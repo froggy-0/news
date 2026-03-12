@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 @dataclass(frozen=True)
 class Settings:
     timezone: str
+    cache_dir: Path
     openai_api_key: str
     openai_model: str
     openai_reasoning_effort: str
@@ -69,6 +70,7 @@ def load_settings() -> Settings:
 
     return Settings(
         timezone=os.getenv("TIMEZONE", "Asia/Seoul"),
+        cache_dir=Path(os.getenv("CACHE_DIR", ".cache")).resolve(),
         openai_api_key=os.getenv("OPENAI_API_KEY", "").strip(),
         openai_model=os.getenv("OPENAI_MODEL", "gpt-5-mini").strip(),
         openai_reasoning_effort=_env_choice(

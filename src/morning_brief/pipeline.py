@@ -99,6 +99,7 @@ def run_pipeline(settings: Settings) -> str:
     market_packet = build_market_packet(
         fred_api_key=settings.fred_api_key,
         alpha_vantage_api_key=settings.alpha_vantage_api_key,
+        cache_dir=settings.cache_dir,
     )
     news_packet = build_news_packet(
         max_items=settings.max_news_items,

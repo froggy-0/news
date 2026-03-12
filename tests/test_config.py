@@ -30,6 +30,12 @@ def test_alpha_vantage_api_key_loaded(monkeypatch):
     assert settings.alpha_vantage_api_key == "alpha-test-key"
 
 
+def test_cache_dir_loaded(monkeypatch, tmp_path):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    settings = load_settings()
+    assert settings.cache_dir == (tmp_path / "cache").resolve()
+
+
 def test_openai_reasoning_effort_invalid_defaults_to_low(monkeypatch):
     monkeypatch.setenv("OPENAI_REASONING_EFFORT", "ultra")
     settings = load_settings()

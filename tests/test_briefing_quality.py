@@ -55,3 +55,28 @@ def test_improve_readability_spacing_breaks_sentences():
     updated = _improve_readability_spacing(text)
 
     assert "금리는 올랐어요.\n\n달러도 강했어요." in updated
+
+
+def test_fallback_brief_mentions_official_btc_etf_flow_when_available():
+    packet = {
+        "macro": [],
+        "us_indices": [],
+        "tech_stocks": [],
+        "bitcoin": {
+            "spot": {"price": 80_000.0, "change_pct": 1.5},
+            "etf_points": [],
+            "etf_total_volume": 123_456,
+            "official_etf_supported_tickers": ["IBIT", "BITB", "GBTC"],
+            "official_etf_compared_tickers": ["IBIT", "BITB", "GBTC"],
+            "official_etf_total_btc": 981_234.56,
+            "official_etf_daily_flow_btc": 1_234.56,
+            "official_etf_daily_flow_usd": 98_764_800.0,
+        },
+        "news": [],
+        "data_quality": {"status": "ok", "warnings": []},
+    }
+
+    briefing = _fallback_brief(packet=packet, timezone="Asia/Seoul")
+
+    assert "공식 발행사 기준으로 집계한 IBIT, BITB, GBTC 합산 보유량은 981,234.56 BTC였어요." in briefing
+    assert "직전 스냅샷과 비교한 공식 ETF 흐름은 1,234.56 BTC 순유입" in briefing

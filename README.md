@@ -46,6 +46,7 @@ cp .env.example .env
 ```
 
 주요 항목:
+- `CACHE_DIR` (기본 `.cache`, ETF 공식 스냅샷 캐시 저장 경로)
 - `OPENAI_API_KEY`
 - `OPENAI_REASONING_EFFORT` (기본 `low`)
 - `OPENAI_MAX_OUTPUT_TOKENS` (기본 `1700`)
@@ -96,6 +97,7 @@ python3 main.py schedule
 - 이메일 제목: `Morning Market Brief | YYYY-MM-DD`
 - 데이터 커버리지 저하 시 제목 아래 `[데이터 품질 알림]` 자동 표시
 - 이메일 본문: HTML + plain text fallback 동시 전송
+- 비트코인 ETF 공식 보유량/순유입: 발행사 공식 페이지 스냅샷을 캐시와 비교해 계산
 
 ## 6) 테스트
 ```bash
@@ -133,6 +135,9 @@ pytest -q
 - `OPENAI_MAX_OUTPUT_TOKENS` (기본 `1700`)
 - `OPENAI_PROMPT_CACHE_KEY` (기본 `morning-market-brief`)
 - `PROMPT_TEMPLATE_VERSION` (기본 `market_brief_v3`)
+
+워크플로우는 `.cache/btc_etf/official_snapshots.json`을 GitHub Actions 캐시로 복원/저장합니다.
+이 파일을 기준으로 다음 실행에서 비트코인 ETF 공식 보유량의 전일 대비 순유입/순유출을 계산합니다.
 
 ### base64 생성 예시 (macOS)
 ```bash

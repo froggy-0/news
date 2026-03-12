@@ -149,11 +149,31 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
     btc_spot = btc.get("spot", {})
     fg_value = btc.get("fear_greed_value")
     fg_label = btc.get("fear_greed_label")
+    official_supported = btc.get("official_etf_supported_tickers", [])
+    official_compared = btc.get("official_etf_compared_tickers", [])
+    official_total_btc = btc.get("official_etf_total_btc")
+    official_flow_btc = btc.get("official_etf_daily_flow_btc")
+    official_flow_usd = btc.get("official_etf_daily_flow_usd")
 
     if fg_value is not None and fg_label:
         sentiment_text = f"공포탐욕지수는 {fg_value}({fg_label})로 확인됐어요."
     else:
         sentiment_text = "공포탐욕지수는 이번 집계에서 확인되지 않았어요."
+
+    official_etf_lines: list[str] = []
+    if official_supported and official_total_btc:
+        supported_text = ", ".join(official_supported)
+        official_etf_lines.append(
+            f"공식 발행사 기준으로 집계한 {supported_text} 합산 보유량은 {official_total_btc:,.2f} BTC였어요."
+        )
+    if official_compared and official_flow_btc is not None:
+        direction = "순유입" if official_flow_btc >= 0 else "순유출"
+        flow_usd_text = ""
+        if official_flow_usd is not None:
+            flow_usd_text = f", 달러 기준 약 {abs(official_flow_usd):,.0f}달러"
+        official_etf_lines.append(
+            f"직전 스냅샷과 비교한 공식 ETF 흐름은 {abs(official_flow_btc):,.2f} BTC {direction}{flow_usd_text}로 계산됐어요."
+        )
 
     body = f"""Morning Market Brief ({date_str})
 
@@ -189,6 +209,7 @@ VIX가 낮게 유지되면 위험자산 선호가 이어질 수 있지만, 금�
 {_bullet_lines([
     f"비트코인 현물은 {btc_spot.get('price', 0):.2f}달러({btc_spot.get('change_pct', 0):+.2f}%) 수준이었어요.",
     f"주요 ETF 합산 거래량은 약 {btc.get('etf_total_volume', 0):,}주였어요.",
+    *official_etf_lines,
     sentiment_text,
 ])}
 

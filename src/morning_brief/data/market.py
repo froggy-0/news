@@ -9,11 +9,16 @@ import requests
 import yfinance as yf
 
 from morning_brief.data.sources.alpha_vantage import fetch_daily_close_change_volume
+from morning_brief.data.sources.btc_etf_official import (
+    fetch_official_btc_etf_snapshots,
+    load_official_btc_etf_cache,
+    save_official_btc_etf_cache,
+)
 from morning_brief.data.sources.coingecko import fetch_btc_usd_price_change
 from morning_brief.data.sources.fred import fetch_macro_points_from_fred
 from morning_brief.data.sources.http_client import HttpFetchError, is_host_resolvable
 from morning_brief.data.sources.stooq import fetch_close_change_and_volume, to_stooq_symbol
-from morning_brief.models import BitcoinSnapshot, MarketPoint
+from morning_brief.models import BitcoinEtfIssuerSnapshot, BitcoinSnapshot, MarketPoint
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +26,7 @@ MAX_RETRIES = 3
 BACKOFF_SECONDS = 1.2
 FEAR_GREED_TIMEOUT = 10
 YAHOO_FINANCE_HOST = "query2.finance.yahoo.com"
+BTC_ETF_OFFICIAL_CACHE_RELATIVE_PATH = Path("btc_etf/official_snapshots.json")
 
 # yfinance tries to write cache files under user cache directory by default.
 # In restricted environments (CI/sandbox), use /tmp to avoid permission issues.
@@ -342,7 +348,80 @@ def _fetch_btc_spot_point() -> MarketPoint:
 
 
 
-def fetch_bitcoin_snapshot(alpha_vantage_api_key: str = "") -> BitcoinSnapshot:
+def _official_btc_etf_cache_file(cache_dir: Path) -> Path:
+    return cache_dir / BTC_ETF_OFFICIAL_CACHE_RELATIVE_PATH
+
+
+def _summarize_official_btc_etf_snapshots(
+    snapshots: list[BitcoinEtfIssuerSnapshot],
+    previous_by_ticker: dict[str, BitcoinEtfIssuerSnapshot],
+    spot_price_usd: float,
+) -> tuple[float | None, float | None, float | None, float | None, list[str]]:
+    if not snapshots:
+        return None, None, None, None, []
+
+    total_btc = sum(snapshot.total_btc for snapshot in snapshots)
+    total_aum_usd = sum(snapshot.aum_usd for snapshot in snapshots)
+    compared_tickers: list[str] = []
+    flow_btc = 0.0
+
+    for snapshot in snapshots:
+        previous = previous_by_ticker.get(snapshot.ticker)
+        if previous is None:
+            continue
+        compared_tickers.append(snapshot.ticker)
+        flow_btc += snapshot.total_btc - previous.total_btc
+
+    flow_usd = flow_btc * spot_price_usd if compared_tickers else None
+    return (
+        round(total_btc, 8),
+        round(total_aum_usd, 2),
+        round(flow_btc, 8) if compared_tickers else None,
+        round(flow_usd, 2) if flow_usd is not None else None,
+        compared_tickers,
+    )
+
+
+def _fetch_official_btc_etf_data(
+    *,
+    cache_dir: Path,
+    spot_price_usd: float,
+) -> tuple[
+    list[BitcoinEtfIssuerSnapshot],
+    float | None,
+    float | None,
+    float | None,
+    float | None,
+    list[str],
+]:
+    cache_file = _official_btc_etf_cache_file(cache_dir)
+    previous_by_ticker = load_official_btc_etf_cache(cache_file)
+
+    try:
+        snapshots = fetch_official_btc_etf_snapshots()
+    except Exception as exc:
+        _warn_once(
+            "btc_etf_official_fallback",
+            "Official BTC ETF issuer fetch failed: %s",
+            exc,
+        )
+        snapshots = []
+
+    if not snapshots:
+        return [], None, None, None, None, []
+
+    save_official_btc_etf_cache(cache_file, snapshots)
+    return (
+        snapshots,
+        *_summarize_official_btc_etf_snapshots(
+            snapshots=snapshots,
+            previous_by_ticker=previous_by_ticker,
+            spot_price_usd=spot_price_usd,
+        ),
+    )
+
+
+def fetch_bitcoin_snapshot(alpha_vantage_api_key: str = "", cache_dir: Path | None = None) -> BitcoinSnapshot:
     spot = _fetch_btc_spot_point()
 
     etf_tickers = ["IBIT", "FBTC", "ARKB", "BITB", "GBTC"]
@@ -362,6 +441,17 @@ def fetch_bitcoin_snapshot(alpha_vantage_api_key: str = "") -> BitcoinSnapshot:
             volume_total += _safe_stooq_volume(ticker=ticker)
 
     fear_greed_value, fear_greed_label = _fetch_fear_greed()
+    (
+        official_snapshots,
+        official_total_btc,
+        official_total_aum_usd,
+        official_daily_flow_btc,
+        official_daily_flow_usd,
+        official_compared_tickers,
+    ) = _fetch_official_btc_etf_data(
+        cache_dir=cache_dir or Path(".cache").resolve(),
+        spot_price_usd=spot.price,
+    )
 
     return BitcoinSnapshot(
         spot=spot,
@@ -369,12 +459,26 @@ def fetch_bitcoin_snapshot(alpha_vantage_api_key: str = "") -> BitcoinSnapshot:
         etf_total_volume=volume_total,
         fear_greed_value=fear_greed_value,
         fear_greed_label=fear_greed_label,
+        official_etf_snapshots=official_snapshots,
+        official_etf_total_btc=official_total_btc,
+        official_etf_total_aum_usd=official_total_aum_usd,
+        official_etf_daily_flow_btc=official_daily_flow_btc,
+        official_etf_daily_flow_usd=official_daily_flow_usd,
+        official_etf_supported_tickers=[snapshot.ticker for snapshot in official_snapshots],
+        official_etf_compared_tickers=official_compared_tickers,
     )
 
 
 
-def build_market_packet(fred_api_key: str = "", alpha_vantage_api_key: str = "") -> dict:
-    btc_snapshot = fetch_bitcoin_snapshot(alpha_vantage_api_key=alpha_vantage_api_key)
+def build_market_packet(
+    fred_api_key: str = "",
+    alpha_vantage_api_key: str = "",
+    cache_dir: Path | None = None,
+) -> dict:
+    btc_snapshot = fetch_bitcoin_snapshot(
+        alpha_vantage_api_key=alpha_vantage_api_key,
+        cache_dir=cache_dir,
+    )
     return {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "macro": [point.__dict__ for point in fetch_macro_points(fred_api_key=fred_api_key)],
@@ -392,5 +496,12 @@ def build_market_packet(fred_api_key: str = "", alpha_vantage_api_key: str = "")
             "etf_total_volume": btc_snapshot.etf_total_volume,
             "fear_greed_value": btc_snapshot.fear_greed_value,
             "fear_greed_label": btc_snapshot.fear_greed_label,
+            "official_etf_snapshots": [snapshot.__dict__ for snapshot in btc_snapshot.official_etf_snapshots],
+            "official_etf_total_btc": btc_snapshot.official_etf_total_btc,
+            "official_etf_total_aum_usd": btc_snapshot.official_etf_total_aum_usd,
+            "official_etf_daily_flow_btc": btc_snapshot.official_etf_daily_flow_btc,
+            "official_etf_daily_flow_usd": btc_snapshot.official_etf_daily_flow_usd,
+            "official_etf_supported_tickers": btc_snapshot.official_etf_supported_tickers,
+            "official_etf_compared_tickers": btc_snapshot.official_etf_compared_tickers,
         },
     }
