@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import logging
+import re
 from zoneinfo import ZoneInfo
 
 from openai import OpenAI
@@ -10,6 +11,9 @@ from morning_brief.config import Settings
 from morning_brief.prompting import build_prompt_cache_key, render_brief_prompts
 
 logger = logging.getLogger(__name__)
+SECTION_HEADING_RE = re.compile(r"^\d+\.\s+.+$")
+SUBSECTION_LABELS = {"수치 체크", "해석", "핵심 내용", "오늘 볼 포인트"}
+SENTENCE_BREAK_RE = re.compile(r"(?<=[.!?])\s+(?=[\"'“”‘’(]*[A-Za-z가-힣])")
 
 
 
@@ -57,6 +61,38 @@ def _inject_quality_notice(text: str, packet: dict) -> str:
         return "\n".join([lines[0], notice, *lines[1:]]).strip()
 
     return f"{notice}\n\n{text}".strip()
+
+
+def _improve_readability_spacing(text: str) -> str:
+    lines: list[str] = []
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if (
+            not stripped
+            or stripped.startswith("[데이터 품질 알림]")
+            or SECTION_HEADING_RE.match(stripped)
+            or stripped in SUBSECTION_LABELS
+            or stripped.startswith("- ")
+        ):
+            lines.append(stripped)
+            continue
+
+        expanded = SENTENCE_BREAK_RE.sub("\n\n", stripped)
+        lines.extend(part.strip() for part in expanded.splitlines())
+
+    compacted: list[str] = []
+    previous_blank = False
+    for line in lines:
+        is_blank = not line
+        if is_blank and previous_blank:
+            continue
+        compacted.append(line)
+        previous_blank = is_blank
+    return "\n".join(compacted).strip()
+
+
+def _bullet_lines(items: list[str]) -> str:
+    return "\n".join(f"- {item}" for item in items if item.strip())
 
 
 def _cached_input_tokens(response: object) -> int | None:
@@ -115,31 +151,75 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
     fg_label = btc.get("fear_greed_label")
 
     if fg_value is not None and fg_label:
-        sentiment_text = f"공포탐욕지수는 {fg_value}({fg_label})로 확인됩니다."
+        sentiment_text = f"공포탐욕지수는 {fg_value}({fg_label})로 확인됐어요."
     else:
-        sentiment_text = "공포탐욕지수는 이번 집계에서 확인되지 않았습니다."
+        sentiment_text = "공포탐욕지수는 이번 집계에서 확인되지 않았어요."
 
     body = f"""Morning Market Brief ({date_str})
 
 1. 거시 환경
-금리·달러·변동성 지표는 {macro_text} 흐름입니다. 단기적으로는 금리와 달러의 방향성이 기술주 밸류에이션에 직접적인 영향을 주는 구간입니다. VIX가 낮게 유지되면 위험자산 선호가 이어질 수 있지만, 금리 급등 시 성장주 변동성은 확대될 수 있습니다.
+수치 체크
+{_bullet_lines([f"금리·달러·변동성 지표는 {macro_text} 흐름으로 확인됐어요."])}
+
+해석
+금리와 달러의 방향은 기술주 밸류에이션에 직접적인 영향을 주고 있어요.
+
+VIX가 낮게 유지되면 위험자산 선호가 이어질 수 있지만, 금리가 다시 오르면 성장주 변동성은 커질 수 있어요.
 
 2. 미국 증시 흐름
-주요 지수는 {index_text}로 마감했습니다. 나스닥과 반도체 섹터의 상대 강도는 AI 관련 수요 기대를 반영하고 있으며, 지수 상승이 소수 종목에 집중되는지 여부가 다음 추세의 지속성을 가를 핵심 포인트입니다.
+수치 체크
+{_bullet_lines([f"주요 지수는 {index_text} 흐름으로 마감했어요."])}
+
+해석
+나스닥과 반도체 섹터의 상대 강도는 AI 수요 기대가 아직 살아 있다는 신호로 읽혀요.
+
+다만 지수 상승이 소수 종목에만 몰리면 추세의 힘은 생각보다 약할 수 있어서, 시장 폭이 넓어지는지 함께 볼 필요가 있어요.
 
 3. AI / 빅테크 동향
-빅테크·반도체 주요 종목에서 변동이 큰 종목은 {top_movers_text}입니다. 실적 가이던스, AI 인프라 투자 속도, 데이터센터 CAPEX 기대가 종목별 차별화를 만들고 있어, 단순 업종 베팅보다 기업별 펀더멘털 해석이 중요합니다.
+수치 체크
+{_bullet_lines([f"빅테크·반도체 주요 종목 가운데 변동이 큰 종목은 {top_movers_text}였어요."])}
+
+해석
+실적 가이던스와 AI 인프라 투자 속도, 데이터센터 CAPEX 기대가 종목별 차이를 만들고 있어요.
+
+같은 AI 테마 안에서도 기업별 해석이 더 중요해지는 구간으로 보여요.
 
 4. 비트코인 시장
-비트코인 현물은 {btc_spot.get('price', 0):.2f}달러({btc_spot.get('change_pct', 0):+.2f}%) 수준이며, 주요 ETF 합산 거래량은 약 {btc.get('etf_total_volume', 0):,}주입니다. {sentiment_text} ETF 자금 유입 강도와 가격 반응의 괴리가 커지면 단기 변동성 확대 신호로 해석할 수 있습니다.
+수치 체크
+{_bullet_lines([
+    f"비트코인 현물은 {btc_spot.get('price', 0):.2f}달러({btc_spot.get('change_pct', 0):+.2f}%) 수준이었어요.",
+    f"주요 ETF 합산 거래량은 약 {btc.get('etf_total_volume', 0):,}주였어요.",
+    sentiment_text,
+])}
+
+해석
+ETF 자금 유입 강도와 가격 반응이 엇갈리면 단기 변동성이 커질 수 있어요.
+
+가격 자체보다 자금 흐름이 얼마나 꾸준한지가 더 중요한 구간으로 보여요.
 
 5. 중요한 뉴스
-{chr(10).join(news_lines) if news_lines else '- 오늘 반영할 주요 뉴스가 충분히 수집되지 않았습니다.'}
+핵심 내용
+{chr(10).join(news_lines) if news_lines else '- 오늘 반영할 주요 뉴스가 충분히 수집되지 않았어요.'}
+
+해석
+오늘 뉴스 흐름은 금리 경로와 AI 투자 기대, 그리고 ETF 수급 해석에 영향을 줄 수 있는 재료들 위주로 읽히고 있어요.
 
 6. 시장 해석
-현재 시장은 "금리 경로"와 "AI 투자 모멘텀"이 동시에 가격을 결정하는 이중 축 국면입니다. 금리 안정과 실적 기대가 유지되면 기술주·반도체 중심의 위험선호가 이어질 수 있지만, 정책/규제 변수나 매크로 서프라이즈가 발생할 경우 빠른 포지션 재조정이 나타날 수 있습니다. 오늘의 핵심 체크포인트는 연준 관련 발언, 미 국채금리 방향, 대형 기술주의 투자지출 신호, 비트코인 ETF 자금 흐름입니다.
+오늘 볼 포인트
+{_bullet_lines([
+    "연준 관련 발언과 미 국채금리 방향",
+    "대형 기술주의 투자지출 신호",
+    "비트코인 ETF 자금 흐름",
+])}
+
+해석
+지금 시장은 금리 경로와 AI 투자 모멘텀이 함께 가격을 움직이는 구간으로 보여요.
+
+금리가 안정되고 실적 기대가 유지되면 기술주와 반도체 중심의 위험 선호가 이어질 수 있어요.
+
+반대로 정책 변수나 매크로 서프라이즈가 나오면 포지션이 빠르게 재조정될 수 있어서, 오늘은 방향성보다 반응 속도를 같이 보는 편이 좋아요.
 """
-    return _inject_quality_notice(body, packet)
+    return _improve_readability_spacing(_inject_quality_notice(body, packet))
 
 
 
@@ -170,7 +250,7 @@ def generate_briefing(packet: dict, settings: Settings) -> str:
                 prompt_cache_key,
                 cached_tokens,
             )
-        return _inject_quality_notice(text, packet)
+        return _improve_readability_spacing(_inject_quality_notice(text, packet))
     except Exception as exc:
         logger.warning("LLM briefing failed; using fallback template: %s", exc)
         return _fallback_brief(packet=packet, timezone=settings.timezone)

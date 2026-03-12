@@ -18,6 +18,9 @@ SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
 
 logger = logging.getLogger(__name__)
 SECTION_HEADING_RE = re.compile(r"^(\d+)\.\s+(.+)$")
+SUMMARY_LABELS = {"수치 체크", "핵심 내용", "오늘 볼 포인트", "체크 포인트"}
+INSIGHT_LABELS = {"해석", "이렇게 읽으면 돼요"}
+SENTENCE_BREAK_RE = re.compile(r"(?<=[.!?])\s+(?=[\"'“”‘’(]*[A-Za-z가-힣])")
 
 
 def _split_recipients(raw: str) -> list[str]:
@@ -76,6 +79,61 @@ def _extract_brief_structure(body: str) -> tuple[str, str, list[tuple[str, str]]
     return title, notice, sections
 
 
+def _expand_sentence_spacing(text: str) -> str:
+    lines: list[str] = []
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("- "):
+            lines.append(stripped)
+            continue
+        expanded = SENTENCE_BREAK_RE.sub("\n\n", stripped)
+        lines.extend(part.strip() for part in expanded.splitlines())
+    return "\n".join(lines).strip()
+
+
+def _split_section_groups(content: str) -> tuple[str, str, str]:
+    normalized = _expand_sentence_spacing(content)
+    current_kind = "summary"
+    current_label = "핵심 요약"
+    sections = {
+        "summary": {"label": "핵심 요약", "lines": []},
+        "insight": {"label": "이렇게 읽으면 좋아요", "lines": []},
+    }
+    explicit_labels_found = False
+
+    for raw_line in normalized.splitlines():
+        line = raw_line.strip()
+        if not line:
+            sections[current_kind]["lines"].append("")
+            continue
+
+        if line in SUMMARY_LABELS:
+            current_kind = "summary"
+            current_label = line
+            sections["summary"]["label"] = current_label
+            explicit_labels_found = True
+            continue
+
+        if line in INSIGHT_LABELS:
+            current_kind = "insight"
+            current_label = line
+            sections["insight"]["label"] = current_label
+            explicit_labels_found = True
+            continue
+
+        sections[current_kind]["lines"].append(line)
+
+    if not explicit_labels_found:
+        paragraphs = [part.strip() for part in normalized.split("\n\n") if part.strip()]
+        if paragraphs:
+            sections["summary"]["lines"] = [paragraphs[0]]
+            sections["insight"]["lines"] = paragraphs[1:]
+
+    summary = "\n".join(sections["summary"]["lines"]).strip()
+    insight = "\n".join(sections["insight"]["lines"]).strip()
+    return sections["summary"]["label"], summary, insight
+
+
 def _text_to_html_blocks(content: str) -> str:
     blocks: list[str] = []
     paragraphs = [chunk.strip() for chunk in content.split("\n\n") if chunk.strip()]
@@ -117,10 +175,33 @@ def _preheader_text(title: str, notice: str, sections: list[tuple[str, str]]) ->
 def render_briefing_email_html(subject: str, body: str) -> str:
     title, notice, sections = _extract_brief_structure(body)
     preheader = _preheader_text(title=title, notice=notice, sections=sections)
-    generated_label = subject.replace("Morning Market Brief | ", "").strip() or title
+    generated_label = subject.split("|")[-1].strip() or title
 
     section_rows = []
     for index, (heading, content) in enumerate(sections, start=1):
+        summary_label, summary_content, insight_content = _split_section_groups(content)
+        summary_block = ""
+        if summary_content:
+            summary_block = (
+                '<tr><td style="padding:0 0 12px 0;">'
+                '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
+                'style="border-collapse:separate;border-spacing:0;background:#f8fafc;border:1px solid #dbe4ee;border-radius:18px;">'
+                '<tr><td style="padding:16px 18px 16px 18px;">'
+                f'<div style="font-size:12px;line-height:1.2;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#2563eb;padding:0 0 10px 0;">{html.escape(summary_label)}</div>'
+                f"{_text_to_html_blocks(summary_content)}"
+                "</td></tr></table></td></tr>"
+            )
+        insight_block = ""
+        if insight_content:
+            insight_block = (
+                '<tr><td style="padding:0;">'
+                '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
+                'style="border-collapse:separate;border-spacing:0;background:#fefefe;border:1px solid #e5e7eb;border-radius:18px;">'
+                '<tr><td style="padding:16px 18px 16px 18px;">'
+                '<div style="font-size:12px;line-height:1.2;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#0f172a;padding:0 0 10px 0;">해석</div>'
+                f"{_text_to_html_blocks(insight_content)}"
+                "</td></tr></table></td></tr>"
+            )
         section_rows.append(
             f"""
             <tr>
@@ -135,7 +216,10 @@ def render_briefing_email_html(subject: str, body: str) -> str:
                           </td>
                           <td valign="top">
                             <div style="font-size:20px;line-height:1.3;font-weight:700;color:#0f172a;padding:4px 0 12px 0;">{html.escape(heading)}</div>
-                            {_text_to_html_blocks(content)}
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                              {summary_block}
+                              {insight_block}
+                            </table>
                           </td>
                         </tr>
                       </table>
@@ -203,10 +287,11 @@ def render_briefing_email_html(subject: str, body: str) -> str:
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" style="border-collapse:separate;border-spacing:0;background:#0f172a;border-radius:28px;overflow:hidden;">
                   <tr>
                     <td style="padding:28px 28px 24px 28px;background:#0f172a;background-image:linear-gradient(135deg,#0f172a 0%,#1d4ed8 140%);">
-                      <div style="font-size:12px;line-height:1.2;letter-spacing:0.14em;text-transform:uppercase;color:#bfdbfe;font-weight:700;padding:0 0 14px 0;">US Tech + BTC Morning Brief</div>
-                      <div style="font-size:34px;line-height:1.15;font-weight:800;color:#f8fafc;padding:0 0 12px 0;">{html.escape(title)}</div>
+                      <div style="font-size:12px;line-height:1.2;letter-spacing:0.14em;text-transform:uppercase;color:#bfdbfe;font-weight:700;padding:0 0 14px 0;">Good Morning Market Note</div>
+                      <div style="font-size:14px;line-height:1.7;color:#dbeafe;padding:0 0 8px 0;">안녕하세요. 오늘 아침 시장 흐름을 편하게 보실 수 있도록 준비했어요.</div>
+                      <div style="font-size:34px;line-height:1.15;font-weight:800;color:#f8fafc;padding:0 0 12px 0;">오늘의 미국 기술주 · 비트코인 브리핑</div>
                       <div style="font-size:15px;line-height:1.75;color:#dbeafe;max-width:520px;">
-                        밤사이 시장 변화를 빠르게 읽을 수 있도록 정리한 해석형 브리핑입니다. 숫자보다 흐름과 연결성을 먼저 보도록 설계했습니다.
+                        핵심 수치와 해석을 나눠서 담았어요. 숫자를 먼저 보고, 바로 아래에서 흐름을 자연스럽게 이해하실 수 있게 구성했어요.
                       </div>
                       <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px;">
                         <tr>
@@ -230,7 +315,7 @@ def render_briefing_email_html(subject: str, body: str) -> str:
             {''.join(section_rows)}
             <tr>
               <td style="padding:8px 6px 0 6px;color:#64748b;font-size:12px;line-height:1.7;text-align:center;">
-                Automated Morning Market Brief. This email is for market monitoring and information only, not investment advice.
+                자동으로 정리된 시장 브리핑 메일이에요. 투자 권유가 아닌 정보 전달 목적의 요약입니다.
               </td>
             </tr>
           </table>

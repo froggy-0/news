@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from morning_brief.briefing import _fallback_brief, _inject_quality_notice, generate_briefing
+from morning_brief.briefing import (
+    _fallback_brief,
+    _improve_readability_spacing,
+    _inject_quality_notice,
+    generate_briefing,
+)
 from morning_brief.config import load_settings
 
 
@@ -42,3 +47,11 @@ def test_generate_briefing_falls_back_when_prompt_rendering_fails(monkeypatch):
     briefing = generate_briefing(packet=packet, settings=settings)
 
     assert briefing == _fallback_brief(packet=packet, timezone=settings.timezone)
+
+
+def test_improve_readability_spacing_breaks_sentences():
+    text = "Morning Market Brief (2026-03-12)\n\n1. 거시 환경\n금리는 올랐어요. 달러도 강했어요."
+
+    updated = _improve_readability_spacing(text)
+
+    assert "금리는 올랐어요.\n\n달러도 강했어요." in updated

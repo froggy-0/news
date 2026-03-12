@@ -83,7 +83,7 @@ def run_pipeline(settings: Settings) -> str:
     output_path.write_text(briefing, encoding="utf-8")
     logger.info("Briefing saved: %s", output_path)
 
-    subject = f"Morning Market Brief | {now.strftime('%Y-%m-%d')}"
+    subject = f"좋은 아침이에요 | 미국 기술주·비트코인 브리핑 ({now.strftime('%Y-%m-%d')})"
     GmailSender(settings).send(subject=subject, body=briefing)
     logger.info("Pipeline completed")
 
