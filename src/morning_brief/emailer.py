@@ -6,11 +6,8 @@ from email.mime.text import MIMEText
 import html
 import logging
 import re
-
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
+from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 from morning_brief.config import Settings
 
@@ -25,6 +22,25 @@ PERCENT_RE = re.compile(r"[+-]?\d[\d,]*(?:\.\d+)?%")
 UP_TOKENS = ("올랐", "상승", "강세", "반등", "높아졌", "증가", "확대", "유입", "개선", "회복")
 DOWN_TOKENS = ("내렸", "하락", "약세", "밀렸", "낮아졌", "감소", "축소", "유출", "둔화", "후퇴")
 FLAT_TOKENS = ("보합", "유지", "비슷", "변동이 크지", "큰 변화는 없")
+
+if TYPE_CHECKING:
+    from google.oauth2.credentials import Credentials
+else:  # pragma: no cover - runtime import guard
+    Credentials = Any
+
+
+def _gmail_dependencies() -> tuple[Any, Any, Any, Any]:
+    try:
+        from google.auth.transport.requests import Request
+        from google.oauth2.credentials import Credentials as GoogleCredentials
+        from google_auth_oauthlib.flow import InstalledAppFlow
+        from googleapiclient.discovery import build
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "Gmail 전송 의존성이 설치되지 않았어요. "
+            "requirements.txt를 설치한 뒤 다시 실행해 주세요."
+        ) from exc
+    return Request, GoogleCredentials, InstalledAppFlow, build
 
 
 def _split_recipients(raw: str) -> list[str]:
@@ -329,10 +345,21 @@ def _render_reference_block(references: list[str]) -> str:
         else:
             label, url = reference, reference
         safe_label = html.escape(label.strip() or url.strip())
-        safe_url = html.escape(url.strip())
+        raw_url = url.strip()
+        parsed = urlparse(raw_url)
+        is_safe_link = parsed.scheme.lower() in {"http", "https"} and bool(parsed.netloc)
+        safe_url = html.escape(raw_url)
+        if is_safe_link:
+            items.append(
+                '<li style="margin:0 0 10px 0;padding:0;list-style:none;">'
+                f'<a href="{safe_url}" style="color:#1d4ed8;text-decoration:none;font-size:14px;line-height:1.7;">{safe_label}</a>'
+                "</li>"
+            )
+            continue
+
         items.append(
-            '<li style="margin:0 0 10px 0;padding:0;list-style:none;">'
-            f'<a href="{safe_url}" style="color:#1d4ed8;text-decoration:none;font-size:14px;line-height:1.7;">{safe_label}</a>'
+            '<li style="margin:0 0 10px 0;padding:0;list-style:none;color:#334155;font-size:14px;line-height:1.7;">'
+            f"{safe_label}"
             "</li>"
         )
 
@@ -473,10 +500,11 @@ class GmailSender:
         self.settings = settings
 
     def _load_credentials(self) -> Credentials:
+        Request, CredentialsType, InstalledAppFlow, _ = _gmail_dependencies()
         creds: Credentials | None = None
         if self.settings.gmail_token_file.exists():
             try:
-                creds = Credentials.from_authorized_user_file(
+                creds = CredentialsType.from_authorized_user_file(
                     str(self.settings.gmail_token_file), SCOPES
                 )
             except Exception as exc:
@@ -521,6 +549,7 @@ class GmailSender:
             raise ValueError("GMAIL_SENDER and GMAIL_RECIPIENT are required when SEND_EMAIL=true")
 
         creds = self._load_credentials()
+        _, _, _, build = _gmail_dependencies()
         service = build("gmail", "v1", credentials=creds, cache_discovery=False)
         msg = build_briefing_message(
             subject=subject,

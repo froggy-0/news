@@ -165,6 +165,19 @@ def test_render_briefing_email_html_renders_reference_links():
     assert 'href="https://www.reuters.com/world/us/example"' in html
 
 
+def test_render_briefing_email_html_omits_unsafe_reference_links():
+    body = SAMPLE_BRIEF + "\n\n참고 출처\n- Bad Link — javascript:alert(1)"
+
+    html = render_briefing_email_html(
+        subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
+        body=body,
+    )
+
+    assert "Bad Link" in html
+    assert "javascript:alert(1)" not in html
+    assert 'href="javascript:alert(1)"' not in html
+
+
 def test_split_reference_block_separates_reference_lines():
     body = SAMPLE_BRIEF + "\n\n참고 출처\n- Reuters — https://www.reuters.com/world/us/example"
 
