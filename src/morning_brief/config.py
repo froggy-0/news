@@ -13,6 +13,9 @@ class Settings:
     cache_dir: Path
     openai_api_key: str
     openai_model: str
+    openai_brief_validation_enabled: bool
+    openai_brief_validation_model: str
+    openai_brief_max_rewrites: int
     openai_web_search_enabled: bool
     openai_web_search_model: str
     openai_web_search_max_results: int
@@ -76,6 +79,15 @@ def load_settings() -> Settings:
         cache_dir=Path(os.getenv("CACHE_DIR", ".cache")).resolve(),
         openai_api_key=os.getenv("OPENAI_API_KEY", "").strip(),
         openai_model=os.getenv("OPENAI_MODEL", "gpt-5-mini").strip(),
+        openai_brief_validation_enabled=_env_bool("OPENAI_BRIEF_VALIDATION_ENABLED", True),
+        openai_brief_validation_model=os.getenv("OPENAI_BRIEF_VALIDATION_MODEL", "").strip()
+        or os.getenv("OPENAI_MODEL", "gpt-5-mini").strip(),
+        openai_brief_max_rewrites=_env_bounded_int(
+            "OPENAI_BRIEF_MAX_REWRITES",
+            default=1,
+            minimum=0,
+            maximum=2,
+        ),
         openai_web_search_enabled=_env_bool("OPENAI_WEB_SEARCH_ENABLED", True),
         openai_web_search_model=os.getenv("OPENAI_WEB_SEARCH_MODEL", "").strip()
         or os.getenv("OPENAI_MODEL", "gpt-5-mini").strip(),

@@ -48,6 +48,9 @@ cp .env.example .env
 주요 항목:
 - `CACHE_DIR` (기본 `.cache`, ETF 공식 스냅샷 캐시 저장 경로)
 - `OPENAI_API_KEY`
+- `OPENAI_BRIEF_VALIDATION_ENABLED` (기본 `true`, 브리핑 최종 검수 사용)
+- `OPENAI_BRIEF_VALIDATION_MODEL` (기본 `gpt-5-mini`)
+- `OPENAI_BRIEF_MAX_REWRITES` (기본 `1`, 검수 실패 시 자동 재작성 횟수)
 - `OPENAI_REASONING_EFFORT` (기본 `low`)
 - `OPENAI_MAX_OUTPUT_TOKENS` (기본 `1700`)
 - `OPENAI_PROMPT_CACHE_KEY` (고정 프롬프트 캐시 네임스페이스)
@@ -134,6 +137,9 @@ pytest -q
 
 선택 GitHub Variables:
 - `OPENAI_MODEL` (기본 `gpt-5-mini`)
+- `OPENAI_BRIEF_VALIDATION_ENABLED` (기본 `true`)
+- `OPENAI_BRIEF_VALIDATION_MODEL` (기본 `gpt-5-mini`)
+- `OPENAI_BRIEF_MAX_REWRITES` (기본 `1`)
 - `OPENAI_REASONING_EFFORT` (기본 `low`)
 - `OPENAI_MAX_OUTPUT_TOKENS` (기본 `1700`)
 - `OPENAI_PROMPT_CACHE_KEY` (기본 `morning-market-brief`)
@@ -145,6 +151,7 @@ pytest -q
 워크플로우는 `.cache/btc_etf/official_snapshots.json`을 GitHub Actions 캐시로 복원/저장합니다.
 이 파일을 기준으로 다음 실행에서 비트코인 ETF 공식 보유량의 전일 대비 순유입/순유출을 계산합니다.
 뉴스 품질이 낮을 때는 OpenAI `web_search`를 사용해 Reuters/Bloomberg/WSJ/FT/CNBC/CoinDesk 등 허용 도메인 안에서만 검증용 백필을 시도합니다.
+브리핑 본문은 생성 후 한 번 더 OpenAI 검수를 거치고, 일반인이 이해하기 어려운 표현이나 숫자-해석 불일치가 있으면 최대 1회 자동으로 다시 다듬습니다.
 
 ### base64 생성 예시 (macOS)
 ```bash

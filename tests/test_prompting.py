@@ -4,6 +4,8 @@ from morning_brief.config import load_settings
 from morning_brief.prompting import (
     build_prompt_cache_key,
     render_brief_prompts,
+    render_brief_rewrite_prompts,
+    render_brief_validator_prompts,
     render_web_search_prompts,
 )
 
@@ -20,6 +22,7 @@ def test_render_brief_prompts_contains_contract_and_packet(monkeypatch):
     instructions, user_prompt = render_brief_prompts(packet=packet, settings=settings)
 
     assert "Morning Market Brief" in instructions
+    assert "경제 뉴스에 익숙하지 않은 일반 직장인" in instructions
     assert "Prompt Version: market_brief_test" in instructions
     assert "<market_data_json>" in user_prompt
     assert '"macro":[{"label":"US2Y","price":4.12,"change_pct":0.11}]' in user_prompt
@@ -41,6 +44,21 @@ def test_prompt_cache_key_is_stable_and_sanitized(monkeypatch):
     assert "/" not in key_one
 
 
+def test_prompt_cache_key_changes_with_model_override(monkeypatch):
+    monkeypatch.setenv("OPENAI_PROMPT_CACHE_KEY", "brief prod/cache")
+    monkeypatch.setenv("PROMPT_TEMPLATE_VERSION", "v9")
+    settings = load_settings()
+
+    key_default = build_prompt_cache_key(settings=settings, instructions="same-static-instructions")
+    key_override = build_prompt_cache_key(
+        settings=settings,
+        instructions="same-static-instructions",
+        model_name="gpt-5",
+    )
+
+    assert key_default != key_override
+
+
 def test_render_web_search_prompts_contains_search_context(monkeypatch):
     monkeypatch.setenv("PROMPT_TEMPLATE_VERSION", "market_brief_test")
     settings = load_settings()
@@ -53,3 +71,35 @@ def test_render_web_search_prompts_contains_search_context(monkeypatch):
     assert "JSON 객체" in instructions
     assert "<search_context_json>" in user_prompt
     assert '"max_results":3' in user_prompt
+
+
+def test_render_brief_validator_prompts_contains_draft_and_packet(monkeypatch):
+    monkeypatch.setenv("PROMPT_TEMPLATE_VERSION", "market_brief_test")
+    settings = load_settings()
+
+    instructions, user_prompt = render_brief_validator_prompts(
+        packet_json='{"macro":[{"label":"US10Y"}]}',
+        draft_text="Morning Market Brief (2026-03-13)\n\n1. 거시 환경\n...",
+        settings=settings,
+    )
+
+    assert "품질 검수 에디터" in instructions
+    assert "Prompt Version: market_brief_test" in instructions
+    assert "<brief_text>" in user_prompt
+    assert '"macro":[{"label":"US10Y"}]' in user_prompt
+
+
+def test_render_brief_rewrite_prompts_contains_review_feedback(monkeypatch):
+    monkeypatch.setenv("PROMPT_TEMPLATE_VERSION", "market_brief_test")
+    settings = load_settings()
+
+    instructions, user_prompt = render_brief_rewrite_prompts(
+        packet_json='{"macro":[]}',
+        draft_text="Morning Market Brief (2026-03-13)\n\n1. 거시 환경\n...",
+        review_json='{"pass":false,"rewrite_guidance":["쉬운 말로 바꾸기"]}',
+        settings=settings,
+    )
+
+    assert "교정 에디터" in instructions
+    assert "<review_json>" in user_prompt
+    assert '"rewrite_guidance":["쉬운 말로 바꾸기"]' in user_prompt

@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from openai import OpenAI
 
+from morning_brief.brief_review import validate_and_rewrite_briefing
 from morning_brief.config import Settings
 from morning_brief.prompting import build_prompt_cache_key, render_brief_prompts
 
@@ -290,6 +291,7 @@ def generate_briefing(packet: dict, settings: Settings) -> str:
         text = (response.output_text or "").strip()
         if not text:
             raise ValueError("모델이 비어 있는 브리핑을 반환했어요.")
+        text = _improve_readability_spacing(text)
         cached_tokens = _cached_input_tokens(response)
         if cached_tokens is not None:
             logger.info(
@@ -297,8 +299,14 @@ def generate_briefing(packet: dict, settings: Settings) -> str:
                 prompt_cache_key,
                 cached_tokens,
             )
+        text = validate_and_rewrite_briefing(
+            draft_text=text,
+            packet=packet,
+            settings=settings,
+            client=client,
+        )
         return _append_reference_block(
-            _improve_readability_spacing(_inject_quality_notice(text, packet)),
+            _inject_quality_notice(_improve_readability_spacing(text), packet),
             packet,
         )
     except Exception as exc:

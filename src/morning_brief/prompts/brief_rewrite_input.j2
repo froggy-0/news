@@ -1,0 +1,19 @@
+아래 자료를 보고 브리핑을 다시 써 주세요.
+
+<market_data_json>
+{{ packet_json }}
+</market_data_json>
+
+<current_brief_text>
+{{ draft_text }}
+</current_brief_text>
+
+<review_json>
+{{ review_json }}
+</review_json>
+
+수정 원칙:
+- review_json의 rewrite_guidance를 우선 반영한다.
+- 숫자 방향과 해석이 어긋난 문장은 반드시 바로잡는다.
+- 어려운 금융 용어는 쉬운 한국어로 바꾼다.
+- 결과는 최종 브리핑 본문만 출력한다.

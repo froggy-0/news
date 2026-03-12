@@ -171,7 +171,11 @@ def backfill_news_with_web_search(
             search_context_json=json.dumps(search_context, ensure_ascii=False, separators=(",", ":")),
             settings=settings,
         )
-        prompt_cache_key = build_prompt_cache_key(settings=settings, instructions=instructions + ":web-search")
+        prompt_cache_key = build_prompt_cache_key(
+            settings=settings,
+            instructions=instructions + ":web-search",
+            model_name=settings.openai_web_search_model,
+        )
         response = client.responses.create(
             model=settings.openai_web_search_model,
             instructions=instructions,

@@ -46,6 +46,16 @@ def test_openai_web_search_flags_loaded(monkeypatch):
     assert settings.openai_web_search_max_results == 4
 
 
+def test_openai_brief_validation_flags_loaded(monkeypatch):
+    monkeypatch.setenv("OPENAI_BRIEF_VALIDATION_ENABLED", "false")
+    monkeypatch.setenv("OPENAI_BRIEF_VALIDATION_MODEL", "gpt-5")
+    monkeypatch.setenv("OPENAI_BRIEF_MAX_REWRITES", "2")
+    settings = load_settings()
+    assert settings.openai_brief_validation_enabled is False
+    assert settings.openai_brief_validation_model == "gpt-5"
+    assert settings.openai_brief_max_rewrites == 2
+
+
 def test_openai_reasoning_effort_invalid_defaults_to_low(monkeypatch):
     monkeypatch.setenv("OPENAI_REASONING_EFFORT", "ultra")
     settings = load_settings()

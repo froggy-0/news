@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from types import SimpleNamespace
+
 from morning_brief.briefing import (
     _fallback_brief,
     _improve_readability_spacing,
@@ -80,3 +83,80 @@ def test_fallback_brief_mentions_official_btc_etf_flow_when_available():
 
     assert "공식 발행사 기준으로 집계한 IBIT, BITB, GBTC 합산 보유량은 981,234.56 BTC였어요." in briefing
     assert "직전 스냅샷과 비교한 공식 ETF 흐름은 1,234.56 BTC 순유입" in briefing
+
+
+def test_generate_briefing_rewrites_when_validator_finds_plain_language_issue(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    settings = load_settings()
+    packet = {
+        "macro": [{"label": "US10Y", "price": 4.1, "change_pct": 0.1}],
+        "us_indices": [],
+        "tech_stocks": [],
+        "bitcoin": {"spot": {"price": 82_000.0, "change_pct": 1.1}, "etf_points": [], "etf_total_volume": 0},
+        "news": [],
+        "data_quality": {"status": "ok", "warnings": []},
+    }
+    draft_text = "Morning Market Brief (2026-03-13)\n\n1. 거시 환경\n수치 체크\n- 미국 금리가 올랐습니다.\n\n해석\n성장주 멀티플이 압박받았습니다.\n\n2. 미국 증시 흐름\n해석\n조용했어요.\n\n3. AI / 빅테크 동향\n해석\n조용했어요.\n\n4. 비트코인 시장\n해석\n조용했어요.\n\n5. 중요한 뉴스\n핵심 내용\n- 없음\n\n6. 시장 해석\n해석\n조용했어요."
+    review_payload = {
+        "pass": False,
+        "rewrite_needed": True,
+        "plain_language_pass": False,
+        "numeric_consistency_pass": True,
+        "structure_pass": True,
+        "issues": ["어려운 금융 용어가 남아 있어요."],
+        "rewrite_guidance": ["'성장주 멀티플' 같은 표현을 쉬운 한국어로 바꿔 주세요."],
+    }
+    rewritten_text = "Morning Market Brief (2026-03-13)\n\n1. 거시 환경\n수치 체크\n- 미국 금리가 올랐어요.\n\n해석\n미국 금리가 올라서, 미래 기대가 큰 기술주 주가가 부담을 받았어요.\n\n2. 미국 증시 흐름\n해석\n조용했어요.\n\n3. AI / 빅테크 동향\n해석\n조용했어요.\n\n4. 비트코인 시장\n해석\n조용했어요.\n\n5. 중요한 뉴스\n핵심 내용\n- 없음\n\n6. 시장 해석\n해석\n조용했어요."
+
+    calls: list[dict] = []
+    responses = [
+        SimpleNamespace(output_text=draft_text, usage=None),
+        SimpleNamespace(output_text=json.dumps(review_payload, ensure_ascii=False), usage=None),
+        SimpleNamespace(output_text=rewritten_text, usage=None),
+    ]
+
+    def _create(**kwargs):
+        calls.append(kwargs)
+        return responses.pop(0)
+
+    fake_client = SimpleNamespace(responses=SimpleNamespace(create=_create))
+    monkeypatch.setattr("morning_brief.briefing.OpenAI", lambda **_: fake_client)
+
+    briefing = generate_briefing(packet=packet, settings=settings)
+
+    assert "미래 기대가 큰 기술주 주가가 부담을 받았어요." in briefing
+    assert "성장주 멀티플이 압박받았습니다." not in briefing
+    assert len(calls) == 3
+    assert calls[1]["text"]["format"]["type"] == "json_schema"
+
+
+def test_generate_briefing_skips_validator_when_disabled(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BRIEF_VALIDATION_ENABLED", "false")
+    settings = load_settings()
+    packet = {
+        "macro": [],
+        "us_indices": [],
+        "tech_stocks": [],
+        "bitcoin": {"spot": {}, "etf_points": [], "etf_total_volume": 0},
+        "news": [],
+        "data_quality": {"status": "ok", "warnings": []},
+    }
+    calls: list[dict] = []
+    responses = [
+        SimpleNamespace(
+            output_text="Morning Market Brief (2026-03-13)\n\n1. 거시 환경\n해석\n조용했어요.\n\n2. 미국 증시 흐름\n해석\n조용했어요.\n\n3. AI / 빅테크 동향\n해석\n조용했어요.\n\n4. 비트코인 시장\n해석\n조용했어요.\n\n5. 중요한 뉴스\n핵심 내용\n- 없음\n\n6. 시장 해석\n해석\n조용했어요.",
+            usage=None,
+        )
+    ]
+
+    def _create(**kwargs):
+        calls.append(kwargs)
+        return responses.pop(0)
+
+    fake_client = SimpleNamespace(responses=SimpleNamespace(create=_create))
+    monkeypatch.setattr("morning_brief.briefing.OpenAI", lambda **_: fake_client)
+
+    generate_briefing(packet=packet, settings=settings)
+
+    assert len(calls) == 1

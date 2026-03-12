@@ -12,6 +12,10 @@ from morning_brief.config import Settings
 
 INSTRUCTIONS_TEMPLATE = "brief_instructions.j2"
 INPUT_TEMPLATE = "brief_input.j2"
+VALIDATOR_INSTRUCTIONS_TEMPLATE = "brief_validator_instructions.j2"
+VALIDATOR_INPUT_TEMPLATE = "brief_validator_input.j2"
+REWRITE_INSTRUCTIONS_TEMPLATE = "brief_rewrite_instructions.j2"
+REWRITE_INPUT_TEMPLATE = "brief_rewrite_input.j2"
 WEB_SEARCH_INSTRUCTIONS_TEMPLATE = "web_search_instructions.j2"
 WEB_SEARCH_INPUT_TEMPLATE = "web_search_input.j2"
 DEFAULT_CACHE_KEY = "morning-market-brief"
@@ -83,17 +87,65 @@ def render_web_search_prompts(
     return instructions, user_prompt
 
 
-def build_prompt_cache_key(settings: Settings, instructions: str) -> str:
+def render_brief_validator_prompts(
+    *,
+    packet_json: str,
+    draft_text: str,
+    settings: Settings,
+) -> tuple[str, str]:
+    instructions = _render_template(
+        template_dir=settings.prompt_template_dir,
+        template_name=VALIDATOR_INSTRUCTIONS_TEMPLATE,
+        prompt_template_version=settings.prompt_template_version,
+    )
+    user_prompt = _render_template(
+        template_dir=settings.prompt_template_dir,
+        template_name=VALIDATOR_INPUT_TEMPLATE,
+        packet_json=packet_json,
+        draft_text=draft_text,
+    )
+    return instructions, user_prompt
+
+
+def render_brief_rewrite_prompts(
+    *,
+    packet_json: str,
+    draft_text: str,
+    review_json: str,
+    settings: Settings,
+) -> tuple[str, str]:
+    instructions = _render_template(
+        template_dir=settings.prompt_template_dir,
+        template_name=REWRITE_INSTRUCTIONS_TEMPLATE,
+        prompt_template_version=settings.prompt_template_version,
+    )
+    user_prompt = _render_template(
+        template_dir=settings.prompt_template_dir,
+        template_name=REWRITE_INPUT_TEMPLATE,
+        packet_json=packet_json,
+        draft_text=draft_text,
+        review_json=review_json,
+    )
+    return instructions, user_prompt
+
+
+def build_prompt_cache_key(
+    settings: Settings,
+    instructions: str,
+    *,
+    model_name: str | None = None,
+) -> str:
     namespace = settings.openai_prompt_cache_key or DEFAULT_CACHE_KEY
     normalized_namespace = _INVALID_CACHE_KEY_CHARS.sub("-", namespace).strip("-")
     if not normalized_namespace:
         normalized_namespace = DEFAULT_CACHE_KEY
 
     static_digest = hashlib.sha256(instructions.encode("utf-8")).hexdigest()[:12]
+    cache_model = (model_name or settings.openai_model).strip() or settings.openai_model
     raw_key = (
         f"{normalized_namespace}:"
         f"{settings.prompt_template_version}:"
-        f"{settings.openai_model}:"
+        f"{cache_model}:"
         f"{static_digest}"
     )
     return raw_key[:MAX_CACHE_KEY_LEN]
