@@ -142,11 +142,11 @@ def _text_to_html_blocks(content: str) -> str:
         lines = [line.strip() for line in paragraph.splitlines() if line.strip()]
         if lines and all(line.startswith("- ") for line in lines):
             items = "".join(
-                f'<li style="margin:0 0 10px 0;">{html.escape(line[2:].strip())}</li>'
+                f'<li style="margin:0 0 10px 0;padding-left:0;">{html.escape(line[2:].strip())}</li>'
                 for line in lines
             )
             blocks.append(
-                '<ul style="margin:0;padding:0 0 0 20px;color:#1f2937;font-size:15px;'
+                '<ul style="margin:0;padding:0;list-style-position:inside;color:#1f2937;font-size:15px;'
                 'line-height:1.75;">'
                 f"{items}</ul>"
             )
@@ -183,24 +183,18 @@ def render_briefing_email_html(subject: str, body: str) -> str:
         summary_block = ""
         if summary_content:
             summary_block = (
-                '<tr><td style="padding:0 0 12px 0;">'
-                '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
-                'style="border-collapse:separate;border-spacing:0;background:#f8fafc;border:1px solid #dbe4ee;border-radius:18px;">'
-                '<tr><td style="padding:16px 18px 16px 18px;">'
+                '<div style="padding:0 0 14px 0;">'
                 f'<div style="font-size:12px;line-height:1.2;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#2563eb;padding:0 0 10px 0;">{html.escape(summary_label)}</div>'
                 f"{_text_to_html_blocks(summary_content)}"
-                "</td></tr></table></td></tr>"
+                "</div>"
             )
         insight_block = ""
         if insight_content:
             insight_block = (
-                '<tr><td style="padding:0;">'
-                '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
-                'style="border-collapse:separate;border-spacing:0;background:#fefefe;border:1px solid #e5e7eb;border-radius:18px;">'
-                '<tr><td style="padding:16px 18px 16px 18px;">'
+                '<div style="padding:0;">'
                 '<div style="font-size:12px;line-height:1.2;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#0f172a;padding:0 0 10px 0;">해석</div>'
                 f"{_text_to_html_blocks(insight_content)}"
-                "</td></tr></table></td></tr>"
+                "</div>"
             )
         section_rows.append(
             f"""
@@ -209,20 +203,10 @@ def render_briefing_email_html(subject: str, body: str) -> str:
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:24px;">
                   <tr>
                     <td style="padding:22px 24px 22px 24px;">
-                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                        <tr>
-                          <td valign="top" width="48">
-                            <div style="width:36px;height:36px;line-height:36px;text-align:center;background:#0f172a;color:#ffffff;border-radius:999px;font-size:14px;font-weight:700;">{index}</div>
-                          </td>
-                          <td valign="top">
-                            <div style="font-size:20px;line-height:1.3;font-weight:700;color:#0f172a;padding:4px 0 12px 0;">{html.escape(heading)}</div>
-                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                              {summary_block}
-                              {insight_block}
-                            </table>
-                          </td>
-                        </tr>
-                      </table>
+                      <div style="width:36px;height:36px;line-height:36px;text-align:center;background:#0f172a;color:#ffffff;border-radius:999px;font-size:14px;font-weight:700;">{index}</div>
+                      <div style="font-size:20px;line-height:1.3;font-weight:700;color:#0f172a;padding:14px 0 12px 0;">{html.escape(heading)}</div>
+                      {summary_block}
+                      {insight_block}
                     </td>
                   </tr>
                 </table>
@@ -252,7 +236,48 @@ def render_briefing_email_html(subject: str, body: str) -> str:
     <title>{html.escape(subject)}</title>
     <style>
       body, table, td {{
-        font-family: Aptos, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        font-family: "Pretendard Variable", Pretendard, "SUIT Variable", SUIT, Roboto,
+          "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Segoe UI",
+          "Helvetica Neue", Helvetica, Arial, sans-serif;
+      }}
+      .hero-kicker {{
+        font-size:12px;
+        line-height:1.2;
+        letter-spacing:0.12em;
+        text-transform:uppercase;
+        color:#dbeafe;
+        font-weight:700;
+      }}
+      .hero-title {{
+        font-size:36px;
+        line-height:1.14;
+        letter-spacing:-0.03em;
+        font-weight:800;
+        color:#f8fafc;
+      }}
+      .hero-copy {{
+        font-size:15px;
+        line-height:1.78;
+        color:#dbeafe;
+      }}
+      .hero-meta {{
+        font-size:13px;
+        line-height:1.6;
+        color:#dbeafe;
+        opacity:0.92;
+      }}
+      @media screen and (max-width: 600px) {{
+        .hero-wrap {{
+          padding:24px 22px 22px 22px !important;
+        }}
+        .hero-title {{
+          font-size:30px !important;
+          line-height:1.18 !important;
+        }}
+        .hero-copy {{
+          font-size:14px !important;
+          line-height:1.75 !important;
+        }}
       }}
       @media (prefers-color-scheme: dark) {{
         body {{
@@ -286,26 +311,23 @@ def render_briefing_email_html(subject: str, body: str) -> str:
               <td style="padding:0 0 16px 0;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" style="border-collapse:separate;border-spacing:0;background:#0f172a;border-radius:28px;overflow:hidden;">
                   <tr>
-                    <td style="padding:28px 28px 24px 28px;background:#0f172a;background-image:linear-gradient(135deg,#0f172a 0%,#1d4ed8 140%);">
-                      <div style="font-size:12px;line-height:1.2;letter-spacing:0.14em;text-transform:uppercase;color:#bfdbfe;font-weight:700;padding:0 0 14px 0;">Good Morning Market Note</div>
-                      <div style="font-size:14px;line-height:1.7;color:#dbeafe;padding:0 0 8px 0;">안녕하세요. 오늘 아침 시장 흐름을 편하게 보실 수 있도록 준비했어요.</div>
-                      <div style="font-size:34px;line-height:1.15;font-weight:800;color:#f8fafc;padding:0 0 12px 0;">오늘의 미국 기술주 · 비트코인 브리핑</div>
-                      <div style="font-size:15px;line-height:1.75;color:#dbeafe;max-width:520px;">
-                        핵심 수치와 해석을 나눠서 담았어요. 숫자를 먼저 보고, 바로 아래에서 흐름을 자연스럽게 이해하실 수 있게 구성했어요.
+                    <td class="hero-wrap" style="padding:28px 28px 24px 28px;background:#0f172a;background-image:linear-gradient(135deg,#0f172a 0%,#1d4ed8 140%);">
+                      <div class="hero-kicker" style="padding:0 0 14px 0;">좋은 아침 시장 브리핑</div>
+                      <div class="hero-copy" style="padding:0 0 14px 0;">
+                        <div>안녕하세요.</div>
+                        <div>오늘 아침 시장 흐름을 편하게 읽으실 수 있도록 정리했어요.</div>
                       </div>
-                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px;">
-                        <tr>
-                          <td style="padding:0 10px 10px 0;">
-                            <div style="display:inline-block;padding:9px 14px;border-radius:999px;background:rgba(255,255,255,0.12);color:#ffffff;font-size:13px;font-weight:600;">{html.escape(generated_label)}</div>
-                          </td>
-                          <td style="padding:0 10px 10px 0;">
-                            <div style="display:inline-block;padding:9px 14px;border-radius:999px;background:rgba(255,255,255,0.12);color:#ffffff;font-size:13px;font-weight:600;">3-5분 읽기</div>
-                          </td>
-                          <td style="padding:0 0 10px 0;">
-                            <div style="display:inline-block;padding:9px 14px;border-radius:999px;background:rgba(255,255,255,0.12);color:#ffffff;font-size:13px;font-weight:600;">HTML + 텍스트</div>
-                          </td>
-                        </tr>
-                      </table>
+                      <div class="hero-title" style="padding:0 0 14px 0;">
+                        오늘의 미국 기술주와 비트코인 흐름을<br>
+                        한 번에 읽으실 수 있게 담았어요.
+                      </div>
+                      <div class="hero-copy" style="max-width:520px;">
+                        <div>핵심 수치를 먼저 짚어드렸어요.</div>
+                        <div>바로 아래에서 흐름과 의미를 자연스럽게 읽으실 수 있어요.</div>
+                      </div>
+                      <div class="hero-meta" style="padding-top:18px;">
+                        {html.escape(generated_label)}
+                      </div>
                     </td>
                   </tr>
                 </table>

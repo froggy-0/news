@@ -58,10 +58,14 @@ def test_render_briefing_email_html_contains_modern_layout_and_list_items():
         body=SAMPLE_BRIEF,
     )
 
-    assert "오늘의 미국 기술주 · 비트코인 브리핑" in html
-    assert "안녕하세요. 오늘 아침 시장 흐름을 편하게 보실 수 있도록 준비했어요." in html
-    assert "3-5분 읽기" in html
+    assert "좋은 아침 시장 브리핑" in html
+    assert "안녕하세요." in html
+    assert "오늘 아침 시장 흐름을 편하게 읽으실 수 있도록 정리했어요." in html
+    assert "오늘의 미국 기술주와 비트코인 흐름을" in html
+    assert "한 번에 읽으실 수 있게 담았어요." in html
+    assert "Pretendard" in html
     assert "<li style=" in html
+    assert "list-style-position:inside" in html
     assert "alpha@example.com" not in html
     assert "[데이터 품질 알림] 뉴스 수가 부족합니다." in html
     assert "수치 체크" in html
