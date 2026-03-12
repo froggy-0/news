@@ -46,7 +46,7 @@ def _latest_two_values(series_id: str, api_key: str) -> tuple[float, float]:
 
     observations = payload.get("observations", [])
     if not isinstance(observations, list):
-        raise ValueError(f"Unexpected observations shape for {series_id}")
+        raise ValueError(f"FRED 응답 구조가 예상과 달라요: {series_id}")
 
     values: list[float] = []
     for item in observations:
@@ -60,7 +60,7 @@ def _latest_two_values(series_id: str, api_key: str) -> tuple[float, float]:
             break
 
     if len(values) < 2:
-        raise ValueError(f"Insufficient values for FRED series {series_id}")
+        raise ValueError(f"FRED 시계열 값이 충분하지 않아요: {series_id}")
 
     return values[0], values[1]
 
@@ -68,7 +68,7 @@ def _latest_two_values(series_id: str, api_key: str) -> tuple[float, float]:
 
 def fetch_macro_points_from_fred(api_key: str) -> list[MarketPoint]:
     if not api_key:
-        raise ValueError("FRED API key is required")
+        raise ValueError("FRED API 키가 필요해요.")
 
     points: list[MarketPoint] = []
     for label, series_id in SERIES_MAP:

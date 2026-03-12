@@ -87,7 +87,7 @@ def _assess_data_quality(packet: dict, news_packet: list[dict]) -> dict:
 
 
 def run_pipeline(settings: Settings) -> str:
-    logger.info("Pipeline started")
+    logger.info("브리핑 파이프라인을 시작할게요.")
     market_packet = build_market_packet(
         fred_api_key=settings.fred_api_key,
         alpha_vantage_api_key=settings.alpha_vantage_api_key,
@@ -97,7 +97,7 @@ def run_pipeline(settings: Settings) -> str:
         max_items=settings.max_news_items,
         newsapi_key=settings.newsapi_key,
     )
-    logger.info("Collected market points and %s news item(s)", len(news_packet))
+    logger.info("시장 지표와 뉴스 %s건을 모았어요.", len(news_packet))
 
     packet = {
         **market_packet,
@@ -115,7 +115,7 @@ def run_pipeline(settings: Settings) -> str:
             packet["news"] = news_packet
             quality = _assess_data_quality(packet=packet, news_packet=news_packet)
             logger.info(
-                "Reassessed data quality after web search backfill: %s",
+                "웹 검색으로 보강한 뒤 데이터 품질을 다시 확인했어요: %s",
                 quality["status"],
             )
         if web_search_references:
@@ -123,7 +123,11 @@ def run_pipeline(settings: Settings) -> str:
 
     packet["data_quality"] = quality
     if quality["status"] != "ok":
-        logger.warning("Data quality status: %s | %s", quality["status"], "; ".join(quality["warnings"]))
+        logger.warning(
+            "데이터 품질 상태는 %s예요. 확인할 점은 %s",
+            quality["status"],
+            "; ".join(quality["warnings"]),
+        )
 
     briefing = generate_briefing(packet=packet, settings=settings)
 
@@ -132,10 +136,10 @@ def run_pipeline(settings: Settings) -> str:
     file_name = now.strftime("brief_%Y%m%d_%H%M.md")
     output_path = settings.output_dir / file_name
     output_path.write_text(briefing, encoding="utf-8")
-    logger.info("Briefing saved: %s", output_path)
+    logger.info("브리핑을 저장했어요: %s", output_path)
 
-    subject = f"좋은 아침이에요 | 미국 기술주·비트코인 브리핑 ({now.strftime('%Y-%m-%d')})"
+    subject = f"미국 기술주·비트코인 브리핑 ({now.strftime('%Y-%m-%d')})"
     GmailSender(settings).send(subject=subject, body=briefing)
-    logger.info("Pipeline completed")
+    logger.info("브리핑 파이프라인을 마쳤어요.")
 
     return briefing

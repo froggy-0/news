@@ -289,11 +289,11 @@ def generate_briefing(packet: dict, settings: Settings) -> str:
         )
         text = (response.output_text or "").strip()
         if not text:
-            raise ValueError("Empty briefing from model")
+            raise ValueError("모델이 비어 있는 브리핑을 반환했어요.")
         cached_tokens = _cached_input_tokens(response)
         if cached_tokens is not None:
             logger.info(
-                "OpenAI prompt cache key=%s cached_input_tokens=%s",
+                "OpenAI 프롬프트 캐시를 사용했어요. key=%s | cached_input_tokens=%s",
                 prompt_cache_key,
                 cached_tokens,
             )
@@ -302,5 +302,5 @@ def generate_briefing(packet: dict, settings: Settings) -> str:
             packet,
         )
     except Exception as exc:
-        logger.warning("LLM briefing failed; using fallback template: %s", exc)
+        logger.warning("LLM 브리핑 생성에 문제가 있어 기본 템플릿으로 이어갈게요: %s", exc)
         return _fallback_brief(packet=packet, timezone=settings.timezone)

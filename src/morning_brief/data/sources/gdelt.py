@@ -61,7 +61,7 @@ def fetch_news_from_gdelt(
 
     articles = payload.get("articles", [])
     if not isinstance(articles, list):
-        raise ValueError("Unexpected GDELT response shape")
+        raise ValueError("GDELT 응답 구조가 예상과 달라요.")
 
     preferred_domains = preferred_domains or set()
     cutoff = datetime.now(timezone.utc) - timedelta(hours=recency_hours)

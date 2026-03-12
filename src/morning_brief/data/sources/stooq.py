@@ -89,7 +89,7 @@ def fetch_close_change_and_volume(symbol: str) -> tuple[float, float, int]:
 
     points = _parse_stooq_csv(csv_text)
     if len(points) < 2:
-        raise HttpFetchError(f"Insufficient daily data from Stooq for {symbol}")
+        raise HttpFetchError(f"Stooq 일봉 데이터가 충분하지 않아요: {symbol}")
 
     latest = points[-1]
     previous = points[-2]

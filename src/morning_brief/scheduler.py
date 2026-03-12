@@ -29,5 +29,5 @@ def run_daily(settings: Settings, hour: int = 8, minute: int = 0) -> None:
         replace_existing=True,
     )
 
-    logger.info("Scheduler started: daily %02d:%02d (%s)", hour, minute, settings.timezone)
+    logger.info("스케줄러를 시작할게요. 매일 %02d:%02d (%s)에 실행돼요.", hour, minute, settings.timezone)
     scheduler.start()

@@ -148,16 +148,14 @@ def _split_section_groups(content: str) -> tuple[str, str, str]:
     return sections["summary"]["label"], summary, insight
 
 
-def _direction_style(direction: str) -> tuple[str, str, str, str]:
+def _direction_color(direction: str) -> str:
     if direction == "up":
-        return "↑", "#dc2626", "#fef2f2", "#fecaca"
+        return "#dc2626"
     if direction == "down":
-        return "↓", "#2563eb", "#eff6ff", "#bfdbfe"
-    if direction == "mixed":
-        return "↕", "#64748b", "#f8fafc", "#cbd5e1"
-    if direction == "flat":
-        return "→", "#64748b", "#f8fafc", "#cbd5e1"
-    return "•", "#94a3b8", "#f8fafc", "#e2e8f0"
+        return "#2563eb"
+    if direction in {"flat", "mixed"}:
+        return "#64748b"
+    return "#0f172a"
 
 
 def _percent_direction(token: str) -> str | None:
@@ -196,34 +194,6 @@ def _token_direction(text: str) -> str | None:
     return None
 
 
-def _metric_indicator(text: str) -> tuple[str, str, str, str]:
-    signed_directions = [
-        direction
-        for token in PERCENT_RE.findall(text)
-        if (direction := _percent_direction(token)) is not None
-    ]
-    positive_count = sum(1 for direction in signed_directions if direction == "up")
-    negative_count = sum(1 for direction in signed_directions if direction == "down")
-
-    if positive_count and negative_count:
-        return _direction_style("mixed")
-    if positive_count:
-        return _direction_style("up")
-    if negative_count:
-        return _direction_style("down")
-    if signed_directions and all(direction == "flat" for direction in signed_directions):
-        return _direction_style("flat")
-
-    token_direction = _token_direction(text)
-    if token_direction is not None:
-        return _direction_style(token_direction)
-
-    if signed_directions:
-        return _direction_style("flat")
-
-    return _direction_style("neutral")
-
-
 def _highlight_metric_text(text: str, default_direction: str) -> str:
     parts: list[str] = []
     last_index = 0
@@ -234,7 +204,7 @@ def _highlight_metric_text(text: str, default_direction: str) -> str:
         token_direction = _percent_direction(token)
         if token_direction is None:
             token_direction = default_direction if default_direction in {"up", "down", "flat"} else "neutral"
-        _, color, _, _ = _direction_style(token_direction)
+        color = _direction_color(token_direction)
         parts.append(html.escape(text[last_index:start]))
         parts.append(f'<span style="color:{color};font-weight:700;">{html.escape(token)}</span>')
         last_index = end
@@ -247,36 +217,15 @@ def _highlight_metric_text(text: str, default_direction: str) -> str:
 
 
 def _render_body_line(text: str) -> str:
-    symbol, color, background, border = _metric_indicator(text)
     highlighted = _highlight_metric_text(text, default_direction=_token_direction(text) or "neutral")
-    if symbol == "•" and highlighted == html.escape(text):
-        return html.escape(text)
-    return (
-        f'<span style="display:inline-block;min-width:18px;height:18px;line-height:18px;'
-        f'text-align:center;border-radius:999px;background:{background};border:1px solid {border};'
-        f'color:{color};font-weight:800;font-size:11px;vertical-align:1px;margin-right:8px;">{symbol}</span>'
-        f'<span style="display:inline;color:#0f172a;">{highlighted}</span>'
-    )
+    return highlighted if highlighted != html.escape(text) else html.escape(text)
 
 
 def _render_metric_item(text: str) -> str:
-    symbol, color, background, border = _metric_indicator(text)
     default_direction = _token_direction(text) or "neutral"
     return (
-        '<li style="margin:0 0 10px 0;padding:0;list-style:none;">'
-        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
-        'style="border-collapse:collapse;">'
-        "<tr>"
-        '<td valign="top" style="padding:0 10px 0 0;">'
-        f'<span style="display:inline-block;min-width:22px;height:22px;line-height:22px;'
-        f'text-align:center;border-radius:999px;background:{background};border:1px solid {border};'
-        f'color:{color};font-weight:800;font-size:13px;">{symbol}</span>'
-        "</td>"
-        '<td valign="top" style="padding:0;">'
+        '<li style="margin:0 0 12px 0;padding:0;list-style:none;">'
         f'<span style="display:inline;color:#0f172a;font-size:15px;line-height:1.75;">{_highlight_metric_text(text, default_direction)}</span>'
-        "</td>"
-        "</tr>"
-        "</table>"
         "</li>"
     )
 
@@ -341,7 +290,7 @@ def _render_section_row(index: int, heading: str, content: str) -> str:
         "<tr>"
         '<td style="padding:0 0 16px 0;">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" '
-        'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:24px;">'
+        'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:24px;box-shadow:0 16px 32px rgba(15,23,42,0.04);">'
         "<tr>"
         '<td style="padding:22px 24px 22px 24px;">'
         f'<div style="width:36px;height:36px;line-height:36px;text-align:center;background:#0f172a;color:#ffffff;border-radius:999px;font-size:14px;font-weight:700;">{index}</div>'
@@ -390,7 +339,7 @@ def _render_reference_block(references: list[str]) -> str:
     return (
         '<tr><td style="padding:4px 0 16px 0;">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" '
-        'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:20px;">'
+        'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:20px;box-shadow:0 16px 32px rgba(15,23,42,0.04);">'
         '<tr><td style="padding:18px 22px 16px 22px;">'
         '<div style="font-size:15px;line-height:1.4;font-weight:700;color:#0f172a;padding:0 0 12px 0;">참고 출처</div>'
         '<ul style="margin:0;padding:0;">'
@@ -400,31 +349,21 @@ def _render_reference_block(references: list[str]) -> str:
     )
 
 
-def _render_hero_block(generated_label: str) -> str:
+def _render_hero_block() -> str:
     return (
         '<tr><td style="padding:0 0 16px 0;">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="hero-card" '
-        'style="border-collapse:separate;border-spacing:0;background:#f8fbff;border:1px solid #dbe4ee;border-radius:28px;overflow:hidden;">'
+        'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:28px;overflow:hidden;box-shadow:0 20px 40px rgba(15,23,42,0.05);">'
         "<tr>"
-        '<td class="hero-wrap" style="padding:28px 28px 24px 28px;background:#ffffff;">'
-        '<div style="padding:0 0 16px 0;">'
-        '<span style="display:inline-block;padding:7px 12px;border-radius:999px;border:1px solid #dbe4ee;background:#f8fafc;color:#0f172a;font-size:12px;line-height:1.2;font-weight:700;letter-spacing:0.02em;-webkit-text-fill-color:#0f172a;">좋은 아침 시장 브리핑</span>'
+        '<td class="hero-wrap" style="padding:30px 30px 28px 30px;background:#ffffff;">'
+        '<div style="padding:0 0 18px 0;">'
+        '<span style="display:inline-block;padding:7px 12px;border-radius:999px;border:1px solid #dbe4ee;background:#f8fafc;color:#334155;font-size:12px;line-height:1.2;font-weight:700;letter-spacing:0.04em;-webkit-text-fill-color:#334155;">데일리 시장 리포트</span>'
         "</div>"
-        '<div class="hero-copy" style="padding:0 0 14px 0;font-size:15px;line-height:1.8;color:#334155;-webkit-text-fill-color:#334155;">'
-        "<div>안녕하세요.</div>"
-        "<div>오늘 아침에 꼭 봐야 할 시장 흐름만 편하게 읽으실 수 있게 정리했어요.</div>"
-        "</div>"
-        '<div class="hero-title" style="padding:0 0 14px 0;font-size:34px;line-height:1.2;font-weight:800;letter-spacing:-0.03em;color:#0f172a;-webkit-text-fill-color:#0f172a;">'
-        "오늘 아침,<br>"
-        '<span style="color:#1d4ed8;-webkit-text-fill-color:#1d4ed8;">미국 기술주와 비트코인</span> 흐름만<br>'
-        "편하게 읽으실 수 있게 담았어요."
-        "</div>"
-        '<div class="hero-copy" style="max-width:540px;font-size:15px;line-height:1.8;color:#475569;-webkit-text-fill-color:#475569;">'
-        '<div><span style="color:#0f172a;font-weight:700;-webkit-text-fill-color:#0f172a;">수치 체크</span>만 먼저 읽으셔도 흐름이 바로 잡히도록 구성했어요.</div>'
-        '<div>조금 더 여유가 있으실 때는 아래 <span style="color:#0f172a;font-weight:700;-webkit-text-fill-color:#0f172a;">해석</span>까지 보시면 의미가 더 쉽게 연결되실 거예요.</div>'
-        "</div>"
-        '<div class="hero-copy" style="padding-top:18px;font-size:13px;line-height:1.6;color:#64748b;-webkit-text-fill-color:#64748b;">'
-        f"{html.escape(generated_label)}"
+        '<div class="hero-title" style="font-size:36px;line-height:1.22;font-weight:800;letter-spacing:-0.035em;color:#0f172a;-webkit-text-fill-color:#0f172a;">'
+        "오늘 아침, 미국 기술주와<br>"
+        '<span style="color:#1d4ed8;-webkit-text-fill-color:#1d4ed8;">비트코인 흐름만</span><br>'
+        "편하게 읽으실 수 있게<br>"
+        "담았어요."
         "</div>"
         "</td>"
         "</tr>"
@@ -464,18 +403,14 @@ def _render_email_document(
           font-size:29px !important;
           line-height:1.22 !important;
         }}
-        .hero-copy {{
-          font-size:14px !important;
-          line-height:1.75 !important;
-        }}
       }}
     </style>
   </head>
-  <body style="margin:0;padding:0;background:#edf2f7;">
+  <body style="margin:0;padding:0;background:#f3f6fb;">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
       {html.escape(preheader)}
     </div>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="shell" style="background:#edf2f7;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="shell" style="background:#f3f6fb;">
       <tr>
         <td align="center" style="padding:28px 14px;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:680px;">
@@ -500,7 +435,6 @@ def render_briefing_email_html(subject: str, body: str) -> str:
     main_body, references = _split_reference_block(body)
     title, notice, sections = _extract_brief_structure(main_body)
     preheader = _preheader_text(title=title, notice=notice, sections=sections)
-    generated_label = subject.split("|")[-1].strip() or title
     section_rows = [
         _render_section_row(index=index, heading=heading, content=content)
         for index, (heading, content) in enumerate(sections, start=1)
@@ -508,7 +442,7 @@ def render_briefing_email_html(subject: str, body: str) -> str:
     return _render_email_document(
         subject=subject,
         preheader=preheader,
-        hero_block=_render_hero_block(generated_label),
+        hero_block=_render_hero_block(),
         notice_block=_render_notice_block(notice),
         section_rows=section_rows,
         reference_block=_render_reference_block(references),
@@ -546,7 +480,7 @@ class GmailSender:
                     str(self.settings.gmail_token_file), SCOPES
                 )
             except Exception as exc:
-                logger.warning("Failed to parse token file. Re-auth required: %s", exc)
+                logger.warning("토큰 파일을 읽는 중 문제가 있어 다시 인증이 필요해요: %s", exc)
 
         if creds and creds.valid:
             return creds
@@ -579,7 +513,7 @@ class GmailSender:
 
     def send(self, subject: str, body: str) -> None:
         if not self.settings.send_email:
-            logger.info("SEND_EMAIL=false. Skipping Gmail send.")
+            logger.info("SEND_EMAIL=false라서 메일 발송은 건너뛸게요.")
             return
 
         recipients = _split_recipients(self.settings.gmail_recipient)
@@ -598,4 +532,4 @@ class GmailSender:
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode("utf-8")
         service.users().messages().send(userId="me", body={"raw": raw}).execute()
 
-        logger.info("Briefing email sent to %s recipient(s)", len(recipients))
+        logger.info("브리핑 메일을 %s명에게 보냈어요.", len(recipients))

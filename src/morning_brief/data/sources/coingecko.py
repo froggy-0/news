@@ -19,12 +19,12 @@ def fetch_btc_usd_price_change() -> tuple[float, float]:
 
     btc = payload.get("bitcoin")
     if not isinstance(btc, dict):
-        raise HttpFetchError("Invalid CoinGecko response: missing bitcoin key")
+        raise HttpFetchError("CoinGecko 응답에서 bitcoin 항목을 찾지 못했어요.")
 
     price_raw = btc.get("usd")
     change_raw = btc.get("usd_24h_change", 0.0)
     if not isinstance(price_raw, (int, float)):
-        raise HttpFetchError("Invalid CoinGecko response: missing usd price")
+        raise HttpFetchError("CoinGecko 응답에서 usd 가격을 찾지 못했어요.")
 
     try:
         change_pct = float(change_raw)

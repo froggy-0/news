@@ -78,10 +78,10 @@ def _history_with_retry(ticker: str, period: str, interval: str):
     if not is_host_resolvable(YAHOO_FINANCE_HOST):
         _warn_once(
             "yahoo_dns",
-            "Yahoo Finance host resolution failed (%s). yfinance fallbacks may return zeros.",
+            "Yahoo Finance 주소를 확인하지 못했어요 (%s). yfinance 폴백 값이 0으로 들어갈 수 있어요.",
             YAHOO_FINANCE_HOST,
         )
-        raise RuntimeError("Yahoo Finance host resolution failed")
+        raise RuntimeError("Yahoo Finance 주소를 확인하지 못했어요.")
 
     last_error: Exception | None = None
     for attempt in range(1, MAX_RETRIES + 1):
@@ -92,14 +92,14 @@ def _history_with_retry(ticker: str, period: str, interval: str):
                 auto_adjust=False,
             )
             if history.empty:
-                raise ValueError(f"No history for {ticker}")
+                raise ValueError(f"{ticker} 이력 데이터가 비어 있어요.")
             return history
         except Exception as exc:
             last_error = exc
             if attempt == MAX_RETRIES:
                 break
             logger.warning(
-                "yfinance retry %s/%s failed for %s: %s",
+                "yfinance 데이터를 다시 가져오는 중이에요 (%s/%s). 대상=%s | %s",
                 attempt,
                 MAX_RETRIES,
                 ticker,
@@ -107,7 +107,7 @@ def _history_with_retry(ticker: str, period: str, interval: str):
             )
             time.sleep(BACKOFF_SECONDS * attempt)
 
-    raise RuntimeError(f"Failed to fetch market history for {ticker}") from last_error
+    raise RuntimeError(f"{ticker} 시장 이력 데이터를 가져오지 못했어요.") from last_error
 
 
 
@@ -118,7 +118,7 @@ def _latest_price_point_from_yfinance(
 ) -> MarketPoint:
     history = _history_with_retry(ticker=ticker, period="5d", interval="1d")
     if len(history) < 2:
-        raise ValueError(f"Insufficient daily history for {ticker}")
+        raise ValueError(f"{ticker} 일봉 데이터가 충분하지 않아요.")
 
     latest_close = float(history["Close"].iloc[-1]) * price_scale
     previous_close = float(history["Close"].iloc[-2]) * price_scale
@@ -165,7 +165,7 @@ def _safe_yfinance_point(
     except Exception as exc:
         _warn_once(
             f"yfinance_fallback_{ticker}",
-            "Using zero fallback for %s (%s): %s",
+            "%s (%s) 데이터를 바로 가져오지 못해 0으로 채웠어요: %s",
             label,
             ticker,
             exc,
@@ -189,7 +189,7 @@ def _safe_stooq_point(label: str, ticker: str, stooq_symbol: str | None = None) 
     symbol = stooq_symbol or to_stooq_symbol(ticker)
     return _safe_with_fallback(
         warning_key=f"stooq_fallback_{symbol}",
-        warning_message="Stooq fetch failed for %s (%s): %s. Falling back to yfinance.",
+        warning_message="Stooq에서 %s (%s) 데이터를 바로 가져오지 못해 yfinance로 이어서 볼게요: %s",
         warning_args=(label, symbol),
         primary_fetch=lambda: _point_from_stooq(label=label, ticker=ticker, stooq_symbol=symbol),
         fallback_fetch=lambda: _safe_yfinance_point(label=label, ticker=ticker),
@@ -210,7 +210,7 @@ def _point_from_alpha_vantage(label: str, ticker: str, api_key: str) -> MarketPo
 def _safe_alpha_vantage_point(label: str, ticker: str, api_key: str) -> MarketPoint:
     return _safe_with_fallback(
         warning_key=f"alpha_vantage_fallback_{ticker}",
-        warning_message="Alpha Vantage fetch failed for %s (%s): %s. Falling back to Stooq/yfinance.",
+        warning_message="Alpha Vantage에서 %s (%s) 데이터를 바로 가져오지 못해 Stooq/yfinance로 이어서 볼게요: %s",
         warning_args=(label, ticker),
         primary_fetch=lambda: _point_from_alpha_vantage(label=label, ticker=ticker, api_key=api_key),
         fallback_fetch=lambda: _safe_stooq_point(label=label, ticker=ticker),
@@ -232,7 +232,7 @@ def _volume_from_yfinance(ticker: str) -> int:
     except Exception as exc:
         _warn_once(
             f"yfinance_volume_fallback_{ticker}",
-            "Skipping volume for %s after yfinance fallback failure: %s",
+            "%s 거래량은 yfinance 폴백까지 확인했지만 가져오지 못했어요: %s",
             ticker,
             exc,
         )
@@ -244,7 +244,7 @@ def _safe_stooq_volume(ticker: str, stooq_symbol: str | None = None) -> int:
     symbol = stooq_symbol or to_stooq_symbol(ticker)
     return _safe_with_fallback(
         warning_key=f"stooq_volume_fallback_{symbol}",
-        warning_message="Stooq volume fetch failed for %s: %s. Falling back to yfinance.",
+        warning_message="Stooq에서 %s 거래량을 바로 가져오지 못해 yfinance로 이어서 볼게요: %s",
         warning_args=(symbol,),
         primary_fetch=lambda: _volume_from_stooq(ticker=ticker, stooq_symbol=symbol),
         fallback_fetch=lambda: _volume_from_yfinance(ticker=ticker),
@@ -259,7 +259,7 @@ def _volume_from_alpha_vantage(ticker: str, api_key: str) -> int:
 def _safe_alpha_vantage_volume(ticker: str, api_key: str) -> int:
     return _safe_with_fallback(
         warning_key=f"alpha_vantage_volume_fallback_{ticker}",
-        warning_message="Alpha Vantage volume fetch failed for %s: %s. Falling back to Stooq/yfinance.",
+        warning_message="Alpha Vantage에서 %s 거래량을 바로 가져오지 못해 Stooq/yfinance로 이어서 볼게요: %s",
         warning_args=(ticker,),
         primary_fetch=lambda: _volume_from_alpha_vantage(ticker=ticker, api_key=api_key),
         fallback_fetch=lambda: _safe_stooq_volume(ticker=ticker),
@@ -270,16 +270,16 @@ def fetch_macro_points(fred_api_key: str = "") -> list[MarketPoint]:
     if fred_api_key:
         try:
             points = fetch_macro_points_from_fred(fred_api_key)
-            logger.info("Macro provider: FRED")
+            logger.info("거시 지표는 FRED 기준으로 가져왔어요.")
             return points
         except Exception as exc:
             _warn_once(
                 "fred_fallback",
-                "FRED macro fetch failed (%s). Falling back to yfinance macros.",
+                "FRED에서 거시 지표를 가져오지 못해 yfinance 기준으로 이어서 볼게요: %s",
                 exc,
             )
 
-    logger.info("Macro provider: yfinance fallback")
+    logger.info("거시 지표는 yfinance 폴백 기준으로 가져왔어요.")
     return [
         _safe_yfinance_point(label=label, ticker=ticker, price_scale=scale)
         for label, ticker, scale in MACRO_FALLBACK_TARGETS
@@ -294,14 +294,14 @@ def fetch_us_index_points(alpha_vantage_api_key: str = "") -> list[MarketPoint]:
             _safe_alpha_vantage_point(label=label, ticker=ticker, api_key=alpha_vantage_api_key)
             for label, ticker, _ in US_INDEX_TARGETS
         ]
-        logger.info("US index provider: Alpha Vantage (ETF proxies) with Stooq/yfinance fallback")
+        logger.info("미국 지수 흐름은 Alpha Vantage 기준으로 보고, 필요하면 Stooq/yfinance로 보강했어요.")
         return points
 
     points = [
         _safe_stooq_point(label=label, ticker=ticker, stooq_symbol=stooq_symbol)
         for label, ticker, stooq_symbol in US_INDEX_TARGETS
     ]
-    logger.info("US index provider: Stooq (ETF proxies) with yfinance fallback")
+    logger.info("미국 지수 흐름은 Stooq 기준으로 보고, 필요하면 yfinance로 보강했어요.")
     return points
 
 
@@ -313,12 +313,12 @@ def fetch_tech_stock_points(alpha_vantage_api_key: str = "") -> list[MarketPoint
             for ticker in TECH_STOCK_TICKERS
         ]
         points.sort(key=lambda x: abs(x.change_pct), reverse=True)
-        logger.info("Tech stock provider: Alpha Vantage with Stooq/yfinance fallback")
+        logger.info("기술주는 Alpha Vantage 기준으로 보고, 필요하면 Stooq/yfinance로 보강했어요.")
         return points
 
     points = [_safe_stooq_point(label=ticker, ticker=ticker) for ticker in TECH_STOCK_TICKERS]
     points.sort(key=lambda x: abs(x.change_pct), reverse=True)
-    logger.info("Tech stock provider: Stooq with yfinance fallback")
+    logger.info("기술주는 Stooq 기준으로 보고, 필요하면 yfinance로 보강했어요.")
     return points
 
 
@@ -344,7 +344,7 @@ def _fetch_fear_greed() -> tuple[int | None, str | None]:
 
     _warn_once(
         "fear_greed_fail",
-        "Fear&Greed fetch failed after retries: %s",
+        "공포탐욕지수는 여러 번 확인했지만 이번에는 가져오지 못했어요: %s",
         last_error,
     )
     return None, None
@@ -354,7 +354,7 @@ def _fetch_fear_greed() -> tuple[int | None, str | None]:
 def _fetch_btc_spot_point() -> MarketPoint:
     try:
         price, change_pct = fetch_btc_usd_price_change()
-        logger.info("BTC spot provider: CoinGecko")
+        logger.info("비트코인 현물 가격은 CoinGecko 기준으로 가져왔어요.")
         return MarketPoint(
             label="BTC-USD",
             ticker="BTC-USD",
@@ -364,7 +364,7 @@ def _fetch_btc_spot_point() -> MarketPoint:
     except Exception as exc:
         _warn_once(
             "coingecko_btc_fallback",
-            "CoinGecko BTC fetch failed: %s. Falling back to yfinance.",
+            "CoinGecko에서 비트코인 가격을 가져오지 못해 yfinance로 이어서 볼게요: %s",
             exc,
         )
         return _safe_yfinance_point(label="BTC-USD", ticker="BTC-USD")
@@ -425,7 +425,7 @@ def _fetch_official_btc_etf_data(
     except Exception as exc:
         _warn_once(
             "btc_etf_official_fallback",
-            "Official BTC ETF issuer fetch failed: %s",
+            "공식 발행사 기준 BTC ETF 데이터를 가져오지 못했어요: %s",
             exc,
         )
         snapshots = []

@@ -55,22 +55,25 @@ def test_extract_brief_structure_parses_title_notice_and_sections():
 
 def test_render_briefing_email_html_contains_modern_layout_and_list_items():
     html = render_briefing_email_html(
-        subject="좋은 아침이에요 | 미국 기술주·비트코인 브리핑 (2026-03-12)",
+        subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
         body=SAMPLE_BRIEF,
     )
 
-    assert "좋은 아침 시장 브리핑" in html
-    assert "안녕하세요." in html
-    assert "오늘 아침에 꼭 봐야 할 시장 흐름만 편하게 읽으실 수 있게 정리했어요." in html
-    assert "미국 기술주와 비트코인" in html
-    assert "편하게 읽으실 수 있게 담았어요." in html
+    assert "데일리 시장 리포트" in html
+    assert "좋은 아침 시장 브리핑" not in html
+    assert "안녕하세요." not in html
+    assert "오늘 아침에 꼭 봐야 할 시장 흐름만 편하게 읽으실 수 있게 정리했어요." not in html
+    assert "오늘 아침, 미국 기술주와" in html
+    assert "비트코인 흐름만" in html
+    assert "편하게 읽으실 수 있게" in html
+    assert "담았어요." in html
     assert "-webkit-text-fill-color:#0f172a" in html
     assert "Pretendard" in html
     assert "<li style=" in html
     assert "list-style:none" in html
-    assert "↑" in html
+    assert "↑" not in html
+    assert "↓" not in html
     assert "#dc2626" in html
-    assert "#fef2f2" in html
     assert "alpha@example.com" not in html
     assert "[데이터 품질 알림] 뉴스 수가 부족합니다." in html
     assert "수치 체크" in html
@@ -90,7 +93,7 @@ def test_split_section_groups_separates_summary_and_insight():
 
 def test_render_briefing_email_html_marks_down_moves_in_blue():
     html = render_briefing_email_html(
-        subject="좋은 아침이에요 | 미국 기술주·비트코인 브리핑 (2026-03-12)",
+        subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
         body="""Morning Market Brief (2026-03-12)
 
 1. 미국 증시 흐름
@@ -99,16 +102,16 @@ def test_render_briefing_email_html_marks_down_moves_in_blue():
 """,
     )
 
-    assert "↓" in html
     assert "#2563eb" in html
-    assert "#eff6ff" in html
+    assert "↑" not in html
+    assert "↓" not in html
     assert '<span style="color:#2563eb;font-weight:700;">2.4%</span>' in html
     assert "엔비디아가 2.4% 내렸어요." in html
 
 
 def test_render_briefing_email_html_colors_each_signed_percent_individually():
     html = render_briefing_email_html(
-        subject="좋은 아침이에요 | 미국 기술주·비트코인 브리핑 (2026-03-12)",
+        subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
         body="""Morning Market Brief (2026-03-12)
 
 1. 미국 증시 흐름
@@ -124,7 +127,7 @@ def test_render_briefing_email_html_colors_each_signed_percent_individually():
 
 def test_render_briefing_email_html_prefers_negative_numeric_direction_over_positive_words():
     html = render_briefing_email_html(
-        subject="좋은 아침이에요 | 미국 기술주·비트코인 브리핑 (2026-03-12)",
+        subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
         body="""Morning Market Brief (2026-03-12)
 
 1. 시장 해석
@@ -133,13 +136,12 @@ def test_render_briefing_email_html_prefers_negative_numeric_direction_over_posi
 """,
     )
 
-    assert "↓" in html
     assert '<span style="color:#2563eb;font-weight:700;">-1.20%</span>' in html
 
 
 def test_build_briefing_message_uses_bcc_for_multiple_recipients():
     msg = build_briefing_message(
-        subject="좋은 아침이에요 | 미국 기술주·비트코인 브리핑 (2026-03-12)",
+        subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
         body=SAMPLE_BRIEF,
         sender="sender@example.com",
         recipients=["a@example.com", "b@example.com"],
@@ -155,7 +157,7 @@ def test_render_briefing_email_html_renders_reference_links():
     body = SAMPLE_BRIEF + "\n\n참고 출처\n- Reuters — https://www.reuters.com/world/us/example"
 
     html = render_briefing_email_html(
-        subject="좋은 아침이에요 | 미국 기술주·비트코인 브리핑 (2026-03-12)",
+        subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
         body=body,
     )
 

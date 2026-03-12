@@ -274,7 +274,7 @@ def _collect_from_gdelt(max_items: int, preferred_only: bool = True) -> list[New
             preferred_only=preferred_only,
         )
     except (HttpFetchError, ValueError) as exc:
-        logger.warning("GDELT fetch failed: %s", exc)
+        logger.warning("GDELT에서 뉴스를 가져오지 못했어요: %s", exc)
         return []
 
 
@@ -286,7 +286,7 @@ def _collect_from_rss(max_items: int, preferred_only: bool = True) -> list[NewsI
         feed = feedparser.parse(_google_news_rss(query))
         if getattr(feed, "bozo", 0):
             logger.warning(
-                "RSS parse warning for query=%s: %s",
+                "RSS를 읽는 중 경고가 있었어요. query=%s | %s",
                 query,
                 getattr(feed, "bozo_exception", "unknown"),
             )
@@ -387,26 +387,26 @@ def fetch_news(max_items: int, newsapi_key: str = "") -> list[NewsItem]:
 
     items = _collect_from_gdelt(max_items=candidate_limit, preferred_only=True)
     if items:
-        logger.info("News provider: GDELT preferred")
+        logger.info("뉴스 수집은 GDELT 우선 결과를 사용했어요.")
 
     if len(items) < MIN_NEWS_ITEMS and newsapi_key:
         try:
             newsapi_items = _collect_from_newsapi(newsapi_key, max_items=candidate_limit)
             items = _merge_rank(items, newsapi_items, max_items=candidate_limit)
             if newsapi_items:
-                logger.info("News backfill provider: NewsAPI")
+                logger.info("뉴스 보강에는 NewsAPI를 함께 사용했어요.")
         except (HttpFetchError, ValueError) as exc:
-            logger.warning("NewsAPI fetch failed: %s", exc)
+            logger.warning("NewsAPI에서 뉴스를 가져오지 못했어요: %s", exc)
 
     if len(items) < MIN_NEWS_ITEMS:
         rss_items = _collect_from_rss(max_items=candidate_limit, preferred_only=True)
         items = _merge_rank(items, rss_items, max_items=candidate_limit)
         if rss_items:
-            logger.info("News backfill provider: Google News RSS preferred domains")
+            logger.info("뉴스 보강에는 Google News RSS 우선 도메인을 사용했어요.")
 
     if len(items) < MIN_NEWS_ITEMS:
         logger.info(
-            "Preferred sources returned %s item(s). Expanding to broader GDELT/RSS.",
+            "우선 신뢰 출처가 %s건이라 범위를 넓혀 GDELT와 RSS를 한 번 더 살펴봤어요.",
             len(items),
         )
         gdelt_broad = _collect_from_gdelt(max_items=candidate_limit, preferred_only=False)

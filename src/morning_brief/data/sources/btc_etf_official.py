@@ -43,7 +43,7 @@ def _parse_compact_number(raw: str) -> float:
 def _extract_value(text: str, label: str) -> float:
     match = re.search(rf"{re.escape(label)}\*?\s+(?P<value>{VALUE_RE})", text, flags=re.IGNORECASE)
     if not match:
-        raise HttpFetchError(f"Missing '{label}' in official ETF page")
+        raise HttpFetchError(f"공식 ETF 페이지에서 '{label}' 값을 찾지 못했어요.")
     return _parse_compact_number(match.group("value"))
 
 
@@ -54,14 +54,14 @@ def _extract_dated_value(text: str, label: str) -> tuple[str, float]:
         flags=re.IGNORECASE,
     )
     if not match:
-        raise HttpFetchError(f"Missing dated '{label}' in official ETF page")
+        raise HttpFetchError(f"공식 ETF 페이지에서 날짜가 포함된 '{label}' 값을 찾지 못했어요.")
     return match.group("date"), _parse_compact_number(match.group("value"))
 
 
 def _extract_page_date(text: str) -> str:
     match = re.search(rf"(?:Data|data)\s+as\s+of\s+(?P<date>{DATE_RE})", text)
     if not match:
-        raise HttpFetchError("Missing page-level 'Data as of' date in official ETF page")
+        raise HttpFetchError("공식 ETF 페이지에서 기준일을 찾지 못했어요.")
     return match.group("date")
 
 

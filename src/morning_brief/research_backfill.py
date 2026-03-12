@@ -203,11 +203,11 @@ def backfill_news_with_web_search(
             max_items=settings.max_news_items,
         )
         logger.info(
-            "OpenAI web search backfill added %s candidate item(s); merged news count=%s",
+            "OpenAI 웹 검색으로 후보 뉴스 %s건을 더 확인했고, 최종 뉴스는 %s건으로 정리했어요.",
             len(extra_items),
             len(merged_packet),
         )
         return merged_packet, citations
     except Exception as exc:
-        logger.warning("OpenAI web search backfill failed: %s", exc)
+        logger.warning("OpenAI 웹 검색으로 뉴스를 보강하는 중 문제가 있었어요: %s", exc)
         return packet.get("news", []), []

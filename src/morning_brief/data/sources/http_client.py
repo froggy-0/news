@@ -48,7 +48,7 @@ def is_host_resolvable(value: str) -> bool:
         _host_resolution_cache[host] = (True, now)
     except socket.gaierror:
         _host_resolution_cache[host] = (False, now)
-        logger.warning("DNS resolution failed for host: %s", host)
+        logger.warning("호스트 주소를 확인하지 못했어요: %s", host)
 
     return _host_resolution_cache[host][0]
 
@@ -64,7 +64,7 @@ def _request_with_retry(
     backoff_seconds: float = DEFAULT_BACKOFF,
 ) -> requests.Response:
     if not is_host_resolvable(url):
-        raise HttpFetchError(f"Host is not resolvable: {urlparse(url).hostname}")
+        raise HttpFetchError(f"호스트 주소를 확인할 수 없어요: {urlparse(url).hostname}")
 
     merged_headers = dict(DEFAULT_HEADERS)
     if headers:
@@ -86,7 +86,7 @@ def _request_with_retry(
             if attempt == retries:
                 break
             logger.warning(
-                "HTTP retry %s/%s failed for %s: %s",
+                "HTTP 요청을 다시 시도하는 중이에요 (%s/%s). 대상=%s | %s",
                 attempt,
                 retries,
                 url,
@@ -94,7 +94,7 @@ def _request_with_retry(
             )
             time.sleep(backoff_seconds * attempt)
 
-    raise HttpFetchError(f"Failed to fetch URL: {url}") from last_error
+    raise HttpFetchError(f"URL을 가져오지 못했어요: {url}") from last_error
 
 
 
@@ -119,10 +119,10 @@ def get_json_with_retry(
     try:
         payload = response.json()
     except ValueError as exc:
-        raise HttpFetchError(f"Invalid JSON response from {url}") from exc
+        raise HttpFetchError(f"JSON 응답 형식을 확인하지 못했어요: {url}") from exc
 
     if not isinstance(payload, dict):
-        raise HttpFetchError(f"Unexpected JSON shape for {url}")
+        raise HttpFetchError(f"JSON 응답 구조가 예상과 달라요: {url}")
 
     return payload
 
