@@ -148,31 +148,120 @@ def _split_section_groups(content: str) -> tuple[str, str, str]:
     return sections["summary"]["label"], summary, insight
 
 
-def _metric_indicator(text: str) -> tuple[str, str, str, str]:
-    if any(token in text for token in UP_TOKENS):
+def _direction_style(direction: str) -> tuple[str, str, str, str]:
+    if direction == "up":
         return "↑", "#dc2626", "#fef2f2", "#fecaca"
-    if any(token in text for token in DOWN_TOKENS):
+    if direction == "down":
         return "↓", "#2563eb", "#eff6ff", "#bfdbfe"
-    if any(token in text for token in FLAT_TOKENS):
+    if direction == "mixed":
+        return "↕", "#64748b", "#f8fafc", "#cbd5e1"
+    if direction == "flat":
         return "→", "#64748b", "#f8fafc", "#cbd5e1"
     return "•", "#94a3b8", "#f8fafc", "#e2e8f0"
 
 
-def _highlight_metric_text(text: str, color: str) -> str:
-    match = PERCENT_RE.search(text)
-    if not match:
+def _percent_direction(token: str) -> str | None:
+    normalized = token.replace(",", "").strip()
+    sign = ""
+    if normalized.startswith("+"):
+        sign = "+"
+    elif normalized.startswith("-"):
+        sign = "-"
+
+    try:
+        value = float(normalized.lstrip("+-").rstrip("%"))
+    except ValueError:
+        return None
+
+    if abs(value) < 1e-9:
+        return "flat"
+    if sign == "+":
+        return "up"
+    if sign == "-":
+        return "down"
+    return None
+
+
+def _token_direction(text: str) -> str | None:
+    up_count = sum(text.count(token) for token in UP_TOKENS)
+    down_count = sum(text.count(token) for token in DOWN_TOKENS)
+    flat_count = sum(text.count(token) for token in FLAT_TOKENS)
+
+    if up_count > down_count and up_count > 0:
+        return "up"
+    if down_count > up_count and down_count > 0:
+        return "down"
+    if flat_count > 0 and up_count == 0 and down_count == 0:
+        return "flat"
+    return None
+
+
+def _metric_indicator(text: str) -> tuple[str, str, str, str]:
+    signed_directions = [
+        direction
+        for token in PERCENT_RE.findall(text)
+        if (direction := _percent_direction(token)) is not None
+    ]
+    positive_count = sum(1 for direction in signed_directions if direction == "up")
+    negative_count = sum(1 for direction in signed_directions if direction == "down")
+
+    if positive_count and negative_count:
+        return _direction_style("mixed")
+    if positive_count:
+        return _direction_style("up")
+    if negative_count:
+        return _direction_style("down")
+    if signed_directions and all(direction == "flat" for direction in signed_directions):
+        return _direction_style("flat")
+
+    token_direction = _token_direction(text)
+    if token_direction is not None:
+        return _direction_style(token_direction)
+
+    if signed_directions:
+        return _direction_style("flat")
+
+    return _direction_style("neutral")
+
+
+def _highlight_metric_text(text: str, default_direction: str) -> str:
+    parts: list[str] = []
+    last_index = 0
+
+    for match in PERCENT_RE.finditer(text):
+        start, end = match.span()
+        token = match.group(0)
+        token_direction = _percent_direction(token)
+        if token_direction is None:
+            token_direction = default_direction if default_direction in {"up", "down", "flat"} else "neutral"
+        _, color, _, _ = _direction_style(token_direction)
+        parts.append(html.escape(text[last_index:start]))
+        parts.append(f'<span style="color:{color};font-weight:700;">{html.escape(token)}</span>')
+        last_index = end
+
+    if not parts:
         return html.escape(text)
 
-    start, end = match.span()
+    parts.append(html.escape(text[last_index:]))
+    return "".join(parts)
+
+
+def _render_body_line(text: str) -> str:
+    symbol, color, background, border = _metric_indicator(text)
+    highlighted = _highlight_metric_text(text, default_direction=_token_direction(text) or "neutral")
+    if symbol == "•" and highlighted == html.escape(text):
+        return html.escape(text)
     return (
-        f"{html.escape(text[:start])}"
-        f'<span style="color:{color};font-weight:700;">{html.escape(match.group(0))}</span>'
-        f"{html.escape(text[end:])}"
+        f'<span style="display:inline-block;min-width:18px;height:18px;line-height:18px;'
+        f'text-align:center;border-radius:999px;background:{background};border:1px solid {border};'
+        f'color:{color};font-weight:800;font-size:11px;vertical-align:1px;margin-right:8px;">{symbol}</span>'
+        f'<span style="display:inline;color:#0f172a;">{highlighted}</span>'
     )
 
 
 def _render_metric_item(text: str) -> str:
     symbol, color, background, border = _metric_indicator(text)
+    default_direction = _token_direction(text) or "neutral"
     return (
         '<li style="margin:0 0 10px 0;padding:0;list-style:none;">'
         '<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
@@ -184,7 +273,7 @@ def _render_metric_item(text: str) -> str:
         f'color:{color};font-weight:800;font-size:13px;">{symbol}</span>'
         "</td>"
         '<td valign="top" style="padding:0;">'
-        f'<span style="display:inline;color:#0f172a;font-size:15px;line-height:1.75;">{_highlight_metric_text(text, color)}</span>'
+        f'<span style="display:inline;color:#0f172a;font-size:15px;line-height:1.75;">{_highlight_metric_text(text, default_direction)}</span>'
         "</td>"
         "</tr>"
         "</table>"
@@ -210,7 +299,7 @@ def _text_to_html_blocks(content: str) -> str:
             )
             continue
 
-        text = "<br>".join(html.escape(line) for line in lines)
+        text = "<br>".join(_render_body_line(line) for line in lines)
         blocks.append(
             '<p style="margin:0;color:#1f2937;font-size:15px;line-height:1.8;">'
             f"{text}</p>"

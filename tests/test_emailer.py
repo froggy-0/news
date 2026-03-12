@@ -106,6 +106,37 @@ def test_render_briefing_email_html_marks_down_moves_in_blue():
     assert "엔비디아가 2.4% 내렸어요." in html
 
 
+def test_render_briefing_email_html_colors_each_signed_percent_individually():
+    html = render_briefing_email_html(
+        subject="좋은 아침이에요 | 미국 기술주·비트코인 브리핑 (2026-03-12)",
+        body="""Morning Market Brief (2026-03-12)
+
+1. 미국 증시 흐름
+수치 체크
+- 주요 지수는 S&P500 610.25 (+1.20%) / NASDAQ 18250.11 (-0.85%) / SOXX 245.10 (+0.10%) 흐름으로 마감했어요.
+""",
+    )
+
+    assert '<span style="color:#dc2626;font-weight:700;">+1.20%</span>' in html
+    assert '<span style="color:#2563eb;font-weight:700;">-0.85%</span>' in html
+    assert '<span style="color:#dc2626;font-weight:700;">+0.10%</span>' in html
+
+
+def test_render_briefing_email_html_prefers_negative_numeric_direction_over_positive_words():
+    html = render_briefing_email_html(
+        subject="좋은 아침이에요 | 미국 기술주·비트코인 브리핑 (2026-03-12)",
+        body="""Morning Market Brief (2026-03-12)
+
+1. 시장 해석
+오늘 볼 포인트
+- 나스닥은 -1.20%였지만 단기 반등 기대는 아직 남아 있어요.
+""",
+    )
+
+    assert "↓" in html
+    assert '<span style="color:#2563eb;font-weight:700;">-1.20%</span>' in html
+
+
 def test_build_briefing_message_uses_bcc_for_multiple_recipients():
     msg = build_briefing_message(
         subject="좋은 아침이에요 | 미국 기술주·비트코인 브리핑 (2026-03-12)",
