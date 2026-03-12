@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import logging
 from zoneinfo import ZoneInfo
 
 from morning_brief.briefing import generate_briefing
@@ -9,28 +10,81 @@ from morning_brief.data.market import build_market_packet
 from morning_brief.data.news import build_news_packet
 from morning_brief.emailer import GmailSender
 
+logger = logging.getLogger(__name__)
+
+
+def _safe_price(value: object) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _assess_data_quality(packet: dict, news_packet: list[dict]) -> dict:
+    macro = packet.get("macro", [])
+    us_indices = packet.get("us_indices", [])
+    tech_stocks = packet.get("tech_stocks", [])
+    btc = packet.get("bitcoin", {})
+
+    numeric_points = macro + us_indices + tech_stocks + btc.get("etf_points", []) + [btc.get("spot", {})]
+    zero_points = [
+        p for p in numeric_points if isinstance(p, dict) and _safe_price(p.get("price", 0.0)) <= 0.0
+    ]
+
+    zero_ratio = (len(zero_points) / len(numeric_points)) if numeric_points else 1.0
+    news_count = len(news_packet)
+
+    warnings: list[str] = []
+    if zero_ratio >= 0.6:
+        warnings.append(f"가격 데이터의 {zero_ratio*100:.0f}%가 폴백 값입니다")
+    if news_count < 3:
+        warnings.append(f"핵심 뉴스가 {news_count}건으로 최소 기준(3건) 미달입니다")
+
+    if news_count < 3 or zero_ratio >= 0.8:
+        status = "critical"
+    elif warnings:
+        status = "degraded"
+    else:
+        status = "ok"
+
+    return {
+        "status": status,
+        "zero_price_ratio": round(zero_ratio, 4),
+        "news_count": news_count,
+        "warnings": warnings,
+    }
+
 
 
 def run_pipeline(settings: Settings) -> str:
-    market_packet = build_market_packet()
+    logger.info("Pipeline started")
+    market_packet = build_market_packet(fred_api_key=settings.fred_api_key)
     news_packet = build_news_packet(
         max_items=settings.max_news_items,
         newsapi_key=settings.newsapi_key,
     )
+    logger.info("Collected market points and %s news item(s)", len(news_packet))
 
     packet = {
         **market_packet,
         "news": news_packet,
     }
+    quality = _assess_data_quality(packet=packet, news_packet=news_packet)
+    packet["data_quality"] = quality
+    if quality["status"] != "ok":
+        logger.warning("Data quality status: %s | %s", quality["status"], "; ".join(quality["warnings"]))
 
     briefing = generate_briefing(packet=packet, settings=settings)
 
     settings.output_dir.mkdir(parents=True, exist_ok=True)
     now = datetime.now(ZoneInfo(settings.timezone))
-    file_name = now.strftime("brief_%Y%m%d.md")
-    (settings.output_dir / file_name).write_text(briefing, encoding="utf-8")
+    file_name = now.strftime("brief_%Y%m%d_%H%M.md")
+    output_path = settings.output_dir / file_name
+    output_path.write_text(briefing, encoding="utf-8")
+    logger.info("Briefing saved: %s", output_path)
 
     subject = f"Morning Market Brief | {now.strftime('%Y-%m-%d')}"
     GmailSender(settings).send(subject=subject, body=briefing)
+    logger.info("Pipeline completed")
 
     return briefing

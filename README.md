@@ -1,31 +1,32 @@
 # Morning Market Brief (US Tech + BTC)
 
-매일 오전 08:00(KST)에 미국 기술주 + 비트코인 중심 `Morning Market Brief`를 생성하고 이메일로 전송하는 단일 Python 프로젝트입니다.
+매일 오전 08:00(KST) 기준으로 미국 기술주 + 비트코인 중심 `Morning Market Brief`를 생성하고 이메일로 발송하는 단일 Python 프로젝트입니다.
 
-## 기능
-- 밤사이 시장 데이터 수집
-  - 거시: 미국 국채금리, 달러 인덱스, VIX
-  - 증시: S&P500, NASDAQ, SOXX
-  - AI/빅테크: NVDA, MSFT, AAPL, AMZN, GOOGL, META, AMD, TSM, ASML, AVGO
-  - 비트코인: BTC 현물, 주요 BTC ETF, 시장 심리(Fear & Greed)
-- 우선 소스 기반 뉴스 수집
-  - Reuters, Bloomberg, WSJ, FT, CNBC, CoinDesk 우선
-- LLM 기반 한국어 브리핑 생성
-  - 고정 포맷
-  - 해석 중심
-  - 3~5개 핵심 뉴스 반영
-- Gmail API 이메일 발송
-- 스케줄 실행(매일 08:00 KST)
+## 핵심 기능
+- 시장 데이터 수집: 금리/달러/VIX, 미국 지수, 빅테크 10종, BTC + ETF
+  - 거시: FRED API 우선, 실패 시 yfinance 폴백
+- 뉴스 수집: GDELT 우선 + NewsAPI/RSS 백필
+  - Reuters/Bloomberg/WSJ/FT/CNBC/CoinDesk 도메인 우선
+- 브리핑 생성: OpenAI API 기반 한국어 해석형 리포트(실패 시 템플릿 폴백)
+  - Jinja 템플릿 기반 프롬프트 관리 (`src/morning_brief/prompts`)
+  - OpenAI `prompt_cache_key` 기반 프롬프트 캐싱 최적화
+- 이메일 발송: Gmail API
+- 자동 실행: 로컬 스케줄러 또는 GitHub Actions
 
 ## 프로젝트 구조
 - `main.py`: 실행 엔트리포인트
 - `src/morning_brief/config.py`: 환경설정 로더
-- `src/morning_brief/data/market.py`: 시장 데이터 수집
-- `src/morning_brief/data/news.py`: 뉴스 수집
-- `src/morning_brief/briefing.py`: LLM 브리핑 생성
+- `src/morning_brief/data/market.py`: 시장 데이터 수집 (재시도 포함)
+- `src/morning_brief/data/news.py`: 뉴스 수집 (우선소스 + 백필)
+- `src/morning_brief/data/sources/`: FRED/GDELT/Stooq/CoinGecko 소스 어댑터
+- `src/morning_brief/briefing.py`: 브리핑 생성
+- `src/morning_brief/prompting.py`: Jinja 프롬프트 렌더링/캐시 키 생성
+- `src/morning_brief/prompts/*.j2`: 프롬프트 템플릿
 - `src/morning_brief/emailer.py`: Gmail 발송
 - `src/morning_brief/pipeline.py`: 전체 파이프라인
 - `src/morning_brief/scheduler.py`: 일일 스케줄러
+- `.github/workflows/morning-brief.yml`: GitHub Actions 일일 실행
+- `tests/`: 핵심 수집/품질 로직 테스트
 
 ## 1) 설치
 ```bash
@@ -34,43 +35,97 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+개발/테스트 의존성까지 설치:
+```bash
+pip install -r requirements-dev.txt
+```
+
 ## 2) 환경변수
 ```bash
 cp .env.example .env
 ```
 
-`.env` 필수 항목:
+주요 항목:
 - `OPENAI_API_KEY`
+- `OPENAI_REASONING_EFFORT` (기본 `low`)
+- `OPENAI_MAX_OUTPUT_TOKENS` (기본 `1700`)
+- `OPENAI_PROMPT_CACHE_KEY` (고정 프롬프트 캐시 네임스페이스)
+- `PROMPT_TEMPLATE_DIR` (기본 `src/morning_brief/prompts`)
+- `PROMPT_TEMPLATE_VERSION` (프롬프트 변경 시 버전 증가 권장)
+- `FRED_API_KEY` (권장, 매크로 공식 소스)
 - `GMAIL_SENDER`
 - `GMAIL_RECIPIENT`
-- `GMAIL_CREDENTIALS_FILE` (`credentials.json` 경로)
+- `GMAIL_CREDENTIALS_FILE` (기본 `credentials.json`)
+- `GMAIL_TOKEN_FILE` (기본 `token.json`)
+- `GMAIL_OAUTH_INTERACTIVE` (로컬 OAuth 로그인 필요 시 `true`)
 
-선택 항목:
-- `NEWSAPI_KEY` (없으면 RSS 폴백)
-- `SEND_EMAIL=false` (로컬 테스트용)
-
-## 3) Gmail API 준비
+## 3) Gmail API 준비 (최초 1회)
 1. Google Cloud Console에서 Gmail API 활성화
 2. OAuth Client ID(Desktop App) 생성
-3. OAuth JSON 다운로드 후 `credentials.json`으로 저장
-4. 첫 실행 시 브라우저 인증 완료하면 `token.json` 자동 생성
+3. `credentials.json` 다운로드
+4. 로컬에서 `python main.py once` 실행
+5. 브라우저 인증 완료 후 `token.json` 생성
 
 ## 4) 실행
 즉시 1회 실행:
 ```bash
-python main.py once
+python3 main.py once
 ```
 
-스케줄 실행(매일 08:00 KST):
+브리핑 본문을 stdout으로 출력:
 ```bash
-python main.py schedule
+python3 main.py once --print-brief
+```
+
+로컬 스케줄 실행(매일 08:00 KST):
+```bash
+python3 main.py schedule
 ```
 
 ## 5) 출력
-- 최종 브리핑만 생성
-- 파일 저장: `outputs/brief_YYYYMMDD.md`
+- 파일 저장: `outputs/brief_YYYYMMDD_HHMM.md`
 - 이메일 제목: `Morning Market Brief | YYYY-MM-DD`
+- 데이터 커버리지 저하 시 제목 아래 `[데이터 품질 알림]` 자동 표시
 
-## 운영 메모
-- 초기 버전은 비용 최소화를 위해 단일 프로세스 기반으로 동작합니다.
-- 장기 운영 시 `systemd`, `pm2`, Docker restart policy 등으로 `python main.py schedule` 프로세스 상시 실행을 권장합니다.
+## 6) 테스트
+```bash
+pytest -q
+```
+
+## 7) 프롬프트 엔지니어링 참고
+- OpenAI Prompt Engineering: <https://platform.openai.com/docs/guides/prompt-engineering>
+- OpenAI Prompt Caching: <https://platform.openai.com/docs/guides/prompt-caching>
+- OpenAI Responses API: <https://platform.openai.com/docs/api-reference/responses/create>
+- Anthropic Prompt Engineering Overview: <https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview>
+- Anthropic Prompt Caching: <https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching>
+
+## 8) GitHub Actions 운영
+워크플로우는 `.github/workflows/morning-brief.yml`에 포함되어 있습니다.
+
+스케줄:
+- `0 23 * * *` (UTC) = 매일 08:00 KST
+
+필수 GitHub Secrets:
+- `OPENAI_API_KEY`
+- `FRED_API_KEY`
+- `GMAIL_SENDER`
+- `GMAIL_RECIPIENT`
+- `GMAIL_CREDENTIALS_JSON_B64`
+- `GMAIL_TOKEN_JSON_B64`
+
+선택 GitHub Secrets:
+- `NEWSAPI_KEY`
+
+선택 GitHub Variables:
+- `OPENAI_MODEL` (기본 `gpt-5-mini`)
+- `OPENAI_REASONING_EFFORT` (기본 `low`)
+- `OPENAI_MAX_OUTPUT_TOKENS` (기본 `1700`)
+- `OPENAI_PROMPT_CACHE_KEY` (기본 `morning-market-brief`)
+- `PROMPT_TEMPLATE_VERSION` (기본 `market_brief_v3`)
+
+### base64 생성 예시 (macOS)
+```bash
+base64 -i credentials.json | pbcopy
+base64 -i token.json | pbcopy
+```
+복사된 값을 각각 `GMAIL_CREDENTIALS_JSON_B64`, `GMAIL_TOKEN_JSON_B64`에 넣으면 됩니다.

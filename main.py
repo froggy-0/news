@@ -9,8 +9,7 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-from morning_brief.config import load_settings
-from morning_brief.scheduler import run_daily, run_once
+from morning_brief.logging_utils import setup_logging
 
 
 
@@ -21,18 +20,31 @@ def parse_args() -> argparse.Namespace:
         choices=["once", "schedule"],
         help="once: execute now, schedule: run every day at 08:00 KST",
     )
+    parser.add_argument(
+        "--print-brief",
+        action="store_true",
+        help="Print generated briefing to stdout (disabled by default to avoid log leakage).",
+    )
     return parser.parse_args()
 
 
 
 def main() -> None:
     args = parse_args()
+    from morning_brief.config import load_settings
+
     settings = load_settings()
+    setup_logging()
 
     if args.mode == "once":
-        briefing = run_once(settings=settings)
-        print(briefing)
+        from morning_brief.pipeline import run_pipeline
+
+        briefing = run_pipeline(settings=settings)
+        if args.print_brief:
+            print(briefing)
         return
+
+    from morning_brief.scheduler import run_daily
 
     run_daily(settings=settings, hour=8, minute=0)
 

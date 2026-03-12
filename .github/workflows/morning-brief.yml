@@ -1,0 +1,93 @@
+name: Morning Market Brief
+
+on:
+  schedule:
+    # 08:00 KST daily == 23:00 UTC (previous day)
+    - cron: "0 23 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: morning-brief-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  run-brief:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: Restore Gmail OAuth files
+        shell: bash
+        run: |
+          if [ -z "${GMAIL_CREDENTIALS_JSON_B64}" ] || [ -z "${GMAIL_TOKEN_JSON_B64}" ]; then
+            echo "Missing Gmail OAuth secrets." >&2
+            exit 1
+          fi
+          echo "${GMAIL_CREDENTIALS_JSON_B64}" | base64 -d > credentials.json
+          echo "${GMAIL_TOKEN_JSON_B64}" | base64 -d > token.json
+        env:
+          GMAIL_CREDENTIALS_JSON_B64: ${{ secrets.GMAIL_CREDENTIALS_JSON_B64 }}
+          GMAIL_TOKEN_JSON_B64: ${{ secrets.GMAIL_TOKEN_JSON_B64 }}
+
+      - name: Run pipeline
+        shell: bash
+        run: |
+          set -euo pipefail
+          attempt=1
+          max_attempts=2
+          while [ "${attempt}" -le "${max_attempts}" ]; do
+            echo "Pipeline attempt ${attempt}/${max_attempts}"
+            if python main.py once 2>&1 | tee run.log; then
+              exit 0
+            fi
+            if [ "${attempt}" -eq "${max_attempts}" ]; then
+              echo "Pipeline failed after retries." >&2
+              exit 1
+            fi
+            attempt=$((attempt + 1))
+            sleep 20
+          done
+        env:
+          CI: "true"
+          TIMEZONE: Asia/Seoul
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5-mini' }}
+          OPENAI_REASONING_EFFORT: ${{ vars.OPENAI_REASONING_EFFORT || 'low' }}
+          OPENAI_MAX_OUTPUT_TOKENS: ${{ vars.OPENAI_MAX_OUTPUT_TOKENS || '1700' }}
+          OPENAI_PROMPT_CACHE_KEY: ${{ vars.OPENAI_PROMPT_CACHE_KEY || 'morning-market-brief' }}
+          PROMPT_TEMPLATE_VERSION: ${{ vars.PROMPT_TEMPLATE_VERSION || 'market_brief_v3' }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
+          GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
+          GMAIL_RECIPIENT: ${{ secrets.GMAIL_RECIPIENT }}
+          GMAIL_CREDENTIALS_FILE: credentials.json
+          GMAIL_TOKEN_FILE: token.json
+          GMAIL_OAUTH_INTERACTIVE: "false"
+          SEND_EMAIL: "true"
+          MAX_NEWS_ITEMS: "5"
+
+      - name: Upload run artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: morning-brief-artifacts
+          path: |
+            outputs/*.md
+            run.log
+          if-no-files-found: warn

@@ -1,21 +1,117 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import logging
+from pathlib import Path
+import socket
+import time
 
 import requests
 import yfinance as yf
 
+from morning_brief.data.sources.coingecko import fetch_btc_usd_price_change
+from morning_brief.data.sources.fred import fetch_macro_points_from_fred
+from morning_brief.data.sources.http_client import HttpFetchError
+from morning_brief.data.sources.stooq import fetch_close_change_and_volume, to_stooq_symbol
 from morning_brief.models import BitcoinSnapshot, MarketPoint
 
+logger = logging.getLogger(__name__)
 
-def _latest_price_point(label: str, ticker: str, price_scale: float = 1.0) -> MarketPoint:
-    history = yf.Ticker(ticker).history(period="5d", interval="1d", auto_adjust=False)
-    if history.empty or len(history) < 2:
-        raise ValueError(f"No recent price history for {ticker}")
+MAX_RETRIES = 3
+BACKOFF_SECONDS = 1.2
+FEAR_GREED_TIMEOUT = 10
+YAHOO_FINANCE_HOST = "query2.finance.yahoo.com"
+
+# yfinance tries to write cache files under user cache directory by default.
+# In restricted environments (CI/sandbox), use /tmp to avoid permission issues.
+try:
+    if hasattr(yf, "set_tz_cache_location"):
+        cache_dir = Path("/tmp/py-yfinance-cache")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        yf.set_tz_cache_location(str(cache_dir))
+except Exception:
+    pass
+
+_yahoo_reachable: bool | None = None
+_provider_warned: set[str] = set()
+
+
+
+def _warn_once(key: str, message: str, *args) -> None:
+    if key in _provider_warned:
+        return
+    _provider_warned.add(key)
+    logger.warning(message, *args)
+
+
+
+def _is_yahoo_reachable() -> bool:
+    global _yahoo_reachable
+    if _yahoo_reachable is not None:
+        return _yahoo_reachable
+
+    try:
+        socket.gethostbyname(YAHOO_FINANCE_HOST)
+        _yahoo_reachable = True
+    except socket.gaierror:
+        _warn_once(
+            "yahoo_dns",
+            "Yahoo Finance host resolution failed (%s). yfinance fallbacks may return zeros.",
+            YAHOO_FINANCE_HOST,
+        )
+        _yahoo_reachable = False
+
+    return _yahoo_reachable
+
+
+
+def _history_with_retry(ticker: str, period: str, interval: str):
+    if not _is_yahoo_reachable():
+        raise RuntimeError("Yahoo Finance host resolution failed")
+
+    last_error: Exception | None = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            history = yf.Ticker(ticker).history(
+                period=period,
+                interval=interval,
+                auto_adjust=False,
+            )
+            if history.empty:
+                raise ValueError(f"No history for {ticker}")
+            return history
+        except Exception as exc:
+            last_error = exc
+            if attempt == MAX_RETRIES:
+                break
+            logger.warning(
+                "yfinance retry %s/%s failed for %s: %s",
+                attempt,
+                MAX_RETRIES,
+                ticker,
+                exc,
+            )
+            time.sleep(BACKOFF_SECONDS * attempt)
+
+    raise RuntimeError(f"Failed to fetch market history for {ticker}") from last_error
+
+
+
+def _latest_price_point_from_yfinance(
+    label: str,
+    ticker: str,
+    price_scale: float = 1.0,
+) -> MarketPoint:
+    history = _history_with_retry(ticker=ticker, period="5d", interval="1d")
+    if len(history) < 2:
+        raise ValueError(f"Insufficient daily history for {ticker}")
 
     latest_close = float(history["Close"].iloc[-1]) * price_scale
     previous_close = float(history["Close"].iloc[-2]) * price_scale
-    change_pct = ((latest_close - previous_close) / previous_close) * 100
+    if previous_close == 0:
+        change_pct = 0.0
+    else:
+        change_pct = ((latest_close - previous_close) / previous_close) * 100
 
     return MarketPoint(
         label=label,
@@ -25,35 +121,122 @@ def _latest_price_point(label: str, ticker: str, price_scale: float = 1.0) -> Ma
     )
 
 
-def _safe_price_point(label: str, ticker: str, price_scale: float = 1.0) -> MarketPoint:
+
+def _safe_yfinance_point(
+    label: str,
+    ticker: str,
+    price_scale: float = 1.0,
+) -> MarketPoint:
     try:
-        return _latest_price_point(label, ticker, price_scale=price_scale)
-    except Exception:
+        return _latest_price_point_from_yfinance(
+            label=label,
+            ticker=ticker,
+            price_scale=price_scale,
+        )
+    except Exception as exc:
+        _warn_once(
+            f"yfinance_fallback_{ticker}",
+            "Using zero fallback for %s (%s): %s",
+            label,
+            ticker,
+            exc,
+        )
         return MarketPoint(label=label, ticker=ticker, price=0.0, change_pct=0.0)
 
 
 
-def fetch_macro_points() -> list[MarketPoint]:
+def _safe_stooq_point(label: str, ticker: str, stooq_symbol: str | None = None) -> MarketPoint:
+    symbol = stooq_symbol or to_stooq_symbol(ticker)
+    try:
+        close, change_pct, _ = fetch_close_change_and_volume(symbol)
+        return MarketPoint(
+            label=label,
+            ticker=ticker,
+            price=round(close, 4),
+            change_pct=round(change_pct, 2),
+        )
+    except (HttpFetchError, ValueError) as exc:
+        _warn_once(
+            f"stooq_fallback_{symbol}",
+            "Stooq fetch failed for %s (%s): %s. Falling back to yfinance.",
+            label,
+            symbol,
+            exc,
+        )
+        return _safe_yfinance_point(label=label, ticker=ticker)
+
+
+
+def _safe_stooq_volume(ticker: str, stooq_symbol: str | None = None) -> int:
+    symbol = stooq_symbol or to_stooq_symbol(ticker)
+    try:
+        _, _, volume = fetch_close_change_and_volume(symbol)
+        return volume
+    except (HttpFetchError, ValueError) as exc:
+        _warn_once(
+            f"stooq_volume_fallback_{symbol}",
+            "Stooq volume fetch failed for %s: %s. Falling back to yfinance.",
+            symbol,
+            exc,
+        )
+
+    try:
+        history = _history_with_retry(ticker=ticker, period="2d", interval="1d")
+        latest_volume = history["Volume"].iloc[-1]
+        if latest_volume == latest_volume:
+            return int(latest_volume)
+    except Exception as exc:
+        _warn_once(
+            f"yfinance_volume_fallback_{ticker}",
+            "Skipping volume for %s after yfinance fallback failure: %s",
+            ticker,
+            exc,
+        )
+
+    return 0
+
+
+
+def fetch_macro_points(fred_api_key: str = "") -> list[MarketPoint]:
+    if fred_api_key:
+        try:
+            points = fetch_macro_points_from_fred(fred_api_key)
+            logger.info("Macro provider: FRED")
+            return points
+        except Exception as exc:
+            _warn_once(
+                "fred_fallback",
+                "FRED macro fetch failed (%s). Falling back to yfinance macros.",
+                exc,
+            )
+
     targets = [
         ("미국 10년물 국채금리", "^TNX", 0.1),
         ("미국 13주물 단기금리", "^IRX", 1.0),
         ("달러 인덱스", "DX-Y.NYB", 1.0),
         ("VIX", "^VIX", 1.0),
     ]
+    logger.info("Macro provider: yfinance fallback")
     return [
-        _safe_price_point(label, ticker, price_scale=price_scale)
-        for label, ticker, price_scale in targets
+        _safe_yfinance_point(label=label, ticker=ticker, price_scale=scale)
+        for label, ticker, scale in targets
     ]
 
 
 
 def fetch_us_index_points() -> list[MarketPoint]:
+    # Stooq index symbols are inconsistent; use liquid ETF proxies for stability.
     targets = [
-        ("S&P500", "^GSPC"),
-        ("NASDAQ", "^IXIC"),
-        ("반도체 섹터 (SOXX)", "SOXX"),
+        ("S&P500", "SPY", "spy.us"),
+        ("NASDAQ", "QQQ", "qqq.us"),
+        ("반도체 섹터 (SOXX)", "SOXX", "soxx.us"),
     ]
-    return [_safe_price_point(label, ticker) for label, ticker in targets]
+    points = [
+        _safe_stooq_point(label=label, ticker=ticker, stooq_symbol=stooq_symbol)
+        for label, ticker, stooq_symbol in targets
+    ]
+    logger.info("US index provider: Stooq (ETF proxies) with yfinance fallback")
+    return points
 
 
 
@@ -70,47 +253,70 @@ def fetch_tech_stock_points() -> list[MarketPoint]:
         "ASML",
         "AVGO",
     ]
-    points: list[MarketPoint] = []
-    for ticker in tickers:
-        points.append(_safe_price_point(ticker, ticker))
-
+    points = [_safe_stooq_point(label=ticker, ticker=ticker) for ticker in tickers]
     points.sort(key=lambda x: abs(x.change_pct), reverse=True)
+    logger.info("Tech stock provider: Stooq with yfinance fallback")
     return points
 
 
 
 def _fetch_fear_greed() -> tuple[int | None, str | None]:
     url = "https://api.alternative.me/fng/?limit=1"
+    last_error: Exception | None = None
+
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            response = requests.get(url, timeout=FEAR_GREED_TIMEOUT)
+            response.raise_for_status()
+            payload = response.json()
+            item = payload.get("data", [{}])[0]
+            value = int(item.get("value"))
+            label = str(item.get("value_classification"))
+            return value, label
+        except (requests.RequestException, ValueError, TypeError, KeyError) as exc:
+            last_error = exc
+            if attempt == MAX_RETRIES:
+                break
+            time.sleep(BACKOFF_SECONDS * attempt)
+
+    _warn_once(
+        "fear_greed_fail",
+        "Fear&Greed fetch failed after retries: %s",
+        last_error,
+    )
+    return None, None
+
+
+
+def _fetch_btc_spot_point() -> MarketPoint:
     try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        payload = response.json()
-        item = payload.get("data", [{}])[0]
-        value = int(item.get("value"))
-        label = str(item.get("value_classification"))
-        return value, label
-    except (requests.RequestException, ValueError, TypeError, KeyError):
-        return None, None
+        price, change_pct = fetch_btc_usd_price_change()
+        logger.info("BTC spot provider: CoinGecko")
+        return MarketPoint(
+            label="BTC-USD",
+            ticker="BTC-USD",
+            price=round(price, 4),
+            change_pct=round(change_pct, 2),
+        )
+    except Exception as exc:
+        _warn_once(
+            "coingecko_btc_fallback",
+            "CoinGecko BTC fetch failed: %s. Falling back to yfinance.",
+            exc,
+        )
+        return _safe_yfinance_point(label="BTC-USD", ticker="BTC-USD")
 
 
 
 def fetch_bitcoin_snapshot() -> BitcoinSnapshot:
-    spot = _safe_price_point("BTC-USD", "BTC-USD")
+    spot = _fetch_btc_spot_point()
 
     etf_tickers = ["IBIT", "FBTC", "ARKB", "BITB", "GBTC"]
-    etf_points = [_safe_price_point(ticker, ticker) for ticker in etf_tickers]
+    etf_points = [_safe_stooq_point(label=ticker, ticker=ticker) for ticker in etf_tickers]
 
     volume_total = 0
     for ticker in etf_tickers:
-        try:
-            history = yf.Ticker(ticker).history(period="2d", interval="1d", auto_adjust=False)
-            if history.empty:
-                continue
-            latest_volume = history["Volume"].iloc[-1]
-            if latest_volume == latest_volume:  # NaN-safe check
-                volume_total += int(latest_volume)
-        except Exception:
-            continue
+        volume_total += _safe_stooq_volume(ticker=ticker)
 
     fear_greed_value, fear_greed_label = _fetch_fear_greed()
 
@@ -124,11 +330,11 @@ def fetch_bitcoin_snapshot() -> BitcoinSnapshot:
 
 
 
-def build_market_packet() -> dict:
+def build_market_packet(fred_api_key: str = "") -> dict:
     btc_snapshot = fetch_bitcoin_snapshot()
     return {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-        "macro": [point.__dict__ for point in fetch_macro_points()],
+        "macro": [point.__dict__ for point in fetch_macro_points(fred_api_key=fred_api_key)],
         "us_indices": [point.__dict__ for point in fetch_us_index_points()],
         "tech_stocks": [point.__dict__ for point in fetch_tech_stock_points()],
         "bitcoin": {

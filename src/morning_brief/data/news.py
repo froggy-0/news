@@ -2,13 +2,16 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
-from urllib.parse import quote_plus, urlparse
+import logging
+from urllib.parse import parse_qsl, quote_plus, urlencode, urlparse, urlunparse
 
 import feedparser
-import requests
 
+from morning_brief.data.sources.gdelt import fetch_news_from_gdelt
+from morning_brief.data.sources.http_client import HttpFetchError, get_json_with_retry
 from morning_brief.models import NewsItem
 
+logger = logging.getLogger(__name__)
 
 PREFERRED_DOMAINS = {
     "reuters.com",
@@ -19,35 +22,50 @@ PREFERRED_DOMAINS = {
     "coindesk.com",
 }
 
-PREFERRED_SOURCE_NAMES = {
-    "reuters",
-    "bloomberg",
-    "wall street journal",
-    "financial times",
-    "cnbc",
-    "coindesk",
+DOMAIN_SCORES = {
+    "reuters.com": 5.0,
+    "bloomberg.com": 5.0,
+    "wsj.com": 4.5,
+    "ft.com": 4.5,
+    "cnbc.com": 4.0,
+    "coindesk.com": 3.8,
 }
 
+TOPIC_KEYWORDS = {
+    "fed": 1.8,
+    "fomc": 1.8,
+    "treasury": 1.5,
+    "yield": 1.5,
+    "nasdaq": 1.3,
+    "s&p 500": 1.3,
+    "semiconductor": 1.5,
+    "nvidia": 1.5,
+    "microsoft": 1.2,
+    "apple": 1.2,
+    "amazon": 1.2,
+    "google": 1.2,
+    "meta": 1.2,
+    "amd": 1.2,
+    "tsm": 1.3,
+    "asml": 1.3,
+    "avgo": 1.2,
+    "bitcoin": 1.7,
+    "btc": 1.6,
+    "etf": 1.2,
+    "regulation": 1.0,
+}
 
-QUERIES = [
+RSS_QUERIES = [
     "Fed interest rates US Treasury yields",
     "US stock market Nasdaq S&P 500 semiconductor",
     "NVIDIA Microsoft Apple Amazon Google Meta AMD TSM ASML AVGO",
     "Bitcoin ETF flows regulation",
 ]
 
-
-
-def _is_preferred_domain(url: str) -> bool:
-    host = urlparse(url).netloc.lower()
-    return any(domain in host for domain in PREFERRED_DOMAINS)
-
-
-def _is_preferred_source(source_name: str, source_url: str) -> bool:
-    source_name_l = source_name.strip().lower()
-    if any(name in source_name_l for name in PREFERRED_SOURCE_NAMES):
-        return True
-    return _is_preferred_domain(source_url)
+NEWS_RECENCY_HOURS = 36
+MIN_NEWS_ITEMS = 3
+TRACKING_QUERY_PREFIXES = ("utm_",)
+TRACKING_QUERY_KEYS = {"gclid", "fbclid", "ocid", "cmpid", "igshid", "mc_cid", "mc_eid", "ref"}
 
 
 
@@ -65,11 +83,6 @@ def _parse_published(entry: dict) -> datetime | None:
 
 
 
-def _dedup_key(item: NewsItem) -> str:
-    return item.title.strip().lower()
-
-
-
 def _google_news_rss(query: str) -> str:
     encoded = quote_plus(query)
     return (
@@ -79,10 +92,160 @@ def _google_news_rss(query: str) -> str:
 
 
 
-def _collect_from_rss(max_items: int) -> list[NewsItem]:
+def _normalize_url(url: str) -> str:
+    parsed = urlparse(url.strip())
+    if not parsed.netloc:
+        return url.strip()
+
+    filtered_params = []
+    for key, value in parse_qsl(parsed.query, keep_blank_values=False):
+        key_l = key.lower()
+        if key_l.startswith(TRACKING_QUERY_PREFIXES):
+            continue
+        if key_l in TRACKING_QUERY_KEYS:
+            continue
+        filtered_params.append((key, value))
+
+    filtered_query = urlencode(filtered_params)
+
+    return urlunparse(
+        (
+            parsed.scheme or "https",
+            parsed.netloc.lower(),
+            parsed.path.rstrip("/"),
+            "",
+            filtered_query,
+            "",
+        )
+    )
+
+
+
+def _extract_domain(url: str) -> str:
+    return urlparse(url).netloc.lower()
+
+
+
+def _is_preferred_domain(url: str) -> bool:
+    domain = _extract_domain(url)
+    return any(preferred in domain for preferred in PREFERRED_DOMAINS)
+
+
+
+def _recency_score(published_at: datetime | None) -> float:
+    if published_at is None:
+        return 0.8
+
+    delta = datetime.now(timezone.utc) - published_at
+    hours = delta.total_seconds() / 3600
+    if hours <= 6:
+        return 3.0
+    if hours <= 24:
+        return 2.0
+    if hours <= 48:
+        return 1.0
+    return 0.2
+
+
+
+def _domain_score(url: str) -> float:
+    domain = _extract_domain(url)
+    best = 0.0
+    for preferred_domain, score in DOMAIN_SCORES.items():
+        if preferred_domain in domain:
+            best = max(best, score)
+    return best
+
+
+
+def _keyword_score(title: str) -> float:
+    title_l = title.lower()
+    score = 0.0
+    for keyword, weight in TOPIC_KEYWORDS.items():
+        if keyword in title_l:
+            score += weight
+    return min(score, 6.0)
+
+
+
+def _item_score(item: NewsItem) -> float:
+    return _domain_score(item.url) + _recency_score(item.published_at) + _keyword_score(item.title)
+
+
+
+def _sort_by_score(items: list[NewsItem]) -> list[NewsItem]:
+    return sorted(
+        items,
+        key=lambda x: (
+            _item_score(x),
+            x.published_at or datetime.min.replace(tzinfo=timezone.utc),
+        ),
+        reverse=True,
+    )
+
+
+
+def _dedup_and_rank(items: list[NewsItem], max_items: int) -> list[NewsItem]:
+    by_key: dict[str, NewsItem] = {}
+
+    for item in items:
+        title = item.title.strip()
+        if not title:
+            continue
+
+        normalized_url = _normalize_url(item.url)
+        if not normalized_url:
+            continue
+
+        source_domain = _extract_domain(normalized_url)
+        normalized_item = NewsItem(
+            title=title,
+            url=normalized_url,
+            source=item.source if item.source and item.source != "Unknown" else source_domain,
+            published_at=item.published_at,
+        )
+
+        key = normalized_url or title.lower()
+        existing = by_key.get(key)
+        if existing is None:
+            by_key[key] = normalized_item
+            continue
+
+        if _item_score(normalized_item) > _item_score(existing):
+            by_key[key] = normalized_item
+
+    ranked = _sort_by_score(list(by_key.values()))
+    return ranked[:max_items]
+
+
+
+def _collect_from_gdelt(max_items: int, preferred_only: bool = True) -> list[NewsItem]:
+    try:
+        return fetch_news_from_gdelt(
+            topics=list(TOPIC_KEYWORDS.keys()),
+            max_items=max_items,
+            recency_hours=NEWS_RECENCY_HOURS,
+            preferred_domains=PREFERRED_DOMAINS,
+            preferred_only=preferred_only,
+        )
+    except (HttpFetchError, ValueError) as exc:
+        logger.warning("GDELT fetch failed: %s", exc)
+        return []
+
+
+
+def _collect_from_rss(max_items: int, preferred_only: bool = True) -> list[NewsItem]:
     candidates: list[NewsItem] = []
-    for query in QUERIES:
+
+    for query in RSS_QUERIES:
         feed = feedparser.parse(_google_news_rss(query))
+        if getattr(feed, "bozo", 0):
+            logger.warning(
+                "RSS parse warning for query=%s: %s",
+                query,
+                getattr(feed, "bozo_exception", "unknown"),
+            )
+
         for entry in feed.entries:
             source = ""
             source_url = ""
@@ -91,67 +254,65 @@ def _collect_from_rss(max_items: int) -> list[NewsItem]:
                 source = source_data.get("title", "").strip()
                 source_url = source_data.get("href", "").strip()
 
-            if not _is_preferred_source(source, source_url):
-                continue
-
             link = entry.get("link", "").strip() or source_url
             if not link:
                 continue
-            if not source:
-                source = "Unknown"
+
+            if preferred_only and not _is_preferred_domain(link):
+                continue
 
             candidates.append(
                 NewsItem(
                     title=entry.get("title", "").strip(),
                     url=link,
-                    source=source,
+                    source=source or _extract_domain(link),
                     published_at=_parse_published(entry),
                 )
             )
 
-    unique: dict[str, NewsItem] = {}
-    for item in candidates:
-        key = _dedup_key(item)
-        if key and key not in unique:
-            unique[key] = item
-
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=36)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=NEWS_RECENCY_HOURS)
     filtered = [
         item
-        for item in unique.values()
+        for item in candidates
         if item.published_at is None or item.published_at >= cutoff
     ]
-    filtered.sort(key=lambda x: x.published_at or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
-    return filtered[:max_items]
+
+    return _dedup_and_rank(filtered, max_items=max_items)
 
 
 
 def _collect_from_newsapi(api_key: str, max_items: int) -> list[NewsItem]:
-    url = "https://newsapi.org/v2/everything"
-    query = "(Fed OR Treasury OR Nasdaq OR S&P 500 OR semiconductor OR Bitcoin ETF OR Nvidia OR Apple OR Microsoft)"
-    params = {
-        "q": query,
-        "language": "en",
-        "sortBy": "publishedAt",
-        "pageSize": max_items * 3,
-        "domains": ",".join(sorted(PREFERRED_DOMAINS)),
-    }
-    headers = {"X-Api-Key": api_key}
+    if not api_key:
+        return []
 
-    response = requests.get(url, params=params, headers=headers, timeout=20)
-    response.raise_for_status()
-    payload = response.json()
+    payload = get_json_with_retry(
+        "https://newsapi.org/v2/everything",
+        params={
+            "q": "(Fed OR Treasury OR Nasdaq OR S&P 500 OR semiconductor OR Bitcoin ETF OR Nvidia OR Apple OR Microsoft)",
+            "language": "en",
+            "sortBy": "publishedAt",
+            "pageSize": max_items * 3,
+            "domains": ",".join(sorted(PREFERRED_DOMAINS)),
+        },
+        headers={"X-Api-Key": api_key},
+        timeout=20,
+    )
 
     items: list[NewsItem] = []
     for article in payload.get("articles", []):
-        title = article.get("title", "").strip()
-        link = article.get("url", "").strip()
-        source = article.get("source", {}).get("name", "Unknown")
+        if not isinstance(article, dict):
+            continue
+
+        title = str(article.get("title", "")).strip()
+        link = str(article.get("url", "")).strip()
         if not title or not link:
             continue
-        published_raw = article.get("publishedAt")
+
+        source = str(article.get("source", {}).get("name", "Unknown")).strip() or "Unknown"
+
         published_at = None
-        if published_raw:
+        published_raw = article.get("publishedAt")
+        if isinstance(published_raw, str) and published_raw:
             try:
                 published_at = datetime.fromisoformat(published_raw.replace("Z", "+00:00"))
             except ValueError:
@@ -166,35 +327,55 @@ def _collect_from_newsapi(api_key: str, max_items: int) -> list[NewsItem]:
             )
         )
 
-    unique: dict[str, NewsItem] = {}
-    for item in items:
-        key = _dedup_key(item)
-        if key and key not in unique:
-            unique[key] = item
+    return _dedup_and_rank(items, max_items=max_items)
 
-    ordered = sorted(
-        unique.values(),
-        key=lambda x: x.published_at or datetime.min.replace(tzinfo=timezone.utc),
-        reverse=True,
-    )
-    return ordered[:max_items]
+
+
+def _merge_rank(items: list[NewsItem], other: list[NewsItem], max_items: int) -> list[NewsItem]:
+    return _dedup_and_rank(items + other, max_items=max_items)
 
 
 
 def fetch_news(max_items: int, newsapi_key: str = "") -> list[NewsItem]:
-    if newsapi_key:
-        try:
-            return _collect_from_newsapi(newsapi_key, max_items)
-        except requests.RequestException:
-            pass
+    # Collect a wider candidate pool, then rank down to target size.
+    candidate_limit = max(max_items * 3, 15)
 
-    return _collect_from_rss(max_items)
+    items = _collect_from_gdelt(max_items=candidate_limit, preferred_only=True)
+    if items:
+        logger.info("News provider: GDELT preferred")
+
+    if len(items) < MIN_NEWS_ITEMS and newsapi_key:
+        try:
+            newsapi_items = _collect_from_newsapi(newsapi_key, max_items=candidate_limit)
+            items = _merge_rank(items, newsapi_items, max_items=candidate_limit)
+            if newsapi_items:
+                logger.info("News backfill provider: NewsAPI")
+        except (HttpFetchError, ValueError) as exc:
+            logger.warning("NewsAPI fetch failed: %s", exc)
+
+    if len(items) < MIN_NEWS_ITEMS:
+        rss_items = _collect_from_rss(max_items=candidate_limit, preferred_only=True)
+        items = _merge_rank(items, rss_items, max_items=candidate_limit)
+        if rss_items:
+            logger.info("News backfill provider: Google News RSS preferred domains")
+
+    if len(items) < MIN_NEWS_ITEMS:
+        logger.info(
+            "Preferred sources returned %s item(s). Expanding to broader GDELT/RSS.",
+            len(items),
+        )
+        gdelt_broad = _collect_from_gdelt(max_items=candidate_limit, preferred_only=False)
+        rss_broad = _collect_from_rss(max_items=candidate_limit, preferred_only=False)
+        items = _merge_rank(items, gdelt_broad + rss_broad, max_items=candidate_limit)
+
+    return _dedup_and_rank(items, max_items=max_items)
 
 
 
 def build_news_packet(max_items: int, newsapi_key: str = "") -> list[dict]:
     items = fetch_news(max_items=max_items, newsapi_key=newsapi_key)
     result: list[dict] = []
+
     for item in items:
         result.append(
             {
@@ -204,4 +385,5 @@ def build_news_packet(max_items: int, newsapi_key: str = "") -> list[dict]:
                 "published_at": item.published_at.isoformat() if item.published_at else None,
             }
         )
+
     return result
