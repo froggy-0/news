@@ -76,6 +76,7 @@ jobs:
           OPENAI_PROMPT_CACHE_KEY: ${{ vars.OPENAI_PROMPT_CACHE_KEY || 'morning-market-brief' }}
           PROMPT_TEMPLATE_VERSION: ${{ vars.PROMPT_TEMPLATE_VERSION || 'market_brief_v3' }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
           NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
           GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
           GMAIL_RECIPIENT: ${{ secrets.GMAIL_RECIPIENT }}

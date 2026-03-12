@@ -60,12 +60,16 @@ def test_render_briefing_email_html_contains_modern_layout_and_list_items():
 
     assert "좋은 아침 시장 브리핑" in html
     assert "안녕하세요." in html
-    assert "오늘 아침 시장 흐름을 편하게 읽으실 수 있도록 정리했어요." in html
-    assert "오늘의 미국 기술주와 비트코인 흐름을" in html
-    assert "한 번에 읽으실 수 있게 담았어요." in html
+    assert "오늘 아침에 꼭 봐야 할 시장 흐름만 편하게 읽으실 수 있게 정리했어요." in html
+    assert "미국 기술주와 비트코인" in html
+    assert "편하게 읽으실 수 있게 담았어요." in html
+    assert "-webkit-text-fill-color:#0f172a" in html
     assert "Pretendard" in html
     assert "<li style=" in html
-    assert "list-style-position:inside" in html
+    assert "list-style:none" in html
+    assert "↑" in html
+    assert "#dc2626" in html
+    assert "#fef2f2" in html
     assert "alpha@example.com" not in html
     assert "[데이터 품질 알림] 뉴스 수가 부족합니다." in html
     assert "수치 체크" in html
@@ -81,6 +85,24 @@ def test_split_section_groups_separates_summary_and_insight():
     assert "- 나스닥이 1.2% 올랐어요." in summary
     assert "강세 흐름이 이어졌어요." in insight
     assert "다만 시장 폭은 더 봐야 해요." in insight
+
+
+def test_render_briefing_email_html_marks_down_moves_in_blue():
+    html = render_briefing_email_html(
+        subject="좋은 아침이에요 | 미국 기술주·비트코인 브리핑 (2026-03-12)",
+        body="""Morning Market Brief (2026-03-12)
+
+1. 미국 증시 흐름
+수치 체크
+- 엔비디아가 2.4% 내렸어요.
+""",
+    )
+
+    assert "↓" in html
+    assert "#2563eb" in html
+    assert "#eff6ff" in html
+    assert '<span style="color:#2563eb;font-weight:700;">2.4%</span>' in html
+    assert "엔비디아가 2.4% 내렸어요." in html
 
 
 def test_build_briefing_message_uses_bcc_for_multiple_recipients():

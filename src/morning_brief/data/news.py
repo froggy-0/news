@@ -32,6 +32,11 @@ DOMAIN_SCORES = {
     "coindesk.com": 3.8,
 }
 
+SOURCE_TIERS = {
+    "tier_1": {"reuters.com", "bloomberg.com", "wsj.com", "ft.com"},
+    "tier_2": {"cnbc.com", "coindesk.com"},
+}
+
 TOPIC_KEYWORDS = {
     "fed": 1.8,
     "fomc": 1.8,
@@ -65,6 +70,8 @@ RSS_QUERIES = [
 
 NEWS_RECENCY_HOURS = 36
 MIN_NEWS_ITEMS = 3
+FRESH_NEWS_HOURS = 24
+MAX_ITEMS_PER_DOMAIN = 2
 TRACKING_QUERY_PREFIXES = ("utm_",)
 TRACKING_QUERY_KEYS = {"gclid", "fbclid", "ocid", "cmpid", "igshid", "mc_cid", "mc_eid", "ref"}
 
@@ -158,6 +165,16 @@ def _domain_score(url: str) -> float:
     return best
 
 
+def _source_tier(url: str) -> str:
+    domain = _extract_domain(url)
+    for tier, domains in SOURCE_TIERS.items():
+        if any(domain_matches(domain, candidate) for candidate in domains):
+            return tier
+    if _is_preferred_domain(url):
+        return "tier_2"
+    return "tier_3"
+
+
 
 def _keyword_score(title: str) -> float:
     title_l = title.lower()
@@ -184,6 +201,33 @@ def _sort_by_score(items: list[NewsItem]) -> list[NewsItem]:
         reverse=True,
     )
 
+
+
+def _apply_domain_diversity_limit(items: list[NewsItem], max_items: int) -> list[NewsItem]:
+    selected: list[NewsItem] = []
+    per_domain: dict[str, int] = {}
+
+    for item in items:
+        domain = _extract_domain(item.url)
+        count = per_domain.get(domain, 0)
+        if count >= MAX_ITEMS_PER_DOMAIN:
+            continue
+        selected.append(item)
+        per_domain[domain] = count + 1
+        if len(selected) >= max_items:
+            break
+
+    if len(selected) >= max_items:
+        return selected
+
+    for item in items:
+        if item in selected:
+            continue
+        selected.append(item)
+        if len(selected) >= max_items:
+            break
+
+    return selected[:max_items]
 
 
 def _dedup_and_rank(items: list[NewsItem], max_items: int) -> list[NewsItem]:
@@ -216,7 +260,7 @@ def _dedup_and_rank(items: list[NewsItem], max_items: int) -> list[NewsItem]:
             by_key[key] = normalized_item
 
     ranked = _sort_by_score(list(by_key.values()))
-    return ranked[:max_items]
+    return _apply_domain_diversity_limit(ranked, max_items=max_items)
 
 
 
@@ -373,17 +417,49 @@ def fetch_news(max_items: int, newsapi_key: str = "") -> list[NewsItem]:
 
 
 
+def summarize_news_quality(items: list[NewsItem]) -> dict:
+    domains = {_extract_domain(item.url) for item in items if item.url}
+    preferred_count = sum(1 for item in items if _is_preferred_domain(item.url))
+    tier_1_count = sum(1 for item in items if _source_tier(item.url) == "tier_1")
+    fresh_count = 0
+
+    for item in items:
+        if item.published_at is None:
+            continue
+        age_hours = (datetime.now(timezone.utc) - item.published_at).total_seconds() / 3600
+        if age_hours <= FRESH_NEWS_HOURS:
+            fresh_count += 1
+
+    return {
+        "count": len(items),
+        "preferred_count": preferred_count,
+        "tier_1_count": tier_1_count,
+        "unique_domains": len(domains),
+        "fresh_count": fresh_count,
+    }
+
+
 def build_news_packet(max_items: int, newsapi_key: str = "") -> list[dict]:
     items = fetch_news(max_items=max_items, newsapi_key=newsapi_key)
     result: list[dict] = []
 
     for item in items:
+        age_hours = None
+        if item.published_at is not None:
+            age_hours = round(
+                (datetime.now(timezone.utc) - item.published_at).total_seconds() / 3600,
+                2,
+            )
         result.append(
             {
                 "title": item.title,
                 "url": item.url,
                 "source": item.source,
                 "published_at": item.published_at.isoformat() if item.published_at else None,
+                "domain": _extract_domain(item.url),
+                "source_tier": _source_tier(item.url),
+                "preferred_source": _is_preferred_domain(item.url),
+                "age_hours": age_hours,
             }
         )
 

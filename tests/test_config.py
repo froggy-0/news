@@ -24,6 +24,12 @@ def test_fred_api_key_loaded(monkeypatch):
     assert settings.fred_api_key == "fred-test-key"
 
 
+def test_alpha_vantage_api_key_loaded(monkeypatch):
+    monkeypatch.setenv("ALPHA_VANTAGE_API_KEY", "alpha-test-key")
+    settings = load_settings()
+    assert settings.alpha_vantage_api_key == "alpha-test-key"
+
+
 def test_openai_reasoning_effort_invalid_defaults_to_low(monkeypatch):
     monkeypatch.setenv("OPENAI_REASONING_EFFORT", "ultra")
     settings = load_settings()

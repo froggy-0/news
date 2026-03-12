@@ -33,12 +33,46 @@ def _assess_data_quality(packet: dict, news_packet: list[dict]) -> dict:
 
     zero_ratio = (len(zero_points) / len(numeric_points)) if numeric_points else 1.0
     news_count = len(news_packet)
+    preferred_news_count = sum(
+        1 for item in news_packet if isinstance(item, dict) and bool(item.get("preferred_source"))
+    )
+    tier_1_news_count = sum(
+        1
+        for item in news_packet
+        if isinstance(item, dict) and str(item.get("source_tier", "")).lower() == "tier_1"
+    )
+    unique_news_domains = len(
+        {
+            str(item.get("domain", "")).strip().lower()
+            for item in news_packet
+            if isinstance(item, dict) and str(item.get("domain", "")).strip()
+        }
+    )
+    fresh_news_count = sum(
+        1
+        for item in news_packet
+        if isinstance(item, dict)
+        and item.get("age_hours") is not None
+        and _safe_price(item.get("age_hours", 10_000)) <= 24.0
+    )
 
     warnings: list[str] = []
     if zero_ratio >= 0.6:
         warnings.append(f"가격 데이터의 {zero_ratio*100:.0f}%가 폴백 값입니다")
     if news_count < 3:
         warnings.append(f"핵심 뉴스가 {news_count}건으로 최소 기준(3건) 미달입니다")
+    if news_count >= 3 and preferred_news_count < 2:
+        warnings.append(
+            f"우선 신뢰 출처 뉴스가 {preferred_news_count}건으로 충분하지 않습니다"
+        )
+    if news_count >= 3 and tier_1_news_count < 1:
+        warnings.append("최상위 신뢰 출처(Reuters/Bloomberg/WSJ/FT) 기사가 없습니다")
+    if news_count >= 3 and unique_news_domains < 3:
+        warnings.append(
+            f"뉴스 출처 다양성이 낮습니다({unique_news_domains}개 도메인)"
+        )
+    if news_count >= 3 and fresh_news_count < 2:
+        warnings.append(f"24시간 내 최신 뉴스가 {fresh_news_count}건으로 부족합니다")
 
     if news_count < 3 or zero_ratio >= 0.8:
         status = "critical"
@@ -51,6 +85,10 @@ def _assess_data_quality(packet: dict, news_packet: list[dict]) -> dict:
         "status": status,
         "zero_price_ratio": round(zero_ratio, 4),
         "news_count": news_count,
+        "preferred_news_count": preferred_news_count,
+        "tier_1_news_count": tier_1_news_count,
+        "unique_news_domains": unique_news_domains,
+        "fresh_news_count": fresh_news_count,
         "warnings": warnings,
     }
 
@@ -58,7 +96,10 @@ def _assess_data_quality(packet: dict, news_packet: list[dict]) -> dict:
 
 def run_pipeline(settings: Settings) -> str:
     logger.info("Pipeline started")
-    market_packet = build_market_packet(fred_api_key=settings.fred_api_key)
+    market_packet = build_market_packet(
+        fred_api_key=settings.fred_api_key,
+        alpha_vantage_api_key=settings.alpha_vantage_api_key,
+    )
     news_packet = build_news_packet(
         max_items=settings.max_news_items,
         newsapi_key=settings.newsapi_key,

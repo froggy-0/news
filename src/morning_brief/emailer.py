@@ -21,6 +21,10 @@ SECTION_HEADING_RE = re.compile(r"^(\d+)\.\s+(.+)$")
 SUMMARY_LABELS = {"수치 체크", "핵심 내용", "오늘 볼 포인트", "체크 포인트"}
 INSIGHT_LABELS = {"해석", "이렇게 읽으면 돼요"}
 SENTENCE_BREAK_RE = re.compile(r"(?<=[.!?])\s+(?=[\"'“”‘’(]*[A-Za-z가-힣])")
+PERCENT_RE = re.compile(r"[+-]?\d[\d,]*(?:\.\d+)?%")
+UP_TOKENS = ("올랐", "상승", "강세", "반등", "높아졌", "증가", "확대", "유입", "개선", "회복")
+DOWN_TOKENS = ("내렸", "하락", "약세", "밀렸", "낮아졌", "감소", "축소", "유출", "둔화", "후퇴")
+FLAT_TOKENS = ("보합", "유지", "비슷", "변동이 크지", "큰 변화는 없")
 
 
 def _split_recipients(raw: str) -> list[str]:
@@ -134,6 +138,50 @@ def _split_section_groups(content: str) -> tuple[str, str, str]:
     return sections["summary"]["label"], summary, insight
 
 
+def _metric_indicator(text: str) -> tuple[str, str, str, str]:
+    if any(token in text for token in UP_TOKENS):
+        return "↑", "#dc2626", "#fef2f2", "#fecaca"
+    if any(token in text for token in DOWN_TOKENS):
+        return "↓", "#2563eb", "#eff6ff", "#bfdbfe"
+    if any(token in text for token in FLAT_TOKENS):
+        return "→", "#64748b", "#f8fafc", "#cbd5e1"
+    return "•", "#94a3b8", "#f8fafc", "#e2e8f0"
+
+
+def _highlight_metric_text(text: str, color: str) -> str:
+    match = PERCENT_RE.search(text)
+    if not match:
+        return html.escape(text)
+
+    start, end = match.span()
+    return (
+        f"{html.escape(text[:start])}"
+        f'<span style="color:{color};font-weight:700;">{html.escape(match.group(0))}</span>'
+        f"{html.escape(text[end:])}"
+    )
+
+
+def _render_metric_item(text: str) -> str:
+    symbol, color, background, border = _metric_indicator(text)
+    return (
+        '<li style="margin:0 0 10px 0;padding:0;list-style:none;">'
+        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
+        'style="border-collapse:collapse;">'
+        "<tr>"
+        '<td valign="top" style="padding:0 10px 0 0;">'
+        f'<span style="display:inline-block;min-width:22px;height:22px;line-height:22px;'
+        f'text-align:center;border-radius:999px;background:{background};border:1px solid {border};'
+        f'color:{color};font-weight:800;font-size:13px;">{symbol}</span>'
+        "</td>"
+        '<td valign="top" style="padding:0;">'
+        f'<span style="display:inline;color:#0f172a;font-size:15px;line-height:1.75;">{_highlight_metric_text(text, color)}</span>'
+        "</td>"
+        "</tr>"
+        "</table>"
+        "</li>"
+    )
+
+
 def _text_to_html_blocks(content: str) -> str:
     blocks: list[str] = []
     paragraphs = [chunk.strip() for chunk in content.split("\n\n") if chunk.strip()]
@@ -142,11 +190,11 @@ def _text_to_html_blocks(content: str) -> str:
         lines = [line.strip() for line in paragraph.splitlines() if line.strip()]
         if lines and all(line.startswith("- ") for line in lines):
             items = "".join(
-                f'<li style="margin:0 0 10px 0;padding-left:0;">{html.escape(line[2:].strip())}</li>'
+                _render_metric_item(line[2:].strip())
                 for line in lines
             )
             blocks.append(
-                '<ul style="margin:0;padding:0;list-style-position:inside;color:#1f2937;font-size:15px;'
+                '<ul style="margin:0;padding:0;list-style:none;color:#1f2937;font-size:15px;'
                 'line-height:1.75;">'
                 f"{items}</ul>"
             )
@@ -240,61 +288,17 @@ def render_briefing_email_html(subject: str, body: str) -> str:
           "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Segoe UI",
           "Helvetica Neue", Helvetica, Arial, sans-serif;
       }}
-      .hero-kicker {{
-        font-size:12px;
-        line-height:1.2;
-        letter-spacing:0.12em;
-        text-transform:uppercase;
-        color:#dbeafe;
-        font-weight:700;
-      }}
-      .hero-title {{
-        font-size:36px;
-        line-height:1.14;
-        letter-spacing:-0.03em;
-        font-weight:800;
-        color:#f8fafc;
-      }}
-      .hero-copy {{
-        font-size:15px;
-        line-height:1.78;
-        color:#dbeafe;
-      }}
-      .hero-meta {{
-        font-size:13px;
-        line-height:1.6;
-        color:#dbeafe;
-        opacity:0.92;
-      }}
       @media screen and (max-width: 600px) {{
         .hero-wrap {{
           padding:24px 22px 22px 22px !important;
         }}
         .hero-title {{
-          font-size:30px !important;
-          line-height:1.18 !important;
+          font-size:29px !important;
+          line-height:1.22 !important;
         }}
         .hero-copy {{
           font-size:14px !important;
           line-height:1.75 !important;
-        }}
-      }}
-      @media (prefers-color-scheme: dark) {{
-        body {{
-          background:#07111f !important;
-        }}
-        .shell {{
-          background:#07111f !important;
-        }}
-        .card {{
-          background:#0f172a !important;
-          border-color:#243145 !important;
-        }}
-        .ink {{
-          color:#e5eef8 !important;
-        }}
-        .muted {{
-          color:#9fb0c7 !important;
         }}
       }}
     </style>
@@ -309,23 +313,26 @@ def render_briefing_email_html(subject: str, body: str) -> str:
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:680px;">
             <tr>
               <td style="padding:0 0 16px 0;">
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" style="border-collapse:separate;border-spacing:0;background:#0f172a;border-radius:28px;overflow:hidden;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="hero-card" style="border-collapse:separate;border-spacing:0;background:#f8fbff;border:1px solid #dbe4ee;border-radius:28px;overflow:hidden;">
                   <tr>
-                    <td class="hero-wrap" style="padding:28px 28px 24px 28px;background:#0f172a;background-image:linear-gradient(135deg,#0f172a 0%,#1d4ed8 140%);">
-                      <div class="hero-kicker" style="padding:0 0 14px 0;">좋은 아침 시장 브리핑</div>
-                      <div class="hero-copy" style="padding:0 0 14px 0;">
+                    <td class="hero-wrap" style="padding:28px 28px 24px 28px;background:#ffffff;">
+                      <div style="padding:0 0 16px 0;">
+                        <span style="display:inline-block;padding:7px 12px;border-radius:999px;border:1px solid #dbe4ee;background:#f8fafc;color:#0f172a;font-size:12px;line-height:1.2;font-weight:700;letter-spacing:0.02em;-webkit-text-fill-color:#0f172a;">좋은 아침 시장 브리핑</span>
+                      </div>
+                      <div class="hero-copy" style="padding:0 0 14px 0;font-size:15px;line-height:1.8;color:#334155;-webkit-text-fill-color:#334155;">
                         <div>안녕하세요.</div>
-                        <div>오늘 아침 시장 흐름을 편하게 읽으실 수 있도록 정리했어요.</div>
+                        <div>오늘 아침에 꼭 봐야 할 시장 흐름만 편하게 읽으실 수 있게 정리했어요.</div>
                       </div>
-                      <div class="hero-title" style="padding:0 0 14px 0;">
-                        오늘의 미국 기술주와 비트코인 흐름을<br>
-                        한 번에 읽으실 수 있게 담았어요.
+                      <div class="hero-title" style="padding:0 0 14px 0;font-size:34px;line-height:1.2;font-weight:800;letter-spacing:-0.03em;color:#0f172a;-webkit-text-fill-color:#0f172a;">
+                        오늘 아침,<br>
+                        <span style="color:#1d4ed8;-webkit-text-fill-color:#1d4ed8;">미국 기술주와 비트코인</span> 흐름만<br>
+                        편하게 읽으실 수 있게 담았어요.
                       </div>
-                      <div class="hero-copy" style="max-width:520px;">
-                        <div>핵심 수치를 먼저 짚어드렸어요.</div>
-                        <div>바로 아래에서 흐름과 의미를 자연스럽게 읽으실 수 있어요.</div>
+                      <div class="hero-copy" style="max-width:540px;font-size:15px;line-height:1.8;color:#475569;-webkit-text-fill-color:#475569;">
+                        <div><span style="color:#0f172a;font-weight:700;-webkit-text-fill-color:#0f172a;">수치 체크</span>만 먼저 읽으셔도 흐름이 바로 잡히도록 구성했어요.</div>
+                        <div>조금 더 여유가 있으실 때는 아래 <span style="color:#0f172a;font-weight:700;-webkit-text-fill-color:#0f172a;">해석</span>까지 보시면 의미가 더 쉽게 연결되실 거예요.</div>
                       </div>
-                      <div class="hero-meta" style="padding-top:18px;">
+                      <div class="hero-copy" style="padding-top:18px;font-size:13px;line-height:1.6;color:#64748b;-webkit-text-fill-color:#64748b;">
                         {html.escape(generated_label)}
                       </div>
                     </td>

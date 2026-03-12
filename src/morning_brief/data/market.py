@@ -8,6 +8,7 @@ import time
 import requests
 import yfinance as yf
 
+from morning_brief.data.sources.alpha_vantage import fetch_daily_close_change_volume
 from morning_brief.data.sources.coingecko import fetch_btc_usd_price_change
 from morning_brief.data.sources.fred import fetch_macro_points_from_fred
 from morning_brief.data.sources.http_client import HttpFetchError, is_host_resolvable
@@ -150,6 +151,26 @@ def _safe_stooq_point(label: str, ticker: str, stooq_symbol: str | None = None) 
 
 
 
+def _safe_alpha_vantage_point(label: str, ticker: str, api_key: str) -> MarketPoint:
+    try:
+        close, change_pct, _ = fetch_daily_close_change_volume(ticker, api_key)
+        return MarketPoint(
+            label=label,
+            ticker=ticker,
+            price=round(close, 4),
+            change_pct=round(change_pct, 2),
+        )
+    except (HttpFetchError, ValueError) as exc:
+        _warn_once(
+            f"alpha_vantage_fallback_{ticker}",
+            "Alpha Vantage fetch failed for %s (%s): %s. Falling back to Stooq/yfinance.",
+            label,
+            ticker,
+            exc,
+        )
+        return _safe_stooq_point(label=label, ticker=ticker)
+
+
 def _safe_stooq_volume(ticker: str, stooq_symbol: str | None = None) -> int:
     symbol = stooq_symbol or to_stooq_symbol(ticker)
     try:
@@ -179,6 +200,19 @@ def _safe_stooq_volume(ticker: str, stooq_symbol: str | None = None) -> int:
     return 0
 
 
+def _safe_alpha_vantage_volume(ticker: str, api_key: str) -> int:
+    try:
+        _, _, volume = fetch_daily_close_change_volume(ticker, api_key)
+        return volume
+    except (HttpFetchError, ValueError) as exc:
+        _warn_once(
+            f"alpha_vantage_volume_fallback_{ticker}",
+            "Alpha Vantage volume fetch failed for %s: %s. Falling back to Stooq/yfinance.",
+            ticker,
+            exc,
+        )
+        return _safe_stooq_volume(ticker=ticker)
+
 
 def fetch_macro_points(fred_api_key: str = "") -> list[MarketPoint]:
     if fred_api_key:
@@ -207,13 +241,21 @@ def fetch_macro_points(fred_api_key: str = "") -> list[MarketPoint]:
 
 
 
-def fetch_us_index_points() -> list[MarketPoint]:
+def fetch_us_index_points(alpha_vantage_api_key: str = "") -> list[MarketPoint]:
     # Stooq index symbols are inconsistent; use liquid ETF proxies for stability.
     targets = [
         ("S&P500", "SPY", "spy.us"),
         ("NASDAQ", "QQQ", "qqq.us"),
         ("반도체 섹터 (SOXX)", "SOXX", "soxx.us"),
     ]
+    if alpha_vantage_api_key:
+        points = [
+            _safe_alpha_vantage_point(label=label, ticker=ticker, api_key=alpha_vantage_api_key)
+            for label, ticker, _ in targets
+        ]
+        logger.info("US index provider: Alpha Vantage (ETF proxies) with Stooq/yfinance fallback")
+        return points
+
     points = [
         _safe_stooq_point(label=label, ticker=ticker, stooq_symbol=stooq_symbol)
         for label, ticker, stooq_symbol in targets
@@ -223,7 +265,7 @@ def fetch_us_index_points() -> list[MarketPoint]:
 
 
 
-def fetch_tech_stock_points() -> list[MarketPoint]:
+def fetch_tech_stock_points(alpha_vantage_api_key: str = "") -> list[MarketPoint]:
     tickers = [
         "NVDA",
         "MSFT",
@@ -236,6 +278,15 @@ def fetch_tech_stock_points() -> list[MarketPoint]:
         "ASML",
         "AVGO",
     ]
+    if alpha_vantage_api_key:
+        points = [
+            _safe_alpha_vantage_point(label=ticker, ticker=ticker, api_key=alpha_vantage_api_key)
+            for ticker in tickers
+        ]
+        points.sort(key=lambda x: abs(x.change_pct), reverse=True)
+        logger.info("Tech stock provider: Alpha Vantage with Stooq/yfinance fallback")
+        return points
+
     points = [_safe_stooq_point(label=ticker, ticker=ticker) for ticker in tickers]
     points.sort(key=lambda x: abs(x.change_pct), reverse=True)
     logger.info("Tech stock provider: Stooq with yfinance fallback")
@@ -291,15 +342,24 @@ def _fetch_btc_spot_point() -> MarketPoint:
 
 
 
-def fetch_bitcoin_snapshot() -> BitcoinSnapshot:
+def fetch_bitcoin_snapshot(alpha_vantage_api_key: str = "") -> BitcoinSnapshot:
     spot = _fetch_btc_spot_point()
 
     etf_tickers = ["IBIT", "FBTC", "ARKB", "BITB", "GBTC"]
-    etf_points = [_safe_stooq_point(label=ticker, ticker=ticker) for ticker in etf_tickers]
+    if alpha_vantage_api_key:
+        etf_points = [
+            _safe_alpha_vantage_point(label=ticker, ticker=ticker, api_key=alpha_vantage_api_key)
+            for ticker in etf_tickers
+        ]
+    else:
+        etf_points = [_safe_stooq_point(label=ticker, ticker=ticker) for ticker in etf_tickers]
 
     volume_total = 0
     for ticker in etf_tickers:
-        volume_total += _safe_stooq_volume(ticker=ticker)
+        if alpha_vantage_api_key:
+            volume_total += _safe_alpha_vantage_volume(ticker=ticker, api_key=alpha_vantage_api_key)
+        else:
+            volume_total += _safe_stooq_volume(ticker=ticker)
 
     fear_greed_value, fear_greed_label = _fetch_fear_greed()
 
@@ -313,13 +373,19 @@ def fetch_bitcoin_snapshot() -> BitcoinSnapshot:
 
 
 
-def build_market_packet(fred_api_key: str = "") -> dict:
-    btc_snapshot = fetch_bitcoin_snapshot()
+def build_market_packet(fred_api_key: str = "", alpha_vantage_api_key: str = "") -> dict:
+    btc_snapshot = fetch_bitcoin_snapshot(alpha_vantage_api_key=alpha_vantage_api_key)
     return {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "macro": [point.__dict__ for point in fetch_macro_points(fred_api_key=fred_api_key)],
-        "us_indices": [point.__dict__ for point in fetch_us_index_points()],
-        "tech_stocks": [point.__dict__ for point in fetch_tech_stock_points()],
+        "us_indices": [
+            point.__dict__
+            for point in fetch_us_index_points(alpha_vantage_api_key=alpha_vantage_api_key)
+        ],
+        "tech_stocks": [
+            point.__dict__
+            for point in fetch_tech_stock_points(alpha_vantage_api_key=alpha_vantage_api_key)
+        ],
         "bitcoin": {
             "spot": btc_snapshot.spot.__dict__,
             "etf_points": [point.__dict__ for point in btc_snapshot.etf_points],

@@ -53,6 +53,7 @@ cp .env.example .env
 - `PROMPT_TEMPLATE_DIR` (기본 `src/morning_brief/prompts`)
 - `PROMPT_TEMPLATE_VERSION` (프롬프트 변경 시 버전 증가 권장)
 - `FRED_API_KEY` (권장, 매크로 공식 소스)
+- `ALPHA_VANTAGE_API_KEY` (선택 권장, 미국 주식/ETF 일봉 API 소스)
 - `GMAIL_SENDER`
 - `GMAIL_RECIPIENT` (`user1@example.com,user2@example.com` 형식으로 다중 수신자 가능)
 - `GMAIL_CREDENTIALS_FILE` (기본 `credentials.json`)
@@ -123,6 +124,7 @@ pytest -q
 - `GMAIL_TOKEN_JSON_B64`
 
 선택 GitHub Secrets:
+- `ALPHA_VANTAGE_API_KEY`
 - `NEWSAPI_KEY`
 
 선택 GitHub Variables:

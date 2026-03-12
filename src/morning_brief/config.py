@@ -18,6 +18,7 @@ class Settings:
     prompt_template_dir: Path
     prompt_template_version: str
     fred_api_key: str
+    alpha_vantage_api_key: str
     gmail_sender: str
     gmail_recipient: str
     gmail_credentials_file: Path
@@ -87,6 +88,7 @@ def load_settings() -> Settings:
         ).resolve(),
         prompt_template_version=os.getenv("PROMPT_TEMPLATE_VERSION", "market_brief_v3").strip(),
         fred_api_key=os.getenv("FRED_API_KEY", "").strip(),
+        alpha_vantage_api_key=os.getenv("ALPHA_VANTAGE_API_KEY", "").strip(),
         gmail_sender=os.getenv("GMAIL_SENDER", "").strip(),
         gmail_recipient=os.getenv("GMAIL_RECIPIENT", "").strip(),
         gmail_credentials_file=Path(
