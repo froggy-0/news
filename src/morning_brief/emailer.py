@@ -83,6 +83,16 @@ def _extract_brief_structure(body: str) -> tuple[str, str, list[tuple[str, str]]
     return title, notice, sections
 
 
+def _split_reference_block(body: str) -> tuple[str, list[str]]:
+    marker = "\n참고 출처\n"
+    if marker not in body:
+        return body, []
+
+    main_body, raw_references = body.split(marker, 1)
+    references = [line.strip()[2:].strip() for line in raw_references.splitlines() if line.strip().startswith("- ")]
+    return main_body.strip(), references
+
+
 def _expand_sentence_spacing(text: str) -> str:
     lines: list[str] = []
     for raw_line in text.splitlines():
@@ -221,7 +231,8 @@ def _preheader_text(title: str, notice: str, sections: list[tuple[str, str]]) ->
 
 
 def render_briefing_email_html(subject: str, body: str) -> str:
-    title, notice, sections = _extract_brief_structure(body)
+    main_body, references = _split_reference_block(body)
+    title, notice, sections = _extract_brief_structure(main_body)
     preheader = _preheader_text(title=title, notice=notice, sections=sections)
     generated_label = subject.split("|")[-1].strip() or title
 
@@ -271,6 +282,33 @@ def render_briefing_email_html(subject: str, body: str) -> str:
             'style="border-collapse:separate;border-spacing:0;background:#fff7ed;border:1px solid #fed7aa;border-radius:18px;">'
             '<tr><td style="padding:14px 18px;color:#9a3412;font-size:14px;line-height:1.6;font-weight:600;">'
             f"{html.escape(notice)}"
+            "</td></tr></table></td></tr>"
+        )
+
+    reference_block = ""
+    if references:
+        items = []
+        for reference in references:
+            if " — " in reference:
+                label, url = reference.split(" — ", 1)
+            else:
+                label, url = reference, reference
+            safe_label = html.escape(label.strip() or url.strip())
+            safe_url = html.escape(url.strip())
+            items.append(
+                '<li style="margin:0 0 10px 0;padding:0;list-style:none;">'
+                f'<a href="{safe_url}" style="color:#1d4ed8;text-decoration:none;font-size:14px;line-height:1.7;">{safe_label}</a>'
+                "</li>"
+            )
+        reference_block = (
+            '<tr><td style="padding:4px 0 16px 0;">'
+            '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" '
+            'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:20px;">'
+            '<tr><td style="padding:18px 22px 16px 22px;">'
+            '<div style="font-size:15px;line-height:1.4;font-weight:700;color:#0f172a;padding:0 0 12px 0;">참고 출처</div>'
+            '<ul style="margin:0;padding:0;">'
+            f"{''.join(items)}"
+            "</ul>"
             "</td></tr></table></td></tr>"
         )
 
@@ -342,6 +380,7 @@ def render_briefing_email_html(subject: str, body: str) -> str:
             </tr>
             {notice_block}
             {''.join(section_rows)}
+            {reference_block}
             <tr>
               <td style="padding:8px 6px 0 6px;color:#64748b;font-size:12px;line-height:1.7;text-align:center;">
                 자동으로 정리된 시장 브리핑 메일이에요. 투자 권유가 아닌 정보 전달 목적의 요약입니다.

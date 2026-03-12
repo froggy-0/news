@@ -4,6 +4,7 @@ from morning_brief.emailer import (
     _extract_brief_structure,
     _split_section_groups,
     _split_recipients,
+    _split_reference_block,
     build_briefing_message,
     render_briefing_email_html,
 )
@@ -117,3 +118,24 @@ def test_build_briefing_message_uses_bcc_for_multiple_recipients():
     assert msg["bcc"] == "a@example.com, b@example.com"
     assert msg.get_payload()[0].get_content_type() == "text/plain"
     assert msg.get_payload()[1].get_content_type() == "text/html"
+
+
+def test_render_briefing_email_html_renders_reference_links():
+    body = SAMPLE_BRIEF + "\n\n참고 출처\n- Reuters — https://www.reuters.com/world/us/example"
+
+    html = render_briefing_email_html(
+        subject="좋은 아침이에요 | 미국 기술주·비트코인 브리핑 (2026-03-12)",
+        body=body,
+    )
+
+    assert "참고 출처" in html
+    assert 'href="https://www.reuters.com/world/us/example"' in html
+
+
+def test_split_reference_block_separates_reference_lines():
+    body = SAMPLE_BRIEF + "\n\n참고 출처\n- Reuters — https://www.reuters.com/world/us/example"
+
+    main_body, references = _split_reference_block(body)
+
+    assert "참고 출처" not in main_body
+    assert references == ["Reuters — https://www.reuters.com/world/us/example"]

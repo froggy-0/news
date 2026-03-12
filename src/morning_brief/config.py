@@ -13,6 +13,9 @@ class Settings:
     cache_dir: Path
     openai_api_key: str
     openai_model: str
+    openai_web_search_enabled: bool
+    openai_web_search_model: str
+    openai_web_search_max_results: int
     openai_reasoning_effort: str
     openai_max_output_tokens: int
     openai_prompt_cache_key: str
@@ -73,6 +76,15 @@ def load_settings() -> Settings:
         cache_dir=Path(os.getenv("CACHE_DIR", ".cache")).resolve(),
         openai_api_key=os.getenv("OPENAI_API_KEY", "").strip(),
         openai_model=os.getenv("OPENAI_MODEL", "gpt-5-mini").strip(),
+        openai_web_search_enabled=_env_bool("OPENAI_WEB_SEARCH_ENABLED", True),
+        openai_web_search_model=os.getenv("OPENAI_WEB_SEARCH_MODEL", "").strip()
+        or os.getenv("OPENAI_MODEL", "gpt-5-mini").strip(),
+        openai_web_search_max_results=_env_bounded_int(
+            "OPENAI_WEB_SEARCH_MAX_RESULTS",
+            default=3,
+            minimum=1,
+            maximum=5,
+        ),
         openai_reasoning_effort=_env_choice(
             "OPENAI_REASONING_EFFORT",
             default="low",

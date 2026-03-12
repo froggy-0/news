@@ -51,6 +51,9 @@ cp .env.example .env
 - `OPENAI_REASONING_EFFORT` (기본 `low`)
 - `OPENAI_MAX_OUTPUT_TOKENS` (기본 `1700`)
 - `OPENAI_PROMPT_CACHE_KEY` (고정 프롬프트 캐시 네임스페이스)
+- `OPENAI_WEB_SEARCH_ENABLED` (기본 `true`, 뉴스 품질 저하 시 OpenAI web search 검증 사용)
+- `OPENAI_WEB_SEARCH_MODEL` (기본 `gpt-5-mini`)
+- `OPENAI_WEB_SEARCH_MAX_RESULTS` (기본 `3`)
 - `PROMPT_TEMPLATE_DIR` (기본 `src/morning_brief/prompts`)
 - `PROMPT_TEMPLATE_VERSION` (프롬프트 변경 시 버전 증가 권장)
 - `FRED_API_KEY` (권장, 매크로 공식 소스)
@@ -135,9 +138,13 @@ pytest -q
 - `OPENAI_MAX_OUTPUT_TOKENS` (기본 `1700`)
 - `OPENAI_PROMPT_CACHE_KEY` (기본 `morning-market-brief`)
 - `PROMPT_TEMPLATE_VERSION` (기본 `market_brief_v3`)
+- `OPENAI_WEB_SEARCH_ENABLED` (기본 `true`)
+- `OPENAI_WEB_SEARCH_MODEL` (기본 `gpt-5-mini`)
+- `OPENAI_WEB_SEARCH_MAX_RESULTS` (기본 `3`)
 
 워크플로우는 `.cache/btc_etf/official_snapshots.json`을 GitHub Actions 캐시로 복원/저장합니다.
 이 파일을 기준으로 다음 실행에서 비트코인 ETF 공식 보유량의 전일 대비 순유입/순유출을 계산합니다.
+뉴스 품질이 낮을 때는 OpenAI `web_search`를 사용해 Reuters/Bloomberg/WSJ/FT/CNBC/CoinDesk 등 허용 도메인 안에서만 검증용 백필을 시도합니다.
 
 ### base64 생성 예시 (macOS)
 ```bash

@@ -9,6 +9,7 @@ from morning_brief.config import Settings
 from morning_brief.data.market import build_market_packet
 from morning_brief.data.news import build_news_packet
 from morning_brief.emailer import GmailSender
+from morning_brief.research_backfill import backfill_news_with_web_search
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +113,23 @@ def run_pipeline(settings: Settings) -> str:
         "news": news_packet,
     }
     quality = _assess_data_quality(packet=packet, news_packet=news_packet)
+    if quality["status"] != "ok":
+        enriched_news, web_search_references = backfill_news_with_web_search(
+            packet=packet,
+            quality=quality,
+            settings=settings,
+        )
+        if enriched_news != news_packet:
+            news_packet = enriched_news
+            packet["news"] = news_packet
+            quality = _assess_data_quality(packet=packet, news_packet=news_packet)
+            logger.info(
+                "Reassessed data quality after web search backfill: %s",
+                quality["status"],
+            )
+        if web_search_references:
+            packet["web_search_references"] = web_search_references
+
     packet["data_quality"] = quality
     if quality["status"] != "ok":
         logger.warning("Data quality status: %s | %s", quality["status"], "; ".join(quality["warnings"]))

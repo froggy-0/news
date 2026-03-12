@@ -439,15 +439,41 @@ def summarize_news_quality(items: list[NewsItem]) -> dict:
     }
 
 
-def build_news_packet(max_items: int, newsapi_key: str = "") -> list[dict]:
-    items = fetch_news(max_items=max_items, newsapi_key=newsapi_key)
+def packet_item_to_news_item(item: dict) -> NewsItem | None:
+    if not isinstance(item, dict):
+        return None
+
+    title = str(item.get("title", "")).strip()
+    url = str(item.get("url", "")).strip()
+    if not title or not url:
+        return None
+
+    published_at = None
+    published_raw = item.get("published_at")
+    if isinstance(published_raw, str) and published_raw.strip():
+        try:
+            published_at = datetime.fromisoformat(published_raw.replace("Z", "+00:00"))
+        except ValueError:
+            published_at = None
+
+    source = str(item.get("source", "")).strip() or _extract_domain(url) or "Unknown"
+    return NewsItem(
+        title=title,
+        url=url,
+        source=source,
+        published_at=published_at,
+    )
+
+
+def news_items_to_packet(items: list[NewsItem]) -> list[dict]:
     result: list[dict] = []
+    now_utc = datetime.now(timezone.utc)
 
     for item in items:
         age_hours = None
         if item.published_at is not None:
             age_hours = round(
-                (datetime.now(timezone.utc) - item.published_at).total_seconds() / 3600,
+                (now_utc - item.published_at).total_seconds() / 3600,
                 2,
             )
         result.append(
@@ -464,3 +490,18 @@ def build_news_packet(max_items: int, newsapi_key: str = "") -> list[dict]:
         )
 
     return result
+
+
+def merge_news_packets(existing_packet: list[dict], extra_items: list[NewsItem], max_items: int) -> list[dict]:
+    existing_items = [
+        item
+        for item in (packet_item_to_news_item(entry) for entry in existing_packet)
+        if item is not None
+    ]
+    merged = _merge_rank(existing_items, extra_items, max_items=max_items)
+    return news_items_to_packet(merged)
+
+
+def build_news_packet(max_items: int, newsapi_key: str = "") -> list[dict]:
+    items = fetch_news(max_items=max_items, newsapi_key=newsapi_key)
+    return news_items_to_packet(items)

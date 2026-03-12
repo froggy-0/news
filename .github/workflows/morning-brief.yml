@@ -80,6 +80,9 @@ jobs:
           CACHE_DIR: .cache
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5-mini' }}
+          OPENAI_WEB_SEARCH_ENABLED: ${{ vars.OPENAI_WEB_SEARCH_ENABLED || 'true' }}
+          OPENAI_WEB_SEARCH_MODEL: ${{ vars.OPENAI_WEB_SEARCH_MODEL || vars.OPENAI_MODEL || 'gpt-5-mini' }}
+          OPENAI_WEB_SEARCH_MAX_RESULTS: ${{ vars.OPENAI_WEB_SEARCH_MAX_RESULTS || '3' }}
           OPENAI_REASONING_EFFORT: ${{ vars.OPENAI_REASONING_EFFORT || 'low' }}
           OPENAI_MAX_OUTPUT_TOKENS: ${{ vars.OPENAI_MAX_OUTPUT_TOKENS || '1700' }}
           OPENAI_PROMPT_CACHE_KEY: ${{ vars.OPENAI_PROMPT_CACHE_KEY || 'morning-market-brief' }}

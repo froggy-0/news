@@ -12,6 +12,8 @@ from morning_brief.config import Settings
 
 INSTRUCTIONS_TEMPLATE = "brief_instructions.j2"
 INPUT_TEMPLATE = "brief_input.j2"
+WEB_SEARCH_INSTRUCTIONS_TEMPLATE = "web_search_instructions.j2"
+WEB_SEARCH_INPUT_TEMPLATE = "web_search_input.j2"
 DEFAULT_CACHE_KEY = "morning-market-brief"
 MAX_CACHE_KEY_LEN = 180
 
@@ -59,6 +61,24 @@ def render_brief_prompts(packet: dict, settings: Settings) -> tuple[str, str]:
         template_dir=settings.prompt_template_dir,
         template_name=INPUT_TEMPLATE,
         packet_json=packet_json,
+    )
+    return instructions, user_prompt
+
+
+def render_web_search_prompts(
+    *,
+    search_context_json: str,
+    settings: Settings,
+) -> tuple[str, str]:
+    instructions = _render_template(
+        template_dir=settings.prompt_template_dir,
+        template_name=WEB_SEARCH_INSTRUCTIONS_TEMPLATE,
+        prompt_template_version=settings.prompt_template_version,
+    )
+    user_prompt = _render_template(
+        template_dir=settings.prompt_template_dir,
+        template_name=WEB_SEARCH_INPUT_TEMPLATE,
+        search_context_json=search_context_json,
     )
     return instructions, user_prompt
 
