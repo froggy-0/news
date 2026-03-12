@@ -319,88 +319,129 @@ def _preheader_text(title: str, notice: str, sections: list[tuple[str, str]]) ->
     return title
 
 
-def render_briefing_email_html(subject: str, body: str) -> str:
-    main_body, references = _split_reference_block(body)
-    title, notice, sections = _extract_brief_structure(main_body)
-    preheader = _preheader_text(title=title, notice=notice, sections=sections)
-    generated_label = subject.split("|")[-1].strip() or title
+def _render_section_row(index: int, heading: str, content: str) -> str:
+    summary_label, summary_content, insight_content = _split_section_groups(content)
+    summary_block = ""
+    if summary_content:
+        summary_block = (
+            '<div style="padding:0 0 14px 0;">'
+            f'<div style="font-size:12px;line-height:1.2;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#2563eb;padding:0 0 10px 0;">{html.escape(summary_label)}</div>'
+            f"{_text_to_html_blocks(summary_content)}"
+            "</div>"
+        )
+    insight_block = ""
+    if insight_content:
+        insight_block = (
+            '<div style="padding:0;">'
+            '<div style="font-size:12px;line-height:1.2;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#0f172a;padding:0 0 10px 0;">해석</div>'
+            f"{_text_to_html_blocks(insight_content)}"
+            "</div>"
+        )
+    return (
+        "<tr>"
+        '<td style="padding:0 0 16px 0;">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" '
+        'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:24px;">'
+        "<tr>"
+        '<td style="padding:22px 24px 22px 24px;">'
+        f'<div style="width:36px;height:36px;line-height:36px;text-align:center;background:#0f172a;color:#ffffff;border-radius:999px;font-size:14px;font-weight:700;">{index}</div>'
+        f'<div style="font-size:20px;line-height:1.3;font-weight:700;color:#0f172a;padding:14px 0 12px 0;">{html.escape(heading)}</div>'
+        f"{summary_block}"
+        f"{insight_block}"
+        "</td>"
+        "</tr>"
+        "</table>"
+        "</td>"
+        "</tr>"
+    )
 
-    section_rows = []
-    for index, (heading, content) in enumerate(sections, start=1):
-        summary_label, summary_content, insight_content = _split_section_groups(content)
-        summary_block = ""
-        if summary_content:
-            summary_block = (
-                '<div style="padding:0 0 14px 0;">'
-                f'<div style="font-size:12px;line-height:1.2;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#2563eb;padding:0 0 10px 0;">{html.escape(summary_label)}</div>'
-                f"{_text_to_html_blocks(summary_content)}"
-                "</div>"
-            )
-        insight_block = ""
-        if insight_content:
-            insight_block = (
-                '<div style="padding:0;">'
-                '<div style="font-size:12px;line-height:1.2;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#0f172a;padding:0 0 10px 0;">해석</div>'
-                f"{_text_to_html_blocks(insight_content)}"
-                "</div>"
-            )
-        section_rows.append(
-            f"""
-            <tr>
-              <td style="padding:0 0 16px 0;">
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:24px;">
-                  <tr>
-                    <td style="padding:22px 24px 22px 24px;">
-                      <div style="width:36px;height:36px;line-height:36px;text-align:center;background:#0f172a;color:#ffffff;border-radius:999px;font-size:14px;font-weight:700;">{index}</div>
-                      <div style="font-size:20px;line-height:1.3;font-weight:700;color:#0f172a;padding:14px 0 12px 0;">{html.escape(heading)}</div>
-                      {summary_block}
-                      {insight_block}
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-            """.strip()
+
+def _render_notice_block(notice: str) -> str:
+    if not notice:
+        return ""
+    return (
+        '<tr><td style="padding:0 0 16px 0;">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
+        'style="border-collapse:separate;border-spacing:0;background:#fff7ed;border:1px solid #fed7aa;border-radius:18px;">'
+        '<tr><td style="padding:14px 18px;color:#9a3412;font-size:14px;line-height:1.6;font-weight:600;">'
+        f"{html.escape(notice)}"
+        "</td></tr></table></td></tr>"
+    )
+
+
+def _render_reference_block(references: list[str]) -> str:
+    if not references:
+        return ""
+
+    items = []
+    for reference in references:
+        if " — " in reference:
+            label, url = reference.split(" — ", 1)
+        else:
+            label, url = reference, reference
+        safe_label = html.escape(label.strip() or url.strip())
+        safe_url = html.escape(url.strip())
+        items.append(
+            '<li style="margin:0 0 10px 0;padding:0;list-style:none;">'
+            f'<a href="{safe_url}" style="color:#1d4ed8;text-decoration:none;font-size:14px;line-height:1.7;">{safe_label}</a>'
+            "</li>"
         )
 
-    notice_block = ""
-    if notice:
-        notice_block = (
-            '<tr><td style="padding:0 0 16px 0;">'
-            '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
-            'style="border-collapse:separate;border-spacing:0;background:#fff7ed;border:1px solid #fed7aa;border-radius:18px;">'
-            '<tr><td style="padding:14px 18px;color:#9a3412;font-size:14px;line-height:1.6;font-weight:600;">'
-            f"{html.escape(notice)}"
-            "</td></tr></table></td></tr>"
-        )
+    return (
+        '<tr><td style="padding:4px 0 16px 0;">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" '
+        'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:20px;">'
+        '<tr><td style="padding:18px 22px 16px 22px;">'
+        '<div style="font-size:15px;line-height:1.4;font-weight:700;color:#0f172a;padding:0 0 12px 0;">참고 출처</div>'
+        '<ul style="margin:0;padding:0;">'
+        f"{''.join(items)}"
+        "</ul>"
+        "</td></tr></table></td></tr>"
+    )
 
-    reference_block = ""
-    if references:
-        items = []
-        for reference in references:
-            if " — " in reference:
-                label, url = reference.split(" — ", 1)
-            else:
-                label, url = reference, reference
-            safe_label = html.escape(label.strip() or url.strip())
-            safe_url = html.escape(url.strip())
-            items.append(
-                '<li style="margin:0 0 10px 0;padding:0;list-style:none;">'
-                f'<a href="{safe_url}" style="color:#1d4ed8;text-decoration:none;font-size:14px;line-height:1.7;">{safe_label}</a>'
-                "</li>"
-            )
-        reference_block = (
-            '<tr><td style="padding:4px 0 16px 0;">'
-            '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" '
-            'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:20px;">'
-            '<tr><td style="padding:18px 22px 16px 22px;">'
-            '<div style="font-size:15px;line-height:1.4;font-weight:700;color:#0f172a;padding:0 0 12px 0;">참고 출처</div>'
-            '<ul style="margin:0;padding:0;">'
-            f"{''.join(items)}"
-            "</ul>"
-            "</td></tr></table></td></tr>"
-        )
 
+def _render_hero_block(generated_label: str) -> str:
+    return (
+        '<tr><td style="padding:0 0 16px 0;">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="hero-card" '
+        'style="border-collapse:separate;border-spacing:0;background:#f8fbff;border:1px solid #dbe4ee;border-radius:28px;overflow:hidden;">'
+        "<tr>"
+        '<td class="hero-wrap" style="padding:28px 28px 24px 28px;background:#ffffff;">'
+        '<div style="padding:0 0 16px 0;">'
+        '<span style="display:inline-block;padding:7px 12px;border-radius:999px;border:1px solid #dbe4ee;background:#f8fafc;color:#0f172a;font-size:12px;line-height:1.2;font-weight:700;letter-spacing:0.02em;-webkit-text-fill-color:#0f172a;">좋은 아침 시장 브리핑</span>'
+        "</div>"
+        '<div class="hero-copy" style="padding:0 0 14px 0;font-size:15px;line-height:1.8;color:#334155;-webkit-text-fill-color:#334155;">'
+        "<div>안녕하세요.</div>"
+        "<div>오늘 아침에 꼭 봐야 할 시장 흐름만 편하게 읽으실 수 있게 정리했어요.</div>"
+        "</div>"
+        '<div class="hero-title" style="padding:0 0 14px 0;font-size:34px;line-height:1.2;font-weight:800;letter-spacing:-0.03em;color:#0f172a;-webkit-text-fill-color:#0f172a;">'
+        "오늘 아침,<br>"
+        '<span style="color:#1d4ed8;-webkit-text-fill-color:#1d4ed8;">미국 기술주와 비트코인</span> 흐름만<br>'
+        "편하게 읽으실 수 있게 담았어요."
+        "</div>"
+        '<div class="hero-copy" style="max-width:540px;font-size:15px;line-height:1.8;color:#475569;-webkit-text-fill-color:#475569;">'
+        '<div><span style="color:#0f172a;font-weight:700;-webkit-text-fill-color:#0f172a;">수치 체크</span>만 먼저 읽으셔도 흐름이 바로 잡히도록 구성했어요.</div>'
+        '<div>조금 더 여유가 있으실 때는 아래 <span style="color:#0f172a;font-weight:700;-webkit-text-fill-color:#0f172a;">해석</span>까지 보시면 의미가 더 쉽게 연결되실 거예요.</div>'
+        "</div>"
+        '<div class="hero-copy" style="padding-top:18px;font-size:13px;line-height:1.6;color:#64748b;-webkit-text-fill-color:#64748b;">'
+        f"{html.escape(generated_label)}"
+        "</div>"
+        "</td>"
+        "</tr>"
+        "</table>"
+        "</td></tr>"
+    )
+
+
+def _render_email_document(
+    *,
+    subject: str,
+    preheader: str,
+    hero_block: str,
+    notice_block: str,
+    section_rows: list[str],
+    reference_block: str,
+) -> str:
     return f"""<!doctype html>
 <html lang="ko">
   <head>
@@ -438,35 +479,7 @@ def render_briefing_email_html(subject: str, body: str) -> str:
       <tr>
         <td align="center" style="padding:28px 14px;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:680px;">
-            <tr>
-              <td style="padding:0 0 16px 0;">
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="hero-card" style="border-collapse:separate;border-spacing:0;background:#f8fbff;border:1px solid #dbe4ee;border-radius:28px;overflow:hidden;">
-                  <tr>
-                    <td class="hero-wrap" style="padding:28px 28px 24px 28px;background:#ffffff;">
-                      <div style="padding:0 0 16px 0;">
-                        <span style="display:inline-block;padding:7px 12px;border-radius:999px;border:1px solid #dbe4ee;background:#f8fafc;color:#0f172a;font-size:12px;line-height:1.2;font-weight:700;letter-spacing:0.02em;-webkit-text-fill-color:#0f172a;">좋은 아침 시장 브리핑</span>
-                      </div>
-                      <div class="hero-copy" style="padding:0 0 14px 0;font-size:15px;line-height:1.8;color:#334155;-webkit-text-fill-color:#334155;">
-                        <div>안녕하세요.</div>
-                        <div>오늘 아침에 꼭 봐야 할 시장 흐름만 편하게 읽으실 수 있게 정리했어요.</div>
-                      </div>
-                      <div class="hero-title" style="padding:0 0 14px 0;font-size:34px;line-height:1.2;font-weight:800;letter-spacing:-0.03em;color:#0f172a;-webkit-text-fill-color:#0f172a;">
-                        오늘 아침,<br>
-                        <span style="color:#1d4ed8;-webkit-text-fill-color:#1d4ed8;">미국 기술주와 비트코인</span> 흐름만<br>
-                        편하게 읽으실 수 있게 담았어요.
-                      </div>
-                      <div class="hero-copy" style="max-width:540px;font-size:15px;line-height:1.8;color:#475569;-webkit-text-fill-color:#475569;">
-                        <div><span style="color:#0f172a;font-weight:700;-webkit-text-fill-color:#0f172a;">수치 체크</span>만 먼저 읽으셔도 흐름이 바로 잡히도록 구성했어요.</div>
-                        <div>조금 더 여유가 있으실 때는 아래 <span style="color:#0f172a;font-weight:700;-webkit-text-fill-color:#0f172a;">해석</span>까지 보시면 의미가 더 쉽게 연결되실 거예요.</div>
-                      </div>
-                      <div class="hero-copy" style="padding-top:18px;font-size:13px;line-height:1.6;color:#64748b;-webkit-text-fill-color:#64748b;">
-                        {html.escape(generated_label)}
-                      </div>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
+            {hero_block}
             {notice_block}
             {''.join(section_rows)}
             {reference_block}
@@ -481,6 +494,25 @@ def render_briefing_email_html(subject: str, body: str) -> str:
     </table>
   </body>
 </html>"""
+
+
+def render_briefing_email_html(subject: str, body: str) -> str:
+    main_body, references = _split_reference_block(body)
+    title, notice, sections = _extract_brief_structure(main_body)
+    preheader = _preheader_text(title=title, notice=notice, sections=sections)
+    generated_label = subject.split("|")[-1].strip() or title
+    section_rows = [
+        _render_section_row(index=index, heading=heading, content=content)
+        for index, (heading, content) in enumerate(sections, start=1)
+    ]
+    return _render_email_document(
+        subject=subject,
+        preheader=preheader,
+        hero_block=_render_hero_block(generated_label),
+        notice_block=_render_notice_block(notice),
+        section_rows=section_rows,
+        reference_block=_render_reference_block(references),
+    )
 
 
 def build_briefing_message(

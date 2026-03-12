@@ -16,7 +16,7 @@ from morning_brief.data.sources.btc_etf_official import (
 )
 from morning_brief.data.sources.coingecko import fetch_btc_usd_price_change
 from morning_brief.data.sources.fred import fetch_macro_points_from_fred
-from morning_brief.data.sources.http_client import HttpFetchError, is_host_resolvable
+from morning_brief.data.sources.http_client import is_host_resolvable
 from morning_brief.data.sources.stooq import fetch_close_change_and_volume, to_stooq_symbol
 from morning_brief.models import BitcoinEtfIssuerSnapshot, BitcoinSnapshot, MarketPoint
 
@@ -27,6 +27,30 @@ BACKOFF_SECONDS = 1.2
 FEAR_GREED_TIMEOUT = 10
 YAHOO_FINANCE_HOST = "query2.finance.yahoo.com"
 BTC_ETF_OFFICIAL_CACHE_RELATIVE_PATH = Path("btc_etf/official_snapshots.json")
+MACRO_FALLBACK_TARGETS = [
+    ("미국 10년물 국채금리", "^TNX", 0.1),
+    ("미국 13주물 단기금리", "^IRX", 1.0),
+    ("달러 인덱스", "DX-Y.NYB", 1.0),
+    ("VIX", "^VIX", 1.0),
+]
+US_INDEX_TARGETS = [
+    ("S&P500", "SPY", "spy.us"),
+    ("NASDAQ", "QQQ", "qqq.us"),
+    ("반도체 섹터 (SOXX)", "SOXX", "soxx.us"),
+]
+TECH_STOCK_TICKERS = [
+    "NVDA",
+    "MSFT",
+    "AAPL",
+    "AMZN",
+    "GOOGL",
+    "META",
+    "AMD",
+    "TSM",
+    "ASML",
+    "AVGO",
+]
+BTC_ETF_TICKERS = ["IBIT", "FBTC", "ARKB", "BITB", "GBTC"]
 
 # yfinance tries to write cache files under user cache directory by default.
 # In restricted environments (CI/sandbox), use /tmp to avoid permission issues.
@@ -111,6 +135,21 @@ def _latest_price_point_from_yfinance(
     )
 
 
+def _safe_with_fallback(
+    *,
+    warning_key: str,
+    warning_message: str,
+    warning_args: tuple[object, ...],
+    primary_fetch,
+    fallback_fetch,
+):
+    try:
+        return primary_fetch()
+    except Exception as exc:
+        _warn_once(warning_key, warning_message, *warning_args, exc)
+        return fallback_fetch()
+
+
 
 def _safe_yfinance_point(
     label: str,
@@ -135,61 +174,56 @@ def _safe_yfinance_point(
 
 
 
+def _point_from_stooq(label: str, ticker: str, stooq_symbol: str | None = None) -> MarketPoint:
+    symbol = stooq_symbol or to_stooq_symbol(ticker)
+    close, change_pct, _ = fetch_close_change_and_volume(symbol)
+    return MarketPoint(
+        label=label,
+        ticker=ticker,
+        price=round(close, 4),
+        change_pct=round(change_pct, 2),
+    )
+
+
 def _safe_stooq_point(label: str, ticker: str, stooq_symbol: str | None = None) -> MarketPoint:
     symbol = stooq_symbol or to_stooq_symbol(ticker)
-    try:
-        close, change_pct, _ = fetch_close_change_and_volume(symbol)
-        return MarketPoint(
-            label=label,
-            ticker=ticker,
-            price=round(close, 4),
-            change_pct=round(change_pct, 2),
-        )
-    except (HttpFetchError, ValueError) as exc:
-        _warn_once(
-            f"stooq_fallback_{symbol}",
-            "Stooq fetch failed for %s (%s): %s. Falling back to yfinance.",
-            label,
-            symbol,
-            exc,
-        )
-        return _safe_yfinance_point(label=label, ticker=ticker)
+    return _safe_with_fallback(
+        warning_key=f"stooq_fallback_{symbol}",
+        warning_message="Stooq fetch failed for %s (%s): %s. Falling back to yfinance.",
+        warning_args=(label, symbol),
+        primary_fetch=lambda: _point_from_stooq(label=label, ticker=ticker, stooq_symbol=symbol),
+        fallback_fetch=lambda: _safe_yfinance_point(label=label, ticker=ticker),
+    )
 
+
+
+def _point_from_alpha_vantage(label: str, ticker: str, api_key: str) -> MarketPoint:
+    close, change_pct, _ = fetch_daily_close_change_volume(ticker, api_key)
+    return MarketPoint(
+        label=label,
+        ticker=ticker,
+        price=round(close, 4),
+        change_pct=round(change_pct, 2),
+    )
 
 
 def _safe_alpha_vantage_point(label: str, ticker: str, api_key: str) -> MarketPoint:
-    try:
-        close, change_pct, _ = fetch_daily_close_change_volume(ticker, api_key)
-        return MarketPoint(
-            label=label,
-            ticker=ticker,
-            price=round(close, 4),
-            change_pct=round(change_pct, 2),
-        )
-    except (HttpFetchError, ValueError) as exc:
-        _warn_once(
-            f"alpha_vantage_fallback_{ticker}",
-            "Alpha Vantage fetch failed for %s (%s): %s. Falling back to Stooq/yfinance.",
-            label,
-            ticker,
-            exc,
-        )
-        return _safe_stooq_point(label=label, ticker=ticker)
+    return _safe_with_fallback(
+        warning_key=f"alpha_vantage_fallback_{ticker}",
+        warning_message="Alpha Vantage fetch failed for %s (%s): %s. Falling back to Stooq/yfinance.",
+        warning_args=(label, ticker),
+        primary_fetch=lambda: _point_from_alpha_vantage(label=label, ticker=ticker, api_key=api_key),
+        fallback_fetch=lambda: _safe_stooq_point(label=label, ticker=ticker),
+    )
 
 
-def _safe_stooq_volume(ticker: str, stooq_symbol: str | None = None) -> int:
+def _volume_from_stooq(ticker: str, stooq_symbol: str | None = None) -> int:
     symbol = stooq_symbol or to_stooq_symbol(ticker)
-    try:
-        _, _, volume = fetch_close_change_and_volume(symbol)
-        return volume
-    except (HttpFetchError, ValueError) as exc:
-        _warn_once(
-            f"stooq_volume_fallback_{symbol}",
-            "Stooq volume fetch failed for %s: %s. Falling back to yfinance.",
-            symbol,
-            exc,
-        )
+    _, _, volume = fetch_close_change_and_volume(symbol)
+    return volume
 
+
+def _volume_from_yfinance(ticker: str) -> int:
     try:
         history = _history_with_retry(ticker=ticker, period="2d", interval="1d")
         latest_volume = history["Volume"].iloc[-1]
@@ -206,18 +240,30 @@ def _safe_stooq_volume(ticker: str, stooq_symbol: str | None = None) -> int:
     return 0
 
 
+def _safe_stooq_volume(ticker: str, stooq_symbol: str | None = None) -> int:
+    symbol = stooq_symbol or to_stooq_symbol(ticker)
+    return _safe_with_fallback(
+        warning_key=f"stooq_volume_fallback_{symbol}",
+        warning_message="Stooq volume fetch failed for %s: %s. Falling back to yfinance.",
+        warning_args=(symbol,),
+        primary_fetch=lambda: _volume_from_stooq(ticker=ticker, stooq_symbol=symbol),
+        fallback_fetch=lambda: _volume_from_yfinance(ticker=ticker),
+    )
+
+
+def _volume_from_alpha_vantage(ticker: str, api_key: str) -> int:
+    _, _, volume = fetch_daily_close_change_volume(ticker, api_key)
+    return volume
+
+
 def _safe_alpha_vantage_volume(ticker: str, api_key: str) -> int:
-    try:
-        _, _, volume = fetch_daily_close_change_volume(ticker, api_key)
-        return volume
-    except (HttpFetchError, ValueError) as exc:
-        _warn_once(
-            f"alpha_vantage_volume_fallback_{ticker}",
-            "Alpha Vantage volume fetch failed for %s: %s. Falling back to Stooq/yfinance.",
-            ticker,
-            exc,
-        )
-        return _safe_stooq_volume(ticker=ticker)
+    return _safe_with_fallback(
+        warning_key=f"alpha_vantage_volume_fallback_{ticker}",
+        warning_message="Alpha Vantage volume fetch failed for %s: %s. Falling back to Stooq/yfinance.",
+        warning_args=(ticker,),
+        primary_fetch=lambda: _volume_from_alpha_vantage(ticker=ticker, api_key=api_key),
+        fallback_fetch=lambda: _safe_stooq_volume(ticker=ticker),
+    )
 
 
 def fetch_macro_points(fred_api_key: str = "") -> list[MarketPoint]:
@@ -233,38 +279,27 @@ def fetch_macro_points(fred_api_key: str = "") -> list[MarketPoint]:
                 exc,
             )
 
-    targets = [
-        ("미국 10년물 국채금리", "^TNX", 0.1),
-        ("미국 13주물 단기금리", "^IRX", 1.0),
-        ("달러 인덱스", "DX-Y.NYB", 1.0),
-        ("VIX", "^VIX", 1.0),
-    ]
     logger.info("Macro provider: yfinance fallback")
     return [
         _safe_yfinance_point(label=label, ticker=ticker, price_scale=scale)
-        for label, ticker, scale in targets
+        for label, ticker, scale in MACRO_FALLBACK_TARGETS
     ]
 
 
 
 def fetch_us_index_points(alpha_vantage_api_key: str = "") -> list[MarketPoint]:
     # Stooq index symbols are inconsistent; use liquid ETF proxies for stability.
-    targets = [
-        ("S&P500", "SPY", "spy.us"),
-        ("NASDAQ", "QQQ", "qqq.us"),
-        ("반도체 섹터 (SOXX)", "SOXX", "soxx.us"),
-    ]
     if alpha_vantage_api_key:
         points = [
             _safe_alpha_vantage_point(label=label, ticker=ticker, api_key=alpha_vantage_api_key)
-            for label, ticker, _ in targets
+            for label, ticker, _ in US_INDEX_TARGETS
         ]
         logger.info("US index provider: Alpha Vantage (ETF proxies) with Stooq/yfinance fallback")
         return points
 
     points = [
         _safe_stooq_point(label=label, ticker=ticker, stooq_symbol=stooq_symbol)
-        for label, ticker, stooq_symbol in targets
+        for label, ticker, stooq_symbol in US_INDEX_TARGETS
     ]
     logger.info("US index provider: Stooq (ETF proxies) with yfinance fallback")
     return points
@@ -272,28 +307,16 @@ def fetch_us_index_points(alpha_vantage_api_key: str = "") -> list[MarketPoint]:
 
 
 def fetch_tech_stock_points(alpha_vantage_api_key: str = "") -> list[MarketPoint]:
-    tickers = [
-        "NVDA",
-        "MSFT",
-        "AAPL",
-        "AMZN",
-        "GOOGL",
-        "META",
-        "AMD",
-        "TSM",
-        "ASML",
-        "AVGO",
-    ]
     if alpha_vantage_api_key:
         points = [
             _safe_alpha_vantage_point(label=ticker, ticker=ticker, api_key=alpha_vantage_api_key)
-            for ticker in tickers
+            for ticker in TECH_STOCK_TICKERS
         ]
         points.sort(key=lambda x: abs(x.change_pct), reverse=True)
         logger.info("Tech stock provider: Alpha Vantage with Stooq/yfinance fallback")
         return points
 
-    points = [_safe_stooq_point(label=ticker, ticker=ticker) for ticker in tickers]
+    points = [_safe_stooq_point(label=ticker, ticker=ticker) for ticker in TECH_STOCK_TICKERS]
     points.sort(key=lambda x: abs(x.change_pct), reverse=True)
     logger.info("Tech stock provider: Stooq with yfinance fallback")
     return points
@@ -424,17 +447,16 @@ def _fetch_official_btc_etf_data(
 def fetch_bitcoin_snapshot(alpha_vantage_api_key: str = "", cache_dir: Path | None = None) -> BitcoinSnapshot:
     spot = _fetch_btc_spot_point()
 
-    etf_tickers = ["IBIT", "FBTC", "ARKB", "BITB", "GBTC"]
     if alpha_vantage_api_key:
         etf_points = [
             _safe_alpha_vantage_point(label=ticker, ticker=ticker, api_key=alpha_vantage_api_key)
-            for ticker in etf_tickers
+            for ticker in BTC_ETF_TICKERS
         ]
     else:
-        etf_points = [_safe_stooq_point(label=ticker, ticker=ticker) for ticker in etf_tickers]
+        etf_points = [_safe_stooq_point(label=ticker, ticker=ticker) for ticker in BTC_ETF_TICKERS]
 
     volume_total = 0
-    for ticker in etf_tickers:
+    for ticker in BTC_ETF_TICKERS:
         if alpha_vantage_api_key:
             volume_total += _safe_alpha_vantage_volume(ticker=ticker, api_key=alpha_vantage_api_key)
         else:

@@ -7,11 +7,17 @@ from zoneinfo import ZoneInfo
 from morning_brief.briefing import generate_briefing
 from morning_brief.config import Settings
 from morning_brief.data.market import build_market_packet
-from morning_brief.data.news import build_news_packet
+from morning_brief.data.news import build_news_packet, summarize_news_packet_quality
 from morning_brief.emailer import GmailSender
 from morning_brief.research_backfill import backfill_news_with_web_search
 
 logger = logging.getLogger(__name__)
+
+MIN_NEWS_ITEMS = 3
+MIN_PREFERRED_NEWS_ITEMS = 2
+MIN_TIER_1_NEWS_ITEMS = 1
+MIN_UNIQUE_NEWS_DOMAINS = 3
+MIN_FRESH_NEWS_ITEMS = 2
 
 
 def _safe_price(value: object) -> float:
@@ -33,49 +39,34 @@ def _assess_data_quality(packet: dict, news_packet: list[dict]) -> dict:
     ]
 
     zero_ratio = (len(zero_points) / len(numeric_points)) if numeric_points else 1.0
-    news_count = len(news_packet)
-    preferred_news_count = sum(
-        1 for item in news_packet if isinstance(item, dict) and bool(item.get("preferred_source"))
-    )
-    tier_1_news_count = sum(
-        1
-        for item in news_packet
-        if isinstance(item, dict) and str(item.get("source_tier", "")).lower() == "tier_1"
-    )
-    unique_news_domains = len(
-        {
-            str(item.get("domain", "")).strip().lower()
-            for item in news_packet
-            if isinstance(item, dict) and str(item.get("domain", "")).strip()
-        }
-    )
-    fresh_news_count = sum(
-        1
-        for item in news_packet
-        if isinstance(item, dict)
-        and item.get("age_hours") is not None
-        and _safe_price(item.get("age_hours", 10_000)) <= 24.0
-    )
+    news_quality = summarize_news_packet_quality(news_packet)
+    news_count = news_quality["count"]
+    preferred_news_count = news_quality["preferred_count"]
+    tier_1_news_count = news_quality["tier_1_count"]
+    unique_news_domains = news_quality["unique_domains"]
+    fresh_news_count = news_quality["fresh_count"]
 
     warnings: list[str] = []
     if zero_ratio >= 0.6:
         warnings.append(f"가격 데이터의 {zero_ratio*100:.0f}%가 폴백 값입니다")
-    if news_count < 3:
-        warnings.append(f"핵심 뉴스가 {news_count}건으로 최소 기준(3건) 미달입니다")
-    if news_count >= 3 and preferred_news_count < 2:
+    if news_count < MIN_NEWS_ITEMS:
+        warnings.append(
+            f"핵심 뉴스가 {news_count}건으로 최소 기준({MIN_NEWS_ITEMS}건) 미달입니다"
+        )
+    if news_count >= MIN_NEWS_ITEMS and preferred_news_count < MIN_PREFERRED_NEWS_ITEMS:
         warnings.append(
             f"우선 신뢰 출처 뉴스가 {preferred_news_count}건으로 충분하지 않습니다"
         )
-    if news_count >= 3 and tier_1_news_count < 1:
+    if news_count >= MIN_NEWS_ITEMS and tier_1_news_count < MIN_TIER_1_NEWS_ITEMS:
         warnings.append("최상위 신뢰 출처(Reuters/Bloomberg/WSJ/FT) 기사가 없습니다")
-    if news_count >= 3 and unique_news_domains < 3:
+    if news_count >= MIN_NEWS_ITEMS and unique_news_domains < MIN_UNIQUE_NEWS_DOMAINS:
         warnings.append(
             f"뉴스 출처 다양성이 낮습니다({unique_news_domains}개 도메인)"
         )
-    if news_count >= 3 and fresh_news_count < 2:
+    if news_count >= MIN_NEWS_ITEMS and fresh_news_count < MIN_FRESH_NEWS_ITEMS:
         warnings.append(f"24시간 내 최신 뉴스가 {fresh_news_count}건으로 부족합니다")
 
-    if news_count < 3 or zero_ratio >= 0.8:
+    if news_count < MIN_NEWS_ITEMS or zero_ratio >= 0.8:
         status = "critical"
     elif warnings:
         status = "degraded"

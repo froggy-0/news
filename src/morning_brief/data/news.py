@@ -439,6 +439,45 @@ def summarize_news_quality(items: list[NewsItem]) -> dict:
     }
 
 
+def summarize_news_packet_quality(packet: list[dict]) -> dict:
+    count = 0
+    preferred_count = 0
+    tier_1_count = 0
+    fresh_count = 0
+    unique_domains: set[str] = set()
+
+    for item in packet:
+        if not isinstance(item, dict):
+            continue
+
+        count += 1
+
+        if bool(item.get("preferred_source")):
+            preferred_count += 1
+
+        if str(item.get("source_tier", "")).strip().lower() == "tier_1":
+            tier_1_count += 1
+
+        domain = str(item.get("domain", "")).strip().lower()
+        if domain:
+            unique_domains.add(domain)
+
+        age_hours = item.get("age_hours")
+        try:
+            if age_hours is not None and float(age_hours) <= FRESH_NEWS_HOURS:
+                fresh_count += 1
+        except (TypeError, ValueError):
+            continue
+
+    return {
+        "count": count,
+        "preferred_count": preferred_count,
+        "tier_1_count": tier_1_count,
+        "unique_domains": len(unique_domains),
+        "fresh_count": fresh_count,
+    }
+
+
 def packet_item_to_news_item(item: dict) -> NewsItem | None:
     if not isinstance(item, dict):
         return None

@@ -106,3 +106,30 @@ def test_build_news_packet_adds_reliability_metadata(monkeypatch):
     assert packet[0]["source_tier"] == "tier_1"
     assert packet[0]["preferred_source"] is True
     assert packet[0]["age_hours"] is not None
+
+
+def test_summarize_news_packet_quality_counts_reliability_fields():
+    packet = [
+        {
+            "preferred_source": True,
+            "source_tier": "tier_1",
+            "domain": "reuters.com",
+            "age_hours": 2.0,
+        },
+        {
+            "preferred_source": False,
+            "source_tier": "tier_3",
+            "domain": "example.com",
+            "age_hours": 30.0,
+        },
+    ]
+
+    summary = news.summarize_news_packet_quality(packet)
+
+    assert summary == {
+        "count": 2,
+        "preferred_count": 1,
+        "tier_1_count": 1,
+        "unique_domains": 2,
+        "fresh_count": 1,
+    }
