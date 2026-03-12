@@ -335,7 +335,7 @@ def build_briefing_message(
 ) -> MIMEMultipart:
     html_body = render_briefing_email_html(subject=subject, body=body)
     msg = MIMEMultipart("alternative")
-    msg["to"] = recipients[0] if len(recipients) == 1 else "Undisclosed recipients:;"
+    msg["to"] = recipients[0] if len(recipients) == 1 else sender
     if len(recipients) > 1:
         msg["bcc"] = ", ".join(recipients)
     msg["from"] = sender

@@ -87,7 +87,7 @@ def test_build_briefing_message_uses_bcc_for_multiple_recipients():
         recipients=["a@example.com", "b@example.com"],
     )
 
-    assert msg["to"] == "Undisclosed recipients:;"
+    assert msg["to"] == "sender@example.com"
     assert msg["bcc"] == "a@example.com, b@example.com"
     assert msg.get_payload()[0].get_content_type() == "text/plain"
     assert msg.get_payload()[1].get_content_type() == "text/html"
