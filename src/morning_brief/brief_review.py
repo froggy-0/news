@@ -40,6 +40,18 @@ BRIEF_REVIEW_SCHEMA = {
 }
 
 
+def _coerce_bool(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "off"}:
+            return False
+    return False
+
+
 def _cached_input_tokens(response: object) -> int | None:
     usage = getattr(response, "usage", None)
     if usage is None:
@@ -62,11 +74,11 @@ def _cached_input_tokens(response: object) -> int | None:
 def _normalize_review_payload(payload: object) -> dict:
     data = payload if isinstance(payload, dict) else {}
     return {
-        "pass": bool(data.get("pass", False)),
-        "rewrite_needed": bool(data.get("rewrite_needed", False)),
-        "plain_language_pass": bool(data.get("plain_language_pass", False)),
-        "numeric_consistency_pass": bool(data.get("numeric_consistency_pass", False)),
-        "structure_pass": bool(data.get("structure_pass", False)),
+        "pass": _coerce_bool(data.get("pass", False)),
+        "rewrite_needed": _coerce_bool(data.get("rewrite_needed", False)),
+        "plain_language_pass": _coerce_bool(data.get("plain_language_pass", False)),
+        "numeric_consistency_pass": _coerce_bool(data.get("numeric_consistency_pass", False)),
+        "structure_pass": _coerce_bool(data.get("structure_pass", False)),
         "issues": [str(item).strip() for item in data.get("issues", []) if str(item).strip()],
         "rewrite_guidance": [
             str(item).strip() for item in data.get("rewrite_guidance", []) if str(item).strip()
@@ -197,20 +209,45 @@ def validate_and_rewrite_briefing(
 
     if settings.openai_brief_max_rewrites <= 0:
         return draft_text
+    if not review["rewrite_needed"]:
+        logger.info("자동 재작성보다 사람 확인이 더 적절해 보여서 초안을 유지할게요.")
+        return draft_text
 
     rewritten = draft_text
+    current_review = review
     for attempt in range(1, settings.openai_brief_max_rewrites + 1):
         try:
             rewritten = _rewrite_briefing(
                 draft_text=rewritten,
                 packet=packet,
-                review=review,
+                review=current_review,
                 settings=settings,
                 client=client,
             )
             logger.info("검수 지적을 반영해 브리핑을 %s회 다듬었어요.", attempt)
-            return rewritten
         except Exception as exc:
             logger.warning("브리핑 재작성 중 문제가 있어 기존 초안을 유지할게요: %s", exc)
+            return draft_text
 
-    return draft_text
+        try:
+            current_review = _review_briefing(
+                draft_text=rewritten,
+                packet=packet,
+                settings=settings,
+                client=client,
+            )
+        except Exception as exc:
+            logger.warning("재작성한 브리핑을 다시 검수하는 중 문제가 있어 현재 버전으로 이어갈게요: %s", exc)
+            return rewritten
+
+        if current_review is None or current_review["pass"]:
+            logger.info("재작성한 브리핑도 다시 확인했고, 최종 검수를 통과했어요.")
+            return rewritten
+
+        followup_issues = "; ".join(current_review["issues"][:3]) or "아직 다듬을 부분이 남아 있어요"
+        logger.warning("재작성 뒤에도 보완점이 남아 있어요: %s", followup_issues)
+        if not current_review["rewrite_needed"]:
+            logger.info("추가 자동 재작성보다는 현재 버전을 유지하는 편이 안전해 보여요.")
+            return rewritten
+
+    return rewritten
