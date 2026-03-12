@@ -2,8 +2,8 @@ name: Morning Market Brief
 
 on:
   schedule:
-    # 08:00 KST daily == 23:00 UTC (previous day)
-    - cron: "0 23 * * *"
+    # 07:57 KST daily == 22:57 UTC (previous day)
+    - cron: "57 22 * * *"
   workflow_dispatch:
 
 concurrency:

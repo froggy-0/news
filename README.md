@@ -121,7 +121,7 @@ pytest -q
 워크플로우는 `.github/workflows/morning-brief.yml`에 포함되어 있습니다.
 
 스케줄:
-- `0 23 * * *` (UTC) = 매일 08:00 KST
+- `57 22 * * *` (UTC) = 매일 07:57 KST
 
 필수 GitHub Secrets:
 - `OPENAI_API_KEY`
