@@ -7,6 +7,7 @@ from urllib.parse import parse_qsl, quote_plus, urlencode, urlparse, urlunparse
 
 import feedparser
 
+from morning_brief.data.sources.domain_utils import domain_matches, normalize_domain
 from morning_brief.data.sources.gdelt import fetch_news_from_gdelt
 from morning_brief.data.sources.http_client import HttpFetchError, get_json_with_retry
 from morning_brief.models import NewsItem
@@ -122,13 +123,13 @@ def _normalize_url(url: str) -> str:
 
 
 def _extract_domain(url: str) -> str:
-    return urlparse(url).netloc.lower()
+    return normalize_domain(url)
 
 
 
 def _is_preferred_domain(url: str) -> bool:
     domain = _extract_domain(url)
-    return any(preferred in domain for preferred in PREFERRED_DOMAINS)
+    return any(domain_matches(domain, preferred) for preferred in PREFERRED_DOMAINS)
 
 
 
@@ -152,7 +153,7 @@ def _domain_score(url: str) -> float:
     domain = _extract_domain(url)
     best = 0.0
     for preferred_domain, score in DOMAIN_SCORES.items():
-        if preferred_domain in domain:
+        if domain_matches(domain, preferred_domain):
             best = max(best, score)
     return best
 

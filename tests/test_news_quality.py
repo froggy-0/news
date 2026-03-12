@@ -50,3 +50,13 @@ def test_dedup_and_rank_keeps_highest_scored_duplicate():
     ranked = news._dedup_and_rank([low, high], max_items=5)
     assert len(ranked) == 1
     assert ranked[0].published_at == high.published_at
+
+
+def test_is_preferred_domain_rejects_substring_spoof():
+    assert not news._is_preferred_domain("https://totallynotreuters.com/market")
+    assert not news._is_preferred_domain("https://news.reuters.com.evil.tld/path")
+
+
+def test_domain_score_rejects_substring_spoof():
+    assert news._domain_score("https://totallynotreuters.com/market") == 0.0
+    assert news._domain_score("https://news.reuters.com.evil.tld/path") == 0.0

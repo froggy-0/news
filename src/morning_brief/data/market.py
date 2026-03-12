@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import logging
 from pathlib import Path
-import socket
 import time
 
 import requests
@@ -11,7 +10,7 @@ import yfinance as yf
 
 from morning_brief.data.sources.coingecko import fetch_btc_usd_price_change
 from morning_brief.data.sources.fred import fetch_macro_points_from_fred
-from morning_brief.data.sources.http_client import HttpFetchError
+from morning_brief.data.sources.http_client import HttpFetchError, is_host_resolvable
 from morning_brief.data.sources.stooq import fetch_close_change_and_volume, to_stooq_symbol
 from morning_brief.models import BitcoinSnapshot, MarketPoint
 
@@ -32,7 +31,6 @@ try:
 except Exception:
     pass
 
-_yahoo_reachable: bool | None = None
 _provider_warned: set[str] = set()
 
 
@@ -45,28 +43,13 @@ def _warn_once(key: str, message: str, *args) -> None:
 
 
 
-def _is_yahoo_reachable() -> bool:
-    global _yahoo_reachable
-    if _yahoo_reachable is not None:
-        return _yahoo_reachable
-
-    try:
-        socket.gethostbyname(YAHOO_FINANCE_HOST)
-        _yahoo_reachable = True
-    except socket.gaierror:
+def _history_with_retry(ticker: str, period: str, interval: str):
+    if not is_host_resolvable(YAHOO_FINANCE_HOST):
         _warn_once(
             "yahoo_dns",
             "Yahoo Finance host resolution failed (%s). yfinance fallbacks may return zeros.",
             YAHOO_FINANCE_HOST,
         )
-        _yahoo_reachable = False
-
-    return _yahoo_reachable
-
-
-
-def _history_with_retry(ticker: str, period: str, interval: str):
-    if not _is_yahoo_reachable():
         raise RuntimeError("Yahoo Finance host resolution failed")
 
     last_error: Exception | None = None

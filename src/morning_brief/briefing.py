@@ -148,10 +148,10 @@ def generate_briefing(packet: dict, settings: Settings) -> str:
         return _fallback_brief(packet=packet, timezone=settings.timezone)
 
     client = OpenAI(api_key=settings.openai_api_key)
-    instructions, user_prompt = render_brief_prompts(packet=packet, settings=settings)
-    prompt_cache_key = build_prompt_cache_key(settings=settings, instructions=instructions)
 
     try:
+        instructions, user_prompt = render_brief_prompts(packet=packet, settings=settings)
+        prompt_cache_key = build_prompt_cache_key(settings=settings, instructions=instructions)
         response = client.responses.create(
             model=settings.openai_model,
             instructions=instructions,

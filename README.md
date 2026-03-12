@@ -54,7 +54,7 @@ cp .env.example .env
 - `PROMPT_TEMPLATE_VERSION` (프롬프트 변경 시 버전 증가 권장)
 - `FRED_API_KEY` (권장, 매크로 공식 소스)
 - `GMAIL_SENDER`
-- `GMAIL_RECIPIENT`
+- `GMAIL_RECIPIENT` (`user1@example.com,user2@example.com` 형식으로 다중 수신자 가능)
 - `GMAIL_CREDENTIALS_FILE` (기본 `credentials.json`)
 - `GMAIL_TOKEN_FILE` (기본 `token.json`)
 - `GMAIL_OAUTH_INTERACTIVE` (로컬 OAuth 로그인 필요 시 `true`)
@@ -63,8 +63,16 @@ cp .env.example .env
 1. Google Cloud Console에서 Gmail API 활성화
 2. OAuth Client ID(Desktop App) 생성
 3. `credentials.json` 다운로드
-4. 로컬에서 `python main.py once` 실행
-5. 브라우저 인증 완료 후 `token.json` 생성
+4. 아래 명령으로 `token.json` 생성
+```bash
+.venv/bin/python generate_gmail_token.py
+```
+5. 브라우저 인증 완료 후 `token.json` 생성 확인
+
+참고:
+- 로컬에서는 `token.json`이 없으면 인증을 통해 자동 생성됩니다.
+- GitHub Actions에서는 브라우저 인증이 불가능하므로, 로컬에서 만든 `token.json`을 Secret으로 등록해야 합니다.
+- `GMAIL_RECIPIENT`는 콤마(`,`) 기준으로 여러 이메일 주소를 지정할 수 있습니다.
 
 ## 4) 실행
 즉시 1회 실행:
@@ -86,6 +94,7 @@ python3 main.py schedule
 - 파일 저장: `outputs/brief_YYYYMMDD_HHMM.md`
 - 이메일 제목: `Morning Market Brief | YYYY-MM-DD`
 - 데이터 커버리지 저하 시 제목 아래 `[데이터 품질 알림]` 자동 표시
+- 이메일 본문: HTML + plain text fallback 동시 전송
 
 ## 6) 테스트
 ```bash
@@ -125,7 +134,21 @@ pytest -q
 
 ### base64 생성 예시 (macOS)
 ```bash
-base64 -i credentials.json | pbcopy
-base64 -i token.json | pbcopy
+base64 -i credentials.json | tr -d '\n' | pbcopy
+base64 -i token.json | tr -d '\n' | pbcopy
 ```
 복사된 값을 각각 `GMAIL_CREDENTIALS_JSON_B64`, `GMAIL_TOKEN_JSON_B64`에 넣으면 됩니다.
+
+`pbcopy` 동작 참고:
+- `pbcopy`는 터미널 출력이 없는 것이 정상입니다. (클립보드로만 복사)
+- 확인 명령: `pbpaste | wc -c`
+- 줄바꿈 제거 출력 시 끝에 보이는 `%`는 zsh 프롬프트이며 base64 값이 아닙니다.
+
+## 9) 최초 점검 실행
+Secrets/Variables 등록이 끝났다면 바로 실행 가능합니다.
+
+- GitHub: Actions -> `Morning Market Brief` -> `Run workflow` (수동 실행)
+- 로컬 1회 점검:
+```bash
+SEND_EMAIL=false python3 main.py once --print-brief
+```

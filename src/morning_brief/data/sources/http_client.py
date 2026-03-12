@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_TIMEOUT = 20
 DEFAULT_RETRIES = 3
 DEFAULT_BACKOFF = 1.2
+HOST_RESOLUTION_CACHE_TTL_SECONDS = 300.0
 DEFAULT_HEADERS = {
     "User-Agent": "morning-market-brief/1.0",
     "Accept": "application/json,text/plain,*/*",
@@ -22,26 +23,34 @@ DEFAULT_HEADERS = {
 class HttpFetchError(RuntimeError):
     """Raised when an HTTP fetch fails after retries."""
 
-_host_resolution_cache: dict[str, bool] = {}
+_host_resolution_cache: dict[str, tuple[bool, float]] = {}
 
 
-def _is_host_resolvable(url: str) -> bool:
-    host = urlparse(url).hostname
+def _normalize_host(value: str) -> str:
+    parsed = urlparse(value if "://" in value else f"https://{value}")
+    return (parsed.hostname or "").strip().lower()
+
+
+def is_host_resolvable(value: str) -> bool:
+    host = _normalize_host(value)
     if not host:
         return True
 
+    now = time.monotonic()
     cached = _host_resolution_cache.get(host)
     if cached is not None:
-        return cached
+        is_resolvable, cached_at = cached
+        if now - cached_at < HOST_RESOLUTION_CACHE_TTL_SECONDS:
+            return is_resolvable
 
     try:
         socket.gethostbyname(host)
-        _host_resolution_cache[host] = True
+        _host_resolution_cache[host] = (True, now)
     except socket.gaierror:
-        _host_resolution_cache[host] = False
+        _host_resolution_cache[host] = (False, now)
         logger.warning("DNS resolution failed for host: %s", host)
 
-    return _host_resolution_cache[host]
+    return _host_resolution_cache[host][0]
 
 
 
@@ -54,7 +63,7 @@ def _request_with_retry(
     retries: int = DEFAULT_RETRIES,
     backoff_seconds: float = DEFAULT_BACKOFF,
 ) -> requests.Response:
-    if not _is_host_resolvable(url):
+    if not is_host_resolvable(url):
         raise HttpFetchError(f"Host is not resolvable: {urlparse(url).hostname}")
 
     merged_headers = dict(DEFAULT_HEADERS)

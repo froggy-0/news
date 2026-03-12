@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import logging
-from urllib.parse import urlparse
 
+from morning_brief.data.sources.domain_utils import domain_matches, normalize_domain
 from morning_brief.data.sources.http_client import HttpFetchError, get_json_with_retry
 from morning_brief.models import NewsItem
 
@@ -27,7 +27,7 @@ def _parse_gdelt_time(raw: str) -> datetime | None:
 
 
 def _normalize_domain(url: str) -> str:
-    return urlparse(url).netloc.lower()
+    return normalize_domain(url)
 
 
 
@@ -78,7 +78,9 @@ def fetch_news_from_gdelt(
             continue
 
         domain = _normalize_domain(link)
-        if preferred_only and preferred_domains and not any(d in domain for d in preferred_domains):
+        if preferred_only and preferred_domains and not any(
+            domain_matches(domain, preferred_domain) for preferred_domain in preferred_domains
+        ):
             continue
 
         published_at = _parse_gdelt_time(str(article.get("seendate", "")))
