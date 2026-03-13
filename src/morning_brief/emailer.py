@@ -486,16 +486,12 @@ def _render_masthead_block(display_date: str) -> str:
     return (
         '<tr><td style="padding:0 0 16px 0;">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="hero-card" '
-        'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:28px;overflow:hidden;box-shadow:0 20px 40px rgba(15,23,42,0.05);">'
+        'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:24px;overflow:hidden;box-shadow:0 16px 32px rgba(15,23,42,0.04);">'
         "<tr>"
-        '<td class="hero-wrap" style="padding:28px 30px 26px 30px;background:#ffffff;">'
-        '<div style="padding:0 0 10px 0;color:#2563eb;font-size:12px;line-height:1.2;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;">Morning Market Brief</div>'
-        f'<div style="padding:0 0 10px 0;color:#64748b;font-size:13px;line-height:1.5;font-weight:600;">{html.escape(display_date)}</div>'
-        '<div class="hero-title" style="font-size:30px;line-height:1.24;font-weight:800;letter-spacing:-0.03em;color:#0f172a;-webkit-text-fill-color:#0f172a;">'
+        '<td class="hero-wrap" style="padding:22px 24px 20px 24px;background:#ffffff;">'
+        f'<div style="padding:0 0 8px 0;color:#64748b;font-size:13px;line-height:1.5;font-weight:600;">{html.escape(display_date)}</div>'
+        '<div class="hero-title" style="font-size:28px;line-height:1.24;font-weight:800;letter-spacing:-0.03em;color:#0f172a;-webkit-text-fill-color:#0f172a;">'
         "미국 기술주 · 비트코인 아침 브리핑"
-        "</div>"
-        '<div style="padding:10px 0 0 0;color:#475569;font-size:15px;line-height:1.75;">'
-        "한 번에 핵심만 읽을 수 있게 정리한 아침 시장 메일이에요."
         "</div>"
         "</td>"
         "</tr>"
@@ -580,10 +576,10 @@ def _render_email_document(
       }}
       @media screen and (max-width: 600px) {{
         .hero-wrap {{
-          padding:24px 22px 22px 22px !important;
+          padding:20px 20px 18px 20px !important;
         }}
         .hero-title {{
-          font-size:27px !important;
+          font-size:24px !important;
           line-height:1.22 !important;
         }}
       }}

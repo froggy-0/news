@@ -77,13 +77,13 @@ def test_render_briefing_email_html_contains_modern_layout_and_list_items():
         body=SAMPLE_BRIEF,
     )
 
-    assert "Morning Market Brief" in html
     assert "미국 기술주 · 비트코인 아침 브리핑" in html
     assert "오늘의 한눈 요약" in html
     assert "시장 스냅샷" in html
     assert "2026.03.12" in html
     assert "-webkit-text-fill-color:#0f172a" in html
     assert "Pretendard" in html
+    assert "한 번에 핵심만 읽을 수 있게 정리한 아침 시장 메일이에요." not in html
     assert "<li style=" in html
     assert "list-style:none" in html
     assert "↑" not in html
