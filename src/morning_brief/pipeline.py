@@ -93,10 +93,7 @@ def run_pipeline(settings: Settings) -> str:
         alpha_vantage_api_key=settings.alpha_vantage_api_key,
         cache_dir=settings.cache_dir,
     )
-    news_packet = build_news_packet(
-        max_items=settings.max_news_items,
-        newsapi_key=settings.newsapi_key,
-    )
+    news_packet = build_news_packet(settings=settings)
     logger.info("시장 지표와 뉴스 %s건을 모았어요.", len(news_packet))
 
     packet = {

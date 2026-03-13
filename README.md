@@ -5,7 +5,7 @@
 ## 핵심 기능
 - 시장 데이터 수집: 금리/달러/VIX, 미국 지수, 빅테크 10종, BTC + ETF
   - 거시: FRED API 우선, 실패 시 yfinance 폴백
-- 뉴스 수집: GDELT 우선 + NewsAPI/RSS 백필
+- 뉴스 수집: Phase 1 기준 `Perplexity` provider 인터페이스를 먼저 고정하고, 실제 수집은 legacy 뉴스 경로로 안전하게 이어짐
   - Reuters/Bloomberg/WSJ/FT/CNBC/CoinDesk 도메인 우선
 - 브리핑 생성: OpenAI API 기반 한국어 해석형 리포트(실패 시 템플릿 폴백)
   - Jinja 템플릿 기반 프롬프트 관리 (`src/morning_brief/prompts`)
@@ -61,6 +61,9 @@ cp .env.example .env
 - `PROMPT_TEMPLATE_VERSION` (프롬프트 변경 시 버전 증가 권장)
 - `FRED_API_KEY` (권장, 매크로 공식 소스)
 - `ALPHA_VANTAGE_API_KEY` (선택 권장, 미국 주식/ETF 일봉 API 소스)
+- `PERPLEXITY_API_KEY` (Phase 2 구현 준비용, Phase 1에서는 인터페이스만 연결)
+- `RESEARCH_PROVIDER` (기본 `perplexity`, 현재는 결과가 비어 있으면 legacy 뉴스 수집으로 안전하게 폴백)
+- `ENABLE_LEGACY_NEWS_FALLBACK` (기본 `true`, Phase 2 전까지는 켜두는 것을 권장)
 - `GMAIL_SENDER`
 - `GMAIL_RECIPIENT` (`user1@example.com,user2@example.com` 형식으로 다중 수신자 가능)
 - `GMAIL_CREDENTIALS_FILE` (기본 `credentials.json`)
@@ -133,6 +136,7 @@ pytest -q
 
 선택 GitHub Secrets:
 - `ALPHA_VANTAGE_API_KEY`
+- `PERPLEXITY_API_KEY`
 - `NEWSAPI_KEY`
 
 선택 GitHub Variables:
@@ -147,6 +151,8 @@ pytest -q
 - `OPENAI_WEB_SEARCH_ENABLED` (기본 `true`)
 - `OPENAI_WEB_SEARCH_MODEL` (기본 `gpt-5-mini`)
 - `OPENAI_WEB_SEARCH_MAX_RESULTS` (기본 `3`)
+- `RESEARCH_PROVIDER` (기본 `perplexity`)
+- `ENABLE_LEGACY_NEWS_FALLBACK` (기본 `true`)
 
 워크플로우는 `.cache/btc_etf/official_snapshots.json`을 GitHub Actions 캐시로 복원/저장합니다.
 이 파일을 기준으로 다음 실행에서 비트코인 ETF 공식 보유량의 전일 대비 순유입/순유출을 계산합니다.

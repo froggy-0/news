@@ -30,6 +30,22 @@ def test_alpha_vantage_api_key_loaded(monkeypatch):
     assert settings.alpha_vantage_api_key == "alpha-test-key"
 
 
+def test_perplexity_settings_loaded(monkeypatch):
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
+    monkeypatch.setenv("RESEARCH_PROVIDER", "legacy")
+    monkeypatch.setenv("ENABLE_LEGACY_NEWS_FALLBACK", "false")
+    settings = load_settings()
+    assert settings.perplexity_api_key == "pplx-test-key"
+    assert settings.research_provider == "legacy"
+    assert settings.enable_legacy_news_fallback is False
+
+
+def test_research_provider_invalid_defaults_to_perplexity(monkeypatch):
+    monkeypatch.setenv("RESEARCH_PROVIDER", "unknown")
+    settings = load_settings()
+    assert settings.research_provider == "perplexity"
+
+
 def test_cache_dir_loaded(monkeypatch, tmp_path):
     monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
     settings = load_settings()

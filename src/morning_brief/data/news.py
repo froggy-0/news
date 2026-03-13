@@ -7,9 +7,11 @@ from urllib.parse import parse_qsl, quote_plus, urlencode, urlparse, urlunparse
 
 import feedparser
 
+from morning_brief.config import Settings
 from morning_brief.data.sources.domain_utils import domain_matches, normalize_domain
 from morning_brief.data.sources.gdelt import fetch_news_from_gdelt
 from morning_brief.data.sources.http_client import HttpFetchError, get_json_with_retry
+from morning_brief.data.sources.perplexity_search import fetch_news_from_perplexity
 from morning_brief.models import NewsItem
 
 logger = logging.getLogger(__name__)
@@ -541,6 +543,28 @@ def merge_news_packets(existing_packet: list[dict], extra_items: list[NewsItem],
     return news_items_to_packet(merged)
 
 
-def build_news_packet(max_items: int, newsapi_key: str = "") -> list[dict]:
-    items = fetch_news(max_items=max_items, newsapi_key=newsapi_key)
+def build_news_packet(*, settings: Settings) -> list[dict]:
+    items: list[NewsItem] = []
+
+    if settings.research_provider == "perplexity":
+        items = fetch_news_from_perplexity(
+            max_items=settings.max_news_items,
+            api_key=settings.perplexity_api_key,
+        )
+        if not items and settings.enable_legacy_news_fallback:
+            logger.info("Perplexity 연구 경로가 아직 비어 있어 legacy 뉴스 수집으로 이어갈게요.")
+            items = fetch_news(
+                max_items=settings.max_news_items,
+                newsapi_key=settings.newsapi_key,
+            )
+        elif not items:
+            logger.warning(
+                "Perplexity 연구 결과가 없고 legacy 뉴스 폴백도 꺼져 있어서 빈 뉴스 묶음을 그대로 사용할게요."
+            )
+    else:
+        items = fetch_news(
+            max_items=settings.max_news_items,
+            newsapi_key=settings.newsapi_key,
+        )
+
     return news_items_to_packet(items)

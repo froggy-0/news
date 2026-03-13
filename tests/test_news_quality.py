@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from morning_brief.config import load_settings
 from morning_brief.data import news
 from morning_brief.models import NewsItem
 
@@ -99,13 +100,53 @@ def test_build_news_packet_adds_reliability_metadata(monkeypatch):
         )
     ]
     monkeypatch.setattr("morning_brief.data.news.fetch_news", lambda **_: sample)
+    monkeypatch.setenv("RESEARCH_PROVIDER", "legacy")
 
-    packet = news.build_news_packet(max_items=5)
+    packet = news.build_news_packet(settings=load_settings())
 
     assert packet[0]["domain"] == "www.reuters.com"
     assert packet[0]["source_tier"] == "tier_1"
     assert packet[0]["preferred_source"] is True
     assert packet[0]["age_hours"] is not None
+
+
+def test_build_news_packet_uses_legacy_fallback_when_perplexity_is_empty(monkeypatch):
+    now = datetime.now(timezone.utc)
+    sample = [
+        NewsItem(
+            title="Bitcoin ETF demand stays firm",
+            url="https://www.cnbc.com/2026/03/12/bitcoin-etf-demand.html",
+            source="CNBC",
+            published_at=now - timedelta(hours=1),
+        )
+    ]
+
+    monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")
+    monkeypatch.setenv("ENABLE_LEGACY_NEWS_FALLBACK", "true")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
+    monkeypatch.setattr("morning_brief.data.news.fetch_news_from_perplexity", lambda **_: [])
+    monkeypatch.setattr("morning_brief.data.news.fetch_news", lambda **_: sample)
+
+    packet = news.build_news_packet(settings=load_settings())
+
+    assert len(packet) == 1
+    assert packet[0]["title"] == "Bitcoin ETF demand stays firm"
+    assert packet[0]["domain"] == "www.cnbc.com"
+
+
+def test_build_news_packet_can_skip_legacy_fallback(monkeypatch):
+    monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")
+    monkeypatch.setenv("ENABLE_LEGACY_NEWS_FALLBACK", "false")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
+    monkeypatch.setattr("morning_brief.data.news.fetch_news_from_perplexity", lambda **_: [])
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news",
+        lambda **_: (_ for _ in ()).throw(AssertionError("legacy fetch should not run")),
+    )
+
+    packet = news.build_news_packet(settings=load_settings())
+
+    assert packet == []
 
 
 def test_summarize_news_packet_quality_counts_reliability_fields():
