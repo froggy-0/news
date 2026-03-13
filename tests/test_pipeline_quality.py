@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from morning_brief.config import load_settings
+from morning_brief.data.data_quality import assess_perplexity_fallback_need
+from morning_brief.data.news_rollout import record_news_rollout_run, should_reduce_legacy_broad_fallback
 from morning_brief.pipeline import _assess_data_quality
 
 
@@ -107,6 +109,134 @@ def test_assess_data_quality_degraded_when_news_reliability_is_low():
     assert quality["tier_1_news_count"] == 0
     assert quality["unique_news_domains"] == 2
     assert quality["fresh_news_count"] == 0
+
+
+def test_assess_data_quality_degraded_when_perplexity_topic_coverage_is_narrow():
+    packet = _base_packet(price=10.0)
+    news_packet = [
+        {
+            "title": "Fed item 1",
+            "preferred_source": True,
+            "source_tier": "tier_1",
+            "domain": "reuters.com",
+            "age_hours": 2.0,
+            "topic": "macro",
+            "provider": "perplexity_search",
+            "why_it_matters": "금리 흐름을 읽는 데 도움이 되는 기사예요.",
+            "citations": ["https://www.reuters.com/world/us/fed-item-1"],
+        },
+        {
+            "title": "Fed item 2",
+            "preferred_source": True,
+            "source_tier": "tier_1",
+            "domain": "bloomberg.com",
+            "age_hours": 4.0,
+            "topic": "macro",
+            "provider": "perplexity_search",
+            "why_it_matters": "금리 흐름을 읽는 데 도움이 되는 기사예요.",
+            "citations": ["https://www.bloomberg.com/news/fed-item-2"],
+        },
+        {
+            "title": "Fed item 3",
+            "preferred_source": True,
+            "source_tier": "tier_2",
+            "domain": "cnbc.com",
+            "age_hours": 6.0,
+            "topic": "macro",
+            "provider": "perplexity_search",
+            "why_it_matters": "금리 흐름을 읽는 데 도움이 되는 기사예요.",
+            "citations": ["https://www.cnbc.com/fed-item-3.html"],
+        },
+    ]
+
+    quality = _assess_data_quality(packet=packet, news_packet=news_packet)
+
+    assert quality["status"] == "degraded"
+    assert quality["topic_coverage_count"] == 1
+    assert quality["perplexity_item_count"] == 3
+
+
+def test_assess_perplexity_fallback_need_reports_reasons():
+    news_packet = [
+        {
+            "title": "Fed item 1",
+            "preferred_source": True,
+            "source_tier": "tier_1",
+            "domain": "reuters.com",
+            "age_hours": 2.0,
+            "topic": "macro",
+            "provider": "perplexity_search",
+            "why_it_matters": "금리 흐름을 읽는 데 도움이 되는 기사예요.",
+            "citations": ["https://www.reuters.com/world/us/fed-item-1"],
+        },
+        {
+            "title": "Fed item 2",
+            "preferred_source": True,
+            "source_tier": "tier_1",
+            "domain": "bloomberg.com",
+            "age_hours": 3.0,
+            "topic": "macro",
+            "provider": "perplexity_search",
+            "why_it_matters": "금리 흐름을 읽는 데 도움이 되는 기사예요.",
+            "citations": ["https://www.bloomberg.com/news/fed-item-2"],
+        },
+        {
+            "title": "Fed item 3",
+            "preferred_source": True,
+            "source_tier": "tier_2",
+            "domain": "cnbc.com",
+            "age_hours": 4.0,
+            "topic": "macro",
+            "provider": "perplexity_search",
+            "why_it_matters": "금리 흐름을 읽는 데 도움이 되는 기사예요.",
+            "citations": ["https://www.cnbc.com/fed-item-3.html"],
+        },
+    ]
+
+    fallback_review = assess_perplexity_fallback_need(news_packet)
+
+    assert fallback_review["needs_legacy_fallback"] is True
+    assert fallback_review["topic_coverage_count"] == 1
+    assert any("토픽" in reason for reason in fallback_review["reasons"])
+
+
+def test_rollout_state_requires_three_stable_runs(tmp_path):
+    for _ in range(2):
+        record_news_rollout_run(
+            cache_dir=tmp_path,
+            fallback_review={
+                "count": 4,
+                "unique_domains": 4,
+                "topic_coverage_count": 4,
+                "fresh_count": 4,
+                "citation_backed_count": 4,
+                "needs_legacy_fallback": False,
+                "reasons": [],
+            },
+            used_legacy=False,
+            allow_broad_fallback=True,
+            provider_breakdown={"perplexity_search": 4},
+        )
+
+    assert should_reduce_legacy_broad_fallback(tmp_path) is False
+
+    record_news_rollout_run(
+        cache_dir=tmp_path,
+        fallback_review={
+            "count": 4,
+            "unique_domains": 4,
+            "topic_coverage_count": 4,
+            "fresh_count": 4,
+            "citation_backed_count": 4,
+            "needs_legacy_fallback": False,
+            "reasons": [],
+        },
+        used_legacy=False,
+        allow_broad_fallback=True,
+        provider_breakdown={"perplexity_search": 4},
+    )
+
+    assert should_reduce_legacy_broad_fallback(tmp_path) is True
 
 
 def test_pipeline_quality_can_improve_after_web_search_backfill(monkeypatch):

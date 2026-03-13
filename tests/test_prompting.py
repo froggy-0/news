@@ -15,7 +15,16 @@ def test_render_brief_prompts_contains_contract_and_packet(monkeypatch):
     settings = load_settings()
     packet = {
         "macro": [{"label": "US2Y", "price": 4.12, "change_pct": 0.11}],
-        "news": [{"title": "Example", "source": "Reuters"}],
+        "news": [
+            {
+                "title": "Example",
+                "source": "Reuters",
+                "topic": "macro",
+                "summary": "Fed 관련 기사예요.",
+                "why_it_matters": "금리 흐름을 읽는 데 도움이 되는 기사예요.",
+                "citations": ["https://www.reuters.com/example"],
+            }
+        ],
         "data_quality": {"status": "ok", "warnings": []},
     }
 
@@ -25,7 +34,10 @@ def test_render_brief_prompts_contains_contract_and_packet(monkeypatch):
     assert "경제 뉴스에 익숙하지 않은 일반 직장인" in instructions
     assert "Prompt Version: market_brief_test" in instructions
     assert "<market_data_json>" in user_prompt
+    assert "<news_focus_json>" in user_prompt
     assert '"macro":[{"label":"US2Y","price":4.12,"change_pct":0.11}]' in user_prompt
+    assert '"topic":"macro"' in user_prompt
+    assert '"why_it_matters":"금리 흐름을 읽는 데 도움이 되는 기사예요."' in user_prompt
 
 
 def test_prompt_cache_key_is_stable_and_sanitized(monkeypatch):

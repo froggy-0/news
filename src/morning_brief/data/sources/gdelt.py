@@ -98,6 +98,7 @@ def fetch_news_from_gdelt(
                 url=link,
                 source=domain or "Unknown",
                 published_at=published_at,
+                provider="legacy_gdelt",
             )
         )
 

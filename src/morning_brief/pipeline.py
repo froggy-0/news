@@ -6,83 +6,15 @@ from zoneinfo import ZoneInfo
 
 from morning_brief.briefing import generate_briefing
 from morning_brief.config import Settings
+from morning_brief.data.data_quality import assess_data_quality
 from morning_brief.data.market import build_market_packet
-from morning_brief.data.news import build_news_packet, summarize_news_packet_quality
+from morning_brief.data.news import build_news_packet
 from morning_brief.emailer import GmailSender
 from morning_brief.research_backfill import backfill_news_with_web_search
 
 logger = logging.getLogger(__name__)
 
-MIN_NEWS_ITEMS = 3
-MIN_PREFERRED_NEWS_ITEMS = 2
-MIN_TIER_1_NEWS_ITEMS = 1
-MIN_UNIQUE_NEWS_DOMAINS = 3
-MIN_FRESH_NEWS_ITEMS = 2
-
-
-def _safe_price(value: object) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def _assess_data_quality(packet: dict, news_packet: list[dict]) -> dict:
-    macro = packet.get("macro", [])
-    us_indices = packet.get("us_indices", [])
-    tech_stocks = packet.get("tech_stocks", [])
-    btc = packet.get("bitcoin", {})
-
-    numeric_points = macro + us_indices + tech_stocks + btc.get("etf_points", []) + [btc.get("spot", {})]
-    zero_points = [
-        p for p in numeric_points if isinstance(p, dict) and _safe_price(p.get("price", 0.0)) <= 0.0
-    ]
-
-    zero_ratio = (len(zero_points) / len(numeric_points)) if numeric_points else 1.0
-    news_quality = summarize_news_packet_quality(news_packet)
-    news_count = news_quality["count"]
-    preferred_news_count = news_quality["preferred_count"]
-    tier_1_news_count = news_quality["tier_1_count"]
-    unique_news_domains = news_quality["unique_domains"]
-    fresh_news_count = news_quality["fresh_count"]
-
-    warnings: list[str] = []
-    if zero_ratio >= 0.6:
-        warnings.append(f"가격 데이터의 {zero_ratio*100:.0f}%가 폴백 값입니다")
-    if news_count < MIN_NEWS_ITEMS:
-        warnings.append(
-            f"핵심 뉴스가 {news_count}건으로 최소 기준({MIN_NEWS_ITEMS}건) 미달입니다"
-        )
-    if news_count >= MIN_NEWS_ITEMS and preferred_news_count < MIN_PREFERRED_NEWS_ITEMS:
-        warnings.append(
-            f"우선 신뢰 출처 뉴스가 {preferred_news_count}건으로 충분하지 않습니다"
-        )
-    if news_count >= MIN_NEWS_ITEMS and tier_1_news_count < MIN_TIER_1_NEWS_ITEMS:
-        warnings.append("최상위 신뢰 출처(Reuters/Bloomberg/WSJ/FT) 기사가 없습니다")
-    if news_count >= MIN_NEWS_ITEMS and unique_news_domains < MIN_UNIQUE_NEWS_DOMAINS:
-        warnings.append(
-            f"뉴스 출처 다양성이 낮습니다({unique_news_domains}개 도메인)"
-        )
-    if news_count >= MIN_NEWS_ITEMS and fresh_news_count < MIN_FRESH_NEWS_ITEMS:
-        warnings.append(f"24시간 내 최신 뉴스가 {fresh_news_count}건으로 부족합니다")
-
-    if news_count < MIN_NEWS_ITEMS or zero_ratio >= 0.8:
-        status = "critical"
-    elif warnings:
-        status = "degraded"
-    else:
-        status = "ok"
-
-    return {
-        "status": status,
-        "zero_price_ratio": round(zero_ratio, 4),
-        "news_count": news_count,
-        "preferred_news_count": preferred_news_count,
-        "tier_1_news_count": tier_1_news_count,
-        "unique_news_domains": unique_news_domains,
-        "fresh_news_count": fresh_news_count,
-        "warnings": warnings,
-    }
+_assess_data_quality = assess_data_quality
 
 
 

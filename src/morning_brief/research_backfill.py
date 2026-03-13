@@ -39,6 +39,8 @@ def _needs_web_search_backfill(quality: dict) -> bool:
     if str(quality.get("status", "ok")).lower() == "ok":
         return False
 
+    perplexity_item_count = int(quality.get("perplexity_item_count", 0))
+
     return any(
         [
             int(quality.get("news_count", 0)) < 3,
@@ -46,6 +48,9 @@ def _needs_web_search_backfill(quality: dict) -> bool:
             int(quality.get("tier_1_news_count", 0)) < 1,
             int(quality.get("unique_news_domains", 0)) < 3,
             int(quality.get("fresh_news_count", 0)) < 2,
+            perplexity_item_count > 0 and int(quality.get("topic_coverage_count", 0)) < 2,
+            perplexity_item_count > 0
+            and int(quality.get("citation_backed_count", 0)) < perplexity_item_count,
         ]
     )
 

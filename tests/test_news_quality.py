@@ -4,6 +4,10 @@ from datetime import datetime, timedelta, timezone
 
 from morning_brief.config import load_settings
 from morning_brief.data import news
+from morning_brief.data.news_rollout import (
+    record_news_rollout_run,
+    should_reduce_legacy_broad_fallback,
+)
 from morning_brief.models import NewsItem
 
 
@@ -182,6 +186,212 @@ def test_build_news_packet_preserves_perplexity_metadata(monkeypatch):
     ]
 
 
+def test_build_news_packet_skips_legacy_when_perplexity_quality_is_good(monkeypatch):
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")
+    monkeypatch.setenv("ENABLE_LEGACY_NEWS_FALLBACK", "true")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news_from_perplexity",
+        lambda **_: [
+            NewsItem(
+                title="Fed tone stays steady",
+                url="https://www.reuters.com/world/us/fed-tone-stays-steady",
+                source="Reuters",
+                published_at=now,
+                topic="macro",
+                provider="perplexity_search",
+                why_it_matters="금리 흐름을 읽는 데 도움이 돼요.",
+                citations=["https://www.reuters.com/world/us/fed-tone-stays-steady"],
+            ),
+            NewsItem(
+                title="Nasdaq closes near highs",
+                url="https://www.bloomberg.com/news/nasdaq-closes-near-highs",
+                source="Bloomberg",
+                published_at=now - timedelta(hours=1),
+                topic="us_equity",
+                provider="perplexity_search",
+                why_it_matters="미국 증시 흐름을 읽는 데 도움이 돼요.",
+                citations=["https://www.bloomberg.com/news/nasdaq-closes-near-highs"],
+            ),
+            NewsItem(
+                title="Nvidia demand remains firm",
+                url="https://www.cnbc.com/2026/03/13/nvidia-demand-remains-firm.html",
+                source="CNBC",
+                published_at=now - timedelta(hours=2),
+                topic="ai_bigtech",
+                provider="perplexity_search",
+                why_it_matters="빅테크 투자 심리를 읽는 데 도움이 돼요.",
+                citations=["https://www.cnbc.com/2026/03/13/nvidia-demand-remains-firm.html"],
+            ),
+            NewsItem(
+                title="Bitcoin ETFs keep drawing demand",
+                url="https://www.coindesk.com/markets/2026/03/13/bitcoin-etfs-keep-drawing-demand",
+                source="CoinDesk",
+                published_at=now - timedelta(hours=3),
+                topic="bitcoin",
+                provider="perplexity_search",
+                why_it_matters="비트코인 자금 흐름을 읽는 데 도움이 돼요.",
+                citations=["https://www.coindesk.com/markets/2026/03/13/bitcoin-etfs-keep-drawing-demand"],
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news",
+        lambda **_: (_ for _ in ()).throw(AssertionError("legacy fetch should not run")),
+    )
+
+    packet = news.build_news_packet(settings=load_settings())
+
+    assert len(packet) == 4
+    assert {item["topic"] for item in packet} == {"macro", "us_equity", "ai_bigtech", "bitcoin"}
+
+
+def test_build_news_packet_uses_legacy_when_perplexity_topics_are_too_narrow(monkeypatch):
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")
+    monkeypatch.setenv("ENABLE_LEGACY_NEWS_FALLBACK", "true")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news_from_perplexity",
+        lambda **_: [
+            NewsItem(
+                title="Fed item 1",
+                url="https://www.reuters.com/world/us/fed-item-1",
+                source="Reuters",
+                published_at=now,
+                topic="macro",
+                provider="perplexity_search",
+                why_it_matters="금리 흐름을 읽는 데 도움이 돼요.",
+                citations=["https://www.reuters.com/world/us/fed-item-1"],
+            ),
+            NewsItem(
+                title="Fed item 2",
+                url="https://www.bloomberg.com/news/fed-item-2",
+                source="Bloomberg",
+                published_at=now - timedelta(hours=1),
+                topic="macro",
+                provider="perplexity_search",
+                why_it_matters="금리 흐름을 읽는 데 도움이 돼요.",
+                citations=["https://www.bloomberg.com/news/fed-item-2"],
+            ),
+            NewsItem(
+                title="Fed item 3",
+                url="https://www.cnbc.com/2026/03/13/fed-item-3.html",
+                source="CNBC",
+                published_at=now - timedelta(hours=2),
+                topic="macro",
+                provider="perplexity_search",
+                why_it_matters="금리 흐름을 읽는 데 도움이 돼요.",
+                citations=["https://www.cnbc.com/2026/03/13/fed-item-3.html"],
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news",
+        lambda **_: [
+            NewsItem(
+                title="Bitcoin ETF demand stays firm",
+                url="https://www.coindesk.com/markets/2026/03/13/bitcoin-etf-demand-stays-firm",
+                source="CoinDesk",
+                published_at=now - timedelta(hours=1),
+                topic="bitcoin",
+                provider="legacy_rss",
+            )
+        ],
+    )
+
+    packet = news.build_news_packet(settings=load_settings())
+
+    assert len(packet) == 4
+    assert {item["provider"] for item in packet} == {"perplexity_search", "legacy_rss"}
+    assert {item["topic"] for item in packet} == {"macro", "bitcoin"}
+
+
+def test_build_news_packet_reduces_broad_legacy_when_recent_runs_are_stable(monkeypatch, tmp_path):
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")
+    monkeypatch.setenv("ENABLE_LEGACY_NEWS_FALLBACK", "true")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
+
+    for _ in range(3):
+        record_news_rollout_run(
+            cache_dir=tmp_path,
+            fallback_review={
+                "count": 4,
+                "unique_domains": 4,
+                "topic_coverage_count": 4,
+                "fresh_count": 4,
+                "citation_backed_count": 4,
+                "needs_legacy_fallback": False,
+                "reasons": [],
+            },
+            used_legacy=False,
+            allow_broad_fallback=True,
+            provider_breakdown={"perplexity_search": 4},
+        )
+    assert should_reduce_legacy_broad_fallback(tmp_path) is True
+
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news_from_perplexity",
+        lambda **_: [
+            NewsItem(
+                title="Fed item 1",
+                url="https://www.reuters.com/world/us/fed-item-1",
+                source="Reuters",
+                published_at=now,
+                topic="macro",
+                provider="perplexity_search",
+                why_it_matters="금리 흐름을 읽는 데 도움이 돼요.",
+                citations=["https://www.reuters.com/world/us/fed-item-1"],
+            ),
+            NewsItem(
+                title="Fed item 2",
+                url="https://www.bloomberg.com/news/fed-item-2",
+                source="Bloomberg",
+                published_at=now - timedelta(hours=1),
+                topic="macro",
+                provider="perplexity_search",
+                why_it_matters="금리 흐름을 읽는 데 도움이 돼요.",
+                citations=["https://www.bloomberg.com/news/fed-item-2"],
+            ),
+            NewsItem(
+                title="Fed item 3",
+                url="https://www.cnbc.com/2026/03/13/fed-item-3.html",
+                source="CNBC",
+                published_at=now - timedelta(hours=2),
+                topic="macro",
+                provider="perplexity_search",
+                why_it_matters="금리 흐름을 읽는 데 도움이 돼요.",
+                citations=["https://www.cnbc.com/2026/03/13/fed-item-3.html"],
+            ),
+        ],
+    )
+
+    captured: dict[str, object] = {}
+
+    def _fake_fetch_news(**kwargs):
+        captured.update(kwargs)
+        return [
+            NewsItem(
+                title="Bitcoin ETF demand stays firm",
+                url="https://www.coindesk.com/markets/2026/03/13/bitcoin-etf-demand-stays-firm",
+                source="CoinDesk",
+                published_at=now - timedelta(hours=1),
+                topic="bitcoin",
+                provider="legacy_rss",
+            )
+        ]
+
+    monkeypatch.setattr("morning_brief.data.news.fetch_news", _fake_fetch_news)
+
+    packet = news.build_news_packet(settings=load_settings())
+
+    assert captured["allow_broad_fallback"] is False
+    assert len(packet) == 4
+
+
 def test_summarize_news_packet_quality_counts_reliability_fields():
     packet = [
         {
@@ -189,6 +399,10 @@ def test_summarize_news_packet_quality_counts_reliability_fields():
             "source_tier": "tier_1",
             "domain": "reuters.com",
             "age_hours": 2.0,
+            "topic": "macro",
+            "provider": "perplexity_search",
+            "why_it_matters": "금리 흐름을 읽는 데 도움이 되는 기사예요.",
+            "citations": ["https://www.reuters.com/world/us/fed"],
         },
         {
             "preferred_source": False,
@@ -206,4 +420,8 @@ def test_summarize_news_packet_quality_counts_reliability_fields():
         "tier_1_count": 1,
         "unique_domains": 2,
         "fresh_count": 1,
+        "topic_coverage_count": 1,
+        "citation_backed_count": 1,
+        "explained_count": 1,
+        "perplexity_item_count": 1,
     }

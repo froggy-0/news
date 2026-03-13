@@ -54,8 +54,47 @@ def _render_template(template_dir: Path, template_name: str, **context: object) 
     return template.render(**context).strip()
 
 
+def _build_news_focus(packet: dict) -> dict:
+    news = packet.get("news", [])
+    if not isinstance(news, list):
+        return {"top_items": [], "topics": {}}
+
+    top_items = []
+    topics: dict[str, list[dict]] = {}
+    for raw_item in news[:5]:
+        if not isinstance(raw_item, dict):
+            continue
+        item = {
+            "title": str(raw_item.get("title", "")).strip(),
+            "source": str(raw_item.get("source", "")).strip(),
+            "topic": str(raw_item.get("topic", "")).strip() or "general",
+            "summary": str(raw_item.get("summary", "")).strip(),
+            "why_it_matters": str(raw_item.get("why_it_matters", "")).strip(),
+            "source_tier": str(raw_item.get("source_tier", "")).strip(),
+            "preferred_source": bool(raw_item.get("preferred_source")),
+            "citations": [
+                str(value).strip()
+                for value in raw_item.get("citations", [])
+                if str(value).strip()
+            ]
+            if isinstance(raw_item.get("citations", []), list)
+            else [],
+        }
+        if not item["title"]:
+            continue
+        top_items.append(item)
+        topics.setdefault(item["topic"], []).append(item)
+
+    return {"top_items": top_items, "topics": topics}
+
+
 def render_brief_prompts(packet: dict, settings: Settings) -> tuple[str, str]:
     packet_json = json.dumps(packet, ensure_ascii=False, separators=(",", ":"))
+    news_focus_json = json.dumps(
+        _build_news_focus(packet),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
     instructions = _render_template(
         template_dir=settings.prompt_template_dir,
         template_name=INSTRUCTIONS_TEMPLATE,
@@ -65,6 +104,7 @@ def render_brief_prompts(packet: dict, settings: Settings) -> tuple[str, str]:
         template_dir=settings.prompt_template_dir,
         template_name=INPUT_TEMPLATE,
         packet_json=packet_json,
+        news_focus_json=news_focus_json,
     )
     return instructions, user_prompt
 
