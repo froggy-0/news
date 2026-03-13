@@ -93,6 +93,30 @@ def test_dedup_and_rank_limits_single_domain_concentration():
     assert reuters_count == 2
 
 
+def test_collect_from_rss_uses_passed_candidate_limit(monkeypatch):
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news_from_google_rss",
+        lambda **kwargs: captured.update(kwargs) or [],
+    )
+
+    news._collect_from_rss(max_items=15, preferred_only=True)
+
+    assert captured["max_items"] == 15
+
+
+def test_collect_from_newsapi_uses_passed_candidate_limit(monkeypatch):
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news_from_newsapi",
+        lambda **kwargs: captured.update(kwargs) or [],
+    )
+
+    news._collect_from_newsapi(api_key="newsapi-key", max_items=15)
+
+    assert captured["max_items"] == 15
+
+
 def test_build_news_packet_adds_reliability_metadata(monkeypatch):
     now = datetime.now(timezone.utc)
     sample = [

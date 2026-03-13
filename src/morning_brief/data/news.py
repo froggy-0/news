@@ -28,7 +28,6 @@ from morning_brief.data.news_policy import (
     is_preferred_domain,
     keyword_score,
     recency_score,
-    source_tier,
 )
 from morning_brief.data.sources.gdelt import fetch_news_from_gdelt
 from morning_brief.data.sources.http_client import HttpFetchError
@@ -89,11 +88,6 @@ def _recency_score(published_at: datetime | None) -> float:
 
 def _domain_score(url: str) -> float:
     return domain_score(url)
-
-
-def _source_tier(url: str) -> str:
-    return source_tier(url)
-
 
 
 def _keyword_score(title: str) -> float:
@@ -202,7 +196,7 @@ def _collect_from_gdelt(max_items: int, preferred_only: bool = True) -> list[New
 def _collect_from_rss(max_items: int, preferred_only: bool = True) -> list[NewsItem]:
     candidates = fetch_news_from_google_rss(
         queries=RSS_QUERIES,
-        max_items=max_items * 3,
+        max_items=max_items,
         recency_hours=NEWS_RECENCY_HOURS,
         preferred_only=preferred_only,
         is_preferred_domain_fn=_is_preferred_domain,
@@ -215,7 +209,7 @@ def _collect_from_rss(max_items: int, preferred_only: bool = True) -> list[NewsI
 def _collect_from_newsapi(api_key: str, max_items: int) -> list[NewsItem]:
     items = fetch_news_from_newsapi(
         api_key=api_key,
-        max_items=max_items * 3,
+        max_items=max_items,
         domains=sorted(PREFERRED_DOMAINS),
         query="(Fed OR Treasury OR Nasdaq OR S&P 500 OR semiconductor OR Bitcoin ETF OR Nvidia OR Apple OR Microsoft)",
     )
@@ -233,6 +227,18 @@ def _provider_breakdown(items: list[NewsItem]) -> dict[str, int]:
         provider = item.provider or "unknown"
         counts[provider] = counts.get(provider, 0) + 1
     return counts
+
+
+def _provider_counts(items: list[NewsItem]) -> tuple[int, int, dict[str, int]]:
+    breakdown = _provider_breakdown(items)
+    perplexity_count = breakdown.get("perplexity_search", 0)
+    legacy_count = sum(count for provider, count in breakdown.items() if provider != "perplexity_search")
+    return perplexity_count, legacy_count, breakdown
+
+
+def _packet_summary(items: list[NewsItem]) -> tuple[list[dict], dict]:
+    packet = _news_items_to_packet(items)
+    return packet, summarize_news_packet_quality(packet)
 
 
 def _needs_full_legacy_backfill(fallback_review: dict) -> bool:
@@ -311,18 +317,18 @@ def merge_news_packets(existing_packet: list[dict], extra_items: list[NewsItem],
 
 def build_news_packet(*, settings: Settings) -> list[dict]:
     items: list[NewsItem] = []
-    perplexity_items: list[NewsItem] = []
     legacy_items: list[NewsItem] = []
     allow_broad_fallback = True
     fallback_review: dict | None = None
 
     if settings.research_provider == "perplexity":
-        perplexity_items = fetch_news_from_perplexity(
+        items = fetch_news_from_perplexity(
             max_items=settings.max_news_items,
             api_key=settings.perplexity_api_key,
         )
-        items = _dedup_and_rank(perplexity_items, max_items=settings.max_news_items)
-        fallback_review = assess_perplexity_fallback_need(_news_items_to_packet(items))
+        items = _dedup_and_rank(items, max_items=settings.max_news_items)
+        packet, _ = _packet_summary(items)
+        fallback_review = assess_perplexity_fallback_need(packet)
         if fallback_review["needs_legacy_fallback"] and settings.enable_legacy_news_fallback:
             reduce_broad_fallback = should_reduce_legacy_broad_fallback(settings.cache_dir)
             allow_broad_fallback = not (
@@ -361,14 +367,15 @@ def build_news_packet(*, settings: Settings) -> list[dict]:
         items = legacy_items
 
     if items:
-        final_summary = summarize_news_packet_quality(_news_items_to_packet(items))
+        packet, final_summary = _packet_summary(items)
+        perplexity_count, legacy_count, provider_breakdown = _provider_counts(items)
         logger.info(
             "최종 뉴스 구성은 Perplexity %s건, legacy %s건이었고 도메인 %s개, 토픽 %s개, provider 비중 %s로 정리됐어요.",
-            len([item for item in items if item.provider == "perplexity_search"]),
-            len([item for item in items if item.provider != "perplexity_search"]),
+            perplexity_count,
+            legacy_count,
             final_summary["unique_domains"],
             final_summary["topic_coverage_count"],
-            _provider_breakdown(items),
+            provider_breakdown,
         )
         if settings.research_provider == "perplexity" and fallback_review is not None:
             record_news_rollout_run(
@@ -376,7 +383,8 @@ def build_news_packet(*, settings: Settings) -> list[dict]:
                 fallback_review=fallback_review,
                 used_legacy=bool(legacy_items),
                 allow_broad_fallback=allow_broad_fallback,
-                provider_breakdown=_provider_breakdown(items),
+                provider_breakdown=provider_breakdown,
             )
+        return packet
 
-    return news_items_to_packet(items)
+    return _news_items_to_packet(items)

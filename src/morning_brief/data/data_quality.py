@@ -80,10 +80,8 @@ def summarize_news_packet_quality(packet: list[dict]) -> dict:
     }
 
 
-def assess_perplexity_fallback_need(news_packet: list[dict]) -> dict:
-    summary = summarize_news_packet_quality(news_packet)
+def _build_perplexity_fallback_reasons(summary: dict) -> list[str]:
     reasons: list[str] = []
-
     if summary["count"] < MIN_NEWS_ITEMS:
         reasons.append(f"기사 수가 {summary['count']}건이라 아직 적어요")
     if summary["fresh_count"] < MIN_FRESH_NEWS_ITEMS:
@@ -94,6 +92,25 @@ def assess_perplexity_fallback_need(news_packet: list[dict]) -> dict:
         reasons.append(f"토픽이 {summary['topic_coverage_count']}개라 주제가 조금 좁아요")
     if summary["citation_backed_count"] < summary["count"]:
         reasons.append("일부 기사에 근거 링크가 빠져 있어요")
+    return reasons
+
+
+def _append_perplexity_quality_warnings(warnings: list[str], news_quality: dict) -> None:
+    if news_quality["perplexity_item_count"] <= 0:
+        return
+    if news_quality["topic_coverage_count"] < MIN_TOPIC_COVERAGE:
+        warnings.append(
+            f"Perplexity 기준 토픽 커버리지가 {news_quality['topic_coverage_count']}개라 조금 좁습니다"
+        )
+    if news_quality["citation_backed_count"] < news_quality["perplexity_item_count"]:
+        warnings.append("Perplexity 결과 일부에 근거 링크가 부족합니다")
+    if news_quality["explained_count"] < news_quality["perplexity_item_count"]:
+        warnings.append("Perplexity 결과 일부에 시장 해석 메모가 빠져 있습니다")
+
+
+def assess_perplexity_fallback_need(news_packet: list[dict]) -> dict:
+    summary = summarize_news_packet_quality(news_packet)
+    reasons = _build_perplexity_fallback_reasons(summary)
 
     return {
         **summary,
@@ -135,15 +152,7 @@ def assess_data_quality(packet: dict, news_packet: list[dict]) -> dict:
         )
     if news_quality["count"] >= MIN_NEWS_ITEMS and news_quality["fresh_count"] < MIN_FRESH_NEWS_ITEMS:
         warnings.append(f"24시간 내 최신 뉴스가 {news_quality['fresh_count']}건으로 부족합니다")
-
-    if news_quality["perplexity_item_count"] > 0 and news_quality["topic_coverage_count"] < MIN_TOPIC_COVERAGE:
-        warnings.append(
-            f"Perplexity 기준 토픽 커버리지가 {news_quality['topic_coverage_count']}개라 조금 좁습니다"
-        )
-    if news_quality["perplexity_item_count"] > 0 and news_quality["citation_backed_count"] < news_quality["perplexity_item_count"]:
-        warnings.append("Perplexity 결과 일부에 근거 링크가 부족합니다")
-    if news_quality["perplexity_item_count"] > 0 and news_quality["explained_count"] < news_quality["perplexity_item_count"]:
-        warnings.append("Perplexity 결과 일부에 시장 해석 메모가 빠져 있습니다")
+    _append_perplexity_quality_warnings(warnings, news_quality)
 
     if news_quality["count"] < MIN_NEWS_ITEMS or zero_ratio >= 0.8:
         status = "critical"
