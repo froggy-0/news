@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import socket
 import time
-from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import urlparse
 
@@ -11,13 +10,10 @@ import requests
 
 from morning_brief.data.sources.provider_runtime import (
     disabled_reason,
+    execute_with_provider_retry,
+    parse_retry_after_seconds,
     policy_for,
-    record_failure,
-    record_request,
-    record_retry,
     record_skip,
-    record_success,
-    wait_for_provider_slot,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,12 +39,14 @@ class HttpFetchError(RuntimeError):
         provider: str | None = None,
         retryable: bool = False,
         rate_limited: bool = False,
+        retry_after_seconds: float | None = None,
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.provider = provider
         self.retryable = retryable
         self.rate_limited = rate_limited
+        self.retry_after_seconds = retry_after_seconds
 
 
 _host_resolution_cache: dict[str, tuple[bool, float]] = {}
@@ -106,10 +104,7 @@ def _request_with_retry(
     if headers:
         merged_headers.update(headers)
 
-    last_error: Exception | None = None
-    for attempt in range(1, retries + 1):
-        wait_for_provider_slot(provider)
-        record_request(provider)
+    def perform_request() -> requests.Response:
         try:
             response = requests.get(
                 url,
@@ -117,84 +112,61 @@ def _request_with_retry(
                 headers=merged_headers,
                 timeout=timeout,
             )
-            if response.status_code < 400:
-                record_success(provider)
-                return response
-
-            should_retry = _is_retryable_status(response.status_code, provider=provider)
-            error = HttpFetchError(
-                f"HTTP {response.status_code} 응답을 받았어요: {url}",
-                status_code=response.status_code,
-                provider=provider,
-                retryable=should_retry,
-                rate_limited=response.status_code == 429,
-            )
-            if not should_retry or attempt == retries:
-                record_failure(provider)
-                raise error
-
-            record_retry(provider)
-            logger.warning(
-                "HTTP 요청을 다시 시도하는 중이에요 (%s/%s). 대상=%s | status=%s",
-                attempt,
-                retries,
-                url,
-                response.status_code,
-            )
-            time.sleep(
-                _retry_delay_seconds(
-                    response=response,
-                    attempt=attempt,
-                    backoff_seconds=backoff_seconds,
-                    provider=provider,
-                )
-            )
-            continue
         except requests.RequestException as exc:
-            last_error = exc
-            if attempt == retries:
-                record_failure(provider)
-                break
-            record_retry(provider)
-            logger.warning(
-                "HTTP 요청을 다시 시도하는 중이에요 (%s/%s). 대상=%s | %s",
-                attempt,
-                retries,
-                url,
-                exc,
-            )
-            time.sleep(backoff_seconds * attempt)
+            raise HttpFetchError(
+                f"URL을 가져오는 중 연결 문제가 있었어요: {url}",
+                provider=provider,
+                retryable=True,
+            ) from exc
 
-    raise HttpFetchError(
-        f"URL을 가져오지 못했어요: {url}",
+        if response.status_code < 400:
+            return response
+
+        raise HttpFetchError(
+            f"HTTP {response.status_code} 응답을 받았어요: {url}",
+            status_code=response.status_code,
+            provider=provider,
+            retryable=_is_retryable_status(response.status_code, provider=provider),
+            rate_limited=response.status_code == 429,
+            retry_after_seconds=parse_retry_after_seconds(response.headers.get("Retry-After")),
+        )
+
+    def log_retry(exc: Exception, attempt: int, max_attempts: int, delay: float) -> None:
+        if isinstance(exc, HttpFetchError) and exc.status_code is not None:
+            logger.warning(
+                "HTTP 요청을 다시 시도하는 중이에요 (%s/%s). 대상=%s | status=%s | sleep=%.2fs",
+                attempt,
+                max_attempts,
+                url,
+                exc.status_code,
+                delay,
+            )
+            return
+
+        logger.warning(
+            "HTTP 요청을 다시 시도하는 중이에요 (%s/%s). 대상=%s | %s | sleep=%.2fs",
+            attempt,
+            max_attempts,
+            url,
+            exc,
+            delay,
+        )
+
+    return execute_with_provider_retry(
         provider=provider,
-        retryable=True,
-    ) from last_error
+        operation=perform_request,
+        should_retry=lambda exc: isinstance(exc, HttpFetchError) and exc.retryable,
+        on_retry=log_retry,
+        max_attempts=retries,
+        base_backoff_seconds=backoff_seconds,
+        retry_after_seconds_for_error=lambda exc: exc.retry_after_seconds
+        if isinstance(exc, HttpFetchError)
+        else None,
+    )
 
 
 def _is_retryable_status(status_code: int, *, provider: str | None) -> bool:
     return status_code in policy_for(provider).retryable_statuses
-
-
-def _retry_delay_seconds(
-    *,
-    response: requests.Response,
-    attempt: int,
-    backoff_seconds: float,
-    provider: str | None,
-) -> float:
-    retry_after = response.headers.get("Retry-After", "").strip()
-    if retry_after and policy_for(provider).respect_retry_after:
-        try:
-            return max(float(retry_after), 0.0)
-        except ValueError:
-            try:
-                retry_at = parsedate_to_datetime(retry_after)
-                delay = retry_at.timestamp() - time.time()
-                return max(delay, 0.0)
-            except (TypeError, ValueError, OverflowError):
-                pass
-    return backoff_seconds * attempt
 
 
 def get_json_with_retry(

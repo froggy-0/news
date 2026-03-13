@@ -78,6 +78,7 @@ def fetch_close_change_and_volume(symbol: str) -> tuple[float, float, int]:
             "s": symbol,
             "i": "d",
         },
+        provider="stooq",
         timeout=20,
     )
 

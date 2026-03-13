@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from morning_brief.data.sources import perplexity_search as ps
+from morning_brief.data.sources import provider_runtime
 from morning_brief.data.sources.http_client import HttpFetchError
 
 
@@ -34,6 +35,12 @@ class _StatusError(ps.APIStatusError):
     def __init__(self, status_code: int, text: str):
         self.status_code = status_code
         self.response = type("_Response", (), {"text": text})()
+
+
+class _TimeoutError(ps.APITimeoutError):
+    def __init__(self):
+        Exception.__init__(self, "timeout")
+        self.request = None
 
 
 def test_fetch_news_from_perplexity_calls_search_api_with_expected_payload(monkeypatch):
@@ -200,3 +207,46 @@ def test_search_once_exposes_status_details(monkeypatch):
         assert "invalid api key" in str(exc)
     else:
         raise AssertionError("HttpFetchError was expected")
+
+
+def test_search_once_retries_timeout_with_provider_backoff(monkeypatch):
+    calls: list[dict] = []
+    sleeps: list[float] = []
+    now = {"value": 100.0}
+    client = _Client(
+        [
+            _TimeoutError(),
+            _SDKResponse(
+                {
+                    "results": [
+                        {
+                            "title": "Fed keeps options open",
+                            "url": "https://www.reuters.com/world/us/fed-keeps-options-open",
+                            "snippet": "The Fed kept its options open.",
+                            "date": "2026-03-13T01:00:00Z",
+                        }
+                    ]
+                }
+            ),
+        ],
+        calls,
+    )
+
+    monkeypatch.setattr(provider_runtime.time, "monotonic", lambda: now["value"])
+    monkeypatch.setattr(
+        provider_runtime.time,
+        "sleep",
+        lambda seconds: sleeps.append(seconds) or now.__setitem__("value", now["value"] + seconds),
+    )
+    monkeypatch.setattr(provider_runtime.random, "random", lambda: 0.5)
+
+    payload = ps._search_once(
+        client=client,
+        query="macro query",
+        domain_filter=("reuters.com",),
+        recency_filter="day",
+    )
+
+    assert len(calls) == 2
+    assert payload["results"][0]["title"] == "Fed keeps options open"
+    assert sleeps and round(sleeps[0], 2) == 1.5

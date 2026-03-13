@@ -74,6 +74,7 @@ def test_get_text_with_retry_does_not_retry_non_retryable_404(monkeypatch):
 def test_get_text_with_retry_retries_429_and_uses_retry_after(monkeypatch):
     calls = {"count": 0}
     sleeps: list[float] = []
+    now = {"value": 100.0}
 
     def fake_get(*args, **kwargs):
         calls["count"] += 1
@@ -83,7 +84,12 @@ def test_get_text_with_retry_retries_429_and_uses_retry_after(monkeypatch):
 
     monkeypatch.setattr(http_client, "is_host_resolvable", lambda *_: True)
     monkeypatch.setattr(http_client.requests, "get", fake_get)
-    monkeypatch.setattr(http_client.time, "sleep", lambda seconds: sleeps.append(seconds))
+    monkeypatch.setattr(provider_runtime.time, "monotonic", lambda: now["value"])
+    monkeypatch.setattr(
+        provider_runtime.time,
+        "sleep",
+        lambda seconds: sleeps.append(seconds) or now.__setitem__("value", now["value"] + seconds),
+    )
     provider_runtime.reset_provider_runtime_state()
 
     text = http_client.get_text_with_retry(
@@ -98,6 +104,7 @@ def test_get_text_with_retry_retries_429_and_uses_retry_after(monkeypatch):
 def test_get_text_with_retry_parses_http_date_retry_after(monkeypatch):
     calls = {"count": 0}
     sleeps: list[float] = []
+    now = {"value": 200.0}
 
     def fake_get(*args, **kwargs):
         calls["count"] += 1
@@ -111,8 +118,13 @@ def test_get_text_with_retry_parses_http_date_retry_after(monkeypatch):
 
     monkeypatch.setattr(http_client, "is_host_resolvable", lambda *_: True)
     monkeypatch.setattr(http_client.requests, "get", fake_get)
-    monkeypatch.setattr(http_client.time, "sleep", lambda seconds: sleeps.append(seconds))
-    monkeypatch.setattr(http_client.time, "time", lambda: 1773388800.0)
+    monkeypatch.setattr(provider_runtime.time, "monotonic", lambda: now["value"])
+    monkeypatch.setattr(
+        provider_runtime.time,
+        "sleep",
+        lambda seconds: sleeps.append(seconds) or now.__setitem__("value", now["value"] + seconds),
+    )
+    monkeypatch.setattr(provider_runtime.time, "time", lambda: 1773388800.0)
     provider_runtime.reset_provider_runtime_state()
 
     text = http_client.get_text_with_retry(
@@ -122,6 +134,35 @@ def test_get_text_with_retry_parses_http_date_retry_after(monkeypatch):
     assert text == "ok"
     assert calls["count"] == 2
     assert sleeps and round(sleeps[0], 2) == 5.0
+
+
+def test_get_text_with_retry_uses_exponential_backoff_without_retry_after(monkeypatch):
+    calls = {"count": 0}
+    sleeps: list[float] = []
+    now = {"value": 300.0}
+
+    def fake_get(*args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return SimpleNamespace(status_code=503, headers={}, text="")
+        return SimpleNamespace(status_code=200, headers={}, text="ok")
+
+    monkeypatch.setattr(http_client, "is_host_resolvable", lambda *_: True)
+    monkeypatch.setattr(http_client.requests, "get", fake_get)
+    monkeypatch.setattr(provider_runtime.time, "monotonic", lambda: now["value"])
+    monkeypatch.setattr(
+        provider_runtime.time,
+        "sleep",
+        lambda seconds: sleeps.append(seconds) or now.__setitem__("value", now["value"] + seconds),
+    )
+    monkeypatch.setattr(provider_runtime.random, "random", lambda: 0.5)
+    provider_runtime.reset_provider_runtime_state()
+
+    text = http_client.get_text_with_retry("https://example.com/transient", provider="fred")
+
+    assert text == "ok"
+    assert calls["count"] == 2
+    assert sleeps and round(sleeps[0], 2) == http_client.DEFAULT_BACKOFF
 
 
 def test_get_text_with_retry_skips_provider_with_open_circuit(monkeypatch):

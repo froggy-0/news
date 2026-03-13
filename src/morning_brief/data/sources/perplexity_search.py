@@ -17,10 +17,11 @@ from morning_brief.data.sources.domain_utils import domain_matches, normalize_do
 from morning_brief.data.sources.http_client import HttpFetchError
 from morning_brief.data.sources.provider_runtime import (
     disabled_reason,
+    execute_with_provider_retry,
     open_circuit,
-    record_failure,
-    record_request,
-    record_success,
+    parse_retry_after_seconds,
+    policy_for,
+    record_skip,
 )
 from morning_brief.models import NewsItem
 
@@ -232,6 +233,69 @@ def _format_status_error(exc: APIStatusError) -> str:
     return f"status={status_code}"
 
 
+def _retry_after_seconds_from_exception(exc: Exception) -> float | None:
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None)
+    if isinstance(headers, dict):
+        return parse_retry_after_seconds(headers.get("Retry-After") or headers.get("retry-after"))
+    return None
+
+
+def _to_http_fetch_error(exc: Exception) -> HttpFetchError:
+    if isinstance(exc, RateLimitError):
+        message = f"Perplexity Search API 호출 한도에 걸렸어요: {_format_status_error(exc)}"
+        open_circuit(PERPLEXITY_PROVIDER, message)
+        return HttpFetchError(
+            message,
+            provider=PERPLEXITY_PROVIDER,
+            retryable=False,
+            rate_limited=True,
+            retry_after_seconds=_retry_after_seconds_from_exception(exc),
+        )
+
+    if isinstance(exc, APITimeoutError):
+        return HttpFetchError(
+            "Perplexity Search API 응답 시간이 너무 오래 걸렸어요.",
+            provider=PERPLEXITY_PROVIDER,
+            retryable=True,
+        )
+
+    if isinstance(exc, APIConnectionError):
+        return HttpFetchError(
+            "Perplexity Search API 연결을 열지 못했어요.",
+            provider=PERPLEXITY_PROVIDER,
+            retryable=True,
+        )
+
+    if isinstance(exc, APIStatusError):
+        status_code = getattr(exc, "status_code", None)
+        retry_after_seconds = _retry_after_seconds_from_exception(exc)
+        if status_code == 429:
+            message = f"Perplexity Search API 호출 한도에 걸렸어요: {_format_status_error(exc)}"
+            open_circuit(PERPLEXITY_PROVIDER, message)
+            return HttpFetchError(
+                message,
+                provider=PERPLEXITY_PROVIDER,
+                retryable=False,
+                rate_limited=True,
+                retry_after_seconds=retry_after_seconds,
+            )
+
+        return HttpFetchError(
+            f"Perplexity Search API가 요청을 거절했어요: {_format_status_error(exc)}",
+            provider=PERPLEXITY_PROVIDER,
+            retryable=status_code in policy_for(PERPLEXITY_PROVIDER).retryable_statuses,
+            rate_limited=status_code == 429,
+            retry_after_seconds=retry_after_seconds,
+        )
+
+    return HttpFetchError(
+        f"Perplexity Search API를 호출하지 못했어요: {exc}",
+        provider=PERPLEXITY_PROVIDER,
+        retryable=False,
+    )
+
+
 def _search_once(
     *,
     client: Perplexity,
@@ -241,50 +305,58 @@ def _search_once(
 ) -> dict[str, Any]:
     unavailable_reason = disabled_reason(PERPLEXITY_PROVIDER)
     if unavailable_reason:
+        record_skip(PERPLEXITY_PROVIDER)
         raise HttpFetchError(
             f"Perplexity는 이번 실행에서 더 이상 쓰지 않을게요: {unavailable_reason}"
         )
 
-    record_request(PERPLEXITY_PROVIDER)
-    try:
-        response = client.search.create(
-            query=query,
-            max_results=SEARCH_MAX_RESULTS,
-            search_domain_filter=list(domain_filter),
-            search_recency_filter=recency_filter,
-            country="US",
-        )
-    except RateLimitError as exc:
-        record_failure(PERPLEXITY_PROVIDER)
-        message = f"Perplexity Search API 호출 한도에 걸렸어요: {_format_status_error(exc)}"
-        open_circuit(PERPLEXITY_PROVIDER, message)
-        raise HttpFetchError(message) from exc
-    except APITimeoutError as exc:
-        record_failure(PERPLEXITY_PROVIDER)
-        raise HttpFetchError("Perplexity Search API 응답 시간이 너무 오래 걸렸어요.") from exc
-    except APIConnectionError as exc:
-        record_failure(PERPLEXITY_PROVIDER)
-        raise HttpFetchError("Perplexity Search API 연결을 열지 못했어요.") from exc
-    except APIStatusError as exc:
-        record_failure(PERPLEXITY_PROVIDER)
-        raise HttpFetchError(
-            f"Perplexity Search API가 요청을 거절했어요: {_format_status_error(exc)}"
-        ) from exc
+    def perform_search() -> dict[str, Any]:
+        try:
+            response = client.search.create(
+                query=query,
+                max_results=SEARCH_MAX_RESULTS,
+                search_domain_filter=list(domain_filter),
+                search_recency_filter=recency_filter,
+                country="US",
+            )
+        except (RateLimitError, APITimeoutError, APIConnectionError, APIStatusError) as exc:
+            raise _to_http_fetch_error(exc) from exc
 
-    try:
-        payload = response.model_dump()
-    except AttributeError:
-        if isinstance(response, dict):
-            payload = response
-        else:
-            raise HttpFetchError("Perplexity Search API 응답 구조가 예상과 달라요.")
+        try:
+            payload = response.model_dump()
+        except AttributeError:
+            if isinstance(response, dict):
+                payload = response
+            else:
+                raise HttpFetchError(
+                    "Perplexity Search API 응답 구조가 예상과 달라요.",
+                    provider=PERPLEXITY_PROVIDER,
+                )
 
-    if not isinstance(payload, dict):
-        record_failure(PERPLEXITY_PROVIDER)
-        raise HttpFetchError("Perplexity Search API 응답 구조가 예상과 달라요.")
+        if not isinstance(payload, dict):
+            raise HttpFetchError(
+                "Perplexity Search API 응답 구조가 예상과 달라요.",
+                provider=PERPLEXITY_PROVIDER,
+            )
 
-    record_success(PERPLEXITY_PROVIDER)
-    return payload
+        return payload
+
+    return execute_with_provider_retry(
+        provider=PERPLEXITY_PROVIDER,
+        operation=perform_search,
+        should_retry=lambda exc: isinstance(exc, HttpFetchError) and exc.retryable,
+        on_retry=lambda exc, attempt, max_attempts, delay: logger.warning(
+            "Perplexity Search API를 다시 시도하는 중이에요 (%s/%s). query=%s | %s | sleep=%.2fs",
+            attempt,
+            max_attempts,
+            " ".join(query.split())[:80],
+            exc,
+            delay,
+        ),
+        retry_after_seconds_for_error=lambda exc: exc.retry_after_seconds
+        if isinstance(exc, HttpFetchError)
+        else None,
+    )
 
 
 def _parse_results(*, payload: dict[str, Any], topic: SearchTopic) -> list[NewsItem]:

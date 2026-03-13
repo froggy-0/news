@@ -13,6 +13,7 @@ def fetch_btc_usd_price_change() -> tuple[float, float]:
             "vs_currencies": "usd",
             "include_24hr_change": "true",
         },
+        provider="coingecko",
         timeout=20,
     )
 

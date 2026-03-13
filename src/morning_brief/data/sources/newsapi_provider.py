@@ -26,6 +26,7 @@ def fetch_news_from_newsapi(
             "domains": ",".join(sorted(domains)),
         },
         headers={"X-Api-Key": api_key},
+        provider="newsapi",
         timeout=20,
     )
 

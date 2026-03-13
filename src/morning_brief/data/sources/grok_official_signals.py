@@ -13,9 +13,11 @@ from morning_brief.data.official_signal_registry import grouped_verified_x_entit
 from morning_brief.data.sources.http_client import HttpFetchError
 from morning_brief.data.sources.provider_runtime import (
     disabled_reason,
-    record_failure,
-    record_request,
-    record_success,
+    execute_with_provider_retry,
+    open_circuit,
+    parse_retry_after_seconds,
+    policy_for,
+    record_skip,
 )
 from morning_brief.models import NewsItem
 
@@ -87,6 +89,58 @@ def _normalize_citations(value: object) -> list[str]:
     return urls
 
 
+def _status_code_from_exception(exc: Exception) -> int | None:
+    status_code = getattr(exc, "status_code", None)
+    if isinstance(status_code, int):
+        return status_code
+
+    response = getattr(exc, "response", None)
+    response_status = getattr(response, "status_code", None)
+    if isinstance(response_status, int):
+        return response_status
+
+    return None
+
+
+def _retry_after_seconds_from_exception(exc: Exception) -> float | None:
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None)
+    if isinstance(headers, dict):
+        return parse_retry_after_seconds(headers.get("Retry-After") or headers.get("retry-after"))
+    return None
+
+
+def _is_retryable_transport_error(exc: Exception) -> bool:
+    message = f"{exc.__class__.__name__} {exc}".lower()
+    keywords = ("timeout", "timed out", "connection", "temporarily unavailable", "transport")
+    return any(keyword in message for keyword in keywords)
+
+
+def _to_http_fetch_error(exc: Exception) -> HttpFetchError:
+    status_code = _status_code_from_exception(exc)
+    retry_after_seconds = _retry_after_seconds_from_exception(exc)
+    if status_code == 429:
+        message = f"Grok X Search 호출 한도에 걸렸어요: {exc}"
+        open_circuit(GROK_PROVIDER, message)
+        return HttpFetchError(
+            message,
+            provider=GROK_PROVIDER,
+            retryable=False,
+            rate_limited=True,
+            retry_after_seconds=retry_after_seconds,
+        )
+
+    retryable = status_code in policy_for(GROK_PROVIDER).retryable_statuses
+    retryable = retryable or _is_retryable_transport_error(exc)
+    return HttpFetchError(
+        f"Grok X Search를 호출하지 못했어요: {exc}",
+        provider=GROK_PROVIDER,
+        retryable=retryable,
+        rate_limited=status_code == 429,
+        retry_after_seconds=retry_after_seconds,
+    )
+
+
 def _build_prompt(
     *, group: str, lookback_hours: int, max_items: int, entities: list[dict[str, Any]]
 ) -> str:
@@ -136,6 +190,7 @@ def _search_group(
 ) -> list[NewsItem]:
     unavailable_reason = disabled_reason(GROK_PROVIDER)
     if unavailable_reason:
+        record_skip(GROK_PROVIDER)
         raise HttpFetchError(f"Grok은 이번 실행에서 더 이상 쓰지 않을게요: {unavailable_reason}")
 
     handles = [
@@ -146,37 +201,54 @@ def _search_group(
     if not handles:
         return []
 
-    client = _build_client(api_key)
     to_date = datetime.now(timezone.utc)
     from_date = to_date - timedelta(hours=lookback_hours)
 
-    record_request(GROK_PROVIDER)
-    try:
-        chat = client.chat.create(
-            model=model,
-            tools=[x_search(allowed_x_handles=handles, from_date=from_date, to_date=to_date)],
-            tool_choice="required",
-            response_format=XAI_RESPONSE_MODEL,
-            include=["inline_citations"],
-        )
-        chat.append(
-            user(
-                _build_prompt(
-                    group=group,
-                    lookback_hours=lookback_hours,
-                    max_items=max_items,
-                    entities=entities,
+    def perform_group_search() -> tuple[list[dict[str, Any]], list[str]]:
+        client = _build_client(api_key)
+        try:
+            chat = client.chat.create(
+                model=model,
+                tools=[x_search(allowed_x_handles=handles, from_date=from_date, to_date=to_date)],
+                tool_choice="required",
+                response_format=XAI_RESPONSE_MODEL,
+                include=["inline_citations"],
+            )
+            chat.append(
+                user(
+                    _build_prompt(
+                        group=group,
+                        lookback_hours=lookback_hours,
+                        max_items=max_items,
+                        entities=entities,
+                    )
                 )
             )
-        )
-        response = chat.sample()
-    except Exception as exc:
-        record_failure(GROK_PROVIDER)
-        raise HttpFetchError(f"Grok X Search를 호출하지 못했어요: {exc}") from exc
+            response = chat.sample()
+        except Exception as exc:
+            raise _to_http_fetch_error(exc) from exc
 
-    payload_items = _parse_response_items(_normalize_text(getattr(response, "content", "")))
-    record_success(GROK_PROVIDER)
-    fallback_citations = _normalize_citations(getattr(response, "citations", []))
+        payload_items = _parse_response_items(_normalize_text(getattr(response, "content", "")))
+        fallback_citations = _normalize_citations(getattr(response, "citations", []))
+        return payload_items, fallback_citations
+
+    payload_items, fallback_citations = execute_with_provider_retry(
+        provider=GROK_PROVIDER,
+        operation=perform_group_search,
+        should_retry=lambda exc: isinstance(exc, HttpFetchError) and exc.retryable,
+        on_retry=lambda exc, attempt, max_attempts, delay: logger.warning(
+            "Grok X Search를 다시 시도하는 중이에요 (%s/%s). group=%s | %s | sleep=%.2fs",
+            attempt,
+            max_attempts,
+            group,
+            exc,
+            delay,
+        ),
+        retry_after_seconds_for_error=lambda exc: exc.retry_after_seconds
+        if isinstance(exc, HttpFetchError)
+        else None,
+    )
+
     can_apply_group_fallback = len(payload_items) == 1
     handle_map = {
         str(entity.get("x_handle", "")).strip().lstrip("@").lower(): entity

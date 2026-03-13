@@ -5,7 +5,7 @@
 ## 핵심 기능
 - 시장 데이터 수집: 금리/달러/VIX, 미국 지수, 빅테크 10종, BTC + ETF
   - 거시: FRED API 우선, 실패 시 yfinance 폴백
-  - 공급자별 요청 간격 제어, 영구 실패 비재시도, quota 감지 시 회로 차단 적용
+  - 공급자별 요청 간격 제어, 공통 지수 백오프 + jitter, 영구 실패 비재시도, quota 감지 시 회로 차단 적용
   - Alpha Vantage는 ETF 가격/거래량을 동일 응답에서 함께 읽어 불필요한 중복 호출 제거
   - 공식 BTC ETF 발행사 페이지는 issuer별 부분 성공을 허용해 한 곳 실패가 전체 스냅샷을 무너뜨리지 않도록 구성
 - 뉴스 수집: `Perplexity Search API`를 토픽별 메인 리서치 레이어로 사용하고, 결과가 약할 때만 legacy 뉴스 경로로 보강
@@ -124,6 +124,7 @@ python3 main.py schedule
 
 ## 6) 수집 신뢰성 운영 원칙
 - 공급자별로 요청 간격과 재시도 규칙이 다르게 적용됩니다. `404` 같은 영구 실패는 바로 중단하고, `429/5xx/timeout` 중심으로만 다시 시도합니다.
+- HTTP 요청뿐 아니라 Perplexity/Grok SDK 호출과 yfinance 폴백도 공통 `provider_runtime` 계층의 지수 백오프와 provider별 간격 제어를 따릅니다.
 - Alpha Vantage가 quota 또는 burst 제한을 반환하면 그 실행에서는 이후 Alpha Vantage 요청을 중단하고 Stooq/yfinance로 일관되게 넘깁니다.
 - 공식 BTC ETF 수집은 `IBIT`, `BITB`, `GBTC`를 issuer별로 독립 처리합니다. 한 발행사 페이지가 깨져도 나머지 스냅샷은 유지합니다.
 - Perplexity legacy fallback은 Perplexity 기사 자체의 개수/신선도/도메인/근거 링크 기준으로 판단합니다. 공식 X 항목의 citation 부족은 별도 취급합니다.

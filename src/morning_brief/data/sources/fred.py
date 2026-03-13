@@ -41,6 +41,7 @@ def _latest_two_values(series_id: str, api_key: str) -> tuple[float, float]:
             "sort_order": "desc",
             "limit": 15,
         },
+        provider="fred",
     )
 
     observations = payload.get("observations", [])

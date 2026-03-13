@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import logging
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-import requests
 import yfinance as yf
 
 from morning_brief.data.sources.alpha_vantage import fetch_daily_close_change_volume
@@ -16,8 +14,13 @@ from morning_brief.data.sources.btc_etf_official import (
 )
 from morning_brief.data.sources.coingecko import fetch_btc_usd_price_change
 from morning_brief.data.sources.fred import fetch_macro_points_from_fred
-from morning_brief.data.sources.http_client import is_host_resolvable
-from morning_brief.data.sources.provider_runtime import disabled_reason as provider_disabled_reason
+from morning_brief.data.sources.http_client import get_json_with_retry, is_host_resolvable
+from morning_brief.data.sources.provider_runtime import (
+    disabled_reason as provider_disabled_reason,
+)
+from morning_brief.data.sources.provider_runtime import (
+    execute_with_provider_retry,
+)
 from morning_brief.data.sources.stooq import fetch_close_change_and_volume, to_stooq_symbol
 from morning_brief.models import BitcoinEtfIssuerSnapshot, BitcoinSnapshot, MarketPoint
 
@@ -94,31 +97,34 @@ def _history_with_retry(ticker: str, period: str, interval: str):
         )
         raise RuntimeError("Yahoo Finance 주소를 확인하지 못했어요.")
 
-    last_error: Exception | None = None
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            history = yf.Ticker(ticker).history(
-                period=period,
-                interval=interval,
-                auto_adjust=False,
-            )
-            if history.empty:
-                raise ValueError(f"{ticker} 이력 데이터가 비어 있어요.")
-            return history
-        except Exception as exc:
-            last_error = exc
-            if attempt == MAX_RETRIES:
-                break
-            logger.warning(
-                "yfinance 데이터를 다시 가져오는 중이에요 (%s/%s). 대상=%s | %s",
+    def fetch_history():
+        history = yf.Ticker(ticker).history(
+            period=period,
+            interval=interval,
+            auto_adjust=False,
+        )
+        if history.empty:
+            raise RuntimeError(f"{ticker} 이력 데이터가 비어 있어요.")
+        return history
+
+    try:
+        return execute_with_provider_retry(
+            provider="yfinance",
+            operation=fetch_history,
+            should_retry=lambda exc: True,
+            on_retry=lambda exc, attempt, max_attempts, delay: logger.warning(
+                "yfinance 데이터를 다시 가져오는 중이에요 (%s/%s). 대상=%s | %s | sleep=%.2fs",
                 attempt,
-                MAX_RETRIES,
+                max_attempts,
                 ticker,
                 exc,
-            )
-            time.sleep(BACKOFF_SECONDS * attempt)
-
-    raise RuntimeError(f"{ticker} 시장 이력 데이터를 가져오지 못했어요.") from last_error
+                delay,
+            ),
+            max_attempts=MAX_RETRIES,
+            base_backoff_seconds=BACKOFF_SECONDS,
+        )
+    except Exception as exc:
+        raise RuntimeError(f"{ticker} 시장 이력 데이터를 가져오지 못했어요.") from exc
 
 
 def _latest_price_point_from_yfinance(
@@ -382,20 +388,20 @@ def _fetch_fear_greed() -> tuple[int | None, str | None]:
     url = "https://api.alternative.me/fng/?limit=1"
     last_error: Exception | None = None
 
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            response = requests.get(url, timeout=FEAR_GREED_TIMEOUT)
-            response.raise_for_status()
-            payload = response.json()
-            item = payload.get("data", [{}])[0]
-            value = int(item.get("value"))
-            label = str(item.get("value_classification"))
-            return value, label
-        except (requests.RequestException, ValueError, TypeError, KeyError) as exc:
-            last_error = exc
-            if attempt == MAX_RETRIES:
-                break
-            time.sleep(BACKOFF_SECONDS * attempt)
+    try:
+        payload = get_json_with_retry(
+            url,
+            provider="alternative_me",
+            timeout=FEAR_GREED_TIMEOUT,
+            retries=MAX_RETRIES,
+            backoff_seconds=BACKOFF_SECONDS,
+        )
+        item = payload.get("data", [{}])[0]
+        value = int(item.get("value"))
+        label = str(item.get("value_classification"))
+        return value, label
+    except Exception as exc:
+        last_error = exc
 
     _warn_once(
         "fear_greed_fail",

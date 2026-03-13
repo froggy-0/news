@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 
 from morning_brief.data.sources import grok_official_signals as gxs
+from morning_brief.data.sources import provider_runtime
 
 
 class _Response:
@@ -23,6 +24,8 @@ class _Chat:
         return self
 
     def sample(self):
+        if isinstance(self._response, Exception):
+            raise self._response
         return self._response
 
 
@@ -40,6 +43,10 @@ class _ChatResource:
 class _Client:
     def __init__(self, responses: list[_Response], calls: list[dict], prompts: list[object]):
         self.chat = _ChatResource(responses, calls, prompts)
+
+
+class TransportTimeoutError(Exception):
+    pass
 
 
 VERIFIED_GROUPS = {
@@ -242,3 +249,56 @@ def test_fetch_official_x_signals_returns_empty_without_api_key(monkeypatch):
     )
 
     assert items == []
+
+
+def test_fetch_official_x_signals_retries_timeout_like_error(monkeypatch):
+    calls: list[dict] = []
+    prompts: list[object] = []
+    sleeps: list[float] = []
+    now = {"value": 100.0}
+    responses = [
+        TransportTimeoutError("temporary timeout"),
+        _Response(
+            content=json.dumps(
+                {
+                    "items": [
+                        {
+                            "entity_id": "amd",
+                            "headline": "AMD가 새 AI 서버 투자 계획을 공개했어요",
+                            "summary": "공식 계정이 데이터센터 투자 계획을 설명했어요.",
+                            "why_it_matters": "AI 투자 지출 기대를 다시 키울 수 있어요.",
+                            "posted_at": "2026-03-13T01:00:00Z",
+                            "source_handle": "AMD",
+                            "citations": ["https://x.com/AMD/status/1"],
+                        }
+                    ]
+                }
+            )
+        ),
+    ]
+
+    monkeypatch.setattr(
+        provider_runtime.time,
+        "sleep",
+        lambda seconds: sleeps.append(seconds) or now.__setitem__("value", now["value"] + seconds),
+    )
+    monkeypatch.setattr(provider_runtime.time, "monotonic", lambda: now["value"])
+    monkeypatch.setattr(provider_runtime.random, "random", lambda: 0.5)
+    monkeypatch.setattr(
+        gxs,
+        "grouped_verified_x_entities",
+        lambda: {"ai_bigtech_primary": VERIFIED_GROUPS["ai_bigtech_primary"]},
+    )
+    monkeypatch.setattr(gxs, "x_search", lambda **kwargs: {"name": "x_search", "kwargs": kwargs})
+    monkeypatch.setattr(gxs, "_build_client", lambda api_key: _Client(responses, calls, prompts))
+
+    items = gxs.fetch_official_x_signals(
+        api_key="grok-test-key",
+        model="grok-test-model",
+        lookback_hours=24,
+        max_items=2,
+    )
+
+    assert len(calls) == 2
+    assert items[0].title == "AMD가 새 AI 서버 투자 계획을 공개했어요"
+    assert sleeps and round(sleeps[0], 2) == 1.5

@@ -52,6 +52,7 @@ def fetch_news_from_gdelt(
             "sort": "datedesc",
             "format": "json",
         },
+        provider="gdelt",
         timeout=25,
     )
 
