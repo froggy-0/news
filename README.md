@@ -1,4 +1,4 @@
-# Morning Market Brief (US Tech + BTC)
+# Morning Market Brief (US Tech + BTC) test
 
 매일 오전 08:00(KST) 기준으로 미국 기술주 + 비트코인 중심 `Morning Market Brief`를 생성하고 이메일로 발송하는 단일 Python 프로젝트입니다.
 
