@@ -69,11 +69,29 @@ def list_verified_x_entities() -> list[OfficialSignalEntity]:
     ]
 
 
+def grouped_verified_x_entities() -> dict[str, list[OfficialSignalEntity]]:
+    grouped: dict[str, list[OfficialSignalEntity]] = {}
+    for entity in list_verified_x_entities():
+        group = str(entity.get("x_search_group", "")).strip()
+        if not group:
+            continue
+        grouped.setdefault(group, []).append(entity)
+
+    for group, entities in grouped.items():
+        grouped[group] = sorted(
+            entities,
+            key=lambda entity: (
+                int(entity.get("x_search_priority", 0)),
+                str(entity.get("entity_id", "")).lower(),
+            ),
+        )[:MAX_X_HANDLES_PER_GROUP]
+    return grouped
+
+
 def grouped_verified_x_handles() -> dict[str, list[str]]:
     normalized: dict[str, list[str]] = {}
-    for group, values in _grouped_verified_x_entries().items():
-        handles = [handle for _, handle in sorted(values, key=lambda item: (item[0], item[1].lower()))]
-        normalized[group] = handles[:MAX_X_HANDLES_PER_GROUP]
+    for group, entities in grouped_verified_x_entities().items():
+        normalized[group] = [str(entity.get("x_handle", "")).strip().lstrip("@") for entity in entities]
     return normalized
 
 

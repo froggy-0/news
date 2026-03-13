@@ -27,8 +27,13 @@ class Settings:
     fred_api_key: str
     alpha_vantage_api_key: str
     perplexity_api_key: str
+    grok_api_key: str
+    grok_model: str
     research_provider: str
     enable_legacy_news_fallback: bool
+    enable_official_x_signals: bool
+    official_x_lookback_hours: int
+    official_x_max_items: int
     gmail_sender: str
     gmail_recipient: str
     gmail_credentials_file: Path
@@ -119,12 +124,27 @@ def load_settings() -> Settings:
         fred_api_key=os.getenv("FRED_API_KEY", "").strip(),
         alpha_vantage_api_key=os.getenv("ALPHA_VANTAGE_API_KEY", "").strip(),
         perplexity_api_key=os.getenv("PERPLEXITY_API_KEY", "").strip(),
+        grok_api_key=os.getenv("GROK_API_KEY", "").strip(),
+        grok_model=os.getenv("GROK_MODEL", "grok-4.20-beta-latest-non-reasoning").strip(),
         research_provider=_env_choice(
             "RESEARCH_PROVIDER",
             default="perplexity",
             allowed={"perplexity", "legacy"},
         ),
         enable_legacy_news_fallback=_env_bool("ENABLE_LEGACY_NEWS_FALLBACK", True),
+        enable_official_x_signals=_env_bool("ENABLE_OFFICIAL_X_SIGNALS", True),
+        official_x_lookback_hours=_env_bounded_int(
+            "OFFICIAL_X_LOOKBACK_HOURS",
+            default=48,
+            minimum=24,
+            maximum=72,
+        ),
+        official_x_max_items=_env_bounded_int(
+            "OFFICIAL_X_MAX_ITEMS",
+            default=4,
+            minimum=1,
+            maximum=6,
+        ),
         gmail_sender=os.getenv("GMAIL_SENDER", "").strip(),
         gmail_recipient=os.getenv("GMAIL_RECIPIENT", "").strip(),
         gmail_credentials_file=Path(

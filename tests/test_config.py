@@ -32,12 +32,22 @@ def test_alpha_vantage_api_key_loaded(monkeypatch):
 
 def test_perplexity_settings_loaded(monkeypatch):
     monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
+    monkeypatch.setenv("GROK_API_KEY", "grok-test-key")
+    monkeypatch.setenv("GROK_MODEL", "grok-test-model")
     monkeypatch.setenv("RESEARCH_PROVIDER", "legacy")
     monkeypatch.setenv("ENABLE_LEGACY_NEWS_FALLBACK", "false")
+    monkeypatch.setenv("ENABLE_OFFICIAL_X_SIGNALS", "false")
+    monkeypatch.setenv("OFFICIAL_X_LOOKBACK_HOURS", "36")
+    monkeypatch.setenv("OFFICIAL_X_MAX_ITEMS", "2")
     settings = load_settings()
     assert settings.perplexity_api_key == "pplx-test-key"
+    assert settings.grok_api_key == "grok-test-key"
+    assert settings.grok_model == "grok-test-model"
     assert settings.research_provider == "legacy"
     assert settings.enable_legacy_news_fallback is False
+    assert settings.enable_official_x_signals is False
+    assert settings.official_x_lookback_hours == 36
+    assert settings.official_x_max_items == 2
 
 
 def test_research_provider_invalid_defaults_to_perplexity(monkeypatch):
