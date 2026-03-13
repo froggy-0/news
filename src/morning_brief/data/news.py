@@ -11,9 +11,7 @@ from morning_brief.data.data_quality import (
 )
 from morning_brief.data.news_packet import (
     OFFICIAL_SIGNAL_PROVIDER,
-    merge_news_packets as _merge_news_packets,
     news_items_to_packet as _news_items_to_packet,
-    packet_item_to_news_item as _packet_item_to_news_item,
 )
 from morning_brief.data.news_policy import (
     MAX_ITEMS_PER_DOMAIN,
@@ -330,23 +328,6 @@ def fetch_news(
     if final_items:
         logger.info("legacy 뉴스 provider 비중은 %s였어요.", _provider_breakdown(final_items))
     return final_items
-
-
-def packet_item_to_news_item(item: dict) -> NewsItem | None:
-    return _packet_item_to_news_item(item)
-
-
-def news_items_to_packet(items: list[NewsItem]) -> list[dict]:
-    return _news_items_to_packet(items)
-
-
-def merge_news_packets(existing_packet: list[dict], extra_items: list[NewsItem], max_items: int) -> list[dict]:
-    return _merge_news_packets(
-        existing_packet=existing_packet,
-        extra_items=extra_items,
-        max_items=max_items,
-        merge_rank_fn=_merge_rank,
-    )
 
 
 def build_news_packet(*, settings: Settings) -> list[dict]:

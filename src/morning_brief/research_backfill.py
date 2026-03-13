@@ -9,7 +9,8 @@ from typing import Any
 from openai import OpenAI
 
 from morning_brief.config import Settings
-from morning_brief.data.news import merge_news_packets
+from morning_brief.data.news import _merge_rank
+from morning_brief.data.news_packet import merge_news_packets
 from morning_brief.models import NewsItem
 from morning_brief.prompting import build_prompt_cache_key, render_web_search_prompts
 
@@ -213,6 +214,7 @@ def backfill_news_with_web_search(
             existing_packet=packet.get("news", []),
             extra_items=extra_items,
             max_items=settings.max_news_items,
+            merge_rank_fn=_merge_rank,
         )
         logger.info(
             "OpenAI 웹 검색으로 후보 뉴스 %s건을 더 확인했고, 최종 뉴스는 %s건으로 정리했어요.",

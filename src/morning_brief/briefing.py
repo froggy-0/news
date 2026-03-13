@@ -2,33 +2,17 @@ from __future__ import annotations
 
 from datetime import datetime
 import logging
-import re
 from zoneinfo import ZoneInfo
 
 from openai import OpenAI
 
 from morning_brief.brief_review import validate_and_rewrite_briefing
+from morning_brief.brief_formatting import improve_readability_spacing
 from morning_brief.config import Settings
+from morning_brief.openai_utils import cached_input_tokens
 from morning_brief.prompting import build_prompt_cache_key, render_brief_prompts
 
 logger = logging.getLogger(__name__)
-SECTION_HEADING_RE = re.compile(r"^\d+\.\s+.+$")
-SUBSECTION_LABELS = {
-    "핵심 판단",
-    "주요 지표",
-    "핵심 이슈",
-    "배경과 해석",
-    "주목할 변수",
-    "한줄 결론",
-    "핵심 수치",
-    "핵심 내용",
-    "쉽게 보면",
-    "오늘 체크할 포인트",
-    "수치 체크",
-    "해석",
-    "오늘 볼 포인트",
-}
-SENTENCE_BREAK_RE = re.compile(r"(?<=[.!?])\s+(?=[\"'“”‘’(]*[A-Za-z가-힣])")
 
 
 
@@ -102,55 +86,11 @@ def _append_reference_block(text: str, packet: dict) -> str:
 
 
 def _improve_readability_spacing(text: str) -> str:
-    lines: list[str] = []
-    for raw_line in text.splitlines():
-        stripped = raw_line.strip()
-        if (
-            not stripped
-            or stripped.startswith("[데이터 품질 알림]")
-            or SECTION_HEADING_RE.match(stripped)
-            or stripped in SUBSECTION_LABELS
-            or stripped.startswith("- ")
-        ):
-            lines.append(stripped)
-            continue
-
-        expanded = SENTENCE_BREAK_RE.sub("\n\n", stripped)
-        lines.extend(part.strip() for part in expanded.splitlines())
-
-    compacted: list[str] = []
-    previous_blank = False
-    for line in lines:
-        is_blank = not line
-        if is_blank and previous_blank:
-            continue
-        compacted.append(line)
-        previous_blank = is_blank
-    return "\n".join(compacted).strip()
+    return improve_readability_spacing(text)
 
 
 def _bullet_lines(items: list[str]) -> str:
     return "\n".join(f"- {item}" for item in items if item.strip())
-
-
-def _cached_input_tokens(response: object) -> int | None:
-    usage = getattr(response, "usage", None)
-    if usage is None:
-        return None
-
-    details = getattr(usage, "input_tokens_details", None)
-    if details is None:
-        return None
-
-    cached_tokens = getattr(details, "cached_tokens", None)
-    if cached_tokens is None:
-        return None
-
-    try:
-        return int(cached_tokens)
-    except (TypeError, ValueError):
-        return None
-
 
 
 def _fallback_brief(packet: dict, timezone: str) -> str:
@@ -359,7 +299,7 @@ def generate_briefing(packet: dict, settings: Settings) -> str:
         if not text:
             raise ValueError("모델이 비어 있는 브리핑을 반환했어요.")
         text = _improve_readability_spacing(text)
-        cached_tokens = _cached_input_tokens(response)
+        cached_tokens = cached_input_tokens(response)
         if cached_tokens is not None:
             logger.info(
                 "OpenAI 프롬프트 캐시를 사용했어요. key=%s | cached_input_tokens=%s",

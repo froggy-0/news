@@ -9,18 +9,17 @@ import re
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
+from morning_brief.brief_formatting import (
+    extract_brief_structure as _extract_brief_structure,
+    split_reference_block as _split_reference_block,
+    split_section_groups as _split_section_groups,
+)
 from morning_brief.config import Settings
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
 
 logger = logging.getLogger(__name__)
-SECTION_HEADING_RE = re.compile(r"^(\d+)\.\s+(.+)$")
 DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
-CONCLUSION_LABELS = {"핵심 판단", "한줄 결론", "오늘의 한줄 결론"}
-METRIC_LABELS = {"주요 지표", "주요 수치", "핵심 수치", "수치 체크", "핵심 내용", "핵심 이슈"}
-INSIGHT_LABELS = {"배경과 해석", "쉽게 보면", "해석", "이렇게 읽으면 좋아요", "이렇게 읽으면 돼요", "왜 중요한지"}
-WATCH_LABELS = {"주목할 변수", "오늘 볼 점", "오늘 체크할 포인트", "지금 주의해서 볼 점", "체크 포인트"}
-SENTENCE_BREAK_RE = re.compile(r"(?<=[.!?])\s+(?=[\"'“”‘’(]*[A-Za-z가-힣])")
 PERCENT_RE = re.compile(r"[+-]?\d[\d,]*(?:\.\d+)?%")
 UP_TOKENS = ("올랐", "상승", "강세", "반등", "높아졌", "증가", "확대", "유입", "개선", "회복")
 DOWN_TOKENS = ("내렸", "하락", "약세", "밀렸", "낮아졌", "감소", "축소", "유출", "둔화", "후퇴")
@@ -59,125 +58,6 @@ def _split_recipients(raw: str) -> list[str]:
         seen.add(normalized)
         recipients.append(candidate)
     return recipients
-
-
-def _extract_brief_structure(body: str) -> tuple[str, str, list[tuple[str, str]]]:
-    lines = [line.rstrip() for line in body.replace("\r\n", "\n").split("\n")]
-    title = lines[0].strip() if lines else "Morning Market Brief"
-
-    notice = ""
-    start_index = 1
-    if len(lines) > 1 and lines[1].strip().startswith("[데이터 품질 알림]"):
-        notice = lines[1].strip()
-        start_index = 2
-
-    sections: list[tuple[str, str]] = []
-    current_heading = ""
-    current_lines: list[str] = []
-
-    def flush_section() -> None:
-        nonlocal current_heading, current_lines
-        if not current_heading:
-            return
-        content = "\n".join(current_lines).strip()
-        sections.append((current_heading, content))
-        current_heading = ""
-        current_lines = []
-
-    for raw_line in lines[start_index:]:
-        line = raw_line.strip()
-        if not line and not current_heading:
-            continue
-
-        match = SECTION_HEADING_RE.match(line)
-        if match:
-            flush_section()
-            current_heading = match.group(2).strip()
-            continue
-
-        if current_heading:
-            current_lines.append(raw_line.strip())
-
-    flush_section()
-    return title, notice, sections
-
-
-def _split_reference_block(body: str) -> tuple[str, list[str]]:
-    marker = "\n참고 출처\n"
-    if marker not in body:
-        return body, []
-
-    main_body, raw_references = body.split(marker, 1)
-    references = [line.strip()[2:].strip() for line in raw_references.splitlines() if line.strip().startswith("- ")]
-    return main_body.strip(), references
-
-
-def _expand_sentence_spacing(text: str) -> str:
-    lines: list[str] = []
-    for raw_line in text.splitlines():
-        stripped = raw_line.strip()
-        if not stripped or stripped.startswith("- "):
-            lines.append(stripped)
-            continue
-        expanded = SENTENCE_BREAK_RE.sub("\n\n", stripped)
-        lines.extend(part.strip() for part in expanded.splitlines())
-    return "\n".join(lines).strip()
-
-
-def _split_section_groups(content: str) -> dict[str, tuple[str, str]]:
-    normalized = _expand_sentence_spacing(content)
-    current_kind = "conclusion"
-    groups = {
-        "conclusion": {"label": "핵심 판단", "lines": []},
-        "metrics": {"label": "주요 지표", "lines": []},
-        "insight": {"label": "배경과 해석", "lines": []},
-        "watch": {"label": "주목할 변수", "lines": []},
-    }
-    explicit_labels_found = False
-
-    for raw_line in normalized.splitlines():
-        line = raw_line.strip()
-        if not line:
-            groups[current_kind]["lines"].append("")
-            continue
-
-        if line in CONCLUSION_LABELS:
-            current_kind = "conclusion"
-            explicit_labels_found = True
-            continue
-
-        if line in METRIC_LABELS:
-            current_kind = "metrics"
-            explicit_labels_found = True
-            continue
-
-        if line in INSIGHT_LABELS:
-            current_kind = "insight"
-            explicit_labels_found = True
-            continue
-
-        if line in WATCH_LABELS:
-            current_kind = "watch"
-            explicit_labels_found = True
-            continue
-
-        groups[current_kind]["lines"].append(line)
-
-    if not explicit_labels_found:
-        paragraphs = [part.strip() for part in normalized.split("\n\n") if part.strip()]
-        if paragraphs:
-            groups["conclusion"]["lines"] = [paragraphs[0]]
-            for paragraph in paragraphs[1:]:
-                lines = [line.strip() for line in paragraph.splitlines() if line.strip()]
-                if lines and all(line.startswith("- ") for line in lines):
-                    groups["metrics"]["lines"].extend(lines)
-                else:
-                    groups["insight"]["lines"].append(paragraph)
-
-    return {
-        key: (value["label"], "\n".join(value["lines"]).strip())
-        for key, value in groups.items()
-    }
 
 
 def _first_non_empty_paragraph(text: str) -> str:

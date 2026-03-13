@@ -5,6 +5,7 @@ import logging
 
 from openai import OpenAI
 
+from morning_brief.openai_utils import cached_input_tokens
 from morning_brief.config import Settings
 from morning_brief.prompting import (
     build_prompt_cache_key,
@@ -50,25 +51,6 @@ def _coerce_bool(value: object) -> bool:
         if normalized in {"false", "0", "no", "off"}:
             return False
     return False
-
-
-def _cached_input_tokens(response: object) -> int | None:
-    usage = getattr(response, "usage", None)
-    if usage is None:
-        return None
-
-    details = getattr(usage, "input_tokens_details", None)
-    if details is None:
-        return None
-
-    cached_tokens = getattr(details, "cached_tokens", None)
-    if cached_tokens is None:
-        return None
-
-    try:
-        return int(cached_tokens)
-    except (TypeError, ValueError):
-        return None
 
 
 def _normalize_review_payload(payload: object) -> dict:
@@ -124,7 +106,7 @@ def _review_briefing(
     )
     payload = json.loads((response.output_text or "").strip() or "{}")
     review = _normalize_review_payload(payload)
-    cached_tokens = _cached_input_tokens(response)
+    cached_tokens = cached_input_tokens(response)
     if cached_tokens is not None:
         logger.info(
             "브리핑 검수 프롬프트 캐시를 사용했어요. key=%s | cached_input_tokens=%s",
@@ -166,7 +148,7 @@ def _rewrite_briefing(
     rewritten = (response.output_text or "").strip()
     if not rewritten:
         raise ValueError("검수 반영 재작성 결과가 비어 있어요.")
-    cached_tokens = _cached_input_tokens(response)
+    cached_tokens = cached_input_tokens(response)
     if cached_tokens is not None:
         logger.info(
             "브리핑 재작성 프롬프트 캐시를 사용했어요. key=%s | cached_input_tokens=%s",
