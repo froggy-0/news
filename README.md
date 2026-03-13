@@ -60,7 +60,7 @@ cp .env.example .env
 - `CACHE_DIR` (기본 `.cache`, ETF 공식 스냅샷 캐시 저장 경로)
 - `OPENAI_API_KEY`
 - `OPENAI_BRIEF_VALIDATION_ENABLED` (기본 `true`, 브리핑 최종 검수 사용)
-- `OPENAI_BRIEF_VALIDATION_MODEL` (기본 `gpt-5-mini`)
+- `OPENAI_BRIEF_VALIDATION_MODEL` (기본 `gpt-5-mini-2025-08-07`)
 - `OPENAI_BRIEF_MAX_REWRITES` (기본 `1`, 검수 실패 시 자동 재작성 횟수)
 - `OPENAI_REASONING_EFFORT` (기본 `low`)
 - `OPENAI_MAX_OUTPUT_TOKENS` (기본 `1700`)
@@ -175,7 +175,7 @@ make validate-pre-commit
 워크플로우는 `.github/workflows/morning-brief.yml`에 포함되어 있습니다.
 
 스케줄:
-- `57 22 * * *` (UTC) = 매일 07:57 KST
+- `0 23 * * *` (UTC) = 매일 08:00 KST
 
 필수 GitHub Secrets:
 - `OPENAI_API_KEY`
@@ -191,14 +191,14 @@ make validate-pre-commit
 - `NEWSAPI_KEY`
 
 선택 GitHub Variables:
-- `OPENAI_MODEL` (기본 `gpt-5-mini`)
+- `OPENAI_MODEL` (기본 `gpt-5-mini-2025-08-07`)
 - `OPENAI_BRIEF_VALIDATION_ENABLED` (기본 `true`)
-- `OPENAI_BRIEF_VALIDATION_MODEL` (기본 `gpt-5-mini`)
+- `OPENAI_BRIEF_VALIDATION_MODEL` (기본 `gpt-5-mini-2025-08-07`)
 - `OPENAI_BRIEF_MAX_REWRITES` (기본 `1`)
 - `OPENAI_REASONING_EFFORT` (기본 `low`)
 - `OPENAI_MAX_OUTPUT_TOKENS` (기본 `1700`)
 - `OPENAI_PROMPT_CACHE_KEY` (기본 `morning-market-brief`)
-- `PROMPT_TEMPLATE_VERSION` (기본 `market_brief_v3`)
+- `PROMPT_TEMPLATE_VERSION` (기본 `market_brief_v4`)
 - `RESEARCH_PROVIDER` (기본 `perplexity`)
 - `ENABLE_LEGACY_NEWS_FALLBACK` (기본 `true`)
 - `GROK_MODEL` (기본 `grok-4.20-beta-latest-non-reasoning`)

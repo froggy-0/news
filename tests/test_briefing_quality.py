@@ -11,6 +11,7 @@ from morning_brief.briefing import (
 )
 from morning_brief.config import load_settings
 from morning_brief.llm_errors import BriefGenerationError
+from morning_brief.observability import PipelineObserver
 
 
 def test_inject_quality_notice_under_title():
@@ -257,6 +258,59 @@ def test_generate_briefing_revalidates_after_rewrite(monkeypatch):
     assert "쉬운 한국어로 바꿨어요." in briefing
     assert len(calls) == 4
     assert calls[3]["text"]["format"]["type"] == "json_schema"
+
+
+def test_generate_briefing_records_cached_input_tokens_in_observer(monkeypatch, tmp_path):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BRIEF_VALIDATION_ENABLED", "false")
+    settings = load_settings()
+    packet = {
+        "macro": [],
+        "us_indices": [],
+        "tech_stocks": [],
+        "bitcoin": {
+            "spot": {"price": 82_000.0, "change_pct": 1.1},
+            "etf_points": [],
+            "etf_total_volume": None,
+        },
+        "news": [],
+        "data_quality": {"status": "ok", "warnings": []},
+    }
+    response = SimpleNamespace(
+        output_text=(
+            "Morning Market Brief (2026-03-14)\n\n"
+            "1. LAYER 1 | 오늘 한줄 판단\n"
+            "핵심 판단\n"
+            "미국 시장은 혼조 흐름을 보였어요. [출처: test]\n\n"
+            "2. LAYER 2 | 주요 뉴스\n"
+            "- 엔비디아 | AI 투자 기대가 유지됐어요. | https://example.com/nvda\n\n"
+            "3. LAYER 3 | 종목 브리핑\n"
+            "- 비트코인 | +1.10% | 82,000달러 안팎에서 거래됐어요. | [출처: test]"
+        ),
+        usage=SimpleNamespace(
+            input_tokens=300,
+            output_tokens=120,
+            input_tokens_details=SimpleNamespace(cached_tokens=80),
+            output_tokens_details=SimpleNamespace(reasoning_tokens=10),
+        ),
+    )
+
+    def _create(**_: object) -> SimpleNamespace:
+        return response
+
+    fake_client = SimpleNamespace(responses=SimpleNamespace(create=_create))
+    observer = PipelineObserver(output_dir=tmp_path)
+    monkeypatch.setattr("morning_brief.briefing.OpenAI", lambda **_: fake_client)
+
+    briefing = generate_briefing(packet=packet, settings=settings, observer=observer)
+
+    usage = observer.provider_usage["openai"]
+    assert "오늘 한줄 판단" in briefing
+    assert usage.requests == 1
+    assert usage.input_tokens == 300
+    assert usage.output_tokens == 120
+    assert usage.cached_input_tokens == 80
+    assert usage.reasoning_tokens == 10
 
 
 def test_generate_briefing_respects_validator_no_rewrite_guidance(monkeypatch):

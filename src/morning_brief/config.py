@@ -6,6 +6,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+DEFAULT_OPENAI_MODEL = "gpt-5-mini-2025-08-07"
+DEFAULT_PROMPT_TEMPLATE_VERSION = "market_brief_v4"
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -84,10 +87,10 @@ def load_settings() -> Settings:
         timezone=os.getenv("TIMEZONE", "Asia/Seoul"),
         cache_dir=Path(os.getenv("CACHE_DIR", ".cache")).resolve(),
         openai_api_key=os.getenv("OPENAI_API_KEY", "").strip(),
-        openai_model=os.getenv("OPENAI_MODEL", "gpt-5-mini").strip(),
+        openai_model=os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL).strip(),
         openai_brief_validation_enabled=_env_bool("OPENAI_BRIEF_VALIDATION_ENABLED", True),
         openai_brief_validation_model=os.getenv("OPENAI_BRIEF_VALIDATION_MODEL", "").strip()
-        or os.getenv("OPENAI_MODEL", "gpt-5-mini").strip(),
+        or os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL).strip(),
         openai_brief_max_rewrites=_env_bounded_int(
             "OPENAI_BRIEF_MAX_REWRITES",
             default=1,
@@ -96,7 +99,7 @@ def load_settings() -> Settings:
         ),
         openai_web_search_enabled=_env_bool("OPENAI_WEB_SEARCH_ENABLED", True),
         openai_web_search_model=os.getenv("OPENAI_WEB_SEARCH_MODEL", "").strip()
-        or os.getenv("OPENAI_MODEL", "gpt-5-mini").strip(),
+        or os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL).strip(),
         openai_web_search_max_results=_env_bounded_int(
             "OPENAI_WEB_SEARCH_MAX_RESULTS",
             default=3,
@@ -118,7 +121,9 @@ def load_settings() -> Settings:
         prompt_template_dir=Path(
             os.getenv("PROMPT_TEMPLATE_DIR", "src/morning_brief/prompts")
         ).resolve(),
-        prompt_template_version=os.getenv("PROMPT_TEMPLATE_VERSION", "market_brief_v3").strip(),
+        prompt_template_version=os.getenv(
+            "PROMPT_TEMPLATE_VERSION", DEFAULT_PROMPT_TEMPLATE_VERSION
+        ).strip(),
         fred_api_key=os.getenv("FRED_API_KEY", "").strip(),
         # Alpha Vantage free tier is intentionally disabled in the pipeline.
         alpha_vantage_api_key="",

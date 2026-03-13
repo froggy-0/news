@@ -2,8 +2,8 @@ name: Morning Market Brief
 
 on:
   schedule:
-    # 07:57 KST daily == 22:57 UTC (previous day)
-    - cron: "57 22 * * *"
+    # 08:00 KST daily == 23:00 UTC (previous day)
+    - cron: "0 23 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -137,14 +137,14 @@ jobs:
           TIMEZONE: Asia/Seoul
           CACHE_DIR: .cache
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5-mini' }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5-mini-2025-08-07' }}
           OPENAI_BRIEF_VALIDATION_ENABLED: ${{ vars.OPENAI_BRIEF_VALIDATION_ENABLED || 'true' }}
-          OPENAI_BRIEF_VALIDATION_MODEL: ${{ vars.OPENAI_BRIEF_VALIDATION_MODEL || vars.OPENAI_MODEL || 'gpt-5-mini' }}
+          OPENAI_BRIEF_VALIDATION_MODEL: ${{ vars.OPENAI_BRIEF_VALIDATION_MODEL || vars.OPENAI_MODEL || 'gpt-5-mini-2025-08-07' }}
           OPENAI_BRIEF_MAX_REWRITES: ${{ vars.OPENAI_BRIEF_MAX_REWRITES || '1' }}
           OPENAI_REASONING_EFFORT: ${{ vars.OPENAI_REASONING_EFFORT || 'low' }}
           OPENAI_MAX_OUTPUT_TOKENS: ${{ vars.OPENAI_MAX_OUTPUT_TOKENS || '1700' }}
           OPENAI_PROMPT_CACHE_KEY: ${{ vars.OPENAI_PROMPT_CACHE_KEY || 'morning-market-brief' }}
-          PROMPT_TEMPLATE_VERSION: ${{ vars.PROMPT_TEMPLATE_VERSION || 'market_brief_v3' }}
+          PROMPT_TEMPLATE_VERSION: ${{ vars.PROMPT_TEMPLATE_VERSION || 'market_brief_v4' }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
           GROK_API_KEY: ${{ secrets.GROK_API_KEY }}

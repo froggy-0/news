@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from morning_brief.config import load_settings
+from morning_brief.config import (
+    DEFAULT_OPENAI_MODEL,
+    DEFAULT_PROMPT_TEMPLATE_VERSION,
+    load_settings,
+)
 
 
 def test_max_news_items_lower_bound(monkeypatch):
@@ -89,3 +93,17 @@ def test_openai_max_output_tokens_bounds(monkeypatch):
     monkeypatch.setenv("OPENAI_MAX_OUTPUT_TOKENS", "99999")
     settings = load_settings()
     assert settings.openai_max_output_tokens == 4000
+
+
+def test_openai_defaults_use_snapshot_model_and_prompt_version(monkeypatch):
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_BRIEF_VALIDATION_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_WEB_SEARCH_MODEL", raising=False)
+    monkeypatch.delenv("PROMPT_TEMPLATE_VERSION", raising=False)
+
+    settings = load_settings()
+
+    assert settings.openai_model == DEFAULT_OPENAI_MODEL
+    assert settings.openai_brief_validation_model == DEFAULT_OPENAI_MODEL
+    assert settings.openai_web_search_model == DEFAULT_OPENAI_MODEL
+    assert settings.prompt_template_version == DEFAULT_PROMPT_TEMPLATE_VERSION
