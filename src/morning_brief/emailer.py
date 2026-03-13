@@ -229,7 +229,14 @@ def _build_news_items(
     items: list[_EmailNewsItem] = []
 
     important_news = next(
-        (section for section in sections if section.heading == "중요한 뉴스"), None
+        (
+            section
+            for section in sections
+            if section.heading == "중요한 뉴스"
+            or "LAYER 2" in section.heading
+            or "주요 뉴스" in section.heading
+        ),
+        None,
     )
     if important_news is not None:
         interpretations = [
@@ -320,10 +327,20 @@ def _build_stock_rows(sections: list[_EmailSection], *, limit: int = 6) -> list[
 
 def _build_macro_rows(sections: list[_EmailSection]) -> list[tuple[str, Markup]]:
     macro_section = next((section for section in sections if section.heading == "거시 환경"), None)
-    if macro_section is None:
-        return []
+    candidate_lines: list[str] = []
+    if macro_section is not None:
+        candidate_lines.extend(_first_metric_lines(macro_section.groups["metrics"][1], limit=4))
+    else:
+        macro_keywords = ("미국 10년물", "달러 인덱스", "VIX", "공포탐욕", "US10Y", "DXY")
+        for section in sections:
+            for line in _first_metric_lines(section.groups["metrics"][1], limit=8):
+                if any(keyword in line for keyword in macro_keywords):
+                    candidate_lines.append(line)
+            if len(candidate_lines) >= 4:
+                break
+
     rows: list[tuple[str, Markup]] = []
-    for line in _first_metric_lines(macro_section.groups["metrics"][1], limit=4):
+    for line in candidate_lines[:4]:
         label = line.split("는 ", 1)[0].split("은 ", 1)[0].strip() or "거시 지표"
         rows.append((label, Markup(_render_body_line(line))))
     return rows
