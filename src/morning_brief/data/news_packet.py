@@ -6,6 +6,8 @@ from typing import Callable
 from morning_brief.data.news_policy import extract_domain, is_preferred_domain, source_tier
 from morning_brief.models import NewsItem
 
+OFFICIAL_SIGNAL_PROVIDER = "grok_official_x"
+
 
 def packet_item_to_news_item(item: dict) -> NewsItem | None:
     if not isinstance(item, dict):
@@ -70,6 +72,7 @@ def news_items_to_packet(items: list[NewsItem]) -> list[dict]:
                 "summary": item.summary or None,
                 "why_it_matters": item.why_it_matters or None,
                 "citations": list(item.citations),
+                "official_source": item.provider == OFFICIAL_SIGNAL_PROVIDER,
             }
         )
 

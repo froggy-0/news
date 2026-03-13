@@ -40,12 +40,15 @@ def _needs_web_search_backfill(quality: dict) -> bool:
         return False
 
     perplexity_item_count = int(quality.get("perplexity_item_count", 0))
+    official_signal_count = int(quality.get("official_signal_count", 0))
+    trusted_signal_count = int(quality.get("preferred_news_count", 0)) + official_signal_count
+    authoritative_signal_count = int(quality.get("tier_1_news_count", 0)) + official_signal_count
 
     return any(
         [
             int(quality.get("news_count", 0)) < 3,
-            int(quality.get("preferred_news_count", 0)) < 2,
-            int(quality.get("tier_1_news_count", 0)) < 1,
+            trusted_signal_count < 2,
+            authoritative_signal_count < 1,
             int(quality.get("unique_news_domains", 0)) < 3,
             int(quality.get("fresh_news_count", 0)) < 2,
             perplexity_item_count > 0 and int(quality.get("topic_coverage_count", 0)) < 2,

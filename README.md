@@ -62,8 +62,13 @@ cp .env.example .env
 - `FRED_API_KEY` (권장, 매크로 공식 소스)
 - `ALPHA_VANTAGE_API_KEY` (선택 권장, 미국 주식/ETF 일봉 API 소스)
 - `PERPLEXITY_API_KEY` (Perplexity Search API 키)
+- `GROK_API_KEY` (검증된 공식 X 시그널 조회용)
+- `GROK_MODEL` (기본 `grok-4.20-beta-latest-non-reasoning`)
 - `RESEARCH_PROVIDER` (기본 `perplexity`, 토픽별 Search API를 먼저 조회)
 - `ENABLE_LEGACY_NEWS_FALLBACK` (기본 `true`, 품질 비교 기간에는 켜두는 것을 권장)
+- `ENABLE_OFFICIAL_X_SIGNALS` (기본 `true`, 검증된 공식 X 계정만 조회)
+- `OFFICIAL_X_LOOKBACK_HOURS` (기본 `48`, 공식 X 조회 범위)
+- `OFFICIAL_X_MAX_ITEMS` (기본 `4`, 공식 X 시그널 최대 반영 수)
 - `GMAIL_SENDER`
 - `GMAIL_RECIPIENT` (`user1@example.com,user2@example.com` 형식으로 다중 수신자 가능)
 - `GMAIL_CREDENTIALS_FILE` (기본 `credentials.json`)
@@ -103,10 +108,11 @@ python3 main.py schedule
 
 ## 5) 출력
 - 파일 저장: `outputs/brief_YYYYMMDD_HHMM.md`
-- 이메일 제목: `Morning Market Brief | YYYY-MM-DD`
+- 이메일 제목: `미국 기술주·비트코인 시장 브리핑 (YYYY-MM-DD)`
 - 데이터 커버리지 저하 시 제목 아래 `[데이터 품질 알림]` 자동 표시
 - 이메일 본문: HTML + plain text fallback 동시 전송
 - 비트코인 ETF 공식 보유량/순유입: 발행사 공식 페이지 스냅샷을 캐시와 비교해 계산
+- 검증된 공식 X 시그널: allowlist에 등록된 공식 계정만 Grok `x_search`로 확인해 뉴스와 함께 반영
 
 ## 6) 테스트
 ```bash
@@ -137,6 +143,7 @@ pytest -q
 선택 GitHub Secrets:
 - `ALPHA_VANTAGE_API_KEY`
 - `PERPLEXITY_API_KEY`
+- `GROK_API_KEY`
 - `NEWSAPI_KEY`
 
 선택 GitHub Variables:
@@ -153,6 +160,10 @@ pytest -q
 - `OPENAI_WEB_SEARCH_MAX_RESULTS` (기본 `3`)
 - `RESEARCH_PROVIDER` (기본 `perplexity`)
 - `ENABLE_LEGACY_NEWS_FALLBACK` (기본 `true`)
+- `GROK_MODEL` (기본 `grok-4.20-beta-latest-non-reasoning`)
+- `ENABLE_OFFICIAL_X_SIGNALS` (기본 `true`)
+- `OFFICIAL_X_LOOKBACK_HOURS` (기본 `48`)
+- `OFFICIAL_X_MAX_ITEMS` (기본 `4`)
 
 워크플로우는 `.cache/btc_etf/official_snapshots.json`을 GitHub Actions 캐시로 복원/저장합니다.
 이 파일을 기준으로 다음 실행에서 비트코인 ETF 공식 보유량의 전일 대비 순유입/순유출을 계산합니다.

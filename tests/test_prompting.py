@@ -23,6 +23,16 @@ def test_render_brief_prompts_contains_contract_and_packet(monkeypatch):
                 "summary": "Fed 관련 기사예요.",
                 "why_it_matters": "금리 흐름을 읽는 데 도움이 되는 기사예요.",
                 "citations": ["https://www.reuters.com/example"],
+            },
+            {
+                "title": "Official update",
+                "source": "@AMD",
+                "topic": "ai_bigtech",
+                "provider": "grok_official_x",
+                "official_source": True,
+                "summary": "AMD 공식 계정이 투자 계획을 다시 설명했어요.",
+                "why_it_matters": "공식 채널 확인이라 해석의 우선 근거가 돼요.",
+                "citations": ["https://x.com/AMD/status/1"],
             }
         ],
         "data_quality": {"status": "ok", "warnings": []},
@@ -38,6 +48,7 @@ def test_render_brief_prompts_contains_contract_and_packet(monkeypatch):
     assert '"macro":[{"label":"US2Y","price":4.12,"change_pct":0.11}]' in user_prompt
     assert '"topic":"macro"' in user_prompt
     assert '"why_it_matters":"금리 흐름을 읽는 데 도움이 되는 기사예요."' in user_prompt
+    assert '"official_signals"' in user_prompt
 
 
 def test_prompt_cache_key_is_stable_and_sanitized(monkeypatch):

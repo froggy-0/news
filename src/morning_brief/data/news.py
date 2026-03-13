@@ -10,6 +10,7 @@ from morning_brief.data.data_quality import (
     summarize_news_packet_quality,
 )
 from morning_brief.data.news_packet import (
+    OFFICIAL_SIGNAL_PROVIDER,
     merge_news_packets as _merge_news_packets,
     news_items_to_packet as _news_items_to_packet,
     packet_item_to_news_item as _packet_item_to_news_item,
@@ -34,6 +35,7 @@ from morning_brief.data.sources.http_client import HttpFetchError
 from morning_brief.data.sources.google_news_rss import fetch_news_from_google_rss
 from morning_brief.data.sources.newsapi_provider import fetch_news_from_newsapi
 from morning_brief.data.sources.perplexity_search import fetch_news_from_perplexity
+from morning_brief.data.sources.grok_official_signals import fetch_official_x_signals
 from morning_brief.data.news_rollout import (
     record_news_rollout_run,
     should_reduce_legacy_broad_fallback,
@@ -41,6 +43,8 @@ from morning_brief.data.news_rollout import (
 from morning_brief.models import NewsItem
 
 logger = logging.getLogger(__name__)
+PERPLEXITY_PROVIDER = "perplexity_search"
+
 
 def _normalize_url(url: str) -> str:
     parsed = urlparse(url.strip())
@@ -96,7 +100,13 @@ def _keyword_score(title: str) -> float:
 
 
 def _item_score(item: NewsItem) -> float:
-    return _domain_score(item.url) + _recency_score(item.published_at) + _keyword_score(item.title)
+    provider_bonus = 4.2 if item.provider == OFFICIAL_SIGNAL_PROVIDER else 0.0
+    return (
+        _domain_score(item.url)
+        + _recency_score(item.published_at)
+        + _keyword_score(item.title)
+        + provider_bonus
+    )
 
 
 
@@ -117,7 +127,11 @@ def _apply_domain_diversity_limit(items: list[NewsItem], max_items: int) -> list
     per_domain: dict[str, int] = {}
 
     for item in items:
-        domain = _extract_domain(item.url)
+        domain = (
+            f"{OFFICIAL_SIGNAL_PROVIDER}:{item.source.lower()}"
+            if item.provider == OFFICIAL_SIGNAL_PROVIDER
+            else _extract_domain(item.url)
+        )
         count = per_domain.get(domain, 0)
         if count >= MAX_ITEMS_PER_DOMAIN:
             continue
@@ -231,9 +245,14 @@ def _provider_breakdown(items: list[NewsItem]) -> dict[str, int]:
 
 def _provider_counts(items: list[NewsItem]) -> tuple[int, int, dict[str, int]]:
     breakdown = _provider_breakdown(items)
-    perplexity_count = breakdown.get("perplexity_search", 0)
-    legacy_count = sum(count for provider, count in breakdown.items() if provider != "perplexity_search")
-    return perplexity_count, legacy_count, breakdown
+    perplexity_count = breakdown.get(PERPLEXITY_PROVIDER, 0)
+    official_signal_count = breakdown.get(OFFICIAL_SIGNAL_PROVIDER, 0)
+    legacy_count = sum(
+        count
+        for provider, count in breakdown.items()
+        if provider not in {PERPLEXITY_PROVIDER, OFFICIAL_SIGNAL_PROVIDER}
+    )
+    return perplexity_count, official_signal_count, legacy_count, breakdown
 
 
 def _packet_summary(items: list[NewsItem]) -> tuple[list[dict], dict]:
@@ -250,6 +269,21 @@ def _needs_full_legacy_backfill(fallback_review: dict) -> bool:
             int(fallback_review.get("citation_backed_count", 0)) == 0,
         ]
     )
+
+
+def _collect_official_signal_items(settings: Settings) -> list[NewsItem]:
+    if not settings.enable_official_x_signals or not settings.grok_api_key:
+        return []
+
+    items = fetch_official_x_signals(
+        api_key=settings.grok_api_key,
+        model=settings.grok_model,
+        lookback_hours=settings.official_x_lookback_hours,
+        max_items=settings.official_x_max_items,
+    )
+    if items:
+        logger.info("검증된 공식 X 시그널 %s건을 함께 반영했어요.", len(items))
+    return items
 
 
 
@@ -318,6 +352,7 @@ def merge_news_packets(existing_packet: list[dict], extra_items: list[NewsItem],
 def build_news_packet(*, settings: Settings) -> list[dict]:
     items: list[NewsItem] = []
     legacy_items: list[NewsItem] = []
+    official_signal_items = _collect_official_signal_items(settings)
     allow_broad_fallback = True
     fallback_review: dict | None = None
 
@@ -326,6 +361,8 @@ def build_news_packet(*, settings: Settings) -> list[dict]:
             max_items=settings.max_news_items,
             api_key=settings.perplexity_api_key,
         )
+        if official_signal_items:
+            items = _merge_rank(items, official_signal_items, max_items=settings.max_news_items)
         items = _dedup_and_rank(items, max_items=settings.max_news_items)
         packet, _ = _packet_summary(items)
         fallback_review = assess_perplexity_fallback_need(packet)
@@ -335,7 +372,7 @@ def build_news_packet(*, settings: Settings) -> list[dict]:
                 reduce_broad_fallback and not _needs_full_legacy_backfill(fallback_review)
             )
             logger.info(
-                "Perplexity 결과를 살펴보니 %s. legacy 뉴스로 빈 부분을 함께 채울게요.",
+                "Perplexity와 공식 시그널 결과를 살펴보니 %s. legacy 뉴스로 빈 부분을 함께 채울게요.",
                 "; ".join(fallback_review["reasons"]),
             )
             if reduce_broad_fallback and not allow_broad_fallback:
@@ -354,7 +391,7 @@ def build_news_packet(*, settings: Settings) -> list[dict]:
             )
         else:
             logger.info(
-                "Perplexity 결과만으로도 기사 %s건, 도메인 %s개, 토픽 %s개 기준을 채웠어요.",
+                "Perplexity와 공식 시그널만으로도 기사 %s건, 도메인 %s개, 토픽 %s개 기준을 채웠어요.",
                 fallback_review["count"],
                 fallback_review["unique_domains"],
                 fallback_review["topic_coverage_count"],
@@ -364,14 +401,15 @@ def build_news_packet(*, settings: Settings) -> list[dict]:
             max_items=settings.max_news_items,
             newsapi_key=settings.newsapi_key,
         )
-        items = legacy_items
+        items = _merge_rank(legacy_items, official_signal_items, max_items=settings.max_news_items)
 
     if items:
         packet, final_summary = _packet_summary(items)
-        perplexity_count, legacy_count, provider_breakdown = _provider_counts(items)
+        perplexity_count, official_signal_count, legacy_count, provider_breakdown = _provider_counts(items)
         logger.info(
-            "최종 뉴스 구성은 Perplexity %s건, legacy %s건이었고 도메인 %s개, 토픽 %s개, provider 비중 %s로 정리됐어요.",
+            "최종 뉴스 구성은 Perplexity %s건, 공식 시그널 %s건, legacy %s건이었고 도메인 %s개, 토픽 %s개, provider 비중 %s로 정리됐어요.",
             perplexity_count,
+            official_signal_count,
             legacy_count,
             final_summary["unique_domains"],
             final_summary["topic_coverage_count"],

@@ -9,6 +9,7 @@ MIN_UNIQUE_NEWS_DOMAINS = 3
 MIN_FRESH_NEWS_ITEMS = 2
 MIN_TOPIC_COVERAGE = 2
 PERPLEXITY_PROVIDER = "perplexity_search"
+OFFICIAL_SIGNAL_PROVIDER = "grok_official_x"
 
 
 def _safe_price(value: object) -> float:
@@ -26,6 +27,7 @@ def summarize_news_packet_quality(packet: list[dict]) -> dict:
     citation_backed_count = 0
     explained_count = 0
     perplexity_item_count = 0
+    official_signal_count = 0
     unique_domains: set[str] = set()
     unique_topics: set[str] = set()
 
@@ -41,9 +43,14 @@ def summarize_news_packet_quality(packet: list[dict]) -> dict:
         if str(item.get("source_tier", "")).strip().lower() == "tier_1":
             tier_1_count += 1
 
-        domain = str(item.get("domain", "")).strip().lower()
-        if domain:
-            unique_domains.add(domain)
+        if bool(item.get("official_source")):
+            source = str(item.get("source", "")).strip().lower()
+            if source:
+                unique_domains.add(f"official:{source}")
+        else:
+            domain = str(item.get("domain", "")).strip().lower()
+            if domain:
+                unique_domains.add(domain)
 
         topic = str(item.get("topic", "")).strip().lower()
         if topic:
@@ -52,6 +59,8 @@ def summarize_news_packet_quality(packet: list[dict]) -> dict:
         provider = str(item.get("provider", "")).strip().lower()
         if provider == PERPLEXITY_PROVIDER:
             perplexity_item_count += 1
+        if provider == OFFICIAL_SIGNAL_PROVIDER or bool(item.get("official_source")):
+            official_signal_count += 1
 
         citations = item.get("citations", [])
         if isinstance(citations, list) and any(str(value).strip() for value in citations):
@@ -77,6 +86,7 @@ def summarize_news_packet_quality(packet: list[dict]) -> dict:
         "citation_backed_count": citation_backed_count,
         "explained_count": explained_count,
         "perplexity_item_count": perplexity_item_count,
+        "official_signal_count": official_signal_count,
     }
 
 
@@ -132,6 +142,8 @@ def assess_data_quality(packet: dict, news_packet: list[dict]) -> dict:
 
     zero_ratio = (len(zero_points) / len(numeric_points)) if numeric_points else 1.0
     news_quality = summarize_news_packet_quality(news_packet)
+    trusted_signal_count = news_quality["preferred_count"] + news_quality["official_signal_count"]
+    authoritative_signal_count = news_quality["tier_1_count"] + news_quality["official_signal_count"]
 
     warnings: list[str] = []
     if zero_ratio >= 0.6:
@@ -140,12 +152,12 @@ def assess_data_quality(packet: dict, news_packet: list[dict]) -> dict:
         warnings.append(
             f"핵심 뉴스가 {news_quality['count']}건으로 최소 기준({MIN_NEWS_ITEMS}건) 미달입니다"
         )
-    if news_quality["count"] >= MIN_NEWS_ITEMS and news_quality["preferred_count"] < MIN_PREFERRED_NEWS_ITEMS:
+    if news_quality["count"] >= MIN_NEWS_ITEMS and trusted_signal_count < MIN_PREFERRED_NEWS_ITEMS:
         warnings.append(
-            f"우선 신뢰 출처 뉴스가 {news_quality['preferred_count']}건으로 충분하지 않습니다"
+            "우선 신뢰 출처 뉴스와 공식 시그널을 합쳐도 충분하지 않습니다"
         )
-    if news_quality["count"] >= MIN_NEWS_ITEMS and news_quality["tier_1_count"] < MIN_TIER_1_NEWS_ITEMS:
-        warnings.append("최상위 신뢰 출처(Reuters/Bloomberg/WSJ/FT) 기사가 없습니다")
+    if news_quality["count"] >= MIN_NEWS_ITEMS and authoritative_signal_count < MIN_TIER_1_NEWS_ITEMS:
+        warnings.append("최상위 신뢰 출처나 공식 시그널이 없습니다")
     if news_quality["count"] >= MIN_NEWS_ITEMS and news_quality["unique_domains"] < MIN_UNIQUE_NEWS_DOMAINS:
         warnings.append(
             f"뉴스 출처 다양성이 낮습니다({news_quality['unique_domains']}개 도메인)"
@@ -174,4 +186,5 @@ def assess_data_quality(packet: dict, news_packet: list[dict]) -> dict:
         "citation_backed_count": news_quality["citation_backed_count"],
         "explained_count": news_quality["explained_count"],
         "perplexity_item_count": news_quality["perplexity_item_count"],
+        "official_signal_count": news_quality["official_signal_count"],
     }

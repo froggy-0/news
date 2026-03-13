@@ -61,6 +61,7 @@ def _build_news_focus(packet: dict) -> dict:
 
     top_items = []
     topics: dict[str, list[dict]] = {}
+    official_signals: list[dict] = []
     for raw_item in news[:5]:
         if not isinstance(raw_item, dict):
             continue
@@ -70,6 +71,8 @@ def _build_news_focus(packet: dict) -> dict:
             "topic": str(raw_item.get("topic", "")).strip() or "general",
             "summary": str(raw_item.get("summary", "")).strip(),
             "why_it_matters": str(raw_item.get("why_it_matters", "")).strip(),
+            "provider": str(raw_item.get("provider", "")).strip(),
+            "official_source": bool(raw_item.get("official_source")),
             "source_tier": str(raw_item.get("source_tier", "")).strip(),
             "preferred_source": bool(raw_item.get("preferred_source")),
             "citations": [
@@ -84,8 +87,10 @@ def _build_news_focus(packet: dict) -> dict:
             continue
         top_items.append(item)
         topics.setdefault(item["topic"], []).append(item)
+        if item["official_source"] or item["provider"] == "grok_official_x":
+            official_signals.append(item)
 
-    return {"top_items": top_items, "topics": topics}
+    return {"top_items": top_items, "topics": topics, "official_signals": official_signals}
 
 
 def render_brief_prompts(packet: dict, settings: Settings) -> tuple[str, str]:

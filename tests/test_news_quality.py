@@ -93,6 +93,25 @@ def test_dedup_and_rank_limits_single_domain_concentration():
     assert reuters_count == 2
 
 
+def test_dedup_and_rank_keeps_multiple_official_x_sources():
+    now = datetime.now(timezone.utc)
+    items = [
+        NewsItem(
+            title=f"Official signal {index}",
+            url=f"https://x.com/source{index}/status/{index}",
+            source=f"@Source{index}",
+            published_at=now - timedelta(minutes=index),
+            provider="grok_official_x",
+        )
+        for index in range(3)
+    ]
+
+    ranked = news._dedup_and_rank(items, max_items=3)
+
+    assert len(ranked) == 3
+    assert {item.source for item in ranked} == {"@Source0", "@Source1", "@Source2"}
+
+
 def test_collect_from_rss_uses_passed_candidate_limit(monkeypatch):
     captured: dict[str, object] = {}
     monkeypatch.setattr(
@@ -268,6 +287,78 @@ def test_build_news_packet_skips_legacy_when_perplexity_quality_is_good(monkeypa
     packet = news.build_news_packet(settings=load_settings())
 
     assert len(packet) == 4
+    assert {item["topic"] for item in packet} == {"macro", "us_equity", "ai_bigtech", "bitcoin"}
+
+
+def test_build_news_packet_merges_official_x_signals_before_legacy(monkeypatch):
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")
+    monkeypatch.setenv("ENABLE_LEGACY_NEWS_FALLBACK", "true")
+    monkeypatch.setenv("ENABLE_OFFICIAL_X_SIGNALS", "true")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
+    monkeypatch.setenv("GROK_API_KEY", "grok-test-key")
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news_from_perplexity",
+        lambda **_: [
+            NewsItem(
+                title="Fed tone stays steady",
+                url="https://www.reuters.com/world/us/fed-tone-stays-steady",
+                source="Reuters",
+                published_at=now,
+                topic="macro",
+                provider="perplexity_search",
+                why_it_matters="금리 경로를 읽는 데 도움이 돼요.",
+                citations=["https://www.reuters.com/world/us/fed-tone-stays-steady"],
+            ),
+            NewsItem(
+                title="Nasdaq closes firmer",
+                url="https://www.cnbc.com/2026/03/13/nasdaq-closes-firmer.html",
+                source="CNBC",
+                published_at=now - timedelta(hours=1),
+                topic="us_equity",
+                provider="perplexity_search",
+                why_it_matters="미국 증시 흐름을 읽는 데 도움이 돼요.",
+                citations=["https://www.cnbc.com/2026/03/13/nasdaq-closes-firmer.html"],
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_official_x_signals",
+        lambda **_: [
+            NewsItem(
+                title="AMD가 데이터센터 투자 계획을 다시 확인했어요",
+                url="https://x.com/AMD/status/1",
+                source="@AMD",
+                published_at=now - timedelta(minutes=30),
+                topic="ai_bigtech",
+                provider="grok_official_x",
+                summary="공식 계정이 투자 계획을 다시 설명했어요.",
+                why_it_matters="AI 투자 기대를 해석할 때 직접 참고할 수 있어요.",
+                citations=["https://x.com/AMD/status/1"],
+            ),
+            NewsItem(
+                title="Fidelity가 ETF 운용 업데이트를 올렸어요",
+                url="https://x.com/Fidelity/status/2",
+                source="@Fidelity",
+                published_at=now - timedelta(minutes=20),
+                topic="bitcoin",
+                provider="grok_official_x",
+                summary="공식 계정이 ETF 관련 업데이트를 공지했어요.",
+                why_it_matters="ETF 수급 해석에 바로 연결할 수 있어요.",
+                citations=["https://x.com/Fidelity/status/2"],
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news",
+        lambda **_: (_ for _ in ()).throw(AssertionError("legacy fetch should not run")),
+    )
+
+    packet = news.build_news_packet(settings=load_settings())
+
+    assert len(packet) == 4
+    assert {item["provider"] for item in packet} == {"perplexity_search", "grok_official_x"}
+    assert sum(1 for item in packet if item["official_source"] is True) == 2
     assert {item["topic"] for item in packet} == {"macro", "us_equity", "ai_bigtech", "bitcoin"}
 
 
@@ -448,4 +539,5 @@ def test_summarize_news_packet_quality_counts_reliability_fields():
         "citation_backed_count": 1,
         "explained_count": 1,
         "perplexity_item_count": 1,
+        "official_signal_count": 0,
     }

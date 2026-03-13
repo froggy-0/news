@@ -111,6 +111,54 @@ def test_assess_data_quality_degraded_when_news_reliability_is_low():
     assert quality["fresh_news_count"] == 0
 
 
+def test_assess_data_quality_accepts_official_signals_as_authoritative_sources():
+    packet = _base_packet(price=10.0)
+    news_packet = [
+        {
+            "title": "Macro recap",
+            "preferred_source": True,
+            "source_tier": "tier_2",
+            "domain": "cnbc.com",
+            "age_hours": 4.0,
+            "topic": "macro",
+            "provider": "perplexity_search",
+            "why_it_matters": "금리 흐름을 읽는 데 도움이 돼요.",
+            "citations": ["https://www.cnbc.com/macro.html"],
+        },
+        {
+            "title": "AMD official update",
+            "preferred_source": False,
+            "source_tier": "tier_3",
+            "domain": "x.com",
+            "source": "@AMD",
+            "age_hours": 2.0,
+            "topic": "ai_bigtech",
+            "provider": "grok_official_x",
+            "official_source": True,
+            "why_it_matters": "공식 투자 계획 확인에 직접 참고할 수 있어요.",
+            "citations": ["https://x.com/AMD/status/1"],
+        },
+        {
+            "title": "Fidelity official update",
+            "preferred_source": False,
+            "source_tier": "tier_3",
+            "domain": "x.com",
+            "source": "@Fidelity",
+            "age_hours": 1.5,
+            "topic": "bitcoin",
+            "provider": "grok_official_x",
+            "official_source": True,
+            "why_it_matters": "ETF 수급 해석에 바로 연결할 수 있어요.",
+            "citations": ["https://x.com/Fidelity/status/2"],
+        },
+    ]
+
+    quality = _assess_data_quality(packet=packet, news_packet=news_packet)
+
+    assert quality["status"] == "ok"
+    assert quality["official_signal_count"] == 2
+
+
 def test_assess_data_quality_degraded_when_perplexity_topic_coverage_is_narrow():
     packet = _base_packet(price=10.0)
     news_packet = [
