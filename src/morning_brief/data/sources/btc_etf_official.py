@@ -5,10 +5,28 @@ import json
 import logging
 import re
 from dataclasses import asdict
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
+from typing import Any
 
-from morning_brief.data.sources.http_client import HttpFetchError, get_text_with_retry
+from perplexity import (
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    Perplexity,
+    RateLimitError,
+)
+
+from morning_brief.data.sources.domain_utils import domain_matches, normalize_domain
+from morning_brief.data.sources.http_client import HttpFetchError
+from morning_brief.data.sources.provider_runtime import (
+    disabled_reason,
+    execute_with_provider_retry,
+    open_circuit,
+    parse_retry_after_seconds,
+    policy_for,
+    record_skip,
+)
 from morning_brief.models import BitcoinEtfIssuerSnapshot
 
 logger = logging.getLogger(__name__)
@@ -17,6 +35,38 @@ IBIT_URL = "https://www.ishares.com/us/products/333011/ishares-bitcoin-trust-etf
 BITB_URL = "https://bitbetf.com/"
 GBTC_URL = "https://etfs.grayscale.com/gbtc"
 IBIT_CREATION_BASKET_SHARES = 40_000
+PERPLEXITY_PROVIDER = "perplexity"
+BTC_ETF_REFERENCE_MODEL = "sonar"
+BTC_ETF_REFERENCE_DOMAINS = (
+    "ishares.com",
+    "bitbetf.com",
+    "etfs.grayscale.com",
+)
+BTC_ETF_REFERENCE_PROMPT = """
+Return only JSON with this exact schema:
+{
+  "snapshots": [
+    {
+      "ticker": "IBIT",
+      "issuer": "iShares",
+      "source_url": "https://...",
+      "as_of": "MM/DD/YYYY",
+      "shares_outstanding": 0,
+      "daily_volume": 0,
+      "aum_usd": 0,
+      "total_btc": 0,
+      "bitcoin_per_share": 0
+    }
+  ]
+}
+
+Task:
+- Find the latest available official spot Bitcoin ETF issuer data for IBIT, BITB, and GBTC.
+- Use only official issuer domains.
+- Include an item only if you can provide all numeric fields and a direct official source URL.
+- Prefer the most recent daily snapshot available as of {today}.
+- Do not include commentary, markdown, or citations outside the JSON.
+""".strip()
 
 DATE_RE = r"(?:[A-Z][a-z]{2}\s+\d{1,2},\s+\d{4}|\d{2}/\d{2}/\d{4})"
 VALUE_RE = r"\$?[\d,]+(?:\.\d+)?(?:[MB])?"
@@ -215,25 +265,261 @@ def parse_gbtc_snapshot(text: str) -> BitcoinEtfIssuerSnapshot:
     )
 
 
-def fetch_official_btc_etf_snapshots() -> list[BitcoinEtfIssuerSnapshot]:
-    issuers = [
-        ("IBIT", IBIT_URL, parse_ibit_snapshot),
-        ("BITB", BITB_URL, parse_bitb_snapshot),
-        ("GBTC", GBTC_URL, parse_gbtc_snapshot),
-    ]
-    snapshots: list[BitcoinEtfIssuerSnapshot] = []
-    for ticker, url, parser in issuers:
+def _build_client(api_key: str) -> Perplexity:
+    return Perplexity(api_key=api_key, timeout=25, max_retries=1)
+
+
+def _format_status_error(exc: APIStatusError) -> str:
+    status_code = getattr(exc, "status_code", "unknown")
+    response = getattr(exc, "response", None)
+    detail = ""
+    if response is not None:
         try:
-            page_text = get_text_with_retry(
-                url,
-                provider="btc_etf_official",
-                timeout=20,
+            detail = str(response.text).strip()
+        except Exception:
+            detail = ""
+    if detail:
+        detail = " ".join(detail.split())[:240]
+        return f"status={status_code}, detail={detail}"
+    return f"status={status_code}"
+
+
+def _retry_after_seconds_from_exception(exc: Exception) -> float | None:
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None)
+    if isinstance(headers, dict):
+        return parse_retry_after_seconds(headers.get("Retry-After") or headers.get("retry-after"))
+    return None
+
+
+def _to_http_fetch_error(exc: Exception) -> HttpFetchError:
+    if isinstance(exc, RateLimitError):
+        message = f"Perplexity ETF 참조 요청 한도에 걸렸어요: {_format_status_error(exc)}"
+        open_circuit(PERPLEXITY_PROVIDER, message)
+        return HttpFetchError(
+            message,
+            provider=PERPLEXITY_PROVIDER,
+            retryable=False,
+            rate_limited=True,
+            retry_after_seconds=_retry_after_seconds_from_exception(exc),
+        )
+
+    if isinstance(exc, APITimeoutError):
+        return HttpFetchError(
+            "Perplexity ETF 참조 응답 시간이 너무 오래 걸렸어요.",
+            provider=PERPLEXITY_PROVIDER,
+            retryable=True,
+        )
+
+    if isinstance(exc, APIConnectionError):
+        return HttpFetchError(
+            "Perplexity ETF 참조 연결을 열지 못했어요.",
+            provider=PERPLEXITY_PROVIDER,
+            retryable=True,
+        )
+
+    if isinstance(exc, APIStatusError):
+        status_code = getattr(exc, "status_code", None)
+        retry_after_seconds = _retry_after_seconds_from_exception(exc)
+        if status_code == 429:
+            message = f"Perplexity ETF 참조 요청 한도에 걸렸어요: {_format_status_error(exc)}"
+            open_circuit(PERPLEXITY_PROVIDER, message)
+            return HttpFetchError(
+                message,
+                provider=PERPLEXITY_PROVIDER,
+                retryable=False,
+                rate_limited=True,
+                retry_after_seconds=retry_after_seconds,
             )
-            snapshots.append(parser(page_text))
-        except Exception as exc:
-            logger.warning("공식 BTC ETF 발행사 페이지를 건너뛸게요. ticker=%s | %s", ticker, exc)
+        return HttpFetchError(
+            f"Perplexity ETF 참조 요청이 거절됐어요: {_format_status_error(exc)}",
+            provider=PERPLEXITY_PROVIDER,
+            retryable=status_code in policy_for(PERPLEXITY_PROVIDER).retryable_statuses,
+            retry_after_seconds=retry_after_seconds,
+        )
+
+    return HttpFetchError(
+        f"Perplexity ETF 참조 데이터를 가져오지 못했어요: {exc}",
+        provider=PERPLEXITY_PROVIDER,
+        retryable=False,
+    )
+
+
+def _extract_response_text(payload: dict[str, Any]) -> str:
+    output_text = payload.get("output_text")
+    if isinstance(output_text, str) and output_text.strip():
+        return output_text.strip()
+
+    choices = payload.get("choices")
+    if isinstance(choices, list) and choices:
+        first = choices[0]
+        if isinstance(first, dict):
+            message = first.get("message")
+            if isinstance(message, dict):
+                content = message.get("content")
+                if isinstance(content, str) and content.strip():
+                    return content.strip()
+                if isinstance(content, list):
+                    parts: list[str] = []
+                    for item in content:
+                        if isinstance(item, dict):
+                            text = str(item.get("text", "")).strip()
+                            if text:
+                                parts.append(text)
+                    if parts:
+                        return "\n".join(parts)
+
+    raise HttpFetchError("Perplexity ETF 참조 응답에서 JSON 본문을 찾지 못했어요.")
+
+
+def _parse_numeric(value: object, *, integer: bool = False) -> int | float:
+    if isinstance(value, (int, float)):
+        return int(value) if integer else float(value)
+
+    normalized = str(value or "").strip().replace(",", "").replace("$", "")
+    if not normalized:
+        raise ValueError("값이 비어 있어요.")
+    numeric = float(normalized)
+    return int(round(numeric)) if integer else numeric
+
+
+def _is_allowed_official_url(url: str) -> bool:
+    domain = normalize_domain(url)
+    return any(domain_matches(domain, candidate) for candidate in BTC_ETF_REFERENCE_DOMAINS)
+
+
+def _snapshot_from_item(item: dict[str, Any]) -> BitcoinEtfIssuerSnapshot:
+    ticker = str(item.get("ticker", "")).strip().upper()
+    source_url = str(item.get("source_url", "")).strip()
+    as_of = str(item.get("as_of", "")).strip()
+    issuer = str(item.get("issuer", "")).strip() or ticker
+    if not ticker or not source_url or not as_of or not _is_allowed_official_url(source_url):
+        raise ValueError("필수 ETF 참조 필드가 없거나 공식 도메인이 아니에요.")
+
+    shares_outstanding = int(_parse_numeric(item.get("shares_outstanding"), integer=True))
+    daily_volume = int(_parse_numeric(item.get("daily_volume"), integer=True))
+    aum_usd = float(_parse_numeric(item.get("aum_usd")))
+    total_btc = float(_parse_numeric(item.get("total_btc")))
+    bitcoin_per_share_raw = item.get("bitcoin_per_share")
+    if bitcoin_per_share_raw in (None, ""):
+        bitcoin_per_share = total_btc / shares_outstanding
+    else:
+        bitcoin_per_share = float(_parse_numeric(bitcoin_per_share_raw))
+
+    if shares_outstanding <= 0 or daily_volume < 0 or aum_usd <= 0 or total_btc <= 0:
+        raise ValueError("ETF 참조 수치가 유효 범위를 벗어나요.")
+
+    return BitcoinEtfIssuerSnapshot(
+        ticker=ticker,
+        issuer=issuer,
+        source_url=source_url,
+        as_of=as_of,
+        shares_outstanding=shares_outstanding,
+        daily_volume=daily_volume,
+        aum_usd=round(aum_usd, 2),
+        total_btc=round(total_btc, 8),
+        bitcoin_per_share=round(bitcoin_per_share, 10),
+    )
+
+
+def _parse_reference_snapshot_response(payload: dict[str, Any]) -> list[BitcoinEtfIssuerSnapshot]:
+    text = _extract_response_text(payload)
+    try:
+        decoded = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise HttpFetchError("Perplexity ETF 참조 JSON을 읽지 못했어요.") from exc
+
+    if not isinstance(decoded, dict):
+        raise HttpFetchError("Perplexity ETF 참조 JSON 구조가 예상과 달라요.")
+
+    raw_snapshots = decoded.get("snapshots", [])
+    if not isinstance(raw_snapshots, list):
+        raise HttpFetchError("Perplexity ETF 참조 JSON에 snapshots 배열이 없어요.")
+
+    snapshots: list[BitcoinEtfIssuerSnapshot] = []
+    for raw_item in raw_snapshots:
+        if not isinstance(raw_item, dict):
+            continue
+        try:
+            snapshots.append(_snapshot_from_item(raw_item))
+        except ValueError as exc:
+            logger.warning("Perplexity ETF 참조 항목을 건너뛸게요: %s", exc)
+
     snapshots.sort(key=lambda item: item.ticker)
     return snapshots
+
+
+def _request_reference_snapshots(api_key: str) -> list[BitcoinEtfIssuerSnapshot]:
+    if not api_key:
+        logger.info("Perplexity API 키가 없어 BTC ETF 참조 스냅샷은 건너뛸게요.")
+        return []
+
+    unavailable_reason = disabled_reason(PERPLEXITY_PROVIDER)
+    if unavailable_reason:
+        record_skip(PERPLEXITY_PROVIDER)
+        raise HttpFetchError(
+            f"Perplexity는 이번 실행에서 더 이상 쓰지 않을게요: {unavailable_reason}"
+        )
+
+    client = _build_client(api_key)
+
+    def request_once() -> list[BitcoinEtfIssuerSnapshot]:
+        try:
+            response = client.chat.completions.create(
+                model=BTC_ETF_REFERENCE_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You normalize financial reference data into strict JSON.",
+                    },
+                    {
+                        "role": "user",
+                        "content": BTC_ETF_REFERENCE_PROMPT.format(today=date.today().isoformat()),
+                    },
+                ],
+                search_domain_filter=list(BTC_ETF_REFERENCE_DOMAINS),
+                search_recency_filter="month",
+                search_mode="web",
+                country="US",
+                temperature=0.0,
+                max_tokens=900,
+                response_format={"type": "json_object"},
+            )
+        except (RateLimitError, APITimeoutError, APIConnectionError, APIStatusError) as exc:
+            raise _to_http_fetch_error(exc) from exc
+
+        try:
+            payload = response.model_dump()
+        except AttributeError:
+            if isinstance(response, dict):
+                payload = response
+            else:
+                raise HttpFetchError("Perplexity ETF 참조 응답 구조가 예상과 달라요.")
+
+        if not isinstance(payload, dict):
+            raise HttpFetchError("Perplexity ETF 참조 응답 구조가 예상과 달라요.")
+
+        return _parse_reference_snapshot_response(payload)
+
+    return execute_with_provider_retry(
+        provider=PERPLEXITY_PROVIDER,
+        operation=request_once,
+        should_retry=lambda exc: isinstance(exc, HttpFetchError) and exc.retryable,
+        on_retry=lambda exc, attempt, max_attempts, delay: logger.warning(
+            "Perplexity ETF 참조 데이터를 다시 시도하는 중이에요 (%s/%s). %s | sleep=%.2fs",
+            attempt,
+            max_attempts,
+            exc,
+            delay,
+        ),
+        retry_after_seconds_for_error=lambda exc: exc.retry_after_seconds
+        if isinstance(exc, HttpFetchError)
+        else None,
+    )
+
+
+def fetch_official_btc_etf_snapshots(*, api_key: str = "") -> list[BitcoinEtfIssuerSnapshot]:
+    return _request_reference_snapshots(api_key)
 
 
 def load_official_btc_etf_cache(cache_file: Path) -> dict[str, BitcoinEtfIssuerSnapshot]:

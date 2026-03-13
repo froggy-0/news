@@ -121,7 +121,7 @@ def test_collect_from_rss_uses_passed_candidate_limit(monkeypatch):
     assert captured["max_items"] == 15
 
 
-def test_fetch_news_prefers_rss_before_gdelt(monkeypatch):
+def test_fetch_news_stays_on_rss_path_when_minimum_is_met(monkeypatch):
     rss_item = NewsItem(
         title="Fed signals patience",
         url="https://www.reuters.com/world/us/fed-signals-patience",
@@ -131,9 +131,9 @@ def test_fetch_news_prefers_rss_before_gdelt(monkeypatch):
     )
     monkeypatch.setattr("morning_brief.data.news._collect_from_rss", lambda **_: [rss_item] * 3)
     monkeypatch.setattr(
-        "morning_brief.data.news._collect_from_gdelt",
+        "morning_brief.data.news._collect_from_newsapi",
         lambda **_: (_ for _ in ()).throw(
-            AssertionError("gdelt should not run before rss is exhausted")
+            AssertionError("newsapi should not run when rss already meets the minimum")
         ),
     )
 
@@ -141,6 +141,38 @@ def test_fetch_news_prefers_rss_before_gdelt(monkeypatch):
 
     assert len(items) == 1
     assert items[0].provider == "legacy_rss"
+
+
+def test_fetch_news_uses_broad_rss_without_gdelt(monkeypatch):
+    now = datetime.now(timezone.utc)
+    narrow_item = NewsItem(
+        title="Fed signals patience",
+        url="https://www.reuters.com/world/us/fed-signals-patience",
+        source="Reuters",
+        published_at=now,
+        provider="legacy_rss",
+    )
+    broad_item = NewsItem(
+        title="Semiconductor shares edge higher",
+        url="https://www.cnbc.com/2026/03/14/semiconductor-shares-edge-higher.html",
+        source="CNBC",
+        published_at=now - timedelta(hours=1),
+        provider="legacy_rss",
+    )
+    calls: list[bool] = []
+
+    def fake_collect_from_rss(*, preferred_only: bool, **_):
+        calls.append(preferred_only)
+        if preferred_only:
+            return [narrow_item]
+        return [broad_item]
+
+    monkeypatch.setattr("morning_brief.data.news._collect_from_rss", fake_collect_from_rss)
+
+    items = news.fetch_news(max_items=3, newsapi_key="", allow_broad_fallback=True)
+
+    assert calls == [True, False]
+    assert {item.provider for item in items} == {"legacy_rss"}
 
 
 def test_collect_from_newsapi_uses_passed_candidate_limit(monkeypatch):

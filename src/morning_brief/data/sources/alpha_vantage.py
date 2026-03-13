@@ -1,10 +1,19 @@
+"""Deprecated adapter kept only for reference.
+
+Alpha Vantage free-tier collection is disabled in the production pipeline due
+to quota instability. Do not re-enable this adapter without a separate source
+review and provider-budget plan.
+"""
+
 from __future__ import annotations
 
-from morning_brief.data.sources.http_client import HttpFetchError, get_json_with_retry
-from morning_brief.data.sources.provider_runtime import disabled_reason, open_circuit
+from morning_brief.data.sources.http_client import HttpFetchError
+from morning_brief.data.sources.provider_runtime import open_circuit
 
-ALPHA_VANTAGE_URL = "https://www.alphavantage.co/query"
 ALPHA_VANTAGE_PROVIDER = "alpha_vantage"
+ALPHA_VANTAGE_DISABLED_REASON = (
+    "Alpha Vantage free tier는 비활성화돼 있어서 더 이상 호출하지 않아요."
+)
 
 
 def _rate_limited_error(message: str) -> HttpFetchError:
@@ -35,45 +44,12 @@ def _extract_daily_series(payload: dict) -> dict[str, dict[str, str]]:
 
 
 def fetch_daily_close_change_volume(symbol: str, api_key: str) -> tuple[float, float, int]:
-    if not api_key:
-        raise ValueError("Alpha Vantage API 키가 필요해요.")
-
-    unavailable_reason = disabled_reason(ALPHA_VANTAGE_PROVIDER)
-    if unavailable_reason:
-        raise HttpFetchError(
-            f"Alpha Vantage는 이번 실행에서 더 이상 쓰지 않을게요: {unavailable_reason}",
-            provider=ALPHA_VANTAGE_PROVIDER,
-        )
-
-    payload = get_json_with_retry(
-        ALPHA_VANTAGE_URL,
-        params={
-            "function": "TIME_SERIES_DAILY",
-            "symbol": symbol,
-            "outputsize": "compact",
-            "apikey": api_key,
-        },
+    open_circuit(ALPHA_VANTAGE_PROVIDER, ALPHA_VANTAGE_DISABLED_REASON)
+    raise HttpFetchError(
+        f"{ALPHA_VANTAGE_DISABLED_REASON} 대상={symbol}",
         provider=ALPHA_VANTAGE_PROVIDER,
-        timeout=20,
+        retryable=False,
     )
-    series = _extract_daily_series(payload)
-    dates = sorted(series.keys(), reverse=True)
-    latest = series[dates[0]]
-    previous = series[dates[1]]
-
-    try:
-        latest_close = float(latest["4. close"])
-        previous_close = float(previous["4. close"])
-        latest_volume = int(float(latest.get("5. volume", 0)))
-    except (KeyError, TypeError, ValueError) as exc:
-        raise HttpFetchError(f"Alpha Vantage OHLC 데이터를 읽지 못했어요: {symbol}") from exc
-
-    if previous_close == 0:
-        change_pct = 0.0
-    else:
-        change_pct = ((latest_close - previous_close) / previous_close) * 100
-
-    return latest_close, change_pct, latest_volume
 
 
 __all__ = [

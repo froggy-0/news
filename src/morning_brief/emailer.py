@@ -14,6 +14,9 @@ from morning_brief.brief_formatting import (
     extract_brief_structure as _extract_brief_structure,
 )
 from morning_brief.brief_formatting import (
+    split_footer_note_block as _split_footer_note_block,
+)
+from morning_brief.brief_formatting import (
     split_reference_block as _split_reference_block,
 )
 from morning_brief.brief_formatting import (
@@ -381,6 +384,29 @@ def _render_reference_block(references: list[str]) -> str:
     )
 
 
+def _render_footer_note_block(notes: list[str]) -> str:
+    if not notes:
+        return ""
+
+    items = "".join(
+        '<li style="margin:0 0 10px 0;padding:0;list-style:none;color:#334155;font-size:14px;line-height:1.7;">'
+        f"{html.escape(note)}"
+        "</li>"
+        for note in notes
+    )
+    return (
+        '<tr><td style="padding:4px 0 16px 0;">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" '
+        'style="border-collapse:separate;border-spacing:0;background:#fffbeb;border:1px solid #fde68a;border-radius:20px;box-shadow:0 10px 24px rgba(15,23,42,0.03);">'
+        '<tr><td style="padding:18px 22px 16px 22px;">'
+        '<div style="font-size:15px;line-height:1.4;font-weight:700;color:#78350f;padding:0 0 12px 0;">데이터 처리 메모</div>'
+        '<ul style="margin:0;padding:0;">'
+        f"{items}"
+        "</ul>"
+        "</td></tr></table></td></tr>"
+    )
+
+
 def _render_masthead_block(display_date: str) -> str:
     return (
         '<tr><td style="padding:0 0 16px 0;">'
@@ -457,6 +483,7 @@ def _render_email_document(
     snapshot_block: str,
     notice_block: str,
     section_rows: list[str],
+    footer_note_block: str,
     reference_block: str,
 ) -> str:
     return f"""<!doctype html>
@@ -497,6 +524,7 @@ def _render_email_document(
             {snapshot_block}
             {notice_block}
             {"".join(section_rows)}
+            {footer_note_block}
             {reference_block}
             <tr>
               <td style="padding:8px 6px 0 6px;color:#64748b;font-size:12px;line-height:1.7;text-align:center;">
@@ -512,7 +540,8 @@ def _render_email_document(
 
 
 def render_briefing_email_html(subject: str, body: str) -> str:
-    main_body, references = _split_reference_block(body)
+    body_without_references, references = _split_reference_block(body)
+    main_body, footer_notes = _split_footer_note_block(body_without_references)
     title, notice, sections = _extract_brief_structure(main_body)
     parsed_sections = _build_email_sections(sections)
     display_date = _format_display_date(title=title, subject=subject)
@@ -531,6 +560,7 @@ def render_briefing_email_html(subject: str, body: str) -> str:
         snapshot_block=_render_snapshot_block(snapshot_rows),
         notice_block=_render_notice_block(notice),
         section_rows=section_rows,
+        footer_note_block=_render_footer_note_block(footer_notes),
         reference_block=_render_reference_block(references),
     )
 

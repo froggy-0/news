@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
+from morning_brief.data.market_policy import canonical_key_for, canonical_label_for
 from morning_brief.data.sources.http_client import HttpFetchError, get_json_with_retry
 from morning_brief.models import MarketPoint
 
@@ -12,10 +13,10 @@ FRED_OBSERVATION_URL = "https://api.stlouisfed.org/fred/series/observations"
 
 # https://fred.stlouisfed.org/docs/api/fred/series_observations.html
 SERIES_MAP = [
-    ("미국 10년물 국채금리", "DGS10"),
-    ("미국 2년물 국채금리", "DGS2"),
-    ("달러 인덱스(광의)", "DTWEXBGS"),
-    ("VIX", "VIXCLS"),
+    ("us10y", "DGS10"),
+    ("us2y", "DGS2"),
+    ("dxy", "DTWEXBGS"),
+    ("vix", "VIXCLS"),
 ]
 
 
@@ -70,7 +71,7 @@ def fetch_macro_points_from_fred(api_key: str) -> list[MarketPoint]:
         raise ValueError("FRED API 키가 필요해요.")
 
     points: list[MarketPoint] = []
-    for label, series_id in SERIES_MAP:
+    for canonical_key, series_id in SERIES_MAP:
         latest, previous = _latest_two_values(series_id=series_id, api_key=api_key)
         if previous == 0:
             change_pct = 0.0
@@ -79,10 +80,13 @@ def fetch_macro_points_from_fred(api_key: str) -> list[MarketPoint]:
 
         points.append(
             MarketPoint(
-                label=label,
+                label=canonical_label_for(canonical_key),
                 ticker=series_id,
                 price=round(latest, 4),
                 change_pct=round(change_pct, 2),
+                canonical_key=canonical_key_for(series_id, canonical_key),
+                raw_value=round(latest, 4),
+                resolved_value=round(latest, 4),
             )
         )
 

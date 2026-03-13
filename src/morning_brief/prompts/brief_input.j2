@@ -13,6 +13,9 @@
 
 작성 지침:
 - 거시, 지수, 빅테크/반도체, 비트코인, 뉴스를 모두 반영하되 핵심만 압축한다.
+- market_data_json 안 각 지표에 `validation_status`, `resolved_value`, `is_previous_value`가 있으면 그 메타데이터를 우선 따른다.
+- `validation_status`가 `anomaly` 또는 `missing`인 지표는 본문 숫자 설명에서 생략한다.
+- `validation_status`가 `previous_value`인 지표를 언급할 때는 숫자 뒤에 반드시 `(전일 값)`을 붙인다.
 - 섹션마다 `핵심 판단`, `주요 지표(또는 핵심 이슈)`, `배경과 해석`, `주목할 변수` 구조를 우선 사용한다.
 - 비트코인 ETF 관련 필드에 `official_` 접두사가 있으면, 그 값을 우선 근거로 사용한다.
 - `news_focus_json`의 `topic`, `summary`, `why_it_matters`, `citations`를 우선 참고해 중요한 뉴스와 시장 해석을 연결한다.

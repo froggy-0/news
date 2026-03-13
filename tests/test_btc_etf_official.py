@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from morning_brief.data.sources import btc_etf_official as official
@@ -103,50 +104,74 @@ def test_official_btc_etf_cache_roundtrip(tmp_path: Path):
     assert loaded["BITB"] == snapshots[0]
 
 
-def test_fetch_official_btc_etf_snapshots_keeps_partial_success_when_one_issuer_fails(monkeypatch):
-    monkeypatch.setattr(
-        official,
-        "get_text_with_retry",
-        lambda url, **kwargs: (_ for _ in ()).throw(official.HttpFetchError("404"))
-        if url == official.BITB_URL
-        else url,
-    )
-    monkeypatch.setattr(
-        official,
-        "parse_ibit_snapshot",
-        lambda text: BitcoinEtfIssuerSnapshot(
+def test_parse_reference_snapshot_response_keeps_only_valid_official_entries():
+    payload = {
+        "choices": [
+            {
+                "message": {
+                    "content": json.dumps(
+                        {
+                            "snapshots": [
+                                {
+                                    "ticker": "IBIT",
+                                    "issuer": "iShares",
+                                    "source_url": official.IBIT_URL,
+                                    "as_of": "03/11/2026",
+                                    "shares_outstanding": "1,340,640,000",
+                                    "daily_volume": "51,079,056",
+                                    "aum_usd": "$53,660,350,151",
+                                    "total_btc": "752,989.52",
+                                    "bitcoin_per_share": "0.00056165",
+                                },
+                                {
+                                    "ticker": "BITB",
+                                    "issuer": "Bitwise",
+                                    "source_url": "https://example.com/not-official",
+                                    "as_of": "03/11/2026",
+                                    "shares_outstanding": 71_500_000,
+                                    "daily_volume": 3_209_174,
+                                    "aum_usd": 2_725_606_287,
+                                    "total_btc": 38_920.51992677,
+                                    "bitcoin_per_share": 0.00054434,
+                                },
+                            ]
+                        }
+                    )
+                }
+            }
+        ]
+    }
+
+    snapshots = official._parse_reference_snapshot_response(payload)
+
+    assert [snapshot.ticker for snapshot in snapshots] == ["IBIT"]
+    assert snapshots[0].aum_usd == 53_660_350_151.0
+    assert snapshots[0].total_btc == 752_989.52
+
+
+def test_fetch_official_btc_etf_snapshots_uses_perplexity_request(monkeypatch):
+    expected = [
+        BitcoinEtfIssuerSnapshot(
             ticker="IBIT",
             issuer="iShares",
-            source_url=text,
+            source_url=official.IBIT_URL,
             as_of="03/11/2026",
             shares_outstanding=1,
             daily_volume=1,
             aum_usd=1.0,
             total_btc=1.0,
             bitcoin_per_share=1.0,
-        ),
-    )
-    monkeypatch.setattr(
-        official,
-        "parse_bitb_snapshot",
-        lambda text: (_ for _ in ()).throw(AssertionError("BITB parser should not run")),
-    )
-    monkeypatch.setattr(
-        official,
-        "parse_gbtc_snapshot",
-        lambda text: BitcoinEtfIssuerSnapshot(
-            ticker="GBTC",
-            issuer="Grayscale",
-            source_url=text,
-            as_of="03/11/2026",
-            shares_outstanding=1,
-            daily_volume=1,
-            aum_usd=1.0,
-            total_btc=1.0,
-            bitcoin_per_share=1.0,
-        ),
-    )
+        )
+    ]
+    captured: dict[str, str] = {}
 
-    snapshots = official.fetch_official_btc_etf_snapshots()
+    def fake_request(api_key: str):
+        captured["api_key"] = api_key
+        return expected
 
-    assert [snapshot.ticker for snapshot in snapshots] == ["GBTC", "IBIT"]
+    monkeypatch.setattr(official, "_request_reference_snapshots", fake_request)
+
+    snapshots = official.fetch_official_btc_etf_snapshots(api_key="pplx-test-key")
+
+    assert snapshots == expected
+    assert captured["api_key"] == "pplx-test-key"

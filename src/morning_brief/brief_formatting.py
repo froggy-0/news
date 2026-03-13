@@ -6,6 +6,7 @@ SECTION_HEADING_RE = re.compile(r"^(\d+)\.\s+(.+)$")
 SENTENCE_BREAK_RE = re.compile(r"(?<=[.!?])\s+(?=[\"'“”‘’(]*[A-Za-z가-힣])")
 
 NOTICE_PREFIX = "[데이터 품질 알림]"
+FOOTER_NOTE_MARKER = "\n데이터 처리 메모\n"
 REFERENCE_MARKER = "\n참고 출처\n"
 
 CONCLUSION_LABELS = {"핵심 판단", "한줄 결론", "오늘의 한줄 결론"}
@@ -39,6 +40,17 @@ def split_reference_block(body: str) -> tuple[str, list[str]]:
         if line.strip().startswith("- ")
     ]
     return main_body.strip(), references
+
+
+def split_footer_note_block(body: str) -> tuple[str, list[str]]:
+    if FOOTER_NOTE_MARKER not in body:
+        return body, []
+
+    main_body, raw_notes = body.split(FOOTER_NOTE_MARKER, 1)
+    notes = [
+        line.strip()[2:].strip() for line in raw_notes.splitlines() if line.strip().startswith("- ")
+    ]
+    return main_body.strip(), notes
 
 
 def improve_readability_spacing(text: str) -> str:

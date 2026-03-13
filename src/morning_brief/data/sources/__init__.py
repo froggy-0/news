@@ -1,1 +1,1 @@
-"""External free-source adapters (FRED, GDELT, etc.)."""
+"""External source adapters and provider-runtime policies."""

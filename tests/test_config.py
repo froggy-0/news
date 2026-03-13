@@ -21,10 +21,10 @@ def test_fred_api_key_loaded(monkeypatch):
     assert settings.fred_api_key == "fred-test-key"
 
 
-def test_alpha_vantage_api_key_loaded(monkeypatch):
+def test_alpha_vantage_api_key_is_ignored(monkeypatch):
     monkeypatch.setenv("ALPHA_VANTAGE_API_KEY", "alpha-test-key")
     settings = load_settings()
-    assert settings.alpha_vantage_api_key == "alpha-test-key"
+    assert settings.alpha_vantage_api_key == ""
 
 
 def test_perplexity_settings_loaded(monkeypatch):

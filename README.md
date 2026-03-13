@@ -6,8 +6,8 @@
 - 시장 데이터 수집: 금리/달러/VIX, 미국 지수, 빅테크 10종, BTC + ETF
   - 거시: FRED API 우선, 실패 시 yfinance 폴백
   - 공급자별 요청 간격 제어, 공통 지수 백오프 + jitter, 영구 실패 비재시도, quota 감지 시 회로 차단 적용
-  - Alpha Vantage는 ETF 가격/거래량을 동일 응답에서 함께 읽어 불필요한 중복 호출 제거
-  - 공식 BTC ETF 발행사 페이지는 issuer별 부분 성공을 허용해 한 곳 실패가 전체 스냅샷을 무너뜨리지 않도록 구성
+  - 미국 지수/기술주/BTC ETF 가격·거래량은 Stooq 우선, 실패 시 yfinance 폴백으로 고정
+  - BTC ETF 보유량/순유입은 Perplexity가 공식 issuer 도메인만 참조해 구조화한 스냅샷을 캐시와 비교해 계산
 - 뉴스 수집: `Perplexity Search API`를 토픽별 메인 리서치 레이어로 사용하고, 결과가 약할 때만 legacy 뉴스 경로로 보강
   - Reuters/Bloomberg/WSJ/FT/CNBC/CoinDesk 도메인 우선
   - Perplexity 품질 평가는 Perplexity 항목 기준으로만 계산하고, Grok 공식 X citation 부족이 legacy fallback을 과도하게 켜지 않도록 분리
@@ -26,7 +26,7 @@
 - `src/morning_brief/data/market.py`: 시장 데이터 수집 (재시도 포함)
 - `src/morning_brief/data/news.py`: 뉴스 수집 오케스트레이션 (우선소스 + 백필)
 - `src/morning_brief/data/news_selection.py`: 뉴스 정규화/랭킹/중복 제거 헬퍼
-- `src/morning_brief/data/sources/`: FRED/GDELT/Stooq/CoinGecko/Perplexity/Grok/공식 ETF/공급자 정책 어댑터
+- `src/morning_brief/data/sources/`: FRED/Stooq/CoinGecko/Perplexity/Grok/BTC ETF 참조/공급자 정책 어댑터
 - `src/morning_brief/briefing.py`: 브리핑 생성
 - `src/morning_brief/prompting.py`: Jinja 프롬프트 렌더링/캐시 키 생성
 - `src/morning_brief/prompts/*.j2`: 프롬프트 템플릿
@@ -69,7 +69,6 @@ cp .env.example .env
 - `PROMPT_TEMPLATE_DIR` (기본 `src/morning_brief/prompts`)
 - `PROMPT_TEMPLATE_VERSION` (프롬프트 변경 시 버전 증가 권장)
 - `FRED_API_KEY` (권장, 매크로 공식 소스)
-- `ALPHA_VANTAGE_API_KEY` (선택 권장, 미국 주식/ETF 일봉 API 소스)
 - `PERPLEXITY_API_KEY` (Perplexity Search API 키)
 - `GROK_API_KEY` (검증된 공식 X 시그널 조회용)
 - `GROK_MODEL` (기본 `grok-4.20-beta-latest-non-reasoning`)
@@ -83,6 +82,9 @@ cp .env.example .env
 - `GMAIL_CREDENTIALS_FILE` (기본 `credentials.json`)
 - `GMAIL_TOKEN_FILE` (기본 `token.json`)
 - `GMAIL_OAUTH_INTERACTIVE` (로컬 OAuth 로그인 필요 시 `true`)
+
+참고:
+- `ALPHA_VANTAGE_API_KEY`는 하위 호환용 환경변수 이름만 남아 있고 현재 파이프라인에서는 사용하지 않습니다.
 
 ## 3) Gmail API 준비 (최초 1회)
 1. Google Cloud Console에서 Gmail API 활성화
@@ -120,14 +122,15 @@ python3 main.py schedule
 - 이메일 제목: `미국 기술주·비트코인 시장 브리핑 (YYYY-MM-DD)`
 - 데이터 커버리지 저하 시 제목 아래 `[데이터 품질 알림]` 자동 표시
 - 이메일 본문: HTML + plain text fallback 동시 전송
-- 비트코인 ETF 공식 보유량/순유입: 발행사 공식 페이지 스냅샷을 캐시와 비교해 계산
+- 비트코인 ETF 공식 보유량/순유입: Perplexity가 공식 issuer 도메인을 바탕으로 정리한 참조 스냅샷을 캐시와 비교해 계산
 - 검증된 공식 X 시그널: allowlist에 등록된 공식 계정만 Grok `x_search`로 확인해 뉴스와 함께 반영
 
 ## 6) 수집 신뢰성 운영 원칙
 - 공급자별로 요청 간격과 재시도 규칙이 다르게 적용됩니다. `404` 같은 영구 실패는 바로 중단하고, `429/5xx/timeout` 중심으로만 다시 시도합니다.
 - HTTP 요청뿐 아니라 Perplexity/Grok SDK 호출과 yfinance 폴백도 공통 `provider_runtime` 계층의 지수 백오프와 provider별 간격 제어를 따릅니다.
-- Alpha Vantage가 quota 또는 burst 제한을 반환하면 그 실행에서는 이후 Alpha Vantage 요청을 중단하고 Stooq/yfinance로 일관되게 넘깁니다.
-- 공식 BTC ETF 수집은 `IBIT`, `BITB`, `GBTC`를 issuer별로 독립 처리합니다. 한 발행사 페이지가 깨져도 나머지 스냅샷은 유지합니다.
+- Alpha Vantage free tier는 구조적 quota 한계 때문에 비활성화했고, 시장 가격 수집은 Stooq/yfinance 경로로 고정했습니다.
+- BTC ETF 참조 수집은 `IBIT`, `BITB`, `GBTC`를 대상으로 Perplexity structured query를 사용하되 공식 issuer 도메인만 허용합니다.
+- GDELT는 제거했고, legacy 뉴스 fallback은 RSS와 NewsAPI만 사용합니다.
 - Perplexity legacy fallback은 Perplexity 기사 자체의 개수/신선도/도메인/근거 링크 기준으로 판단합니다. 공식 X 항목의 citation 부족은 별도 취급합니다.
 - 파이프라인 종료 시 공급자별 요청/성공/실패/재시도/skip 요약 로그를 남깁니다.
 
@@ -175,7 +178,6 @@ make validate-pre-commit
 - `GMAIL_TOKEN_JSON_B64`
 
 선택 GitHub Secrets:
-- `ALPHA_VANTAGE_API_KEY`
 - `PERPLEXITY_API_KEY`
 - `GROK_API_KEY`
 - `NEWSAPI_KEY`

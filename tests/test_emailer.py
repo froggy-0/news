@@ -194,6 +194,18 @@ def test_render_briefing_email_html_omits_unsafe_reference_links():
     assert 'href="javascript:alert(1)"' not in html
 
 
+def test_render_briefing_email_html_renders_data_footer_notes():
+    body = SAMPLE_BRIEF + "\n\n데이터 처리 메모\n- 달러 인덱스는 허용 범위를 벗어나 생략했어요."
+
+    html = render_briefing_email_html(
+        subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
+        body=body,
+    )
+
+    assert "데이터 처리 메모" in html
+    assert "달러 인덱스는 허용 범위를 벗어나 생략했어요." in html
+
+
 def test_split_reference_block_separates_reference_lines():
     body = SAMPLE_BRIEF + "\n\n참고 출처\n- Reuters — https://www.reuters.com/world/us/example"
 

@@ -47,9 +47,9 @@ Morning Market Brief는 미국 기술주와 비트코인을 중심으로, 밤사
 이 제품은 역할이 다른 세 개의 데이터 수집 루트와, 하나의 편집/검증 레이어로 구성하는 것이 가장 합리적이다.
 
 ### 2026-03 운영 보강 메모
-- 핵심 수집 경로는 `정형 HTTP 소스 + Perplexity + 공식 X` 중심으로 유지하고, `GDELT/RSS`는 보강 레이어로 제한한다.
+- 핵심 수집 경로는 `FRED + Stooq/yfinance + Perplexity + 공식 X` 중심으로 유지하고, `RSS/NewsAPI`만 보강 레이어로 둔다.
 - 공급자별 요청 간격, 재시도 가능 상태코드, 회로 차단 규칙을 분리해서 운영해야 한다.
-- 한 발행사 페이지 실패가 전체 ETF 스냅샷을 무효화하지 않도록 issuer별 부분 성공 구조를 유지한다.
+- BTC ETF 보유량/순유입은 HTML 스크래핑 대신 Perplexity가 공식 issuer 도메인만 참조해 구조화한 스냅샷을 사용한다.
 - 품질 게이트는 provider별로 분리해야 하며, 공식 X citation 부족이 Perplexity legacy fallback을 유발해서는 안 된다.
 
 ### 루트 1. 정형 수치 레이어
@@ -68,8 +68,8 @@ Morning Market Brief는 미국 기술주와 비트코인을 중심으로, 밤사
 
 대표 소스:
 - FRED
-- Alpha Vantage
-- ETF 공식 페이지
+- Stooq / yfinance
+- Perplexity 공식-domain ETF reference query
 - Alternative.me Fear & Greed
 
 원칙:
@@ -105,7 +105,7 @@ Morning Market Brief는 미국 기술주와 비트코인을 중심으로, 밤사
 포함 채널:
 - 기업 newsroom / IR
 - 규제기관 페이지
-- ETF 발행사 공식 페이지
+- ETF 발행사 공식 도메인 기반 참조 응답
 - 공식 X 계정
 
 권장 운영 방식:

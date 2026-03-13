@@ -87,6 +87,48 @@ def test_fallback_brief_mentions_official_btc_etf_flow_when_available():
     assert "직전 스냅샷과 비교한 공식 ETF 흐름은 1,234.56 BTC 순유입" in briefing
 
 
+def test_fallback_brief_marks_previous_values_and_appends_footer_notes():
+    packet = {
+        "macro": [
+            {
+                "label": "달러 인덱스",
+                "price": 104.2,
+                "resolved_value": 104.2,
+                "change_pct": 0.3,
+                "is_previous_value": True,
+                "validation_status": "previous_value",
+            }
+        ],
+        "us_indices": [],
+        "tech_stocks": [],
+        "bitcoin": {
+            "spot": {
+                "price": 80_000.0,
+                "resolved_value": 80_000.0,
+                "change_pct": 1.5,
+                "is_previous_value": True,
+                "validation_status": "previous_value",
+            },
+            "etf_points": [],
+            "etf_total_volume": None,
+            "official_etf_supported_tickers": [],
+            "official_etf_compared_tickers": [],
+            "official_etf_total_btc": None,
+            "official_etf_daily_flow_btc": None,
+            "official_etf_daily_flow_usd": None,
+        },
+        "news": [],
+        "data_quality": {"status": "ok", "warnings": []},
+        "data_footer_notes": ["달러 인덱스는 허용 범위를 벗어나 생략했어요."],
+    }
+
+    briefing = _fallback_brief(packet=packet, timezone="Asia/Seoul")
+
+    assert "(전일 값)" in briefing
+    assert "데이터 처리 메모" in briefing
+    assert "달러 인덱스는 허용 범위를 벗어나 생략했어요." in briefing
+
+
 def test_generate_briefing_rewrites_when_validator_finds_plain_language_issue(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     settings = load_settings()

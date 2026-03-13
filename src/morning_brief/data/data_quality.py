@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from morning_brief.data.news_policy import FRESH_NEWS_HOURS
+from morning_brief.data.news_policy import FRESH_NEWS_HOURS, MIN_NEWS_ITEMS
 
-MIN_NEWS_ITEMS = 3
 MIN_PREFERRED_NEWS_ITEMS = 2
 MIN_TIER_1_NEWS_ITEMS = 1
 MIN_UNIQUE_NEWS_DOMAINS = 3
@@ -165,7 +164,7 @@ def assess_data_quality(packet: dict, news_packet: list[dict]) -> dict:
 
     warnings: list[str] = []
     if zero_ratio >= 0.6:
-        warnings.append(f"가격 데이터의 {zero_ratio * 100:.0f}%가 폴백 값입니다")
+        warnings.append(f"가격 데이터의 {zero_ratio * 100:.0f}%가 누락됐거나 생략 상태입니다")
     if news_quality["count"] < MIN_NEWS_ITEMS:
         warnings.append(
             f"핵심 뉴스가 {news_quality['count']}건으로 최소 기준({MIN_NEWS_ITEMS}건) 미달입니다"

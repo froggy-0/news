@@ -120,7 +120,8 @@ def load_settings() -> Settings:
         ).resolve(),
         prompt_template_version=os.getenv("PROMPT_TEMPLATE_VERSION", "market_brief_v3").strip(),
         fred_api_key=os.getenv("FRED_API_KEY", "").strip(),
-        alpha_vantage_api_key=os.getenv("ALPHA_VANTAGE_API_KEY", "").strip(),
+        # Alpha Vantage free tier is intentionally disabled in the pipeline.
+        alpha_vantage_api_key="",
         perplexity_api_key=os.getenv("PERPLEXITY_API_KEY", "").strip(),
         grok_api_key=os.getenv("GROK_API_KEY", "").strip(),
         grok_model=os.getenv("GROK_MODEL", "grok-4.20-beta-latest-non-reasoning").strip(),

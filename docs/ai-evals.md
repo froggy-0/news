@@ -19,9 +19,9 @@
 
 추가 검증:
 - `tests/test_http_client.py`
-- `tests/test_alpha_vantage.py`
 - `tests/test_btc_etf_official.py`
 - `tests/test_market_btc_official_flow.py`
+- `tests/test_market_reliability.py`
 - `tests/test_news_quality.py`
 - `tests/test_grok_official_signals.py`
 - `tests/test_perplexity_search.py`

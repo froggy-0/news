@@ -26,7 +26,7 @@ def run_pipeline(settings: Settings) -> str:
     logger.info("브리핑 파이프라인을 시작할게요.")
     market_packet = build_market_packet(
         fred_api_key=settings.fred_api_key,
-        alpha_vantage_api_key=settings.alpha_vantage_api_key,
+        perplexity_api_key=settings.perplexity_api_key,
         cache_dir=settings.cache_dir,
     )
     news_packet = build_news_packet(settings=settings)

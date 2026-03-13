@@ -1,3 +1,10 @@
+"""Deprecated legacy adapter kept only for reference.
+
+GDELT is no longer used in the briefing pipeline because it proved too unstable
+for financial news selection. Keep this file for historical context, but do not
+re-enable it without a separate source-quality review.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -42,6 +49,10 @@ def fetch_news_from_gdelt(
     preferred_domains: set[str] | None = None,
     preferred_only: bool = True,
 ) -> list[NewsItem]:
+    logger.warning("GDELT 어댑터는 deprecated 상태라 빈 결과를 반환할게요.")
+    return []
+
+    # Historical implementation kept below for reference only.
     payload = get_json_with_retry(
         GDELT_DOC_URL,
         params={

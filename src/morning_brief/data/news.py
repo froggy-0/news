@@ -15,13 +15,11 @@ from morning_brief.data.news_policy import (
     NEWS_RECENCY_HOURS,
     PREFERRED_DOMAINS,
     RSS_QUERIES,
-    TOPIC_KEYWORDS,
 )
 from morning_brief.data.news_rollout import (
     record_news_rollout_run,
     should_reduce_legacy_broad_fallback,
 )
-from morning_brief.data.sources.gdelt import fetch_news_from_gdelt
 from morning_brief.data.sources.google_news_rss import fetch_news_from_google_rss
 from morning_brief.data.sources.grok_official_signals import fetch_official_x_signals
 from morning_brief.data.sources.http_client import HttpFetchError
@@ -44,20 +42,6 @@ _packet_summary = news_selection._packet_summary
 _provider_breakdown = news_selection._provider_breakdown
 _provider_counts = news_selection._provider_counts
 summarize_news_packet_quality = data_quality.summarize_news_packet_quality
-
-
-def _collect_from_gdelt(max_items: int, preferred_only: bool = True) -> list[NewsItem]:
-    try:
-        return fetch_news_from_gdelt(
-            topics=list(TOPIC_KEYWORDS.keys()),
-            max_items=max_items,
-            recency_hours=NEWS_RECENCY_HOURS,
-            preferred_domains=PREFERRED_DOMAINS,
-            preferred_only=preferred_only,
-        )
-    except (HttpFetchError, ValueError) as exc:
-        logger.warning("GDELT에서 뉴스를 가져오지 못했어요: %s", exc)
-        return []
 
 
 def _collect_from_rss(max_items: int, preferred_only: bool = True) -> list[NewsItem]:
@@ -130,26 +114,24 @@ def fetch_news(
         except (HttpFetchError, ValueError) as exc:
             logger.warning("NewsAPI에서 뉴스를 가져오지 못했어요: %s", exc)
 
-    if len(items) < MIN_NEWS_ITEMS:
-        gdelt_items = _collect_from_gdelt(max_items=candidate_limit, preferred_only=True)
-        items = _merge_rank(items, gdelt_items, max_items=candidate_limit)
-        if gdelt_items:
-            logger.info("뉴스 보강에는 GDELT 우선 도메인을 사용했어요.")
-
     if len(items) < MIN_NEWS_ITEMS and allow_broad_fallback:
         logger.info(
-            "우선 신뢰 출처가 %s건이라 범위를 넓혀 GDELT와 RSS를 한 번 더 살펴봤어요.",
+            "우선 신뢰 출처가 %s건이라 범위를 넓혀 RSS를 한 번 더 살펴봤어요.",
             len(items),
         )
         rss_broad = _collect_from_rss(max_items=candidate_limit, preferred_only=False)
-        gdelt_broad = _collect_from_gdelt(max_items=candidate_limit, preferred_only=False)
-        items = _merge_rank(items, rss_broad + gdelt_broad, max_items=candidate_limit)
+        items = _merge_rank(items, rss_broad, max_items=candidate_limit)
     elif len(items) < MIN_NEWS_ITEMS and not allow_broad_fallback:
         logger.info("최근 운영 이력이 안정적이라 broad legacy fallback은 이번엔 건너뛸게요.")
 
     final_items = _dedup_and_rank(items, max_items=max_items)
     if final_items:
         logger.info("legacy 뉴스 provider 비중은 %s였어요.", _provider_breakdown(final_items))
+    elif candidate_limit >= MIN_NEWS_ITEMS:
+        logger.warning(
+            "RSS와 NewsAPI까지 확인했지만 legacy 뉴스가 최소 기준(%s건)을 채우지 못했어요.",
+            MIN_NEWS_ITEMS,
+        )
     return final_items
 
 

@@ -15,15 +15,48 @@ from morning_brief.prompting import build_prompt_cache_key, render_brief_prompts
 logger = logging.getLogger(__name__)
 
 
+def _point_price(point: dict) -> float | None:
+    resolved = point.get("resolved_value")
+    if resolved is not None:
+        return float(resolved)
+
+    raw_price = point.get("price")
+    if raw_price is None:
+        return None
+
+    return float(raw_price)
+
+
+def _point_change_pct(point: dict) -> float | None:
+    raw_change = point.get("change_pct")
+    if raw_change is None:
+        return None
+    return float(raw_change)
+
+
+def _point_suffix(point: dict) -> str:
+    if (
+        bool(point.get("is_previous_value"))
+        or str(point.get("validation_status", "")) == "previous_value"
+    ):
+        return " (전일 값)"
+    return ""
+
+
 def _fmt_point(point: dict) -> str:
-    sign = "+" if point["change_pct"] >= 0 else ""
-    return f"{point['label']} {point['price']:.2f} ({sign}{point['change_pct']:.2f}%)"
+    price = _point_price(point)
+    change_pct = _point_change_pct(point)
+    if price is None or change_pct is None:
+        return ""
+    sign = "+" if change_pct >= 0 else ""
+    return f"{point['label']} {price:.2f} ({sign}{change_pct:.2f}%){_point_suffix(point)}"
 
 
 def _format_points(points: list[dict], empty_text: str) -> str:
-    if not points:
+    formatted = [text for point in points if (text := _fmt_point(point))]
+    if not formatted:
         return empty_text
-    return " / ".join(_fmt_point(p) for p in points)
+    return " / ".join(formatted)
 
 
 def _quality_notice(packet: dict) -> str:
@@ -84,12 +117,32 @@ def _append_reference_block(text: str, packet: dict) -> str:
     return f"{text.rstrip()}\n\n" + "\n".join(lines)
 
 
+def _append_footer_note_block(text: str, packet: dict) -> str:
+    notes = packet.get("data_footer_notes", [])
+    if not isinstance(notes, list) or not notes:
+        return text
+
+    lines = ["데이터 처리 메모"]
+    for note in notes:
+        note_text = str(note).strip()
+        if note_text:
+            lines.append(f"- {note_text}")
+
+    if len(lines) == 1:
+        return text
+
+    return f"{text.rstrip()}\n\n" + "\n".join(lines)
+
+
 _improve_readability_spacing = improve_readability_spacing
 
 
 def _finalize_briefing(text: str, packet: dict) -> str:
     return _append_reference_block(
-        _inject_quality_notice(_improve_readability_spacing(text), packet),
+        _append_footer_note_block(
+            _inject_quality_notice(_improve_readability_spacing(text), packet),
+            packet,
+        ),
         packet,
     )
 
@@ -104,20 +157,25 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
 
     macro = packet.get("macro", [])
     indices = packet.get("us_indices", [])
-    tech = packet.get("tech_stocks", [])
+    tech = [
+        point for point in packet.get("tech_stocks", []) if _point_change_pct(point) is not None
+    ]
     btc = packet.get("bitcoin", {})
     news = packet.get("news", [])[:5]
 
-    top_gainers = sorted(tech, key=lambda x: x["change_pct"], reverse=True)[:3]
-    top_losers = sorted(tech, key=lambda x: x["change_pct"])[:3]
+    top_gainers = sorted(tech, key=lambda x: _point_change_pct(x) or 0.0, reverse=True)[:3]
+    top_losers = sorted(tech, key=lambda x: _point_change_pct(x) or 0.0)[:3]
     mover_parts: list[str] = []
     seen_labels: set[str] = set()
     for point in top_gainers + top_losers:
         label = point.get("label", "")
+        change_pct = _point_change_pct(point)
         if not label or label in seen_labels:
             continue
+        if change_pct is None:
+            continue
         seen_labels.add(label)
-        mover_parts.append(f"{label}({point['change_pct']:+.2f}%)")
+        mover_parts.append(f"{label}({change_pct:+.2f}%){_point_suffix(point)}")
         if len(mover_parts) >= 4:
             break
     top_movers_text = (
@@ -146,6 +204,21 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
         sentiment_text = f"공포탐욕지수는 {fg_value}({fg_label})로 확인됐습니다."
     else:
         sentiment_text = "공포탐욕지수는 이번 집계에서 확인되지 않았습니다."
+
+    btc_spot_line = "비트코인 현물은 이번 집계에서 확인되지 않았습니다."
+    btc_spot_price = _point_price(btc_spot) if isinstance(btc_spot, dict) else None
+    btc_spot_change = _point_change_pct(btc_spot) if isinstance(btc_spot, dict) else None
+    if btc_spot_price is not None and btc_spot_change is not None:
+        btc_spot_line = (
+            f"비트코인 현물은 {btc_spot_price:.2f}달러({btc_spot_change:+.2f}%)"
+            f"{_point_suffix(btc_spot)} 수준이었습니다."
+        )
+
+    volume_text = (
+        f"주요 ETF 합산 거래량은 약 {btc.get('etf_total_volume', 0):,}주였습니다."
+        if btc.get("etf_total_volume") is not None
+        else "주요 ETF 합산 거래량은 이번 집계에서 확인되지 않았습니다."
+    )
 
     official_etf_lines: list[str] = []
     if official_supported and official_total_btc:
@@ -238,8 +311,8 @@ VIX가 낮게 유지되면 위험자산 선호가 이어질 수 있지만, 금�
 {
         _bullet_lines(
             [
-                f"비트코인 현물은 {btc_spot.get('price', 0):.2f}달러({btc_spot.get('change_pct', 0):+.2f}%) 수준이었습니다.",
-                f"주요 ETF 합산 거래량은 약 {btc.get('etf_total_volume', 0):,}주였습니다.",
+                btc_spot_line,
+                volume_text,
                 *official_etf_lines,
                 sentiment_text,
             ]

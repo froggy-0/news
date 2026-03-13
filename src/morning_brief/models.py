@@ -8,8 +8,14 @@ from datetime import datetime
 class MarketPoint:
     label: str
     ticker: str
-    price: float
-    change_pct: float
+    price: float | None
+    change_pct: float | None
+    canonical_key: str = ""
+    is_previous_value: bool = False
+    validation_status: str = "ok"
+    raw_value: float | None = None
+    resolved_value: float | None = None
+    resolution_reason: str = ""
 
 
 @dataclass
@@ -42,7 +48,7 @@ class BitcoinEtfIssuerSnapshot:
 class BitcoinSnapshot:
     spot: MarketPoint
     etf_points: list[MarketPoint]
-    etf_total_volume: int
+    etf_total_volume: int | None
     fear_greed_value: int | None
     fear_greed_label: str | None
     official_etf_snapshots: list[BitcoinEtfIssuerSnapshot]
