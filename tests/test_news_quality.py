@@ -149,6 +149,39 @@ def test_build_news_packet_can_skip_legacy_fallback(monkeypatch):
     assert packet == []
 
 
+def test_build_news_packet_preserves_perplexity_metadata(monkeypatch):
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")
+    monkeypatch.setenv("ENABLE_LEGACY_NEWS_FALLBACK", "false")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news_from_perplexity",
+        lambda **_: [
+            NewsItem(
+                title="Fed keeps markets steady",
+                url="https://www.reuters.com/world/us/fed-keeps-markets-steady",
+                source="Reuters",
+                published_at=now,
+                topic="macro",
+                provider="perplexity_search",
+                summary="The Fed kept markets steady.",
+                why_it_matters="금리 경로를 읽는 데 도움이 되는 기사예요.",
+                citations=["https://www.reuters.com/world/us/fed-keeps-markets-steady"],
+            )
+        ],
+    )
+
+    packet = news.build_news_packet(settings=load_settings())
+
+    assert packet[0]["topic"] == "macro"
+    assert packet[0]["provider"] == "perplexity_search"
+    assert packet[0]["summary"] == "The Fed kept markets steady."
+    assert packet[0]["why_it_matters"] == "금리 경로를 읽는 데 도움이 되는 기사예요."
+    assert packet[0]["citations"] == [
+        "https://www.reuters.com/world/us/fed-keeps-markets-steady"
+    ]
+
+
 def test_summarize_news_packet_quality_counts_reliability_fields():
     packet = [
         {

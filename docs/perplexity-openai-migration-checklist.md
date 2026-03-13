@@ -30,17 +30,17 @@
 
 ### 구현 고정 결정
 
-- [ ] Perplexity는 `Search API`를 기본값으로 고정한다.
-- [ ] `Sonar`는 이번 마이그레이션 범위에서 기본 구현 대상이 아니다.
-- [ ] 이유:
-  - [ ] Search API는 원문 검색 결과와 출처 통제가 더 명확하다.
-  - [ ] 최종 요약/검수는 이미 OpenAI가 맡고 있으므로, 리서치 단계에서 LLM 요약을 한 번 더 넣지 않는다.
-- [ ] Perplexity 호출 기본값
-  - [ ] 토픽당 `max_results=5`
-  - [ ] 토픽당 메인 질의 1회
-  - [ ] 품질 미달 시 토픽당 재질의 1회
-  - [ ] 하루 1회 브리핑 기준 총 요청 수는 `4~8회`
-- [ ] OpenAI는 Perplexity가 넘긴 결과를 다시 검색하지 않고, 그 결과만 바탕으로 한국어 브리핑을 생성한다.
+- [x] Perplexity는 `Search API`를 기본값으로 고정한다.
+- [x] `Sonar`는 이번 마이그레이션 범위에서 기본 구현 대상이 아니다.
+- [x] 이유:
+  - [x] Search API는 원문 검색 결과와 출처 통제가 더 명확하다.
+  - [x] 최종 요약/검수는 이미 OpenAI가 맡고 있으므로, 리서치 단계에서 LLM 요약을 한 번 더 넣지 않는다.
+- [x] Perplexity 호출 기본값
+  - [x] 토픽당 `max_results=5`
+  - [x] 토픽당 메인 질의 1회
+  - [x] 품질 미달 시 토픽당 재질의 1회
+  - [x] 하루 1회 브리핑 기준 총 요청 수는 `4~8회`
+- [x] OpenAI는 Perplexity가 넘긴 결과를 다시 검색하지 않고, 그 결과만 바탕으로 한국어 브리핑을 생성한다.
 
 ## Phase 0. 현재 구조 정리
 
@@ -149,68 +149,68 @@
 | `citations` | 근거 URL 목록 | 최소 1개 |
 
 완료 기준:
-- [ ] 구현자가 추가 판단 없이 config와 타입을 만들 수 있다
-- [ ] 필드 정의만으로 provider / ranking / quality 구현이 가능하다
+- [x] 구현자가 추가 판단 없이 config와 타입을 만들 수 있다
+- [x] 필드 정의만으로 provider / ranking / quality 구현이 가능하다
 
 ## Phase 2. 뉴스 / 리서치 수집 교체
 
-- [ ] Perplexity 전용 research provider를 1순위 메인으로 정의한다
-- [ ] 토픽을 아래 4개로 분리한다고 명시한다
-  - [ ] `macro`
-  - [ ] `us_equity`
-  - [ ] `ai_bigtech`
-  - [ ] `bitcoin`
-- [ ] 각 토픽별 검색 쿼리 전략을 정의한다
-- [ ] 허용 도메인 정책을 정의한다
-- [ ] 중복 제거 기준을 정의한다
+- [x] Perplexity 전용 research provider를 1순위 메인으로 정의한다
+- [x] 토픽을 아래 4개로 분리한다고 명시한다
+  - [x] `macro`
+  - [x] `us_equity`
+  - [x] `ai_bigtech`
+  - [x] `bitcoin`
+- [x] 각 토픽별 검색 쿼리 전략을 정의한다
+- [x] 허용 도메인 정책을 정의한다
+- [x] 중복 제거 기준을 정의한다
 - [ ] 기존 `news.py`는 수집 / 병합 / 랭킹 / 품질을 분리한다고 적는다
 
 ### 허용 도메인 정책
 
-- [ ] 우선 허용
-  - [ ] Reuters
-  - [ ] Bloomberg
-  - [ ] WSJ
-  - [ ] FT
-  - [ ] CNBC
-  - [ ] CoinDesk
-  - [ ] SEC
-  - [ ] Federal Reserve
-  - [ ] Treasury
-  - [ ] ETF 발행사 공식 도메인
-- [ ] 보조 허용
-  - [ ] 기업 IR / newsroom
+- [x] 우선 허용
+  - [x] Reuters
+  - [x] Bloomberg
+  - [x] WSJ
+  - [x] FT
+  - [x] CNBC
+  - [x] CoinDesk
+  - [x] SEC
+  - [x] Federal Reserve
+  - [x] Treasury
+  - [x] ETF 발행사 공식 도메인
+- [x] 보조 허용
+  - [x] 기업 IR / newsroom
   - [ ] PR Newswire
   - [ ] Business Wire
 
 ### Perplexity 쿼리 전략
 
-- [ ] 토픽당 1개 메인 질의를 둔다
-- [ ] 결과가 약하면 토픽당 1개 재질의를 허용한다
-- [ ] 하루 1회 파이프라인 기준 총 4~8회 검색 안쪽으로 제한한다
-- [ ] 최신성보다 출처 신뢰도를 우선한다
-- [ ] 가능하면 시장 영향도가 높은 기사만 반환하도록 유도한다
+- [x] 토픽당 1개 메인 질의를 둔다
+- [x] 결과가 약하면 토픽당 1개 재질의를 허용한다
+- [x] 하루 1회 파이프라인 기준 총 4~8회 검색 안쪽으로 제한한다
+- [x] 최신성보다 출처 신뢰도를 우선한다
+- [x] 가능하면 시장 영향도가 높은 기사만 반환하도록 유도한다
 
 #### 토픽별 기본 질의
 
-- [ ] `macro`
-  - [ ] `Fed, FOMC, Treasury yields, dollar, VIX, inflation expectations`
-- [ ] `us_equity`
-  - [ ] `S&P 500, Nasdaq, semiconductor sector, market breadth`
-- [ ] `ai_bigtech`
-  - [ ] `NVIDIA, Microsoft, Apple, Amazon, Google, Meta, AMD, TSM, ASML, AVGO`
-- [ ] `bitcoin`
-  - [ ] `Bitcoin, BTC ETF flows, regulation, institutional demand`
+- [x] `macro`
+  - [x] `Fed, FOMC, Treasury yields, dollar, VIX, inflation expectations`
+- [x] `us_equity`
+  - [x] `S&P 500, Nasdaq, semiconductor sector, market breadth`
+- [x] `ai_bigtech`
+  - [x] `NVIDIA, Microsoft, Apple, Amazon, Google, Meta, AMD, TSM, ASML, AVGO`
+- [x] `bitcoin`
+  - [x] `Bitcoin, BTC ETF flows, regulation, institutional demand`
 
 #### 질의 실패 / 약한 결과 규칙
 
-- [ ] 메인 질의에서 `trust_tier >= tier_2` 결과가 2건 미만이면 재질의를 실행한다.
-- [ ] 재질의 뒤에도 토픽 결과가 1건 미만이면 legacy fallback 후보에 넘긴다.
-- [ ] 토픽별 최종 후보는 최대 5건으로 제한한다.
+- [x] 메인 질의에서 `trust_tier >= tier_2` 결과가 2건 미만이면 재질의를 실행한다.
+- [x] 재질의 뒤에도 토픽 결과가 1건 미만이면 legacy fallback 후보에 넘긴다.
+- [x] 토픽별 최종 후보는 최대 5건으로 제한한다.
 
 ### 중복 제거 기준
 
-- [ ] 정규화 URL 기준 중복 제거
+- [x] 정규화 URL 기준 중복 제거
 - [ ] URL이 다르더라도 제목 유사도가 높으면 2차 중복 후보로 본다
 - [ ] 같은 도메인 과다 점유를 막기 위해 도메인별 최대 건수를 둔다
 - [ ] 같은 사건의 공식 소스가 있으면 2차 기사보다 우선한다

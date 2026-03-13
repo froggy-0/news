@@ -5,7 +5,7 @@
 ## 핵심 기능
 - 시장 데이터 수집: 금리/달러/VIX, 미국 지수, 빅테크 10종, BTC + ETF
   - 거시: FRED API 우선, 실패 시 yfinance 폴백
-- 뉴스 수집: Phase 1 기준 `Perplexity` provider 인터페이스를 먼저 고정하고, 실제 수집은 legacy 뉴스 경로로 안전하게 이어짐
+- 뉴스 수집: `Perplexity Search API`를 토픽별 메인 리서치 레이어로 사용하고, 결과가 약할 때만 legacy 뉴스 경로로 보강
   - Reuters/Bloomberg/WSJ/FT/CNBC/CoinDesk 도메인 우선
 - 브리핑 생성: OpenAI API 기반 한국어 해석형 리포트(실패 시 템플릿 폴백)
   - Jinja 템플릿 기반 프롬프트 관리 (`src/morning_brief/prompts`)
@@ -18,7 +18,7 @@
 - `src/morning_brief/config.py`: 환경설정 로더
 - `src/morning_brief/data/market.py`: 시장 데이터 수집 (재시도 포함)
 - `src/morning_brief/data/news.py`: 뉴스 수집 (우선소스 + 백필)
-- `src/morning_brief/data/sources/`: FRED/GDELT/Stooq/CoinGecko 소스 어댑터
+- `src/morning_brief/data/sources/`: FRED/GDELT/Stooq/CoinGecko/Perplexity 소스 어댑터
 - `src/morning_brief/briefing.py`: 브리핑 생성
 - `src/morning_brief/prompting.py`: Jinja 프롬프트 렌더링/캐시 키 생성
 - `src/morning_brief/prompts/*.j2`: 프롬프트 템플릿
@@ -61,9 +61,9 @@ cp .env.example .env
 - `PROMPT_TEMPLATE_VERSION` (프롬프트 변경 시 버전 증가 권장)
 - `FRED_API_KEY` (권장, 매크로 공식 소스)
 - `ALPHA_VANTAGE_API_KEY` (선택 권장, 미국 주식/ETF 일봉 API 소스)
-- `PERPLEXITY_API_KEY` (Phase 2 구현 준비용, Phase 1에서는 인터페이스만 연결)
-- `RESEARCH_PROVIDER` (기본 `perplexity`, 현재는 결과가 비어 있으면 legacy 뉴스 수집으로 안전하게 폴백)
-- `ENABLE_LEGACY_NEWS_FALLBACK` (기본 `true`, Phase 2 전까지는 켜두는 것을 권장)
+- `PERPLEXITY_API_KEY` (Perplexity Search API 키)
+- `RESEARCH_PROVIDER` (기본 `perplexity`, 토픽별 Search API를 먼저 조회)
+- `ENABLE_LEGACY_NEWS_FALLBACK` (기본 `true`, 품질 비교 기간에는 켜두는 것을 권장)
 - `GMAIL_SENDER`
 - `GMAIL_RECIPIENT` (`user1@example.com,user2@example.com` 형식으로 다중 수신자 가능)
 - `GMAIL_CREDENTIALS_FILE` (기본 `credentials.json`)

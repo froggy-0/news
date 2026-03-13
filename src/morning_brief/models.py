@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 
@@ -18,6 +18,11 @@ class NewsItem:
     url: str
     source: str
     published_at: datetime | None
+    topic: str = ""
+    provider: str = ""
+    summary: str = ""
+    why_it_matters: str = ""
+    citations: list[str] = field(default_factory=list)
 
 
 @dataclass

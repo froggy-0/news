@@ -250,6 +250,11 @@ def _dedup_and_rank(items: list[NewsItem], max_items: int) -> list[NewsItem]:
             url=normalized_url,
             source=item.source if item.source and item.source != "Unknown" else source_domain,
             published_at=item.published_at,
+            topic=item.topic,
+            provider=item.provider,
+            summary=item.summary,
+            why_it_matters=item.why_it_matters,
+            citations=list(item.citations),
         )
 
         key = normalized_url or title.lower()
@@ -503,6 +508,17 @@ def packet_item_to_news_item(item: dict) -> NewsItem | None:
         url=url,
         source=source,
         published_at=published_at,
+        topic=str(item.get("topic", "")).strip(),
+        provider=str(item.get("provider", "")).strip(),
+        summary=str(item.get("summary", "")).strip(),
+        why_it_matters=str(item.get("why_it_matters", "")).strip(),
+        citations=[
+            str(citation).strip()
+            for citation in item.get("citations", [])
+            if str(citation).strip()
+        ]
+        if isinstance(item.get("citations", []), list)
+        else [],
     )
 
 
@@ -527,6 +543,11 @@ def news_items_to_packet(items: list[NewsItem]) -> list[dict]:
                 "source_tier": _source_tier(item.url),
                 "preferred_source": _is_preferred_domain(item.url),
                 "age_hours": age_hours,
+                "topic": item.topic or None,
+                "provider": item.provider or None,
+                "summary": item.summary or None,
+                "why_it_matters": item.why_it_matters or None,
+                "citations": list(item.citations),
             }
         )
 
@@ -551,12 +572,17 @@ def build_news_packet(*, settings: Settings) -> list[dict]:
             max_items=settings.max_news_items,
             api_key=settings.perplexity_api_key,
         )
-        if not items and settings.enable_legacy_news_fallback:
-            logger.info("Perplexity 연구 경로가 아직 비어 있어 legacy 뉴스 수집으로 이어갈게요.")
-            items = fetch_news(
+        items = _dedup_and_rank(items, max_items=settings.max_news_items)
+        if len(items) < MIN_NEWS_ITEMS and settings.enable_legacy_news_fallback:
+            logger.info(
+                "Perplexity 후보가 %s건이라 legacy 뉴스 수집으로 빈 부분을 함께 채울게요.",
+                len(items),
+            )
+            legacy_items = fetch_news(
                 max_items=settings.max_news_items,
                 newsapi_key=settings.newsapi_key,
             )
+            items = _merge_rank(items, legacy_items, max_items=settings.max_news_items)
         elif not items:
             logger.warning(
                 "Perplexity 연구 결과가 없고 legacy 뉴스 폴백도 꺼져 있어서 빈 뉴스 묶음을 그대로 사용할게요."
