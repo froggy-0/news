@@ -81,7 +81,7 @@ def test_fallback_brief_mentions_official_btc_etf_flow_when_available():
 
     briefing = _fallback_brief(packet=packet, timezone="Asia/Seoul")
 
-    assert "공식 발행사 기준으로 집계한 IBIT, BITB, GBTC 합산 보유량은 981,234.56 BTC였어요." in briefing
+    assert "공식 발행사 기준으로 집계한 IBIT, BITB, GBTC 합산 보유량은 981,234.56 BTC였습니다." in briefing
     assert "직전 스냅샷과 비교한 공식 ETF 흐름은 1,234.56 BTC 순유입" in briefing
 
 

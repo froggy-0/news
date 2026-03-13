@@ -14,6 +14,11 @@ from morning_brief.prompting import build_prompt_cache_key, render_brief_prompts
 logger = logging.getLogger(__name__)
 SECTION_HEADING_RE = re.compile(r"^\d+\.\s+.+$")
 SUBSECTION_LABELS = {
+    "핵심 판단",
+    "주요 지표",
+    "핵심 이슈",
+    "배경과 해석",
+    "주목할 변수",
     "한줄 결론",
     "핵심 수치",
     "핵심 내용",
@@ -189,15 +194,15 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
     official_flow_usd = btc.get("official_etf_daily_flow_usd")
 
     if fg_value is not None and fg_label:
-        sentiment_text = f"공포탐욕지수는 {fg_value}({fg_label})로 확인됐어요."
+        sentiment_text = f"공포탐욕지수는 {fg_value}({fg_label})로 확인됐습니다."
     else:
-        sentiment_text = "공포탐욕지수는 이번 집계에서 확인되지 않았어요."
+        sentiment_text = "공포탐욕지수는 이번 집계에서 확인되지 않았습니다."
 
     official_etf_lines: list[str] = []
     if official_supported and official_total_btc:
         supported_text = ", ".join(official_supported)
         official_etf_lines.append(
-            f"공식 발행사 기준으로 집계한 {supported_text} 합산 보유량은 {official_total_btc:,.2f} BTC였어요."
+            f"공식 발행사 기준으로 집계한 {supported_text} 합산 보유량은 {official_total_btc:,.2f} BTC였습니다."
         )
     if official_compared and official_flow_btc is not None:
         direction = "순유입" if official_flow_btc >= 0 else "순유출"
@@ -205,121 +210,121 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
         if official_flow_usd is not None:
             flow_usd_text = f", 달러 기준 약 {abs(official_flow_usd):,.0f}달러"
         official_etf_lines.append(
-            f"직전 스냅샷과 비교한 공식 ETF 흐름은 {abs(official_flow_btc):,.2f} BTC {direction}{flow_usd_text}로 계산됐어요."
+            f"직전 스냅샷과 비교한 공식 ETF 흐름은 {abs(official_flow_btc):,.2f} BTC {direction}{flow_usd_text}로 계산됐습니다."
         )
 
     body = f"""Morning Market Brief ({date_str})
 
 1. 거시 환경
-한줄 결론
-- 금리와 달러 방향이 기술주 분위기를 좌우하고 있어요.
+핵심 판단
+- 금리와 달러 방향이 기술주 흐름을 좌우하고 있습니다.
 
-핵심 수치
-{_bullet_lines([f"금리·달러·변동성 지표는 {macro_text} 흐름으로 확인됐어요."])}
+주요 지표
+{_bullet_lines([f"금리·달러·변동성 지표는 {macro_text} 흐름으로 확인됐습니다."])}
 
-쉽게 보면
-금리와 달러의 방향은 기술주 밸류에이션에 직접적인 영향을 주고 있어요.
+배경과 해석
+금리와 달러의 방향은 기술주 주가 부담에 직접적인 영향을 주고 있습니다.
 
-VIX가 낮게 유지되면 위험자산 선호가 이어질 수 있지만, 금리가 다시 오르면 성장주 변동성은 커질 수 있어요.
+VIX가 낮게 유지되면 위험자산 선호가 이어질 수 있지만, 금리가 다시 오르면 성장주 변동성은 커질 수 있습니다.
 
-오늘 체크할 포인트
+주목할 변수
 {_bullet_lines([
     "장기금리가 더 오르는지",
     "달러 강세가 다시 커지는지",
 ])}
 
 2. 미국 증시 흐름
-한줄 결론
-- 지수보다 시장 폭이 넓어지는지가 더 중요해 보였어요.
+핵심 판단
+- 지수 자체보다 상승 흐름이 시장 전반으로 퍼지는지가 더 중요해 보입니다.
 
-핵심 수치
-{_bullet_lines([f"주요 지수는 {index_text} 흐름으로 마감했어요."])}
+주요 지표
+{_bullet_lines([f"주요 지수는 {index_text} 흐름으로 마감했습니다."])}
 
-쉽게 보면
-나스닥과 반도체 섹터의 상대 강도는 AI 수요 기대가 아직 살아 있다는 신호로 읽혀요.
+배경과 해석
+나스닥과 반도체 섹터의 상대 강도는 AI 수요 기대가 아직 살아 있다는 신호로 읽힙니다.
 
-다만 지수 상승이 소수 종목에만 몰리면 추세의 힘은 생각보다 약할 수 있어서, 시장 폭이 넓어지는지 함께 볼 필요가 있어요.
+다만 지수 상승이 소수 종목에만 몰리면 추세의 힘은 생각보다 약할 수 있어서, 시장 폭이 넓어지는지 함께 볼 필요가 있습니다.
 
-오늘 체크할 포인트
+주목할 변수
 {_bullet_lines([
     "반도체 강세가 다른 업종으로 번지는지",
     "대형주 쏠림이 다시 강해지는지",
 ])}
 
 3. AI / 빅테크 동향
-한줄 결론
-- 같은 AI 테마 안에서도 종목별 차이가 더 커졌어요.
+핵심 판단
+- 같은 AI 테마 안에서도 종목별 차이가 더 커지고 있습니다.
 
-핵심 수치
-{_bullet_lines([f"빅테크·반도체 주요 종목 가운데 변동이 큰 종목은 {top_movers_text}였어요."])}
+주요 지표
+{_bullet_lines([f"빅테크·반도체 주요 종목 가운데 변동이 큰 종목은 {top_movers_text}였습니다."])}
 
-쉽게 보면
-실적 가이던스와 AI 인프라 투자 속도, 데이터센터 CAPEX 기대가 종목별 차이를 만들고 있어요.
+배경과 해석
+실적 가이던스와 AI 인프라 투자 속도, 데이터센터 투자 기대가 종목별 차이를 만들고 있습니다.
 
-같은 AI 테마 안에서도 기업별 해석이 더 중요해지는 구간으로 보여요.
+같은 AI 테마 안에서도 기업별 해석이 더 중요해지는 구간으로 보입니다.
 
-오늘 체크할 포인트
+주목할 변수
 {_bullet_lines([
     "AI 투자 기대가 실적으로 이어지는지",
     "반도체 강세가 이어지는지",
 ])}
 
 4. 비트코인 시장
-한줄 결론
-- 가격보다 ETF 자금 흐름이 더 중요하게 읽혔어요.
+핵심 판단
+- 가격 자체보다 ETF 자금 흐름이 더 중요한 변수로 읽힙니다.
 
-핵심 수치
+주요 지표
 {_bullet_lines([
-    f"비트코인 현물은 {btc_spot.get('price', 0):.2f}달러({btc_spot.get('change_pct', 0):+.2f}%) 수준이었어요.",
-    f"주요 ETF 합산 거래량은 약 {btc.get('etf_total_volume', 0):,}주였어요.",
+    f"비트코인 현물은 {btc_spot.get('price', 0):.2f}달러({btc_spot.get('change_pct', 0):+.2f}%) 수준이었습니다.",
+    f"주요 ETF 합산 거래량은 약 {btc.get('etf_total_volume', 0):,}주였습니다.",
     *official_etf_lines,
     sentiment_text,
 ])}
 
-쉽게 보면
-ETF 자금 유입 강도와 가격 반응이 엇갈리면 단기 변동성이 커질 수 있어요.
+배경과 해석
+ETF 자금 유입 강도와 가격 반응이 엇갈리면 단기 변동성이 커질 수 있습니다.
 
-가격 자체보다 자금 흐름이 얼마나 꾸준한지가 더 중요한 구간으로 보여요.
+가격 자체보다 자금 흐름이 얼마나 꾸준한지가 더 중요한 구간으로 보입니다.
 
-오늘 체크할 포인트
+주목할 변수
 {_bullet_lines([
     "ETF 자금 유입이 이어지는지",
-    "가격이 거래량과 같이 움직이는지",
+    "가격이 거래량과 함께 움직이는지",
 ])}
 
 5. 중요한 뉴스
-한줄 결론
-- 오늘 뉴스는 금리와 AI 투자, ETF 흐름 쪽에 무게가 실렸어요.
+핵심 판단
+- 오늘 뉴스는 금리와 AI 투자, ETF 흐름 쪽에 무게가 실렸습니다.
 
-핵심 내용
-{chr(10).join(news_lines) if news_lines else '- 오늘 반영할 주요 뉴스가 충분히 수집되지 않았어요.'}
+핵심 이슈
+{chr(10).join(news_lines) if news_lines else '- 오늘 반영할 주요 뉴스가 충분히 수집되지 않았습니다.'}
 
-쉽게 보면
-오늘 뉴스 흐름은 금리 경로와 AI 투자 기대, 그리고 ETF 수급 해석에 영향을 줄 수 있는 재료들 위주로 읽히고 있어요.
+배경과 해석
+오늘 뉴스 흐름은 금리 경로와 AI 투자 기대, 그리고 ETF 수급 해석에 영향을 줄 수 있는 재료들 위주로 읽힙니다.
 
-오늘 체크할 포인트
+주목할 변수
 {_bullet_lines([
-    "시장에 바로 영향을 줄 뉴스가 이어지는지",
-    "같은 주제를 다른 출처도 같이 확인하는지",
+    "시장에 직접 영향을 줄 뉴스가 이어지는지",
+    "같은 주제를 다른 출처도 함께 확인하는지",
 ])}
 
 6. 시장 해석
-한줄 결론
-- 지금 시장은 금리와 AI 투자 기대가 같이 가격을 움직이는 구간이에요.
+핵심 판단
+- 지금 시장은 금리와 AI 투자 기대가 함께 가격을 움직이는 구간입니다.
 
-핵심 수치
+주요 지표
 {_bullet_lines([
-    "오늘 해석은 금리, 빅테크 투자, 비트코인 ETF 흐름을 함께 봐야 해요.",
+    "오늘 해석은 금리, 빅테크 투자, 비트코인 ETF 흐름을 함께 봐야 합니다.",
 ])}
 
-쉽게 보면
-지금 시장은 금리 경로와 AI 투자 모멘텀이 함께 가격을 움직이는 구간으로 보여요.
+배경과 해석
+지금 시장은 금리 경로와 AI 투자 모멘텀이 함께 가격을 움직이는 구간으로 보입니다.
 
-금리가 안정되고 실적 기대가 유지되면 기술주와 반도체 중심의 위험 선호가 이어질 수 있어요.
+금리가 안정되고 실적 기대가 유지되면 기술주와 반도체 중심의 위험 선호가 이어질 수 있습니다.
 
-반대로 정책 변수나 매크로 서프라이즈가 나오면 포지션이 빠르게 재조정될 수 있어서, 오늘은 방향성보다 반응 속도를 같이 보는 편이 좋아요.
+반대로 정책 변수나 거시 지표의 예상 밖 변화가 나오면 포지션이 빠르게 재조정될 수 있어서, 오늘은 방향성보다 시장 반응 속도를 함께 볼 필요가 있습니다.
 
-오늘 체크할 포인트
+주목할 변수
 {_bullet_lines([
     "연준 관련 발언과 미 국채금리 방향",
     "대형 기술주의 투자지출 신호",

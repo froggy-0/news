@@ -16,10 +16,10 @@ SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
 logger = logging.getLogger(__name__)
 SECTION_HEADING_RE = re.compile(r"^(\d+)\.\s+(.+)$")
 DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
-CONCLUSION_LABELS = {"한줄 결론", "오늘의 한줄 결론"}
-METRIC_LABELS = {"핵심 수치", "수치 체크", "핵심 내용"}
-INSIGHT_LABELS = {"쉽게 보면", "해석", "이렇게 읽으면 좋아요", "이렇게 읽으면 돼요", "왜 중요한지"}
-WATCH_LABELS = {"오늘 볼 점", "오늘 체크할 포인트", "지금 주의해서 볼 점", "체크 포인트"}
+CONCLUSION_LABELS = {"핵심 판단", "한줄 결론", "오늘의 한줄 결론"}
+METRIC_LABELS = {"주요 지표", "주요 수치", "핵심 수치", "수치 체크", "핵심 내용", "핵심 이슈"}
+INSIGHT_LABELS = {"배경과 해석", "쉽게 보면", "해석", "이렇게 읽으면 좋아요", "이렇게 읽으면 돼요", "왜 중요한지"}
+WATCH_LABELS = {"주목할 변수", "오늘 볼 점", "오늘 체크할 포인트", "지금 주의해서 볼 점", "체크 포인트"}
 SENTENCE_BREAK_RE = re.compile(r"(?<=[.!?])\s+(?=[\"'“”‘’(]*[A-Za-z가-힣])")
 PERCENT_RE = re.compile(r"[+-]?\d[\d,]*(?:\.\d+)?%")
 UP_TOKENS = ("올랐", "상승", "강세", "반등", "높아졌", "증가", "확대", "유입", "개선", "회복")
@@ -128,10 +128,10 @@ def _split_section_groups(content: str) -> dict[str, tuple[str, str]]:
     normalized = _expand_sentence_spacing(content)
     current_kind = "conclusion"
     groups = {
-        "conclusion": {"label": "한줄 결론", "lines": []},
-        "metrics": {"label": "핵심 수치", "lines": []},
-        "insight": {"label": "쉽게 보면", "lines": []},
-        "watch": {"label": "오늘 체크할 포인트", "lines": []},
+        "conclusion": {"label": "핵심 판단", "lines": []},
+        "metrics": {"label": "주요 지표", "lines": []},
+        "insight": {"label": "배경과 해석", "lines": []},
+        "watch": {"label": "주목할 변수", "lines": []},
     }
     explicit_labels_found = False
 
@@ -143,25 +143,21 @@ def _split_section_groups(content: str) -> dict[str, tuple[str, str]]:
 
         if line in CONCLUSION_LABELS:
             current_kind = "conclusion"
-            groups["conclusion"]["label"] = line
             explicit_labels_found = True
             continue
 
         if line in METRIC_LABELS:
             current_kind = "metrics"
-            groups["metrics"]["label"] = line
             explicit_labels_found = True
             continue
 
         if line in INSIGHT_LABELS:
             current_kind = "insight"
-            groups["insight"]["label"] = line
             explicit_labels_found = True
             continue
 
         if line in WATCH_LABELS:
             current_kind = "watch"
-            groups["watch"]["label"] = line
             explicit_labels_found = True
             continue
 
@@ -369,13 +365,15 @@ def _render_section_row(index: int, heading: str, content: str) -> str:
     metrics_label, metrics_content = groups["metrics"]
     insight_label, insight_content = groups["insight"]
     watch_label, watch_content = groups["watch"]
+    if heading == "중요한 뉴스":
+        metrics_label = "핵심 이슈"
 
     conclusion_block = ""
     if conclusion_content:
         conclusion_block = (
             '<div style="padding:0 0 16px 0;">'
             f'<div style="font-size:11px;line-height:1.2;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#475569;padding:0 0 8px 0;">{html.escape(conclusion_label)}</div>'
-            '<div style="padding:14px 16px;border-radius:18px;background:#f8fafc;border:1px solid #e2e8f0;">'
+            '<div style="padding:14px 16px;border-radius:16px;background:#f8fafc;border:1px solid #e2e8f0;">'
             f"{_text_to_html_blocks(conclusion_content)}"
             "</div>"
             "</div>"
@@ -384,7 +382,7 @@ def _render_section_row(index: int, heading: str, content: str) -> str:
     if metrics_content:
         metrics_block = (
             '<div style="padding:0 0 14px 0;">'
-            f'<div style="font-size:11px;line-height:1.2;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#2563eb;padding:0 0 10px 0;">{html.escape(metrics_label)}</div>'
+            f'<div style="font-size:11px;line-height:1.2;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#1d4ed8;padding:0 0 10px 0;">{html.escape(metrics_label)}</div>'
             f"{_text_to_html_blocks(metrics_content)}"
             "</div>"
         )
@@ -400,8 +398,8 @@ def _render_section_row(index: int, heading: str, content: str) -> str:
     if watch_content:
         watch_block = (
             '<div style="padding:0;">'
-            f'<div style="font-size:11px;line-height:1.2;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#7c3aed;padding:0 0 10px 0;">{html.escape(watch_label)}</div>'
-            '<div style="padding:14px 16px;border-radius:18px;background:#faf5ff;border:1px solid #e9d5ff;">'
+            f'<div style="font-size:11px;line-height:1.2;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#1d4ed8;padding:0 0 10px 0;">{html.escape(watch_label)}</div>'
+            '<div style="padding:14px 16px;border-radius:16px;background:#f8fbff;border:1px solid #dbeafe;">'
             f"{_text_to_html_blocks(watch_content)}"
             "</div>"
             "</div>"
@@ -410,7 +408,7 @@ def _render_section_row(index: int, heading: str, content: str) -> str:
         "<tr>"
         '<td style="padding:0 0 16px 0;">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" '
-        'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:24px;box-shadow:0 16px 32px rgba(15,23,42,0.04);">'
+        'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:20px;box-shadow:0 10px 24px rgba(15,23,42,0.03);">'
         "<tr>"
         '<td style="padding:22px 24px 22px 24px;">'
         f'<div style="width:36px;height:36px;line-height:36px;text-align:center;background:#0f172a;color:#ffffff;border-radius:999px;font-size:14px;font-weight:700;">{index}</div>'
@@ -474,7 +472,7 @@ def _render_reference_block(references: list[str]) -> str:
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" '
         'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:20px;box-shadow:0 16px 32px rgba(15,23,42,0.04);">'
         '<tr><td style="padding:18px 22px 16px 22px;">'
-        '<div style="font-size:15px;line-height:1.4;font-weight:700;color:#0f172a;padding:0 0 12px 0;">참고 출처</div>'
+        '<div style="font-size:15px;line-height:1.4;font-weight:700;color:#0f172a;padding:0 0 12px 0;">주요 참고 출처</div>'
         '<ul style="margin:0;padding:0;">'
         f"{''.join(items)}"
         "</ul>"
@@ -486,12 +484,12 @@ def _render_masthead_block(display_date: str) -> str:
     return (
         '<tr><td style="padding:0 0 16px 0;">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="hero-card" '
-        'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:24px;overflow:hidden;box-shadow:0 16px 32px rgba(15,23,42,0.04);">'
+        'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:20px;overflow:hidden;box-shadow:0 10px 24px rgba(15,23,42,0.03);">'
         "<tr>"
         '<td class="hero-wrap" style="padding:22px 24px 20px 24px;background:#ffffff;">'
         f'<div style="padding:0 0 8px 0;color:#64748b;font-size:13px;line-height:1.5;font-weight:600;">{html.escape(display_date)}</div>'
         '<div class="hero-title" style="font-size:28px;line-height:1.24;font-weight:800;letter-spacing:-0.03em;color:#0f172a;-webkit-text-fill-color:#0f172a;">'
-        "미국 기술주 · 비트코인 아침 브리핑"
+        "미국 기술주 · 비트코인 시장 브리핑"
         "</div>"
         "</td>"
         "</tr>"
@@ -513,9 +511,9 @@ def _render_top_summary_block(summary_lines: list[str]) -> str:
     return (
         '<tr><td style="padding:0 0 16px 0;">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" '
-        'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:22px;box-shadow:0 16px 32px rgba(15,23,42,0.04);">'
+        'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:20px;box-shadow:0 10px 24px rgba(15,23,42,0.03);">'
         '<tr><td style="padding:20px 22px 16px 22px;">'
-        '<div style="font-size:12px;line-height:1.2;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#2563eb;padding:0 0 10px 0;">오늘의 한눈 요약</div>'
+        '<div style="font-size:12px;line-height:1.2;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#1d4ed8;padding:0 0 10px 0;">핵심 요약</div>'
         f'<ul style="margin:0;padding:0;">{items}</ul>'
         "</td></tr></table></td></tr>"
     )
@@ -539,9 +537,9 @@ def _render_snapshot_block(snapshot_rows: list[tuple[str, str]]) -> str:
     return (
         '<tr><td style="padding:0 0 16px 0;">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" '
-        'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:22px;box-shadow:0 16px 32px rgba(15,23,42,0.04);">'
+        'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:20px;box-shadow:0 10px 24px rgba(15,23,42,0.03);">'
         '<tr><td style="padding:18px 22px 16px 22px;">'
-        '<div style="font-size:12px;line-height:1.2;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#2563eb;padding:0 0 6px 0;">시장 스냅샷</div>'
+        '<div style="font-size:12px;line-height:1.2;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#1d4ed8;padding:0 0 6px 0;">주요 지표</div>'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">'
         f"{rows}"
         "</table>"
@@ -601,7 +599,7 @@ def _render_email_document(
             {reference_block}
             <tr>
               <td style="padding:8px 6px 0 6px;color:#64748b;font-size:12px;line-height:1.7;text-align:center;">
-                공개 시장 데이터와 신뢰 가능한 출처를 바탕으로 정리한 아침 브리핑이에요. 투자 권유가 아닌 정보 전달 목적의 요약입니다.
+                본 자료는 공개 시장 데이터와 신뢰 가능한 외부 출처를 바탕으로 작성한 일반 정보성 브리핑입니다. 특정 자산에 대한 투자 권유나 자문에 해당하지 않으며, 시장 상황에 따라 수치와 해석은 달라질 수 있습니다.
               </td>
             </tr>
           </table>

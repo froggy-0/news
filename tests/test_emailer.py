@@ -14,44 +14,44 @@ SAMPLE_BRIEF = """Morning Market Brief (2026-03-12)
 [데이터 품질 알림] 뉴스 수가 부족합니다.
 
 1. 거시 환경
-한줄 결론
-- 금리와 달러 흐름이 기술주 심리에 부담을 줬어요.
+핵심 판단
+- 금리와 달러 흐름이 기술주 심리에 부담으로 작용했습니다.
 
-핵심 수치
-- 미국 10년물 금리는 4.20%였어요.
+주요 지표
+- 미국 10년물 금리는 4.20%였습니다.
 
-쉽게 보면
-금리 흐름은 기술주 밸류에이션에 영향을 주고 있어요. 달러 방향도 함께 봐야 해요.
+배경과 해석
+금리 흐름은 기술주 주가 부담에 영향을 주고 있습니다. 달러 방향도 함께 볼 필요가 있습니다.
 
-오늘 체크할 포인트
-- 장기금리가 더 오르는지 같이 봐야 해요.
+주목할 변수
+- 장기금리가 더 오르는지 함께 볼 필요가 있습니다.
 
 2. 미국 증시 흐름
-한줄 결론
-- 반도체가 지수를 조금 더 잘 버텼어요.
+핵심 판단
+- 반도체가 지수를 조금 더 잘 버텼습니다.
 
-핵심 수치
-- 나스닥이 1.2% 올랐어요.
+주요 지표
+- 나스닥이 1.2% 상승했습니다.
 
-쉽게 보면
-반도체가 상대적으로 견조했어요. 시장 폭이 넓어지는지는 더 봐야 해요.
+배경과 해석
+반도체가 상대적으로 견조했습니다. 시장 폭이 넓어지는지는 더 볼 필요가 있습니다.
 
-오늘 체크할 포인트
-- 대형 기술주로만 쏠리는지 확인이 필요해요.
+주목할 변수
+- 대형 기술주로만 쏠리는지 확인이 필요합니다.
 
 5. 중요한 뉴스
-한줄 결론
-- AI 투자 기대와 ETF 자금 흐름이 같이 읽혔어요.
+핵심 판단
+- AI 투자 기대와 ETF 자금 흐름이 함께 읽혔습니다.
 
-핵심 내용
+핵심 이슈
 - 엔비디아가 신규 AI 투자 계획을 공개했습니다.
 - 비트코인 ETF 자금 유입이 재개됐습니다.
 
-쉽게 보면
-AI 투자 기대와 ETF 수급 개선이 함께 읽혔어요.
+배경과 해석
+AI 투자 기대와 ETF 수급 개선이 함께 읽혔습니다.
 
-오늘 체크할 포인트
-- 관련 기대가 오늘도 이어지는지 살펴봐야 해요.
+주목할 변수
+- 관련 기대가 오늘도 이어지는지 살펴볼 필요가 있습니다.
 """
 
 
@@ -77,9 +77,9 @@ def test_render_briefing_email_html_contains_modern_layout_and_list_items():
         body=SAMPLE_BRIEF,
     )
 
-    assert "미국 기술주 · 비트코인 아침 브리핑" in html
-    assert "오늘의 한눈 요약" in html
-    assert "시장 스냅샷" in html
+    assert "미국 기술주 · 비트코인 시장 브리핑" in html
+    assert "핵심 요약" in html
+    assert "주요 지표" in html
     assert "2026.03.12" in html
     assert "-webkit-text-fill-color:#0f172a" in html
     assert "Pretendard" in html
@@ -91,22 +91,21 @@ def test_render_briefing_email_html_contains_modern_layout_and_list_items():
     assert "#dc2626" in html
     assert "alpha@example.com" not in html
     assert "[데이터 품질 알림] 뉴스 수가 부족합니다." in html
-    assert "한줄 결론" in html
-    assert "핵심 수치" in html
-    assert "쉽게 보면" in html
-    assert "오늘 체크할 포인트" in html
+    assert "핵심 판단" in html
+    assert "배경과 해석" in html
+    assert "주목할 변수" in html
 
 
 def test_split_section_groups_separates_summary_and_insight():
     groups = _split_section_groups(
-        "한줄 결론\n- 반도체가 지수를 조금 더 잘 버텼어요.\n\n핵심 수치\n- 나스닥이 1.2% 올랐어요.\n\n쉽게 보면\n강세 흐름이 이어졌어요. 다만 시장 폭은 더 봐야 해요.\n\n오늘 체크할 포인트\n- 대형 기술주로만 쏠리는지 봐야 해요."
+        "한줄 결론\n- 반도체가 지수를 조금 더 잘 버텼습니다.\n\n핵심 수치\n- 나스닥이 1.2% 상승했습니다.\n\n쉽게 보면\n강세 흐름이 이어졌습니다. 다만 시장 폭은 더 볼 필요가 있습니다.\n\n오늘 체크할 포인트\n- 대형 기술주로만 쏠리는지 볼 필요가 있습니다."
     )
 
-    assert groups["conclusion"][0] == "한줄 결론"
-    assert "- 반도체가 지수를 조금 더 잘 버텼어요." in groups["conclusion"][1]
-    assert "- 나스닥이 1.2% 올랐어요." in groups["metrics"][1]
-    assert "강세 흐름이 이어졌어요." in groups["insight"][1]
-    assert "대형 기술주로만 쏠리는지 봐야 해요." in groups["watch"][1]
+    assert groups["conclusion"][0] == "핵심 판단"
+    assert "- 반도체가 지수를 조금 더 잘 버텼습니다." in groups["conclusion"][1]
+    assert "- 나스닥이 1.2% 상승했습니다." in groups["metrics"][1]
+    assert "강세 흐름이 이어졌습니다." in groups["insight"][1]
+    assert "대형 기술주로만 쏠리는지 볼 필요가 있습니다." in groups["watch"][1]
 
 
 def test_render_briefing_email_html_marks_down_moves_in_blue():
@@ -115,8 +114,8 @@ def test_render_briefing_email_html_marks_down_moves_in_blue():
         body="""Morning Market Brief (2026-03-12)
 
 1. 미국 증시 흐름
-핵심 수치
-- 엔비디아가 2.4% 내렸어요.
+주요 지표
+- 엔비디아가 2.4% 하락했습니다.
 """,
     )
 
@@ -124,7 +123,7 @@ def test_render_briefing_email_html_marks_down_moves_in_blue():
     assert "↑" not in html
     assert "↓" not in html
     assert '<span style="color:#2563eb;font-weight:700;">2.4%</span>' in html
-    assert "엔비디아가 2.4% 내렸어요." in html
+    assert "엔비디아가 2.4% 하락했습니다." in html
 
 
 def test_render_briefing_email_html_colors_each_signed_percent_individually():
@@ -133,8 +132,8 @@ def test_render_briefing_email_html_colors_each_signed_percent_individually():
         body="""Morning Market Brief (2026-03-12)
 
 1. 미국 증시 흐름
-핵심 수치
-- 주요 지수는 S&P500 610.25 (+1.20%) / NASDAQ 18250.11 (-0.85%) / SOXX 245.10 (+0.10%) 흐름으로 마감했어요.
+주요 지표
+- 주요 지수는 S&P500 610.25 (+1.20%) / NASDAQ 18250.11 (-0.85%) / SOXX 245.10 (+0.10%) 흐름으로 마감했습니다.
 """,
     )
 
@@ -149,8 +148,8 @@ def test_render_briefing_email_html_prefers_negative_numeric_direction_over_posi
         body="""Morning Market Brief (2026-03-12)
 
 1. 시장 해석
-오늘 체크할 포인트
-- 나스닥은 -1.20%였지만 단기 반등 기대는 아직 남아 있어요.
+주목할 변수
+- 나스닥은 -1.20%였지만 단기 반등 기대는 아직 남아 있습니다.
 """,
     )
 
@@ -179,7 +178,7 @@ def test_render_briefing_email_html_renders_reference_links():
         body=body,
     )
 
-    assert "참고 출처" in html
+    assert "주요 참고 출처" in html
     assert 'href="https://www.reuters.com/world/us/example"' in html
 
 

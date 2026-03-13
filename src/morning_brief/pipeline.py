@@ -67,7 +67,7 @@ def run_pipeline(settings: Settings) -> str:
     output_path.write_text(briefing, encoding="utf-8")
     logger.info("브리핑을 저장했어요: %s", output_path)
 
-    subject = f"미국 기술주·비트코인 브리핑 ({now.strftime('%Y-%m-%d')})"
+    subject = f"미국 기술주·비트코인 시장 브리핑 ({now.strftime('%Y-%m-%d')})"
     GmailSender(settings).send(subject=subject, body=briefing)
     logger.info("브리핑 파이프라인을 마쳤어요.")
 
