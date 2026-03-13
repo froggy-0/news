@@ -5,15 +5,14 @@ from datetime import datetime, timezone
 import logging
 from typing import Any
 
-import requests
+from perplexity import APIConnectionError, APIStatusError, APITimeoutError, Perplexity, RateLimitError
 
 from morning_brief.data.sources.domain_utils import domain_matches, normalize_domain
-from morning_brief.data.sources.http_client import HttpFetchError, is_host_resolvable
+from morning_brief.data.sources.http_client import HttpFetchError
 from morning_brief.models import NewsItem
 
 logger = logging.getLogger(__name__)
 
-SEARCH_API_URL = "https://api.perplexity.ai/search"
 SEARCH_TIMEOUT_SECONDS = 25
 SEARCH_MAX_RESULTS = 5
 TOPIC_RESULT_TARGET = 2
@@ -196,36 +195,65 @@ def _is_allowed_domain(url: str, allowed_domains: tuple[str, ...]) -> bool:
     return any(domain_matches(domain, candidate) for candidate in allowed_domains)
 
 
-def _search_once(*, query: str, domain_filter: tuple[str, ...], recency_filter: str, api_key: str) -> dict[str, Any]:
-    if not is_host_resolvable(SEARCH_API_URL):
-        raise HttpFetchError("Perplexity API 호스트 주소를 확인하지 못했어요.")
+def _build_client(api_key: str) -> Perplexity:
+    return Perplexity(
+        api_key=api_key,
+        timeout=SEARCH_TIMEOUT_SECONDS,
+        max_retries=1,
+    )
 
+
+def _format_status_error(exc: APIStatusError) -> str:
+    status_code = getattr(exc, "status_code", "unknown")
+    response = getattr(exc, "response", None)
+    detail = ""
+    if response is not None:
+        try:
+            detail = str(response.text).strip()
+        except Exception:
+            detail = ""
+    if detail:
+        detail = " ".join(detail.split())[:240]
+        return f"status={status_code}, detail={detail}"
+    return f"status={status_code}"
+
+
+def _search_once(
+    *,
+    client: Perplexity,
+    query: str,
+    domain_filter: tuple[str, ...],
+    recency_filter: str,
+) -> dict[str, Any]:
     try:
-        response = requests.post(
-            SEARCH_API_URL,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
-            json={
-                "query": query,
-                "max_results": SEARCH_MAX_RESULTS,
-                "search_domain_filter": list(domain_filter),
-                "search_recency_filter": recency_filter,
-                "country": "US",
-                "search_mode": "web",
-            },
-            timeout=SEARCH_TIMEOUT_SECONDS,
+        response = client.search.create(
+            query=query,
+            max_results=SEARCH_MAX_RESULTS,
+            search_domain_filter=list(domain_filter),
+            search_recency_filter=recency_filter,
+            country="US",
+            search_mode="web",
         )
-        response.raise_for_status()
-    except requests.RequestException as exc:
-        raise HttpFetchError("Perplexity Search API를 호출하지 못했어요.") from exc
+    except RateLimitError as exc:
+        raise HttpFetchError(
+            f"Perplexity Search API 호출 한도에 걸렸어요: {_format_status_error(exc)}"
+        ) from exc
+    except APITimeoutError as exc:
+        raise HttpFetchError("Perplexity Search API 응답 시간이 너무 오래 걸렸어요.") from exc
+    except APIConnectionError as exc:
+        raise HttpFetchError("Perplexity Search API 연결을 열지 못했어요.") from exc
+    except APIStatusError as exc:
+        raise HttpFetchError(
+            f"Perplexity Search API가 요청을 거절했어요: {_format_status_error(exc)}"
+        ) from exc
 
     try:
-        payload = response.json()
-    except ValueError as exc:
-        raise HttpFetchError("Perplexity Search API 응답을 JSON으로 읽지 못했어요.") from exc
+        payload = response.model_dump()
+    except AttributeError:
+        if isinstance(response, dict):
+            payload = response
+        else:
+            raise HttpFetchError("Perplexity Search API 응답 구조가 예상과 달라요.")
 
     if not isinstance(payload, dict):
         raise HttpFetchError("Perplexity Search API 응답 구조가 예상과 달라요.")
@@ -273,23 +301,24 @@ def fetch_news_from_perplexity(*, max_items: int, api_key: str) -> list[NewsItem
         logger.info("Perplexity API 키가 아직 없어 legacy 뉴스 수집으로 이어갈게요.")
         return []
 
+    client = _build_client(api_key)
     collected: list[NewsItem] = []
 
     for topic in TOPIC_SPECS:
         try:
             payload = _search_once(
+                client=client,
                 query=topic.query,
                 domain_filter=topic.domain_filter,
                 recency_filter=topic.recency_filter,
-                api_key=api_key,
             )
             topic_items = _parse_results(payload=payload, topic=topic)
             if len(topic_items) < TOPIC_RESULT_TARGET and topic.retry_query:
                 retry_payload = _search_once(
+                    client=client,
                     query=topic.retry_query,
                     domain_filter=topic.domain_filter,
                     recency_filter=topic.recency_filter,
-                    api_key=api_key,
                 )
                 topic_items.extend(_parse_results(payload=retry_payload, topic=topic))
 
