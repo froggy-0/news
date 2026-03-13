@@ -15,8 +15,11 @@ SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
 
 logger = logging.getLogger(__name__)
 SECTION_HEADING_RE = re.compile(r"^(\d+)\.\s+(.+)$")
-SUMMARY_LABELS = {"수치 체크", "핵심 내용", "오늘 볼 포인트", "체크 포인트"}
-INSIGHT_LABELS = {"해석", "이렇게 읽으면 돼요"}
+DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
+CONCLUSION_LABELS = {"한줄 결론", "오늘의 한줄 결론"}
+METRIC_LABELS = {"핵심 수치", "수치 체크", "핵심 내용"}
+INSIGHT_LABELS = {"쉽게 보면", "해석", "이렇게 읽으면 좋아요", "이렇게 읽으면 돼요", "왜 중요한지"}
+WATCH_LABELS = {"오늘 볼 점", "오늘 체크할 포인트", "지금 주의해서 볼 점", "체크 포인트"}
 SENTENCE_BREAK_RE = re.compile(r"(?<=[.!?])\s+(?=[\"'“”‘’(]*[A-Za-z가-힣])")
 PERCENT_RE = re.compile(r"[+-]?\d[\d,]*(?:\.\d+)?%")
 UP_TOKENS = ("올랐", "상승", "강세", "반등", "높아졌", "증가", "확대", "유입", "개선", "회복")
@@ -121,47 +124,120 @@ def _expand_sentence_spacing(text: str) -> str:
     return "\n".join(lines).strip()
 
 
-def _split_section_groups(content: str) -> tuple[str, str, str]:
+def _split_section_groups(content: str) -> dict[str, tuple[str, str]]:
     normalized = _expand_sentence_spacing(content)
-    current_kind = "summary"
-    current_label = "핵심 요약"
-    sections = {
-        "summary": {"label": "핵심 요약", "lines": []},
-        "insight": {"label": "이렇게 읽으면 좋아요", "lines": []},
+    current_kind = "conclusion"
+    groups = {
+        "conclusion": {"label": "한줄 결론", "lines": []},
+        "metrics": {"label": "핵심 수치", "lines": []},
+        "insight": {"label": "쉽게 보면", "lines": []},
+        "watch": {"label": "오늘 체크할 포인트", "lines": []},
     }
     explicit_labels_found = False
 
     for raw_line in normalized.splitlines():
         line = raw_line.strip()
         if not line:
-            sections[current_kind]["lines"].append("")
+            groups[current_kind]["lines"].append("")
             continue
 
-        if line in SUMMARY_LABELS:
-            current_kind = "summary"
-            current_label = line
-            sections["summary"]["label"] = current_label
+        if line in CONCLUSION_LABELS:
+            current_kind = "conclusion"
+            groups["conclusion"]["label"] = line
+            explicit_labels_found = True
+            continue
+
+        if line in METRIC_LABELS:
+            current_kind = "metrics"
+            groups["metrics"]["label"] = line
             explicit_labels_found = True
             continue
 
         if line in INSIGHT_LABELS:
             current_kind = "insight"
-            current_label = line
-            sections["insight"]["label"] = current_label
+            groups["insight"]["label"] = line
             explicit_labels_found = True
             continue
 
-        sections[current_kind]["lines"].append(line)
+        if line in WATCH_LABELS:
+            current_kind = "watch"
+            groups["watch"]["label"] = line
+            explicit_labels_found = True
+            continue
+
+        groups[current_kind]["lines"].append(line)
 
     if not explicit_labels_found:
         paragraphs = [part.strip() for part in normalized.split("\n\n") if part.strip()]
         if paragraphs:
-            sections["summary"]["lines"] = [paragraphs[0]]
-            sections["insight"]["lines"] = paragraphs[1:]
+            groups["conclusion"]["lines"] = [paragraphs[0]]
+            for paragraph in paragraphs[1:]:
+                lines = [line.strip() for line in paragraph.splitlines() if line.strip()]
+                if lines and all(line.startswith("- ") for line in lines):
+                    groups["metrics"]["lines"].extend(lines)
+                else:
+                    groups["insight"]["lines"].append(paragraph)
 
-    summary = "\n".join(sections["summary"]["lines"]).strip()
-    insight = "\n".join(sections["insight"]["lines"]).strip()
-    return sections["summary"]["label"], summary, insight
+    return {
+        key: (value["label"], "\n".join(value["lines"]).strip())
+        for key, value in groups.items()
+    }
+
+
+def _first_non_empty_paragraph(text: str) -> str:
+    for paragraph in (part.strip() for part in text.split("\n\n")):
+        if paragraph:
+            return paragraph
+    return ""
+
+
+def _first_metric_line(text: str) -> str:
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        return stripped[2:].strip() if stripped.startswith("- ") else stripped
+    return ""
+
+
+def _format_display_date(title: str, subject: str) -> str:
+    match = DATE_RE.search(title) or DATE_RE.search(subject)
+    if not match:
+        return ""
+    year, month, day = match.group(1).split("-")
+    weekdays = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
+    try:
+        from datetime import datetime
+        weekday = weekdays[datetime(int(year), int(month), int(day)).weekday()]
+    except ValueError:
+        weekday = ""
+    return f"{year}.{month}.{day} {weekday}".strip()
+
+
+def _build_top_summary_lines(sections: list[tuple[str, str]]) -> list[str]:
+    lines: list[str] = []
+    for heading, content in sections:
+        groups = _split_section_groups(content)
+        conclusion = groups["conclusion"][1]
+        insight = groups["insight"][1]
+        candidate = _first_non_empty_paragraph(conclusion) or _first_non_empty_paragraph(insight)
+        if candidate:
+            if candidate.startswith("- "):
+                candidate = candidate[2:].strip()
+            lines.append(candidate)
+        if len(lines) >= 3:
+            break
+    return lines
+
+
+def _build_snapshot_rows(sections: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    rows: list[tuple[str, str]] = []
+    for heading, content in sections[:4]:
+        groups = _split_section_groups(content)
+        metric_line = _first_metric_line(groups["metrics"][1])
+        if metric_line:
+            rows.append((heading, metric_line))
+    return rows
 
 
 def _direction_color(direction: str) -> str:
@@ -279,27 +355,55 @@ def _text_to_html_blocks(content: str) -> str:
 def _preheader_text(title: str, notice: str, sections: list[tuple[str, str]]) -> str:
     if notice:
         return notice[:140]
+    summary_lines = _build_top_summary_lines(sections)
+    if summary_lines:
+        return " | ".join(summary_lines)[:140]
     if sections:
         return f"{title} | {sections[0][1][:120]}".strip()
     return title
 
 
 def _render_section_row(index: int, heading: str, content: str) -> str:
-    summary_label, summary_content, insight_content = _split_section_groups(content)
-    summary_block = ""
-    if summary_content:
-        summary_block = (
+    groups = _split_section_groups(content)
+    conclusion_label, conclusion_content = groups["conclusion"]
+    metrics_label, metrics_content = groups["metrics"]
+    insight_label, insight_content = groups["insight"]
+    watch_label, watch_content = groups["watch"]
+
+    conclusion_block = ""
+    if conclusion_content:
+        conclusion_block = (
+            '<div style="padding:0 0 16px 0;">'
+            f'<div style="font-size:11px;line-height:1.2;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#475569;padding:0 0 8px 0;">{html.escape(conclusion_label)}</div>'
+            '<div style="padding:14px 16px;border-radius:18px;background:#f8fafc;border:1px solid #e2e8f0;">'
+            f"{_text_to_html_blocks(conclusion_content)}"
+            "</div>"
+            "</div>"
+        )
+    metrics_block = ""
+    if metrics_content:
+        metrics_block = (
             '<div style="padding:0 0 14px 0;">'
-            f'<div style="font-size:12px;line-height:1.2;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#2563eb;padding:0 0 10px 0;">{html.escape(summary_label)}</div>'
-            f"{_text_to_html_blocks(summary_content)}"
+            f'<div style="font-size:11px;line-height:1.2;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#2563eb;padding:0 0 10px 0;">{html.escape(metrics_label)}</div>'
+            f"{_text_to_html_blocks(metrics_content)}"
             "</div>"
         )
     insight_block = ""
     if insight_content:
         insight_block = (
-            '<div style="padding:0;">'
-            '<div style="font-size:12px;line-height:1.2;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#0f172a;padding:0 0 10px 0;">해석</div>'
+            '<div style="padding:0 0 14px 0;">'
+            f'<div style="font-size:11px;line-height:1.2;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#0f172a;padding:0 0 10px 0;">{html.escape(insight_label)}</div>'
             f"{_text_to_html_blocks(insight_content)}"
+            "</div>"
+        )
+    watch_block = ""
+    if watch_content:
+        watch_block = (
+            '<div style="padding:0;">'
+            f'<div style="font-size:11px;line-height:1.2;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#7c3aed;padding:0 0 10px 0;">{html.escape(watch_label)}</div>'
+            '<div style="padding:14px 16px;border-radius:18px;background:#faf5ff;border:1px solid #e9d5ff;">'
+            f"{_text_to_html_blocks(watch_content)}"
+            "</div>"
             "</div>"
         )
     return (
@@ -311,8 +415,10 @@ def _render_section_row(index: int, heading: str, content: str) -> str:
         '<td style="padding:22px 24px 22px 24px;">'
         f'<div style="width:36px;height:36px;line-height:36px;text-align:center;background:#0f172a;color:#ffffff;border-radius:999px;font-size:14px;font-weight:700;">{index}</div>'
         f'<div style="font-size:20px;line-height:1.3;font-weight:700;color:#0f172a;padding:14px 0 12px 0;">{html.escape(heading)}</div>'
-        f"{summary_block}"
+        f"{conclusion_block}"
+        f"{metrics_block}"
         f"{insight_block}"
+        f"{watch_block}"
         "</td>"
         "</tr>"
         "</table>"
@@ -376,21 +482,20 @@ def _render_reference_block(references: list[str]) -> str:
     )
 
 
-def _render_hero_block() -> str:
+def _render_masthead_block(display_date: str) -> str:
     return (
         '<tr><td style="padding:0 0 16px 0;">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="hero-card" '
         'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:28px;overflow:hidden;box-shadow:0 20px 40px rgba(15,23,42,0.05);">'
         "<tr>"
-        '<td class="hero-wrap" style="padding:30px 30px 28px 30px;background:#ffffff;">'
-        '<div style="padding:0 0 18px 0;">'
-        '<span style="display:inline-block;padding:7px 12px;border-radius:999px;border:1px solid #dbe4ee;background:#f8fafc;color:#334155;font-size:12px;line-height:1.2;font-weight:700;letter-spacing:0.04em;-webkit-text-fill-color:#334155;">데일리 시장 리포트</span>'
+        '<td class="hero-wrap" style="padding:28px 30px 26px 30px;background:#ffffff;">'
+        '<div style="padding:0 0 10px 0;color:#2563eb;font-size:12px;line-height:1.2;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;">Morning Market Brief</div>'
+        f'<div style="padding:0 0 10px 0;color:#64748b;font-size:13px;line-height:1.5;font-weight:600;">{html.escape(display_date)}</div>'
+        '<div class="hero-title" style="font-size:30px;line-height:1.24;font-weight:800;letter-spacing:-0.03em;color:#0f172a;-webkit-text-fill-color:#0f172a;">'
+        "미국 기술주 · 비트코인 아침 브리핑"
         "</div>"
-        '<div class="hero-title" style="font-size:36px;line-height:1.22;font-weight:800;letter-spacing:-0.035em;color:#0f172a;-webkit-text-fill-color:#0f172a;">'
-        "오늘 아침, 미국 기술주와<br>"
-        '<span style="color:#1d4ed8;-webkit-text-fill-color:#1d4ed8;">비트코인 흐름만</span><br>'
-        "편하게 읽으실 수 있게<br>"
-        "담았어요."
+        '<div style="padding:10px 0 0 0;color:#475569;font-size:15px;line-height:1.75;">'
+        "한 번에 핵심만 읽을 수 있게 정리한 아침 시장 메일이에요."
         "</div>"
         "</td>"
         "</tr>"
@@ -399,11 +504,62 @@ def _render_hero_block() -> str:
     )
 
 
+def _render_top_summary_block(summary_lines: list[str]) -> str:
+    if not summary_lines:
+        return ""
+
+    items = "".join(
+        '<li style="margin:0 0 10px 0;padding:0;list-style:none;color:#0f172a;font-size:15px;line-height:1.75;">'
+        f"{_render_body_line(line)}"
+        "</li>"
+        for line in summary_lines
+    )
+    return (
+        '<tr><td style="padding:0 0 16px 0;">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" '
+        'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:22px;box-shadow:0 16px 32px rgba(15,23,42,0.04);">'
+        '<tr><td style="padding:20px 22px 16px 22px;">'
+        '<div style="font-size:12px;line-height:1.2;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#2563eb;padding:0 0 10px 0;">오늘의 한눈 요약</div>'
+        f'<ul style="margin:0;padding:0;">{items}</ul>'
+        "</td></tr></table></td></tr>"
+    )
+
+
+def _render_snapshot_block(snapshot_rows: list[tuple[str, str]]) -> str:
+    if not snapshot_rows:
+        return ""
+
+    rows = "".join(
+        '<tr>'
+        '<td style="padding:10px 0;border-top:1px solid #e2e8f0;width:34%;vertical-align:top;">'
+        f'<div style="font-size:12px;line-height:1.4;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:#64748b;">{html.escape(label)}</div>'
+        "</td>"
+        '<td style="padding:10px 0;border-top:1px solid #e2e8f0;vertical-align:top;">'
+        f'<div style="font-size:14px;line-height:1.7;color:#0f172a;">{_render_body_line(value)}</div>'
+        "</td>"
+        "</tr>"
+        for label, value in snapshot_rows
+    )
+    return (
+        '<tr><td style="padding:0 0 16px 0;">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" '
+        'style="border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:22px;box-shadow:0 16px 32px rgba(15,23,42,0.04);">'
+        '<tr><td style="padding:18px 22px 16px 22px;">'
+        '<div style="font-size:12px;line-height:1.2;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#2563eb;padding:0 0 6px 0;">시장 스냅샷</div>'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">'
+        f"{rows}"
+        "</table>"
+        "</td></tr></table></td></tr>"
+    )
+
+
 def _render_email_document(
     *,
     subject: str,
     preheader: str,
-    hero_block: str,
+    masthead_block: str,
+    summary_block: str,
+    snapshot_block: str,
     notice_block: str,
     section_rows: list[str],
     reference_block: str,
@@ -427,7 +583,7 @@ def _render_email_document(
           padding:24px 22px 22px 22px !important;
         }}
         .hero-title {{
-          font-size:29px !important;
+          font-size:27px !important;
           line-height:1.22 !important;
         }}
       }}
@@ -441,13 +597,15 @@ def _render_email_document(
       <tr>
         <td align="center" style="padding:28px 14px;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:680px;">
-            {hero_block}
+            {masthead_block}
+            {summary_block}
+            {snapshot_block}
             {notice_block}
             {''.join(section_rows)}
             {reference_block}
             <tr>
               <td style="padding:8px 6px 0 6px;color:#64748b;font-size:12px;line-height:1.7;text-align:center;">
-                자동으로 정리된 시장 브리핑 메일이에요. 투자 권유가 아닌 정보 전달 목적의 요약입니다.
+                공개 시장 데이터와 신뢰 가능한 출처를 바탕으로 정리한 아침 브리핑이에요. 투자 권유가 아닌 정보 전달 목적의 요약입니다.
               </td>
             </tr>
           </table>
@@ -461,6 +619,9 @@ def _render_email_document(
 def render_briefing_email_html(subject: str, body: str) -> str:
     main_body, references = _split_reference_block(body)
     title, notice, sections = _extract_brief_structure(main_body)
+    display_date = _format_display_date(title=title, subject=subject)
+    summary_lines = _build_top_summary_lines(sections)
+    snapshot_rows = _build_snapshot_rows(sections)
     preheader = _preheader_text(title=title, notice=notice, sections=sections)
     section_rows = [
         _render_section_row(index=index, heading=heading, content=content)
@@ -469,7 +630,9 @@ def render_briefing_email_html(subject: str, body: str) -> str:
     return _render_email_document(
         subject=subject,
         preheader=preheader,
-        hero_block=_render_hero_block(),
+        masthead_block=_render_masthead_block(display_date=display_date),
+        summary_block=_render_top_summary_block(summary_lines),
+        snapshot_block=_render_snapshot_block(snapshot_rows),
         notice_block=_render_notice_block(notice),
         section_rows=section_rows,
         reference_block=_render_reference_block(references),
