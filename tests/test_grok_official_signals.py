@@ -157,7 +157,11 @@ def test_fetch_official_x_signals_uses_response_citations_fallback(monkeypatch):
         )
     ]
 
-    monkeypatch.setattr(gxs, "grouped_verified_x_entities", lambda: {"ai_bigtech_primary": VERIFIED_GROUPS["ai_bigtech_primary"]})
+    monkeypatch.setattr(
+        gxs,
+        "grouped_verified_x_entities",
+        lambda: {"ai_bigtech_primary": VERIFIED_GROUPS["ai_bigtech_primary"]},
+    )
     monkeypatch.setattr(gxs, "x_search", lambda **kwargs: {"name": "x_search", "kwargs": kwargs})
     monkeypatch.setattr(gxs, "_build_client", lambda api_key: _Client(responses, calls, prompts))
 
@@ -170,6 +174,62 @@ def test_fetch_official_x_signals_uses_response_citations_fallback(monkeypatch):
 
     assert items[0].citations == ["https://x.com/AMD/status/3"]
     assert items[0].url == "https://x.com/AMD/status/3"
+
+
+
+def test_fetch_official_x_signals_does_not_fan_out_group_citations(monkeypatch):
+    calls: list[dict] = []
+    prompts: list[object] = []
+    responses = [
+        _Response(
+            content=json.dumps(
+                {
+                    "items": [
+                        {
+                            "entity_id": "amd",
+                            "headline": "AMD가 공식 일정 공지를 올렸어요",
+                            "summary": "공식 계정이 이벤트 일정을 다시 정리했어요.",
+                            "why_it_matters": "이벤트 일정 확인에 직접 쓸 수 있어요.",
+                            "posted_at": "2026-03-13T01:00:00Z",
+                            "source_handle": "AMD",
+                            "citations": [],
+                        },
+                        {
+                            "entity_id": "fidelity",
+                            "headline": "Fidelity가 ETF 관련 짧은 공지를 올렸어요",
+                            "summary": "공식 계정이 ETF 업데이트를 다시 공지했어요.",
+                            "why_it_matters": "ETF 흐름 해석에 참고할 수 있어요.",
+                            "posted_at": "2026-03-13T02:00:00Z",
+                            "source_handle": "Fidelity",
+                            "citations": [],
+                        },
+                    ]
+                }
+            ),
+            citations=[{"url": "https://x.com/shared/status/99"}],
+        )
+    ]
+
+    monkeypatch.setattr(
+        gxs,
+        "grouped_verified_x_entities",
+        lambda: {"mixed": VERIFIED_GROUPS["ai_bigtech_primary"] + VERIFIED_GROUPS["btc_etf_primary"]},
+    )
+    monkeypatch.setattr(gxs, "GROUP_TOPIC_MAP", {"mixed": "ai_bigtech"})
+    monkeypatch.setattr(gxs, "x_search", lambda **kwargs: {"name": "x_search", "kwargs": kwargs})
+    monkeypatch.setattr(gxs, "_build_client", lambda api_key: _Client(responses, calls, prompts))
+
+    items = gxs.fetch_official_x_signals(
+        api_key="grok-test-key",
+        model="grok-test-model",
+        lookback_hours=24,
+        max_items=3,
+    )
+
+    assert items[0].citations == []
+    assert items[0].url == "https://www.fidelity.com/etfs/fbtc"
+    assert items[1].citations == []
+    assert items[1].url == "https://www.amd.com/en/newsroom.html"
 
 
 

@@ -243,7 +243,7 @@ def _provider_breakdown(items: list[NewsItem]) -> dict[str, int]:
     return counts
 
 
-def _provider_counts(items: list[NewsItem]) -> tuple[int, int, dict[str, int]]:
+def _provider_counts(items: list[NewsItem]) -> tuple[int, int, int, dict[str, int]]:
     breakdown = _provider_breakdown(items)
     perplexity_count = breakdown.get(PERPLEXITY_PROVIDER, 0)
     official_signal_count = breakdown.get(OFFICIAL_SIGNAL_PROVIDER, 0)

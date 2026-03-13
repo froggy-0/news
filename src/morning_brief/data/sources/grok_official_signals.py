@@ -67,7 +67,7 @@ def _normalize_text(value: object) -> str:
 
 def _normalize_citations(value: object) -> list[str]:
     urls: list[str] = []
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple, set)):
         for item in value:
             if isinstance(item, str):
                 candidate = item.strip()
@@ -153,6 +153,7 @@ def _search_group(
 
     payload_items = _parse_response_items(_normalize_text(getattr(response, "content", "")))
     fallback_citations = _normalize_citations(getattr(response, "citations", []))
+    can_apply_group_fallback = len(payload_items) == 1
     handle_map = {
         str(entity.get("x_handle", "")).strip().lstrip("@").lower(): entity
         for entity in entities
@@ -167,7 +168,9 @@ def _search_group(
         if entity is None:
             continue
 
-        citations = _normalize_citations(item.get("citations", [])) or fallback_citations
+        citations = _normalize_citations(item.get("citations", []))
+        if not citations and can_apply_group_fallback:
+            citations = fallback_citations
         title = _normalize_text(item.get("headline"))
         summary = _normalize_text(item.get("summary"))
         why_it_matters = _normalize_text(item.get("why_it_matters")) or GROUP_IMPACT_LINES.get(topic, "공식 시그널이라 직접적인 확인 근거가 돼요.")
