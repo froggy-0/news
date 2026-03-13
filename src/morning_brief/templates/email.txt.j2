@@ -1,0 +1,43 @@
+Morning Market Brief
+{{ display_date or title }}
+{{ layer_one_text }}
+
+{% if notice -%}
+[알림]
+{{ notice }}
+
+{% endif -%}
+{% if news_items -%}
+[LAYER 2 | 주요 뉴스]
+{% for item in news_items -%}
+- {{ item.headline }}
+  해석: {{ item.interpretation }}
+  {% if item.safe_url %}출처: {{ item.safe_url }}{% else %}출처: 없음{% endif %}
+{% endfor %}
+
+{% endif -%}
+{% if stock_rows -%}
+[LAYER 3 | 종목 브리핑]
+{% for row in stock_rows -%}
+- {{ row.name }} | {{ row.change_text }} | {{ row.context_text }}
+{% endfor %}
+
+{% endif -%}
+{% if macro_rows -%}
+[거시 지표]
+{% for label, value in macro_rows -%}
+- {{ label }}: {{ value|striptags }}
+{% endfor %}
+
+{% endif -%}
+{% if footer_notes -%}
+[데이터 처리 메모]
+{% for note in footer_notes -%}
+- {{ note }}
+{% endfor %}
+
+{% endif -%}
+[링크]
+- 대표 링크: {{ primary_cta.url }}
+- 구독 해지: {{ unsubscribe_url }}
+- GitHub: {{ github_url }}

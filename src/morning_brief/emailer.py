@@ -7,8 +7,12 @@ import re
 from dataclasses import dataclass
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
+
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+from markupsafe import Markup
 
 from morning_brief.brief_formatting import (
     extract_brief_structure as _extract_brief_structure,
@@ -32,6 +36,9 @@ PERCENT_RE = re.compile(r"[+-]?\d[\d,]*(?:\.\d+)?%")
 UP_TOKENS = ("올랐", "상승", "강세", "반등", "높아졌", "증가", "확대", "유입", "개선", "회복")
 DOWN_TOKENS = ("내렸", "하락", "약세", "밀렸", "낮아졌", "감소", "축소", "유출", "둔화", "후퇴")
 FLAT_TOKENS = ("보합", "유지", "비슷", "변동이 크지", "큰 변화는 없")
+EMAIL_TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
+PROJECT_GITHUB_URL = "https://github.com/froggy-0/news"
+DEFAULT_UNSUBSCRIBE_EMAIL = "unsubscribe@example.com"
 
 if TYPE_CHECKING:
     from google.oauth2.credentials import Credentials
@@ -44,6 +51,24 @@ class _EmailSection:
     heading: str
     content: str
     groups: dict[str, tuple[str, str]]
+
+
+@dataclass(frozen=True)
+class _EmailNewsItem:
+    headline: str
+    interpretation: str
+    url: str
+    safe_url: str | None
+    url_label: str
+
+
+@dataclass(frozen=True)
+class _EmailBriefRow:
+    name: str
+    change_text: str
+    context_text: str
+    context_html: Markup
+    tone: str
 
 
 def _gmail_dependencies() -> tuple[Any, Any, Any, Any]:
@@ -141,11 +166,244 @@ def _build_snapshot_rows(sections: list[_EmailSection]) -> list[tuple[str, str]]
     return rows
 
 
+def _load_email_environment() -> Environment:
+    return Environment(
+        loader=FileSystemLoader(str(EMAIL_TEMPLATE_DIR)),
+        autoescape=select_autoescape(("html", "xml")),
+        trim_blocks=True,
+        lstrip_blocks=True,
+    )
+
+
+def _first_metric_lines(text: str, *, limit: int) -> list[str]:
+    lines: list[str] = []
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if not stripped:
+            continue
+        lines.append(stripped[2:].strip() if stripped.startswith("- ") else stripped)
+        if len(lines) >= limit:
+            break
+    return lines
+
+
+def _first_sentence(text: str) -> str:
+    paragraph = _first_non_empty_paragraph(text)
+    if not paragraph:
+        return ""
+    parts = re.split(r"(?<=[.!?])\s+", paragraph)
+    return parts[0].strip() if parts else paragraph.strip()
+
+
+def _safe_link(url: str) -> str | None:
+    parsed = urlparse(url.strip())
+    if parsed.scheme.lower() in {"http", "https"} and bool(parsed.netloc):
+        return url.strip()
+    return None
+
+
+def _extract_layer_one_text(sections: list[_EmailSection], notice: str, title: str) -> str:
+    summary_lines = _build_top_summary_lines(sections)
+    if summary_lines:
+        return summary_lines[0]
+    if sections:
+        first_section = sections[0]
+        return _first_sentence(first_section.groups["conclusion"][1]) or _first_sentence(
+            first_section.groups["insight"][1]
+        )
+    return notice or title
+
+
+def _build_news_items(
+    sections: list[_EmailSection],
+    references: list[str],
+    *,
+    limit: int = 3,
+) -> list[_EmailNewsItem]:
+    safe_reference_urls = [
+        safe_url
+        for reference in references
+        for safe_url in [_safe_link(reference.split(" — ", 1)[-1].strip())]
+        if safe_url
+    ]
+    items: list[_EmailNewsItem] = []
+
+    important_news = next(
+        (section for section in sections if section.heading == "중요한 뉴스"), None
+    )
+    if important_news is not None:
+        interpretations = [
+            _first_sentence(important_news.groups["conclusion"][1]),
+            _first_sentence(important_news.groups["insight"][1]),
+            _first_sentence(important_news.groups["watch"][1]),
+        ]
+        fallback_interpretation = next((item for item in interpretations if item), "")
+        for index, headline in enumerate(
+            _first_metric_lines(important_news.groups["metrics"][1], limit=limit)
+        ):
+            safe_url = safe_reference_urls[index] if index < len(safe_reference_urls) else None
+            items.append(
+                _EmailNewsItem(
+                    headline=headline,
+                    interpretation=fallback_interpretation,
+                    url=safe_url or "",
+                    safe_url=safe_url,
+                    url_label=safe_url or "출처 없음",
+                )
+            )
+
+    if items:
+        return items[:limit]
+
+    for index, section in enumerate(sections[:limit]):
+        safe_url = safe_reference_urls[index] if index < len(safe_reference_urls) else None
+        interpretation = _first_sentence(section.groups["conclusion"][1]) or _first_sentence(
+            section.groups["insight"][1]
+        )
+        items.append(
+            _EmailNewsItem(
+                headline=section.heading,
+                interpretation=interpretation or _first_non_empty_paragraph(section.content),
+                url=safe_url or "",
+                safe_url=safe_url,
+                url_label=safe_url or "출처 없음",
+            )
+        )
+    return items
+
+
+def _stock_name_from_line(line: str, fallback: str) -> str:
+    percent_match = PERCENT_RE.search(line)
+    if percent_match is None:
+        return fallback
+    prefix = line[: percent_match.start()].strip(" -:|")
+    if not prefix:
+        return fallback
+    cleaned = re.split(r"(은|는|이|가)\s*$", prefix)[0].strip()
+    return cleaned or fallback
+
+
+def _row_tone(line: str, change_text: str) -> str:
+    direction = _percent_direction(change_text) or _token_direction(line) or "flat"
+    if direction == "up":
+        return "up"
+    if direction == "down":
+        return "down"
+    return "flat"
+
+
+def _build_stock_rows(sections: list[_EmailSection], *, limit: int = 6) -> list[_EmailBriefRow]:
+    rows: list[_EmailBriefRow] = []
+    for section in sections:
+        candidate_lines = [
+            *_first_metric_lines(section.groups["metrics"][1], limit=limit),
+            *_first_metric_lines(section.groups["watch"][1], limit=limit),
+        ]
+        for line in candidate_lines:
+            percent_match = PERCENT_RE.search(line)
+            if percent_match is None:
+                continue
+            change_text = percent_match.group(0)
+            rows.append(
+                _EmailBriefRow(
+                    name=_stock_name_from_line(line, fallback=section.heading),
+                    change_text=change_text,
+                    context_text=line,
+                    context_html=Markup(_render_body_line(line)),
+                    tone=_row_tone(line, change_text),
+                )
+            )
+            if len(rows) >= limit:
+                return rows
+    return rows
+
+
+def _build_macro_rows(sections: list[_EmailSection]) -> list[tuple[str, Markup]]:
+    macro_section = next((section for section in sections if section.heading == "거시 환경"), None)
+    if macro_section is None:
+        return []
+    rows: list[tuple[str, Markup]] = []
+    for line in _first_metric_lines(macro_section.groups["metrics"][1], limit=4):
+        label = line.split("는 ", 1)[0].split("은 ", 1)[0].strip() or "거시 지표"
+        rows.append((label, Markup(_render_body_line(line))))
+    return rows
+
+
+def _build_reference_items(references: list[str]) -> list[dict[str, str | None]]:
+    items: list[dict[str, str | None]] = []
+    for reference in references:
+        if " — " in reference:
+            label, url = reference.split(" — ", 1)
+        else:
+            label, url = reference, reference
+        safe_url = _safe_link(url.strip())
+        items.append(
+            {
+                "label": label.strip() or url.strip(),
+                "url": url.strip(),
+                "safe_url": safe_url,
+            }
+        )
+    return items
+
+
+def _unsubscribe_url(sender: str) -> str:
+    target = sender.strip() or DEFAULT_UNSUBSCRIBE_EMAIL
+    subject = quote("Morning Market Brief 구독 해지")
+    body = quote("구독 해지를 요청합니다.")
+    return f"mailto:{target}?subject={subject}&body={body}"
+
+
+def _primary_cta(reference_items: list[dict[str, str | None]]) -> dict[str, str]:
+    first_reference = next(
+        (
+            item
+            for item in reference_items
+            if isinstance(item.get("safe_url"), str) and item["safe_url"]
+        ),
+        None,
+    )
+    if first_reference is not None:
+        return {"label": "대표 출처 열기", "url": str(first_reference["safe_url"])}
+    return {"label": "GitHub에서 보기", "url": PROJECT_GITHUB_URL}
+
+
+def _build_email_context(subject: str, body: str, *, sender: str = "") -> dict[str, object]:
+    body_without_references, references = _split_reference_block(body)
+    main_body, footer_notes = _split_footer_note_block(body_without_references)
+    title, notice, sections = _extract_brief_structure(main_body)
+    parsed_sections = _build_email_sections(sections)
+    display_date = _format_display_date(title=title, subject=subject)
+    layer_one_text = _extract_layer_one_text(parsed_sections, notice, title)
+    reference_items = _build_reference_items(references)
+    news_items = _build_news_items(parsed_sections, references)
+    stock_rows = _build_stock_rows(parsed_sections)
+    macro_rows = _build_macro_rows(parsed_sections)
+
+    return {
+        "subject": subject,
+        "title": title,
+        "display_date": display_date,
+        "preheader": f"{display_date} | {layer_one_text}"[:140].strip(" |"),
+        "notice": notice,
+        "layer_one_text": layer_one_text,
+        "layer_one_html": Markup(_render_body_line(layer_one_text)),
+        "news_items": news_items,
+        "stock_rows": stock_rows,
+        "macro_rows": macro_rows,
+        "footer_notes": footer_notes,
+        "reference_items": reference_items,
+        "primary_cta": _primary_cta(reference_items),
+        "unsubscribe_url": _unsubscribe_url(sender),
+        "github_url": PROJECT_GITHUB_URL,
+    }
+
+
 def _direction_color(direction: str) -> str:
     if direction == "up":
-        return "#dc2626"
+        return "#16a34a"
     if direction == "down":
-        return "#2563eb"
+        return "#dc2626"
     if direction in {"flat", "mixed"}:
         return "#64748b"
     return "#0f172a"
@@ -539,30 +797,18 @@ def _render_email_document(
 </html>"""
 
 
-def render_briefing_email_html(subject: str, body: str) -> str:
-    body_without_references, references = _split_reference_block(body)
-    main_body, footer_notes = _split_footer_note_block(body_without_references)
-    title, notice, sections = _extract_brief_structure(main_body)
-    parsed_sections = _build_email_sections(sections)
-    display_date = _format_display_date(title=title, subject=subject)
-    summary_lines = _build_top_summary_lines(parsed_sections)
-    snapshot_rows = _build_snapshot_rows(parsed_sections)
-    preheader = _preheader_text(title=title, notice=notice, sections=parsed_sections)
-    section_rows = [
-        _render_section_row(index=index, section=section)
-        for index, section in enumerate(parsed_sections, start=1)
-    ]
-    return _render_email_document(
-        subject=subject,
-        preheader=preheader,
-        masthead_block=_render_masthead_block(display_date=display_date),
-        summary_block=_render_top_summary_block(summary_lines),
-        snapshot_block=_render_snapshot_block(snapshot_rows),
-        notice_block=_render_notice_block(notice),
-        section_rows=section_rows,
-        footer_note_block=_render_footer_note_block(footer_notes),
-        reference_block=_render_reference_block(references),
-    )
+def render_briefing_email_html(subject: str, body: str, *, sender: str = "") -> str:
+    environment = _load_email_environment()
+    template = environment.get_template("email.html.j2")
+    context = _build_email_context(subject=subject, body=body, sender=sender)
+    return template.render(**context).strip()
+
+
+def render_briefing_email_text(subject: str, body: str, *, sender: str = "") -> str:
+    environment = _load_email_environment()
+    template = environment.get_template("email.txt.j2")
+    context = _build_email_context(subject=subject, body=body, sender=sender)
+    return template.render(**context).strip()
 
 
 def build_briefing_message(
@@ -572,14 +818,15 @@ def build_briefing_message(
     sender: str,
     recipients: list[str],
 ) -> MIMEMultipart:
-    html_body = render_briefing_email_html(subject=subject, body=body)
+    html_body = render_briefing_email_html(subject=subject, body=body, sender=sender)
+    text_body = render_briefing_email_text(subject=subject, body=body, sender=sender)
     msg = MIMEMultipart("alternative")
     msg["to"] = recipients[0] if len(recipients) == 1 else sender
     if len(recipients) > 1:
         msg["bcc"] = ", ".join(recipients)
     msg["from"] = sender
     msg["subject"] = subject
-    msg.attach(MIMEText(body, _subtype="plain", _charset="utf-8"))
+    msg.attach(MIMEText(text_body, _subtype="plain", _charset="utf-8"))
     msg.attach(MIMEText(html_body, _subtype="html", _charset="utf-8"))
     return msg
 

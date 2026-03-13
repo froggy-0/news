@@ -7,6 +7,7 @@ from morning_brief.emailer import (
     _split_section_groups,
     build_briefing_message,
     render_briefing_email_html,
+    render_briefing_email_text,
 )
 
 SAMPLE_BRIEF = """Morning Market Brief (2026-03-12)
@@ -70,29 +71,26 @@ def test_extract_brief_structure_parses_title_notice_and_sections():
     assert sections[2][0] == "중요한 뉴스"
 
 
-def test_render_briefing_email_html_contains_modern_layout_and_list_items():
+def test_render_briefing_email_html_contains_layered_mobile_layout():
     html = render_briefing_email_html(
         subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
         body=SAMPLE_BRIEF,
     )
 
-    assert "미국 기술주 · 비트코인 시장 브리핑" in html
-    assert "핵심 요약" in html
-    assert "주요 지표" in html
+    assert "Morning Market Brief" in html
+    assert "Layer 1 · 오늘 한줄 판단" in html
+    assert "Layer 2 · 주요 뉴스" in html
+    assert "Layer 3 · 종목 브리핑" in html
     assert "2026.03.12" in html
-    assert "-webkit-text-fill-color:#0f172a" in html
-    assert "Pretendard" in html
-    assert "한 번에 핵심만 읽을 수 있게 정리한 아침 시장 메일이에요." not in html
-    assert "<li style=" in html
-    assert "list-style:none" in html
-    assert "↑" not in html
-    assert "↓" not in html
-    assert "#dc2626" in html
-    assert "alpha@example.com" not in html
+    assert "prefers-color-scheme: dark" in html
+    assert "-apple-system" in html
+    assert "display:none;max-height:0" in html
+    assert "대표 출처 열기" not in html
+    assert "GitHub에서 보기" in html
+    assert "구독 해지" in html
+    assert "GitHub" in html
     assert "[데이터 품질 알림] 뉴스 수가 부족합니다." in html
-    assert "핵심 판단" in html
-    assert "배경과 해석" in html
-    assert "주목할 변수" in html
+    assert "거시 지표" in html
 
 
 def test_split_section_groups_separates_summary_and_insight():
@@ -118,10 +116,10 @@ def test_render_briefing_email_html_marks_down_moves_in_blue():
 """,
     )
 
-    assert "#2563eb" in html
+    assert "#dc2626" in html
     assert "↑" not in html
     assert "↓" not in html
-    assert '<span style="color:#2563eb;font-weight:700;">2.4%</span>' in html
+    assert ">2.4%<" in html
     assert "엔비디아가 2.4% 하락했습니다." in html
 
 
@@ -136,9 +134,11 @@ def test_render_briefing_email_html_colors_each_signed_percent_individually():
 """,
     )
 
-    assert '<span style="color:#dc2626;font-weight:700;">+1.20%</span>' in html
-    assert '<span style="color:#2563eb;font-weight:700;">-0.85%</span>' in html
-    assert '<span style="color:#dc2626;font-weight:700;">+0.10%</span>' in html
+    assert "#16a34a" in html
+    assert "#dc2626" in html
+    assert "+1.20%" in html
+    assert "-0.85%" in html
+    assert "+0.10%" in html
 
 
 def test_render_briefing_email_html_prefers_negative_numeric_direction_over_positive_words():
@@ -152,7 +152,8 @@ def test_render_briefing_email_html_prefers_negative_numeric_direction_over_posi
 """,
     )
 
-    assert '<span style="color:#2563eb;font-weight:700;">-1.20%</span>' in html
+    assert "#dc2626" in html
+    assert "-1.20%" in html
 
 
 def test_build_briefing_message_uses_bcc_for_multiple_recipients():
@@ -167,6 +168,7 @@ def test_build_briefing_message_uses_bcc_for_multiple_recipients():
     assert msg["bcc"] == "a@example.com, b@example.com"
     assert msg.get_payload()[0].get_content_type() == "text/plain"
     assert msg.get_payload()[1].get_content_type() == "text/html"
+    assert "구독 해지" in msg.get_payload()[0].get_payload(decode=True).decode("utf-8")
 
 
 def test_render_briefing_email_html_renders_reference_links():
@@ -177,7 +179,7 @@ def test_render_briefing_email_html_renders_reference_links():
         body=body,
     )
 
-    assert "주요 참고 출처" in html
+    assert "데이터 소스" in html
     assert 'href="https://www.reuters.com/world/us/example"' in html
 
 
@@ -204,6 +206,19 @@ def test_render_briefing_email_html_renders_data_footer_notes():
 
     assert "데이터 처리 메모" in html
     assert "달러 인덱스는 허용 범위를 벗어나 생략했어요." in html
+
+
+def test_render_briefing_email_text_builds_plain_text_fallback():
+    text = render_briefing_email_text(
+        subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
+        body=SAMPLE_BRIEF + "\n\n참고 출처\n- Reuters — https://www.reuters.com/world/us/example",
+        sender="sender@example.com",
+    )
+
+    assert "[LAYER 2 | 주요 뉴스]" in text
+    assert "[LAYER 3 | 종목 브리핑]" in text
+    assert "구독 해지: mailto:sender@example.com" in text
+    assert "GitHub: https://github.com/froggy-0/news" in text
 
 
 def test_split_reference_block_separates_reference_lines():
