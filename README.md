@@ -5,8 +5,12 @@
 ## 핵심 기능
 - 시장 데이터 수집: 금리/달러/VIX, 미국 지수, 빅테크 10종, BTC + ETF
   - 거시: FRED API 우선, 실패 시 yfinance 폴백
+  - 공급자별 요청 간격 제어, 영구 실패 비재시도, quota 감지 시 회로 차단 적용
+  - Alpha Vantage는 ETF 가격/거래량을 동일 응답에서 함께 읽어 불필요한 중복 호출 제거
+  - 공식 BTC ETF 발행사 페이지는 issuer별 부분 성공을 허용해 한 곳 실패가 전체 스냅샷을 무너뜨리지 않도록 구성
 - 뉴스 수집: `Perplexity Search API`를 토픽별 메인 리서치 레이어로 사용하고, 결과가 약할 때만 legacy 뉴스 경로로 보강
   - Reuters/Bloomberg/WSJ/FT/CNBC/CoinDesk 도메인 우선
+  - Perplexity 품질 평가는 Perplexity 항목 기준으로만 계산하고, Grok 공식 X citation 부족이 legacy fallback을 과도하게 켜지 않도록 분리
 - 브리핑 생성: OpenAI API 기반 한국어 해석형 리포트(실패 시 템플릿 폴백)
   - Jinja 템플릿 기반 프롬프트 관리 (`src/morning_brief/prompts`)
   - OpenAI `prompt_cache_key` 기반 프롬프트 캐싱 최적화
@@ -18,7 +22,7 @@
 - `src/morning_brief/config.py`: 환경설정 로더
 - `src/morning_brief/data/market.py`: 시장 데이터 수집 (재시도 포함)
 - `src/morning_brief/data/news.py`: 뉴스 수집 (우선소스 + 백필)
-- `src/morning_brief/data/sources/`: FRED/GDELT/Stooq/CoinGecko/Perplexity 소스 어댑터
+- `src/morning_brief/data/sources/`: FRED/GDELT/Stooq/CoinGecko/Perplexity/Grok/공식 ETF/공급자 정책 어댑터
 - `src/morning_brief/briefing.py`: 브리핑 생성
 - `src/morning_brief/prompting.py`: Jinja 프롬프트 렌더링/캐시 키 생성
 - `src/morning_brief/prompts/*.j2`: 프롬프트 템플릿
@@ -114,19 +118,26 @@ python3 main.py schedule
 - 비트코인 ETF 공식 보유량/순유입: 발행사 공식 페이지 스냅샷을 캐시와 비교해 계산
 - 검증된 공식 X 시그널: allowlist에 등록된 공식 계정만 Grok `x_search`로 확인해 뉴스와 함께 반영
 
-## 6) 테스트
+## 6) 수집 신뢰성 운영 원칙
+- 공급자별로 요청 간격과 재시도 규칙이 다르게 적용됩니다. `404` 같은 영구 실패는 바로 중단하고, `429/5xx/timeout` 중심으로만 다시 시도합니다.
+- Alpha Vantage가 quota 또는 burst 제한을 반환하면 그 실행에서는 이후 Alpha Vantage 요청을 중단하고 Stooq/yfinance로 일관되게 넘깁니다.
+- 공식 BTC ETF 수집은 `IBIT`, `BITB`, `GBTC`를 issuer별로 독립 처리합니다. 한 발행사 페이지가 깨져도 나머지 스냅샷은 유지합니다.
+- Perplexity legacy fallback은 Perplexity 기사 자체의 개수/신선도/도메인/근거 링크 기준으로 판단합니다. 공식 X 항목의 citation 부족은 별도 취급합니다.
+- 파이프라인 종료 시 공급자별 요청/성공/실패/재시도/skip 요약 로그를 남깁니다.
+
+## 7) 테스트
 ```bash
 pytest -q
 ```
 
-## 7) 프롬프트 엔지니어링 참고
+## 8) 프롬프트 엔지니어링 참고
 - OpenAI Prompt Engineering: <https://platform.openai.com/docs/guides/prompt-engineering>
 - OpenAI Prompt Caching: <https://platform.openai.com/docs/guides/prompt-caching>
 - OpenAI Responses API: <https://platform.openai.com/docs/api-reference/responses/create>
 - Anthropic Prompt Engineering Overview: <https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview>
 - Anthropic Prompt Caching: <https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching>
 
-## 8) GitHub Actions 운영
+## 9) GitHub Actions 운영
 워크플로우는 `.github/workflows/morning-brief.yml`에 포함되어 있습니다.
 
 스케줄:
@@ -182,7 +193,7 @@ base64 -i token.json | tr -d '\n' | pbcopy
 - 확인 명령: `pbpaste | wc -c`
 - 줄바꿈 제거 출력 시 끝에 보이는 `%`는 zsh 프롬프트이며 base64 값이 아닙니다.
 
-## 9) 최초 점검 실행
+## 10) 최초 점검 실행
 Secrets/Variables 등록이 끝났다면 바로 실행 가능합니다.
 
 - GitHub: Actions -> `Morning Market Brief` -> `Run workflow` (수동 실행)

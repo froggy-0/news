@@ -11,9 +11,16 @@ from xai_sdk.tools import x_search
 
 from morning_brief.data.official_signal_registry import grouped_verified_x_entities
 from morning_brief.data.sources.http_client import HttpFetchError
+from morning_brief.data.sources.provider_runtime import (
+    disabled_reason,
+    record_failure,
+    record_request,
+    record_success,
+)
 from morning_brief.models import NewsItem
 
 logger = logging.getLogger(__name__)
+GROK_PROVIDER = "grok"
 
 GROUP_TOPIC_MAP = {
     "macro_regulator": "macro",
@@ -125,6 +132,10 @@ def _search_group(
     lookback_hours: int,
     max_items: int,
  ) -> list[NewsItem]:
+    unavailable_reason = disabled_reason(GROK_PROVIDER)
+    if unavailable_reason:
+        raise HttpFetchError(f"Grok은 이번 실행에서 더 이상 쓰지 않을게요: {unavailable_reason}")
+
     handles = [str(entity.get("x_handle", "")).strip().lstrip("@") for entity in entities if entity.get("x_handle")]
     if not handles:
         return []
@@ -133,6 +144,7 @@ def _search_group(
     to_date = datetime.now(timezone.utc)
     from_date = to_date - timedelta(hours=lookback_hours)
 
+    record_request(GROK_PROVIDER)
     try:
         chat = client.chat.create(
             model=model,
@@ -149,9 +161,11 @@ def _search_group(
         )))
         response = chat.sample()
     except Exception as exc:
+        record_failure(GROK_PROVIDER)
         raise HttpFetchError(f"Grok X Search를 호출하지 못했어요: {exc}") from exc
 
     payload_items = _parse_response_items(_normalize_text(getattr(response, "content", "")))
+    record_success(GROK_PROVIDER)
     fallback_citations = _normalize_citations(getattr(response, "citations", []))
     can_apply_group_fallback = len(payload_items) == 1
     handle_map = {

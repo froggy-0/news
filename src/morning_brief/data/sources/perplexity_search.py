@@ -9,9 +9,17 @@ from perplexity import APIConnectionError, APIStatusError, APITimeoutError, Perp
 
 from morning_brief.data.sources.domain_utils import domain_matches, normalize_domain
 from morning_brief.data.sources.http_client import HttpFetchError
+from morning_brief.data.sources.provider_runtime import (
+    disabled_reason,
+    open_circuit,
+    record_failure,
+    record_request,
+    record_success,
+)
 from morning_brief.models import NewsItem
 
 logger = logging.getLogger(__name__)
+PERPLEXITY_PROVIDER = "perplexity"
 
 SEARCH_TIMEOUT_SECONDS = 25
 SEARCH_MAX_RESULTS = 5
@@ -225,6 +233,11 @@ def _search_once(
     domain_filter: tuple[str, ...],
     recency_filter: str,
 ) -> dict[str, Any]:
+    unavailable_reason = disabled_reason(PERPLEXITY_PROVIDER)
+    if unavailable_reason:
+        raise HttpFetchError(f"Perplexity는 이번 실행에서 더 이상 쓰지 않을게요: {unavailable_reason}")
+
+    record_request(PERPLEXITY_PROVIDER)
     try:
         response = client.search.create(
             query=query,
@@ -234,14 +247,20 @@ def _search_once(
             country="US",
         )
     except RateLimitError as exc:
+        record_failure(PERPLEXITY_PROVIDER)
+        message = f"Perplexity Search API 호출 한도에 걸렸어요: {_format_status_error(exc)}"
+        open_circuit(PERPLEXITY_PROVIDER, message)
         raise HttpFetchError(
-            f"Perplexity Search API 호출 한도에 걸렸어요: {_format_status_error(exc)}"
+            message
         ) from exc
     except APITimeoutError as exc:
+        record_failure(PERPLEXITY_PROVIDER)
         raise HttpFetchError("Perplexity Search API 응답 시간이 너무 오래 걸렸어요.") from exc
     except APIConnectionError as exc:
+        record_failure(PERPLEXITY_PROVIDER)
         raise HttpFetchError("Perplexity Search API 연결을 열지 못했어요.") from exc
     except APIStatusError as exc:
+        record_failure(PERPLEXITY_PROVIDER)
         raise HttpFetchError(
             f"Perplexity Search API가 요청을 거절했어요: {_format_status_error(exc)}"
         ) from exc
@@ -255,8 +274,10 @@ def _search_once(
             raise HttpFetchError("Perplexity Search API 응답 구조가 예상과 달라요.")
 
     if not isinstance(payload, dict):
+        record_failure(PERPLEXITY_PROVIDER)
         raise HttpFetchError("Perplexity Search API 응답 구조가 예상과 달라요.")
 
+    record_success(PERPLEXITY_PROVIDER)
     return payload
 
 

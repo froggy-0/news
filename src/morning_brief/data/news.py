@@ -294,9 +294,9 @@ def fetch_news(
     # Collect a wider candidate pool, then rank down to target size.
     candidate_limit = max(max_items * 3, 15)
 
-    items = _collect_from_gdelt(max_items=candidate_limit, preferred_only=True)
+    items = _collect_from_rss(max_items=candidate_limit, preferred_only=True)
     if items:
-        logger.info("뉴스 수집은 GDELT 우선 결과를 사용했어요.")
+        logger.info("뉴스 수집은 Google News RSS 우선 결과를 사용했어요.")
 
     if len(items) < MIN_NEWS_ITEMS and newsapi_key:
         try:
@@ -308,19 +308,19 @@ def fetch_news(
             logger.warning("NewsAPI에서 뉴스를 가져오지 못했어요: %s", exc)
 
     if len(items) < MIN_NEWS_ITEMS:
-        rss_items = _collect_from_rss(max_items=candidate_limit, preferred_only=True)
-        items = _merge_rank(items, rss_items, max_items=candidate_limit)
-        if rss_items:
-            logger.info("뉴스 보강에는 Google News RSS 우선 도메인을 사용했어요.")
+        gdelt_items = _collect_from_gdelt(max_items=candidate_limit, preferred_only=True)
+        items = _merge_rank(items, gdelt_items, max_items=candidate_limit)
+        if gdelt_items:
+            logger.info("뉴스 보강에는 GDELT 우선 도메인을 사용했어요.")
 
     if len(items) < MIN_NEWS_ITEMS and allow_broad_fallback:
         logger.info(
             "우선 신뢰 출처가 %s건이라 범위를 넓혀 GDELT와 RSS를 한 번 더 살펴봤어요.",
             len(items),
         )
-        gdelt_broad = _collect_from_gdelt(max_items=candidate_limit, preferred_only=False)
         rss_broad = _collect_from_rss(max_items=candidate_limit, preferred_only=False)
-        items = _merge_rank(items, gdelt_broad + rss_broad, max_items=candidate_limit)
+        gdelt_broad = _collect_from_gdelt(max_items=candidate_limit, preferred_only=False)
+        items = _merge_rank(items, rss_broad + gdelt_broad, max_items=candidate_limit)
     elif len(items) < MIN_NEWS_ITEMS and not allow_broad_fallback:
         logger.info("최근 운영 이력이 안정적이라 broad legacy fallback은 이번엔 건너뛸게요.")
 

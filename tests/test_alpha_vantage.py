@@ -8,6 +8,7 @@ from morning_brief.data.sources.alpha_vantage import (
     _extract_daily_series,
     fetch_daily_close_change_volume,
 )
+from morning_brief.data.sources import provider_runtime
 
 
 def test_extract_daily_series_rejects_rate_limit_note():
@@ -49,3 +50,19 @@ def test_fetch_us_index_points_prefers_alpha_vantage_when_key_present(monkeypatc
 
     assert [point.ticker for point in points] == ["SPY", "QQQ", "SOXX"]
     assert all(point.change_pct == 1.5 for point in points)
+
+
+def test_fetch_daily_close_change_volume_opens_provider_circuit_on_information_message(monkeypatch):
+    provider_runtime.reset_provider_runtime_state()
+    monkeypatch.setattr(
+        "morning_brief.data.sources.alpha_vantage.get_json_with_retry",
+        lambda *_, **__: {
+            "Information": "Thank you for using Alpha Vantage! Please consider spreading out your free API requests more sparingly (1 request per second)."
+        },
+    )
+
+    with pytest.raises(HttpFetchError) as exc_info:
+        fetch_daily_close_change_volume("NVDA", "demo")
+
+    assert exc_info.value.rate_limited is True
+    assert provider_runtime.disabled_reason("alpha_vantage") is not None

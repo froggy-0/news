@@ -22,6 +22,16 @@ Bitcoin in Trust 37,604.17
 Bitcoin per Share 0.00033605
 """
 
+BITB_CURRENT_SAMPLE = """
+<script id="__NEXT_DATA__" type="application/json">
+{"props":{"pageProps":{"fundPageData":{"fundDetailsData":{"netAssets":2725606286.52,"sharesOutstanding":71500000,"volume":3209174}},"proofOfReservesSnapshotData":{"fundName":"BITB","totalReserve":38920.51992677,"timestamp":"2026-03-13T01:01:51.772Z"}}}}
+</script>
+Data as of 03/11/2026
+Net Assets (AUM) $2,725,606,287
+Shares Outstanding 71,500,000
+Daily Volume (Shares)* 3,209,174
+"""
+
 GBTC_SAMPLE = """
 Data as of 03/10/2026
 ASSETS UNDER MANAGEMENT* $16,100,265,163
@@ -50,6 +60,17 @@ def test_parse_bitb_snapshot_reads_direct_holdings_fields():
     assert snapshot.as_of == "03/10/2026"
     assert snapshot.total_btc == 37_604.17
     assert snapshot.bitcoin_per_share == 0.00033605
+
+
+def test_parse_bitb_snapshot_prefers_structured_page_payload_when_available():
+    snapshot = official.parse_bitb_snapshot(BITB_CURRENT_SAMPLE)
+
+    assert snapshot.ticker == "BITB"
+    assert snapshot.as_of == "03/13/2026"
+    assert snapshot.total_btc == 38920.51992677
+    assert snapshot.shares_outstanding == 71_500_000
+    assert snapshot.daily_volume == 3_209_174
+    assert snapshot.bitcoin_per_share == round(38920.51992677 / 71_500_000, 10)
 
 
 def test_parse_gbtc_snapshot_reads_direct_holdings_fields():
@@ -81,3 +102,52 @@ def test_official_btc_etf_cache_roundtrip(tmp_path: Path):
     loaded = official.load_official_btc_etf_cache(cache_file)
 
     assert loaded["BITB"] == snapshots[0]
+
+
+def test_fetch_official_btc_etf_snapshots_keeps_partial_success_when_one_issuer_fails(monkeypatch):
+    monkeypatch.setattr(
+        official,
+        "get_text_with_retry",
+        lambda url, **kwargs: (_ for _ in ()).throw(official.HttpFetchError("404"))
+        if url == official.BITB_URL
+        else url,
+    )
+    monkeypatch.setattr(
+        official,
+        "parse_ibit_snapshot",
+        lambda text: BitcoinEtfIssuerSnapshot(
+            ticker="IBIT",
+            issuer="iShares",
+            source_url=text,
+            as_of="03/11/2026",
+            shares_outstanding=1,
+            daily_volume=1,
+            aum_usd=1.0,
+            total_btc=1.0,
+            bitcoin_per_share=1.0,
+        ),
+    )
+    monkeypatch.setattr(
+        official,
+        "parse_bitb_snapshot",
+        lambda text: (_ for _ in ()).throw(AssertionError("BITB parser should not run")),
+    )
+    monkeypatch.setattr(
+        official,
+        "parse_gbtc_snapshot",
+        lambda text: BitcoinEtfIssuerSnapshot(
+            ticker="GBTC",
+            issuer="Grayscale",
+            source_url=text,
+            as_of="03/11/2026",
+            shares_outstanding=1,
+            daily_volume=1,
+            aum_usd=1.0,
+            total_btc=1.0,
+            bitcoin_per_share=1.0,
+        ),
+    )
+
+    snapshots = official.fetch_official_btc_etf_snapshots()
+
+    assert [snapshot.ticker for snapshot in snapshots] == ["GBTC", "IBIT"]

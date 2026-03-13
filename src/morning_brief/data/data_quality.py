@@ -27,6 +27,8 @@ def summarize_news_packet_quality(packet: list[dict]) -> dict:
     citation_backed_count = 0
     explained_count = 0
     perplexity_item_count = 0
+    perplexity_citation_backed_count = 0
+    perplexity_explained_count = 0
     official_signal_count = 0
     unique_domains: set[str] = set()
     unique_topics: set[str] = set()
@@ -63,11 +65,19 @@ def summarize_news_packet_quality(packet: list[dict]) -> dict:
             official_signal_count += 1
 
         citations = item.get("citations", [])
-        if isinstance(citations, list) and any(str(value).strip() for value in citations):
+        has_citations = isinstance(citations, list) and any(str(value).strip() for value in citations)
+        if has_citations:
             citation_backed_count += 1
 
-        if str(item.get("why_it_matters", "")).strip():
+        has_explanation = bool(str(item.get("why_it_matters", "")).strip())
+        if has_explanation:
             explained_count += 1
+
+        if provider == PERPLEXITY_PROVIDER:
+            if has_citations:
+                perplexity_citation_backed_count += 1
+            if has_explanation:
+                perplexity_explained_count += 1
 
         age_hours = item.get("age_hours")
         try:
@@ -86,6 +96,8 @@ def summarize_news_packet_quality(packet: list[dict]) -> dict:
         "citation_backed_count": citation_backed_count,
         "explained_count": explained_count,
         "perplexity_item_count": perplexity_item_count,
+        "perplexity_citation_backed_count": perplexity_citation_backed_count,
+        "perplexity_explained_count": perplexity_explained_count,
         "official_signal_count": official_signal_count,
     }
 
@@ -100,7 +112,7 @@ def _build_perplexity_fallback_reasons(summary: dict) -> list[str]:
         reasons.append(f"도메인이 {summary['unique_domains']}개라 출처가 아직 좁아요")
     if summary["topic_coverage_count"] < MIN_TOPIC_COVERAGE:
         reasons.append(f"토픽이 {summary['topic_coverage_count']}개라 주제가 조금 좁아요")
-    if summary["citation_backed_count"] < summary["count"]:
+    if summary["perplexity_citation_backed_count"] < summary["perplexity_item_count"]:
         reasons.append("일부 기사에 근거 링크가 빠져 있어요")
     return reasons
 
@@ -112,9 +124,9 @@ def _append_perplexity_quality_warnings(warnings: list[str], news_quality: dict)
         warnings.append(
             f"Perplexity 기준 토픽 커버리지가 {news_quality['topic_coverage_count']}개라 조금 좁습니다"
         )
-    if news_quality["citation_backed_count"] < news_quality["perplexity_item_count"]:
+    if news_quality["perplexity_citation_backed_count"] < news_quality["perplexity_item_count"]:
         warnings.append("Perplexity 결과 일부에 근거 링크가 부족합니다")
-    if news_quality["explained_count"] < news_quality["perplexity_item_count"]:
+    if news_quality["perplexity_explained_count"] < news_quality["perplexity_item_count"]:
         warnings.append("Perplexity 결과 일부에 시장 해석 메모가 빠져 있습니다")
 
 
@@ -186,5 +198,7 @@ def assess_data_quality(packet: dict, news_packet: list[dict]) -> dict:
         "citation_backed_count": news_quality["citation_backed_count"],
         "explained_count": news_quality["explained_count"],
         "perplexity_item_count": news_quality["perplexity_item_count"],
+        "perplexity_citation_backed_count": news_quality["perplexity_citation_backed_count"],
+        "perplexity_explained_count": news_quality["perplexity_explained_count"],
         "official_signal_count": news_quality["official_signal_count"],
     }

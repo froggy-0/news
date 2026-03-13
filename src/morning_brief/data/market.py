@@ -17,6 +17,7 @@ from morning_brief.data.sources.btc_etf_official import (
 from morning_brief.data.sources.coingecko import fetch_btc_usd_price_change
 from morning_brief.data.sources.fred import fetch_macro_points_from_fred
 from morning_brief.data.sources.http_client import is_host_resolvable
+from morning_brief.data.sources.provider_runtime import disabled_reason as provider_disabled_reason
 from morning_brief.data.sources.stooq import fetch_close_change_and_volume, to_stooq_symbol
 from morning_brief.models import BitcoinEtfIssuerSnapshot, BitcoinSnapshot, MarketPoint
 
@@ -71,6 +72,18 @@ def _warn_once(key: str, message: str, *args) -> None:
         return
     _provider_warned.add(key)
     logger.warning(message, *args)
+
+
+def _alpha_vantage_disabled_reason() -> str | None:
+    return provider_disabled_reason("alpha_vantage")
+
+
+def _warn_alpha_vantage_disabled_once(reason: str) -> None:
+    _warn_once(
+        "alpha_vantage_disabled",
+        "Alpha Vantage는 이번 실행에서 더 이상 쓰지 않을게요. 이유=%s",
+        reason,
+    )
 
 
 
@@ -208,6 +221,11 @@ def _point_from_alpha_vantage(label: str, ticker: str, api_key: str) -> MarketPo
 
 
 def _safe_alpha_vantage_point(label: str, ticker: str, api_key: str) -> MarketPoint:
+    disabled_reason = _alpha_vantage_disabled_reason()
+    if disabled_reason:
+        _warn_alpha_vantage_disabled_once(disabled_reason)
+        return _safe_stooq_point(label=label, ticker=ticker)
+
     return _safe_with_fallback(
         warning_key=f"alpha_vantage_fallback_{ticker}",
         warning_message="Alpha Vantage에서 %s (%s) 데이터를 바로 가져오지 못해 Stooq/yfinance로 이어서 볼게요: %s",
@@ -257,6 +275,11 @@ def _volume_from_alpha_vantage(ticker: str, api_key: str) -> int:
 
 
 def _safe_alpha_vantage_volume(ticker: str, api_key: str) -> int:
+    disabled_reason = _alpha_vantage_disabled_reason()
+    if disabled_reason:
+        _warn_alpha_vantage_disabled_once(disabled_reason)
+        return _safe_stooq_volume(ticker=ticker)
+
     return _safe_with_fallback(
         warning_key=f"alpha_vantage_volume_fallback_{ticker}",
         warning_message="Alpha Vantage에서 %s 거래량을 바로 가져오지 못해 Stooq/yfinance로 이어서 볼게요: %s",
@@ -264,6 +287,43 @@ def _safe_alpha_vantage_volume(ticker: str, api_key: str) -> int:
         primary_fetch=lambda: _volume_from_alpha_vantage(ticker=ticker, api_key=api_key),
         fallback_fetch=lambda: _safe_stooq_volume(ticker=ticker),
     )
+
+
+def _safe_alpha_vantage_point_and_volume(
+    *,
+    label: str,
+    ticker: str,
+    api_key: str,
+) -> tuple[MarketPoint, int]:
+    disabled_reason = _alpha_vantage_disabled_reason()
+    if disabled_reason:
+        _warn_alpha_vantage_disabled_once(disabled_reason)
+        return _safe_stooq_point(label=label, ticker=ticker), _safe_stooq_volume(ticker=ticker)
+
+    try:
+        close, change_pct, volume = fetch_daily_close_change_volume(ticker, api_key)
+        return (
+            MarketPoint(
+                label=label,
+                ticker=ticker,
+                price=round(close, 4),
+                change_pct=round(change_pct, 2),
+            ),
+            volume,
+        )
+    except Exception as exc:
+        disabled_reason = _alpha_vantage_disabled_reason()
+        if disabled_reason:
+            _warn_alpha_vantage_disabled_once(disabled_reason)
+        else:
+            _warn_once(
+                f"alpha_vantage_point_volume_fallback_{ticker}",
+                "Alpha Vantage에서 %s (%s) 가격과 거래량을 바로 가져오지 못해 Stooq/yfinance로 이어서 볼게요: %s",
+                label,
+                ticker,
+                exc,
+            )
+        return _safe_stooq_point(label=label, ticker=ticker), _safe_stooq_volume(ticker=ticker)
 
 
 def fetch_macro_points(fred_api_key: str = "") -> list[MarketPoint]:
@@ -448,18 +508,20 @@ def fetch_bitcoin_snapshot(alpha_vantage_api_key: str = "", cache_dir: Path | No
     spot = _fetch_btc_spot_point()
 
     if alpha_vantage_api_key:
-        etf_points = [
-            _safe_alpha_vantage_point(label=ticker, ticker=ticker, api_key=alpha_vantage_api_key)
-            for ticker in BTC_ETF_TICKERS
-        ]
+        etf_points: list[MarketPoint] = []
+        volume_total = 0
+        for ticker in BTC_ETF_TICKERS:
+            point, volume = _safe_alpha_vantage_point_and_volume(
+                label=ticker,
+                ticker=ticker,
+                api_key=alpha_vantage_api_key,
+            )
+            etf_points.append(point)
+            volume_total += volume
     else:
         etf_points = [_safe_stooq_point(label=ticker, ticker=ticker) for ticker in BTC_ETF_TICKERS]
-
-    volume_total = 0
-    for ticker in BTC_ETF_TICKERS:
-        if alpha_vantage_api_key:
-            volume_total += _safe_alpha_vantage_volume(ticker=ticker, api_key=alpha_vantage_api_key)
-        else:
+        volume_total = 0
+        for ticker in BTC_ETF_TICKERS:
             volume_total += _safe_stooq_volume(ticker=ticker)
 
     fear_greed_value, fear_greed_label = _fetch_fear_greed()

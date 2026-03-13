@@ -1,8 +1,20 @@
 from __future__ import annotations
 
 from morning_brief.data.sources.http_client import HttpFetchError, get_json_with_retry
+from morning_brief.data.sources.provider_runtime import disabled_reason, open_circuit
 
 ALPHA_VANTAGE_URL = "https://www.alphavantage.co/query"
+ALPHA_VANTAGE_PROVIDER = "alpha_vantage"
+
+
+def _rate_limited_error(message: str) -> HttpFetchError:
+    open_circuit(ALPHA_VANTAGE_PROVIDER, message)
+    return HttpFetchError(
+        message,
+        provider=ALPHA_VANTAGE_PROVIDER,
+        retryable=False,
+        rate_limited=True,
+    )
 
 
 def _extract_daily_series(payload: dict) -> dict[str, dict[str, str]]:
@@ -10,9 +22,9 @@ def _extract_daily_series(payload: dict) -> dict[str, dict[str, str]]:
         raise HttpFetchError("Alpha Vantage 응답 구조가 예상과 달라요.")
 
     if payload.get("Note"):
-        raise HttpFetchError(f"Alpha Vantage 안내 메시지를 받았어요: {payload['Note']}")
+        raise _rate_limited_error(f"Alpha Vantage 안내 메시지를 받았어요: {payload['Note']}")
     if payload.get("Information"):
-        raise HttpFetchError(f"Alpha Vantage 안내 정보를 받았어요: {payload['Information']}")
+        raise _rate_limited_error(f"Alpha Vantage 안내 정보를 받았어요: {payload['Information']}")
     if payload.get("Error Message"):
         raise HttpFetchError(f"Alpha Vantage 오류 메시지를 받았어요: {payload['Error Message']}")
 
@@ -26,6 +38,13 @@ def fetch_daily_close_change_volume(symbol: str, api_key: str) -> tuple[float, f
     if not api_key:
         raise ValueError("Alpha Vantage API 키가 필요해요.")
 
+    unavailable_reason = disabled_reason(ALPHA_VANTAGE_PROVIDER)
+    if unavailable_reason:
+        raise HttpFetchError(
+            f"Alpha Vantage는 이번 실행에서 더 이상 쓰지 않을게요: {unavailable_reason}",
+            provider=ALPHA_VANTAGE_PROVIDER,
+        )
+
     payload = get_json_with_retry(
         ALPHA_VANTAGE_URL,
         params={
@@ -34,6 +53,7 @@ def fetch_daily_close_change_volume(symbol: str, api_key: str) -> tuple[float, f
             "outputsize": "compact",
             "apikey": api_key,
         },
+        provider=ALPHA_VANTAGE_PROVIDER,
         timeout=20,
     )
     series = _extract_daily_series(payload)

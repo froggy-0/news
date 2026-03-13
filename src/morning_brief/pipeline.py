@@ -9,6 +9,10 @@ from morning_brief.config import Settings
 from morning_brief.data.data_quality import assess_data_quality
 from morning_brief.data.market import build_market_packet
 from morning_brief.data.news import build_news_packet
+from morning_brief.data.sources.provider_runtime import (
+    provider_stats_snapshot,
+    reset_provider_runtime_state,
+)
 from morning_brief.emailer import GmailSender
 from morning_brief.research_backfill import backfill_news_with_web_search
 
@@ -19,6 +23,7 @@ _assess_data_quality = assess_data_quality
 
 
 def run_pipeline(settings: Settings) -> str:
+    reset_provider_runtime_state()
     logger.info("브리핑 파이프라인을 시작할게요.")
     market_packet = build_market_packet(
         fred_api_key=settings.fred_api_key,
@@ -69,6 +74,9 @@ def run_pipeline(settings: Settings) -> str:
 
     subject = f"미국 기술주·비트코인 시장 브리핑 ({now.strftime('%Y-%m-%d')})"
     GmailSender(settings).send(subject=subject, body=briefing)
+    provider_stats = provider_stats_snapshot()
+    if provider_stats:
+        logger.info("이번 실행의 수집 공급자 상태는 %s", provider_stats)
     logger.info("브리핑 파이프라인을 마쳤어요.")
 
     return briefing

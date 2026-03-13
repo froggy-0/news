@@ -124,6 +124,26 @@ def test_collect_from_rss_uses_passed_candidate_limit(monkeypatch):
     assert captured["max_items"] == 15
 
 
+def test_fetch_news_prefers_rss_before_gdelt(monkeypatch):
+    rss_item = NewsItem(
+        title="Fed signals patience",
+        url="https://www.reuters.com/world/us/fed-signals-patience",
+        source="Reuters",
+        published_at=datetime.now(timezone.utc),
+        provider="legacy_rss",
+    )
+    monkeypatch.setattr("morning_brief.data.news._collect_from_rss", lambda **_: [rss_item] * 3)
+    monkeypatch.setattr(
+        "morning_brief.data.news._collect_from_gdelt",
+        lambda **_: (_ for _ in ()).throw(AssertionError("gdelt should not run before rss is exhausted")),
+    )
+
+    items = news.fetch_news(max_items=3, newsapi_key="", allow_broad_fallback=False)
+
+    assert len(items) == 1
+    assert items[0].provider == "legacy_rss"
+
+
 def test_collect_from_newsapi_uses_passed_candidate_limit(monkeypatch):
     captured: dict[str, object] = {}
     monkeypatch.setattr(
@@ -288,6 +308,73 @@ def test_build_news_packet_skips_legacy_when_perplexity_quality_is_good(monkeypa
 
     assert len(packet) == 4
     assert {item["topic"] for item in packet} == {"macro", "us_equity", "ai_bigtech", "bitcoin"}
+
+
+def test_build_news_packet_does_not_trigger_legacy_fallback_for_uncited_grok_items(monkeypatch):
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")
+    monkeypatch.setenv("ENABLE_LEGACY_NEWS_FALLBACK", "true")
+    monkeypatch.setenv("ENABLE_OFFICIAL_X_SIGNALS", "true")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
+    monkeypatch.setenv("GROK_API_KEY", "grok-test-key")
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news_from_perplexity",
+        lambda **_: [
+            NewsItem(
+                title="Fed tone stays steady",
+                url="https://www.reuters.com/world/us/fed-tone-stays-steady",
+                source="Reuters",
+                published_at=now,
+                topic="macro",
+                provider="perplexity_search",
+                why_it_matters="금리 흐름을 읽는 데 도움이 돼요.",
+                citations=["https://www.reuters.com/world/us/fed-tone-stays-steady"],
+            ),
+            NewsItem(
+                title="Nasdaq closes near highs",
+                url="https://www.bloomberg.com/news/nasdaq-closes-near-highs",
+                source="Bloomberg",
+                published_at=now - timedelta(hours=1),
+                topic="us_equity",
+                provider="perplexity_search",
+                why_it_matters="미국 증시 흐름을 읽는 데 도움이 돼요.",
+                citations=["https://www.bloomberg.com/news/nasdaq-closes-near-highs"],
+            ),
+            NewsItem(
+                title="Bitcoin ETFs keep drawing demand",
+                url="https://www.coindesk.com/markets/2026/03/13/bitcoin-etfs-keep-drawing-demand",
+                source="CoinDesk",
+                published_at=now - timedelta(hours=2),
+                topic="bitcoin",
+                provider="perplexity_search",
+                why_it_matters="비트코인 자금 흐름을 읽는 데 도움이 돼요.",
+                citations=["https://www.coindesk.com/markets/2026/03/13/bitcoin-etfs-keep-drawing-demand"],
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_official_x_signals",
+        lambda **_: [
+            NewsItem(
+                title="AMD official update",
+                url="https://ir.amd.com/",
+                source="@AMD",
+                published_at=now - timedelta(minutes=30),
+                topic="ai_bigtech",
+                provider="grok_official_x",
+                why_it_matters="공식 메시지라 직접 확인 근거가 돼요.",
+                citations=[],
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news",
+        lambda **_: (_ for _ in ()).throw(AssertionError("legacy fetch should not run")),
+    )
+
+    packet = news.build_news_packet(settings=load_settings())
+
+    assert len(packet) == 4
 
 
 def test_build_news_packet_merges_official_x_signals_before_legacy(monkeypatch):
@@ -539,5 +626,7 @@ def test_summarize_news_packet_quality_counts_reliability_fields():
         "citation_backed_count": 1,
         "explained_count": 1,
         "perplexity_item_count": 1,
+        "perplexity_citation_backed_count": 1,
+        "perplexity_explained_count": 1,
         "official_signal_count": 0,
     }
