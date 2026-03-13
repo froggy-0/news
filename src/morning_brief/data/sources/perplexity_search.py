@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import logging
 from typing import Any
 
-from perplexity import APIConnectionError, APIStatusError, APITimeoutError, Perplexity, RateLimitError
+from perplexity import (
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    Perplexity,
+    RateLimitError,
+)
 
 from morning_brief.data.sources.domain_utils import domain_matches, normalize_domain
 from morning_brief.data.sources.http_client import HttpFetchError
@@ -235,7 +241,9 @@ def _search_once(
 ) -> dict[str, Any]:
     unavailable_reason = disabled_reason(PERPLEXITY_PROVIDER)
     if unavailable_reason:
-        raise HttpFetchError(f"Perplexity는 이번 실행에서 더 이상 쓰지 않을게요: {unavailable_reason}")
+        raise HttpFetchError(
+            f"Perplexity는 이번 실행에서 더 이상 쓰지 않을게요: {unavailable_reason}"
+        )
 
     record_request(PERPLEXITY_PROVIDER)
     try:
@@ -250,9 +258,7 @@ def _search_once(
         record_failure(PERPLEXITY_PROVIDER)
         message = f"Perplexity Search API 호출 한도에 걸렸어요: {_format_status_error(exc)}"
         open_circuit(PERPLEXITY_PROVIDER, message)
-        raise HttpFetchError(
-            message
-        ) from exc
+        raise HttpFetchError(message) from exc
     except APITimeoutError as exc:
         record_failure(PERPLEXITY_PROVIDER)
         raise HttpFetchError("Perplexity Search API 응답 시간이 너무 오래 걸렸어요.") from exc
@@ -349,6 +355,8 @@ def fetch_news_from_perplexity(*, max_items: int, api_key: str) -> list[NewsItem
             )
             collected.extend(topic_items)
         except HttpFetchError as exc:
-            logger.warning("Perplexity에서 %s 토픽을 확인하는 중 문제가 있었어요: %s", topic.name, exc)
+            logger.warning(
+                "Perplexity에서 %s 토픽을 확인하는 중 문제가 있었어요: %s", topic.name, exc
+            )
 
     return collected

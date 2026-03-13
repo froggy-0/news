@@ -15,7 +15,6 @@ def test_checked_in_registry_is_valid():
     assert registry.registry_validation_errors() == []
 
 
-
 def test_grouped_verified_x_handles_normalizes_and_limits(monkeypatch, tmp_path):
     entities = [
         {
@@ -50,7 +49,6 @@ def test_grouped_verified_x_handles_normalizes_and_limits(monkeypatch, tmp_path)
     assert handles["alpha"][-1] == "Handle02"
 
 
-
 def test_registry_validation_errors_for_missing_verified_metadata(monkeypatch, tmp_path):
     entities = [
         {
@@ -83,7 +81,6 @@ def test_registry_validation_errors_for_missing_verified_metadata(monkeypatch, t
     assert "x_verified=true인데 x_search_group이 없습니다: amd" in errors
 
 
-
 def test_registry_validation_errors_when_group_exceeds_limit(monkeypatch, tmp_path):
     entities = [
         {
@@ -112,4 +109,7 @@ def test_registry_validation_errors_when_group_exceeds_limit(monkeypatch, tmp_pa
 
     errors = registry.registry_validation_errors()
 
-    assert f"x_search_group over_limit 이(가) {registry.MAX_X_HANDLES_PER_GROUP}개를 초과합니다" in errors
+    assert (
+        f"x_search_group over_limit 이(가) {registry.MAX_X_HANDLES_PER_GROUP}개를 초과합니다"
+        in errors
+    )

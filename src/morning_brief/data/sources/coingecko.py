@@ -5,7 +5,6 @@ from morning_brief.data.sources.http_client import HttpFetchError, get_json_with
 COINGECKO_SIMPLE_PRICE_URL = "https://api.coingecko.com/api/v3/simple/price"
 
 
-
 def fetch_btc_usd_price_change() -> tuple[float, float]:
     payload = get_json_with_retry(
         COINGECKO_SIMPLE_PRICE_URL,

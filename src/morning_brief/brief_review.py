@@ -5,8 +5,8 @@ import logging
 
 from openai import OpenAI
 
-from morning_brief.openai_utils import cached_input_tokens
 from morning_brief.config import Settings
+from morning_brief.openai_utils import cached_input_tokens
 from morning_brief.prompting import (
     build_prompt_cache_key,
     render_brief_rewrite_prompts,
@@ -219,14 +219,18 @@ def validate_and_rewrite_briefing(
                 client=client,
             )
         except Exception as exc:
-            logger.warning("재작성한 브리핑을 다시 검수하는 중 문제가 있어 현재 버전으로 이어갈게요: %s", exc)
+            logger.warning(
+                "재작성한 브리핑을 다시 검수하는 중 문제가 있어 현재 버전으로 이어갈게요: %s", exc
+            )
             return rewritten
 
         if current_review is None or current_review["pass"]:
             logger.info("재작성한 브리핑도 다시 확인했고, 최종 검수를 통과했어요.")
             return rewritten
 
-        followup_issues = "; ".join(current_review["issues"][:3]) or "아직 다듬을 부분이 남아 있어요"
+        followup_issues = (
+            "; ".join(current_review["issues"][:3]) or "아직 다듬을 부분이 남아 있어요"
+        )
         logger.warning("재작성 뒤에도 보완점이 남아 있어요: %s", followup_issues)
         if not current_review["rewrite_needed"]:
             logger.info("추가 자동 재작성보다는 현재 버전을 유지하는 편이 안전해 보여요.")

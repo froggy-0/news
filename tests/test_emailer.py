@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from morning_brief.emailer import (
     _extract_brief_structure,
-    _split_section_groups,
     _split_recipients,
     _split_reference_block,
+    _split_section_groups,
     build_briefing_message,
     render_briefing_email_html,
 )
-
 
 SAMPLE_BRIEF = """Morning Market Brief (2026-03-12)
 [데이터 품질 알림] 뉴스 수가 부족합니다.

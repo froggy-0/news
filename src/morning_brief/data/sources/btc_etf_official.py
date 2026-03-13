@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import asdict
-from datetime import datetime
 import html
 import json
 import logging
-from pathlib import Path
 import re
+from dataclasses import asdict
+from datetime import datetime
+from pathlib import Path
 
 from morning_brief.data.sources.http_client import HttpFetchError, get_text_with_retry
 from morning_brief.models import BitcoinEtfIssuerSnapshot
@@ -122,7 +122,10 @@ def _extract_bitb_structured_values(text: str) -> tuple[str, float, float, int, 
     shares_outstanding_raw = _find_first_key(payload, "sharesOutstanding")
     daily_volume_raw = _find_first_key(payload, "volume")
 
-    if not all(value is not None for value in [total_btc_raw, aum_usd_raw, shares_outstanding_raw, daily_volume_raw]):
+    if not all(
+        value is not None
+        for value in [total_btc_raw, aum_usd_raw, shares_outstanding_raw, daily_volume_raw]
+    ):
         raise HttpFetchError("Bitwise 페이지의 구조화 데이터가 충분하지 않아요.")
 
     as_of = _extract_page_date(_normalize_page_text(text))
@@ -165,13 +168,17 @@ def parse_ibit_snapshot(text: str) -> BitcoinEtfIssuerSnapshot:
 def parse_bitb_snapshot(text: str) -> BitcoinEtfIssuerSnapshot:
     normalized = _normalize_page_text(text)
     try:
-        as_of, total_btc, aum_usd, shares_outstanding, daily_volume = _extract_bitb_structured_values(text)
+        as_of, total_btc, aum_usd, shares_outstanding, daily_volume = (
+            _extract_bitb_structured_values(text)
+        )
         bitcoin_per_share = total_btc / shares_outstanding
     except HttpFetchError:
         as_of = _extract_page_date(normalized)
         aum_usd = _extract_first_matching_value(normalized, ["Net Assets (AUM)", "Net Assets"])
         shares_outstanding = _extract_value(normalized, "Shares Outstanding")
-        daily_volume = _extract_first_matching_value(normalized, ["Daily Volume (Shares)", "Daily Volume"])
+        daily_volume = _extract_first_matching_value(
+            normalized, ["Daily Volume (Shares)", "Daily Volume"]
+        )
         total_btc = _extract_value(normalized, "Bitcoin in Trust")
         bitcoin_per_share = _extract_value(normalized, "Bitcoin per Share")
     return BitcoinEtfIssuerSnapshot(
@@ -252,7 +259,9 @@ def load_official_btc_etf_cache(cache_file: Path) -> dict[str, BitcoinEtfIssuerS
     return snapshots
 
 
-def save_official_btc_etf_cache(cache_file: Path, snapshots: list[BitcoinEtfIssuerSnapshot]) -> None:
+def save_official_btc_etf_cache(
+    cache_file: Path, snapshots: list[BitcoinEtfIssuerSnapshot]
+) -> None:
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     payload = {snapshot.ticker: asdict(snapshot) for snapshot in snapshots}
     cache_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

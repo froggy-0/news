@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROLLOUT_STATE_RELATIVE_PATH = Path("news/perplexity_rollout_state.json")
@@ -36,8 +36,7 @@ def should_reduce_legacy_broad_fallback(cache_dir: Path) -> bool:
         return False
 
     return all(
-        bool(run.get("perplexity_only_ready"))
-        and not bool(run.get("legacy_used"))
+        bool(run.get("perplexity_only_ready")) and not bool(run.get("legacy_used"))
         for run in recent_runs
     )
 

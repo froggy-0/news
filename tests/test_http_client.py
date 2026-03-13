@@ -5,8 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from morning_brief.data.sources import http_client
-from morning_brief.data.sources import provider_runtime
+from morning_brief.data.sources import http_client, provider_runtime
 
 
 def test_is_host_resolvable_uses_ttl_cache(monkeypatch):
@@ -87,7 +86,9 @@ def test_get_text_with_retry_retries_429_and_uses_retry_after(monkeypatch):
     monkeypatch.setattr(http_client.time, "sleep", lambda seconds: sleeps.append(seconds))
     provider_runtime.reset_provider_runtime_state()
 
-    text = http_client.get_text_with_retry("https://example.com/rate-limited", provider="alpha_vantage")
+    text = http_client.get_text_with_retry(
+        "https://example.com/rate-limited", provider="alpha_vantage"
+    )
 
     assert text == "ok"
     assert calls["count"] == 2
@@ -114,7 +115,9 @@ def test_get_text_with_retry_parses_http_date_retry_after(monkeypatch):
     monkeypatch.setattr(http_client.time, "time", lambda: 1773388800.0)
     provider_runtime.reset_provider_runtime_state()
 
-    text = http_client.get_text_with_retry("https://example.com/retry-after-date", provider="alpha_vantage")
+    text = http_client.get_text_with_retry(
+        "https://example.com/retry-after-date", provider="alpha_vantage"
+    )
 
     assert text == "ok"
     assert calls["count"] == 2

@@ -65,7 +65,9 @@ def summarize_news_packet_quality(packet: list[dict]) -> dict:
             official_signal_count += 1
 
         citations = item.get("citations", [])
-        has_citations = isinstance(citations, list) and any(str(value).strip() for value in citations)
+        has_citations = isinstance(citations, list) and any(
+            str(value).strip() for value in citations
+        )
         if has_citations:
             citation_backed_count += 1
 
@@ -147,7 +149,9 @@ def assess_data_quality(packet: dict, news_packet: list[dict]) -> dict:
     tech_stocks = packet.get("tech_stocks", [])
     btc = packet.get("bitcoin", {})
 
-    numeric_points = macro + us_indices + tech_stocks + btc.get("etf_points", []) + [btc.get("spot", {})]
+    numeric_points = (
+        macro + us_indices + tech_stocks + btc.get("etf_points", []) + [btc.get("spot", {})]
+    )
     zero_points = [
         p for p in numeric_points if isinstance(p, dict) and _safe_price(p.get("price", 0.0)) <= 0.0
     ]
@@ -155,26 +159,33 @@ def assess_data_quality(packet: dict, news_packet: list[dict]) -> dict:
     zero_ratio = (len(zero_points) / len(numeric_points)) if numeric_points else 1.0
     news_quality = summarize_news_packet_quality(news_packet)
     trusted_signal_count = news_quality["preferred_count"] + news_quality["official_signal_count"]
-    authoritative_signal_count = news_quality["tier_1_count"] + news_quality["official_signal_count"]
+    authoritative_signal_count = (
+        news_quality["tier_1_count"] + news_quality["official_signal_count"]
+    )
 
     warnings: list[str] = []
     if zero_ratio >= 0.6:
-        warnings.append(f"가격 데이터의 {zero_ratio*100:.0f}%가 폴백 값입니다")
+        warnings.append(f"가격 데이터의 {zero_ratio * 100:.0f}%가 폴백 값입니다")
     if news_quality["count"] < MIN_NEWS_ITEMS:
         warnings.append(
             f"핵심 뉴스가 {news_quality['count']}건으로 최소 기준({MIN_NEWS_ITEMS}건) 미달입니다"
         )
     if news_quality["count"] >= MIN_NEWS_ITEMS and trusted_signal_count < MIN_PREFERRED_NEWS_ITEMS:
-        warnings.append(
-            "우선 신뢰 출처 뉴스와 공식 시그널을 합쳐도 충분하지 않습니다"
-        )
-    if news_quality["count"] >= MIN_NEWS_ITEMS and authoritative_signal_count < MIN_TIER_1_NEWS_ITEMS:
+        warnings.append("우선 신뢰 출처 뉴스와 공식 시그널을 합쳐도 충분하지 않습니다")
+    if (
+        news_quality["count"] >= MIN_NEWS_ITEMS
+        and authoritative_signal_count < MIN_TIER_1_NEWS_ITEMS
+    ):
         warnings.append("최상위 신뢰 출처나 공식 시그널이 없습니다")
-    if news_quality["count"] >= MIN_NEWS_ITEMS and news_quality["unique_domains"] < MIN_UNIQUE_NEWS_DOMAINS:
-        warnings.append(
-            f"뉴스 출처 다양성이 낮습니다({news_quality['unique_domains']}개 도메인)"
-        )
-    if news_quality["count"] >= MIN_NEWS_ITEMS and news_quality["fresh_count"] < MIN_FRESH_NEWS_ITEMS:
+    if (
+        news_quality["count"] >= MIN_NEWS_ITEMS
+        and news_quality["unique_domains"] < MIN_UNIQUE_NEWS_DOMAINS
+    ):
+        warnings.append(f"뉴스 출처 다양성이 낮습니다({news_quality['unique_domains']}개 도메인)")
+    if (
+        news_quality["count"] >= MIN_NEWS_ITEMS
+        and news_quality["fresh_count"] < MIN_FRESH_NEWS_ITEMS
+    ):
         warnings.append(f"24시간 내 최신 뉴스가 {news_quality['fresh_count']}건으로 부족합니다")
     _append_perplexity_quality_warnings(warnings, news_quality)
 

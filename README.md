@@ -19,6 +19,9 @@
 
 ## 프로젝트 구조
 - `main.py`: 실행 엔트리포인트
+- `AGENTS.md`: Codex 작업 규칙 요약
+- `CONTRIBUTING.md`: 기여/커밋/검증 가이드
+- `docs/development-standards.md`: 개발 표준과 리뷰 루브릭
 - `src/morning_brief/config.py`: 환경설정 로더
 - `src/morning_brief/data/market.py`: 시장 데이터 수집 (재시도 포함)
 - `src/morning_brief/data/news.py`: 뉴스 수집 (우선소스 + 백필)
@@ -42,6 +45,7 @@ pip install -r requirements.txt
 개발/테스트 의존성까지 설치:
 ```bash
 pip install -r requirements-dev.txt
+git config commit.template .gitmessage.txt
 ```
 
 ## 2) 환경변수
@@ -130,14 +134,31 @@ python3 main.py schedule
 pytest -q
 ```
 
-## 8) 프롬프트 엔지니어링 참고
+## 8) 개발 워크플로우
+
+권장 명령:
+
+```bash
+make fmt
+make lint
+make test
+make check
+make validate-pre-commit
+```
+
+주요 개발 규칙:
+- 커밋 제목 형식은 `type(scope): 한국어 요약`
+- 상세 기준은 `docs/development-standards.md`
+- 변경 유형별 회귀 기준은 `docs/ai-evals.md`
+- Codex용 단축 규칙은 `AGENTS.md`
+- Python 변경은 `ruff format`, `ruff check`, `pytest`를 모두 통과해야 완료로 봅니다.
+
+## 9) 프롬프트 엔지니어링 참고
 - OpenAI Prompt Engineering: <https://platform.openai.com/docs/guides/prompt-engineering>
 - OpenAI Prompt Caching: <https://platform.openai.com/docs/guides/prompt-caching>
 - OpenAI Responses API: <https://platform.openai.com/docs/api-reference/responses/create>
-- Anthropic Prompt Engineering Overview: <https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview>
-- Anthropic Prompt Caching: <https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching>
 
-## 9) GitHub Actions 운영
+## 10) GitHub Actions 운영
 워크플로우는 `.github/workflows/morning-brief.yml`에 포함되어 있습니다.
 
 스케줄:
@@ -180,6 +201,7 @@ pytest -q
 이 파일을 기준으로 다음 실행에서 비트코인 ETF 공식 보유량의 전일 대비 순유입/순유출을 계산합니다.
 뉴스 품질이 낮을 때는 OpenAI `web_search`를 사용해 Reuters/Bloomberg/WSJ/FT/CNBC/CoinDesk 등 허용 도메인 안에서만 검증용 백필을 시도합니다.
 브리핑 본문은 생성 후 한 번 더 OpenAI 검수를 거치고, 일반인이 이해하기 어려운 표현이나 숫자-해석 불일치가 있으면 최대 1회 자동으로 다시 다듬습니다.
+품질 게이트는 `python -m ruff format --check .`, `python -m ruff check .`, `python -m pytest -q` 순서로 실행됩니다.
 
 ### base64 생성 예시 (macOS)
 ```bash
@@ -193,7 +215,7 @@ base64 -i token.json | tr -d '\n' | pbcopy
 - 확인 명령: `pbpaste | wc -c`
 - 줄바꿈 제거 출력 시 끝에 보이는 `%`는 zsh 프롬프트이며 base64 값이 아닙니다.
 
-## 10) 최초 점검 실행
+## 11) 최초 점검 실행
 Secrets/Variables 등록이 끝났다면 바로 실행 가능합니다.
 
 - GitHub: Actions -> `Morning Market Brief` -> `Run workflow` (수동 실행)

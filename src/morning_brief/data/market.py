@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import logging
-from pathlib import Path
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 
 import requests
 import yfinance as yf
@@ -66,7 +66,6 @@ except Exception:
 _provider_warned: set[str] = set()
 
 
-
 def _warn_once(key: str, message: str, *args) -> None:
     if key in _provider_warned:
         return
@@ -84,7 +83,6 @@ def _warn_alpha_vantage_disabled_once(reason: str) -> None:
         "Alpha Vantage는 이번 실행에서 더 이상 쓰지 않을게요. 이유=%s",
         reason,
     )
-
 
 
 def _history_with_retry(ticker: str, period: str, interval: str):
@@ -121,7 +119,6 @@ def _history_with_retry(ticker: str, period: str, interval: str):
             time.sleep(BACKOFF_SECONDS * attempt)
 
     raise RuntimeError(f"{ticker} 시장 이력 데이터를 가져오지 못했어요.") from last_error
-
 
 
 def _latest_price_point_from_yfinance(
@@ -163,7 +160,6 @@ def _safe_with_fallback(
         return fallback_fetch()
 
 
-
 def _safe_yfinance_point(
     label: str,
     ticker: str,
@@ -184,7 +180,6 @@ def _safe_yfinance_point(
             exc,
         )
         return MarketPoint(label=label, ticker=ticker, price=0.0, change_pct=0.0)
-
 
 
 def _point_from_stooq(label: str, ticker: str, stooq_symbol: str | None = None) -> MarketPoint:
@@ -209,7 +204,6 @@ def _safe_stooq_point(label: str, ticker: str, stooq_symbol: str | None = None) 
     )
 
 
-
 def _point_from_alpha_vantage(label: str, ticker: str, api_key: str) -> MarketPoint:
     close, change_pct, _ = fetch_daily_close_change_volume(ticker, api_key)
     return MarketPoint(
@@ -230,7 +224,9 @@ def _safe_alpha_vantage_point(label: str, ticker: str, api_key: str) -> MarketPo
         warning_key=f"alpha_vantage_fallback_{ticker}",
         warning_message="Alpha Vantage에서 %s (%s) 데이터를 바로 가져오지 못해 Stooq/yfinance로 이어서 볼게요: %s",
         warning_args=(label, ticker),
-        primary_fetch=lambda: _point_from_alpha_vantage(label=label, ticker=ticker, api_key=api_key),
+        primary_fetch=lambda: _point_from_alpha_vantage(
+            label=label, ticker=ticker, api_key=api_key
+        ),
         fallback_fetch=lambda: _safe_stooq_point(label=label, ticker=ticker),
     )
 
@@ -346,7 +342,6 @@ def fetch_macro_points(fred_api_key: str = "") -> list[MarketPoint]:
     ]
 
 
-
 def fetch_us_index_points(alpha_vantage_api_key: str = "") -> list[MarketPoint]:
     # Stooq index symbols are inconsistent; use liquid ETF proxies for stability.
     if alpha_vantage_api_key:
@@ -354,7 +349,9 @@ def fetch_us_index_points(alpha_vantage_api_key: str = "") -> list[MarketPoint]:
             _safe_alpha_vantage_point(label=label, ticker=ticker, api_key=alpha_vantage_api_key)
             for label, ticker, _ in US_INDEX_TARGETS
         ]
-        logger.info("미국 지수 흐름은 Alpha Vantage 기준으로 보고, 필요하면 Stooq/yfinance로 보강했어요.")
+        logger.info(
+            "미국 지수 흐름은 Alpha Vantage 기준으로 보고, 필요하면 Stooq/yfinance로 보강했어요."
+        )
         return points
 
     points = [
@@ -363,7 +360,6 @@ def fetch_us_index_points(alpha_vantage_api_key: str = "") -> list[MarketPoint]:
     ]
     logger.info("미국 지수 흐름은 Stooq 기준으로 보고, 필요하면 yfinance로 보강했어요.")
     return points
-
 
 
 def fetch_tech_stock_points(alpha_vantage_api_key: str = "") -> list[MarketPoint]:
@@ -380,7 +376,6 @@ def fetch_tech_stock_points(alpha_vantage_api_key: str = "") -> list[MarketPoint
     points.sort(key=lambda x: abs(x.change_pct), reverse=True)
     logger.info("기술주는 Stooq 기준으로 보고, 필요하면 yfinance로 보강했어요.")
     return points
-
 
 
 def _fetch_fear_greed() -> tuple[int | None, str | None]:
@@ -410,7 +405,6 @@ def _fetch_fear_greed() -> tuple[int | None, str | None]:
     return None, None
 
 
-
 def _fetch_btc_spot_point() -> MarketPoint:
     try:
         price, change_pct = fetch_btc_usd_price_change()
@@ -428,7 +422,6 @@ def _fetch_btc_spot_point() -> MarketPoint:
             exc,
         )
         return _safe_yfinance_point(label="BTC-USD", ticker="BTC-USD")
-
 
 
 def _official_btc_etf_cache_file(cache_dir: Path) -> Path:
@@ -504,7 +497,9 @@ def _fetch_official_btc_etf_data(
     )
 
 
-def fetch_bitcoin_snapshot(alpha_vantage_api_key: str = "", cache_dir: Path | None = None) -> BitcoinSnapshot:
+def fetch_bitcoin_snapshot(
+    alpha_vantage_api_key: str = "", cache_dir: Path | None = None
+) -> BitcoinSnapshot:
     spot = _fetch_btc_spot_point()
 
     if alpha_vantage_api_key:
@@ -553,7 +548,6 @@ def fetch_bitcoin_snapshot(alpha_vantage_api_key: str = "", cache_dir: Path | No
     )
 
 
-
 def build_market_packet(
     fred_api_key: str = "",
     alpha_vantage_api_key: str = "",
@@ -580,7 +574,9 @@ def build_market_packet(
             "etf_total_volume": btc_snapshot.etf_total_volume,
             "fear_greed_value": btc_snapshot.fear_greed_value,
             "fear_greed_label": btc_snapshot.fear_greed_label,
-            "official_etf_snapshots": [snapshot.__dict__ for snapshot in btc_snapshot.official_etf_snapshots],
+            "official_etf_snapshots": [
+                snapshot.__dict__ for snapshot in btc_snapshot.official_etf_snapshots
+            ],
             "official_etf_total_btc": btc_snapshot.official_etf_total_btc,
             "official_etf_total_aum_usd": btc_snapshot.official_etf_total_aum_usd,
             "official_etf_daily_flow_btc": btc_snapshot.official_etf_daily_flow_btc,

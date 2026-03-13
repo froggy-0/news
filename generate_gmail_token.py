@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import sys
+from pathlib import Path
 
 from google_auth_oauthlib.flow import InstalledAppFlow
 

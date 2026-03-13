@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass
-from io import StringIO
 from datetime import datetime
+from io import StringIO
 
 from morning_brief.data.sources.http_client import HttpFetchError, get_text_with_retry
 
@@ -17,13 +17,11 @@ class StooqDailyPoint:
     volume: int
 
 
-
 def to_stooq_symbol(ticker: str) -> str:
     symbol = ticker.strip().lower()
     if symbol.endswith(".us"):
         return symbol
     return f"{symbol}.us"
-
 
 
 def _parse_float(raw: str) -> float | None:
@@ -36,7 +34,6 @@ def _parse_float(raw: str) -> float | None:
         return None
 
 
-
 def _parse_int(raw: str) -> int:
     text = (raw or "").strip()
     if not text or text.upper() in {"N/D", "NA", "NULL"}:
@@ -47,7 +44,6 @@ def _parse_int(raw: str) -> int:
         return 0
 
 
-
 def _parse_date(raw: str) -> datetime | None:
     text = (raw or "").strip()
     if not text:
@@ -56,7 +52,6 @@ def _parse_date(raw: str) -> datetime | None:
         return datetime.strptime(text, "%Y-%m-%d")
     except ValueError:
         return None
-
 
 
 def _parse_stooq_csv(text: str) -> list[StooqDailyPoint]:
@@ -74,7 +69,6 @@ def _parse_stooq_csv(text: str) -> list[StooqDailyPoint]:
 
     points.sort(key=lambda x: x.date)
     return points
-
 
 
 def fetch_close_change_and_volume(symbol: str) -> tuple[float, float, int]:

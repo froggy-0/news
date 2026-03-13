@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
-import logging
 from typing import Callable
 from urllib.parse import quote_plus
 
@@ -78,8 +78,6 @@ def fetch_news_from_google_rss(
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=recency_hours)
     filtered = [
-        item
-        for item in candidates
-        if item.published_at is None or item.published_at >= cutoff
+        item for item in candidates if item.published_at is None or item.published_at >= cutoff
     ]
     return filtered[:max_items]

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from email.utils import parsedate_to_datetime
 import logging
 import socket
 import time
+from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import urlparse
 
@@ -50,6 +50,7 @@ class HttpFetchError(RuntimeError):
         self.retryable = retryable
         self.rate_limited = rate_limited
 
+
 _host_resolution_cache: dict[str, tuple[bool, float]] = {}
 
 
@@ -78,7 +79,6 @@ def is_host_resolvable(value: str) -> bool:
         logger.warning("호스트 주소를 확인하지 못했어요: %s", host)
 
     return _host_resolution_cache[host][0]
-
 
 
 def _request_with_retry(
@@ -197,7 +197,6 @@ def _retry_delay_seconds(
     return backoff_seconds * attempt
 
 
-
 def get_json_with_retry(
     url: str,
     *,
@@ -227,7 +226,6 @@ def get_json_with_retry(
         raise HttpFetchError(f"JSON 응답 구조가 예상과 달라요: {url}")
 
     return payload
-
 
 
 def get_text_with_retry(

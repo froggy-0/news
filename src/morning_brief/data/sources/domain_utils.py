@@ -18,4 +18,3 @@ def domain_matches(value: str, preferred_domain: str) -> bool:
     if not domain or not target:
         return False
     return domain == target or domain.endswith(f".{target}")
-

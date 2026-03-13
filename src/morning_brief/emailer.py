@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import base64
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 import html
 import logging
 import re
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from morning_brief.brief_formatting import (
     extract_brief_structure as _extract_brief_structure,
+)
+from morning_brief.brief_formatting import (
     split_reference_block as _split_reference_block,
+)
+from morning_brief.brief_formatting import (
     split_section_groups as _split_section_groups,
 )
 from morning_brief.config import Settings
@@ -84,6 +88,7 @@ def _format_display_date(title: str, subject: str) -> str:
     weekdays = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
     try:
         from datetime import datetime
+
         weekday = weekdays[datetime(int(year), int(month), int(day)).weekday()]
     except ValueError:
         weekday = ""
@@ -171,7 +176,9 @@ def _highlight_metric_text(text: str, default_direction: str) -> str:
         token = match.group(0)
         token_direction = _percent_direction(token)
         if token_direction is None:
-            token_direction = default_direction if default_direction in {"up", "down", "flat"} else "neutral"
+            token_direction = (
+                default_direction if default_direction in {"up", "down", "flat"} else "neutral"
+            )
         color = _direction_color(token_direction)
         parts.append(html.escape(text[last_index:start]))
         parts.append(f'<span style="color:{color};font-weight:700;">{html.escape(token)}</span>')
@@ -185,7 +192,9 @@ def _highlight_metric_text(text: str, default_direction: str) -> str:
 
 
 def _render_body_line(text: str) -> str:
-    highlighted = _highlight_metric_text(text, default_direction=_token_direction(text) or "neutral")
+    highlighted = _highlight_metric_text(
+        text, default_direction=_token_direction(text) or "neutral"
+    )
     return highlighted if highlighted != html.escape(text) else html.escape(text)
 
 
@@ -205,10 +214,7 @@ def _text_to_html_blocks(content: str) -> str:
     for paragraph in paragraphs:
         lines = [line.strip() for line in paragraph.splitlines() if line.strip()]
         if lines and all(line.startswith("- ") for line in lines):
-            items = "".join(
-                _render_metric_item(line[2:].strip())
-                for line in lines
-            )
+            items = "".join(_render_metric_item(line[2:].strip()) for line in lines)
             blocks.append(
                 '<ul style="margin:0;padding:0;list-style:none;color:#1f2937;font-size:15px;'
                 'line-height:1.75;">'
@@ -218,13 +224,11 @@ def _text_to_html_blocks(content: str) -> str:
 
         text = "<br>".join(_render_body_line(line) for line in lines)
         blocks.append(
-            '<p style="margin:0;color:#1f2937;font-size:15px;line-height:1.8;">'
-            f"{text}</p>"
+            f'<p style="margin:0;color:#1f2937;font-size:15px;line-height:1.8;">{text}</p>'
         )
 
     return "".join(blocks) or (
-        '<p style="margin:0;color:#1f2937;font-size:15px;line-height:1.8;">'
-        "내용이 없습니다.</p>"
+        '<p style="margin:0;color:#1f2937;font-size:15px;line-height:1.8;">내용이 없습니다.</p>'
     )
 
 
@@ -404,7 +408,7 @@ def _render_snapshot_block(snapshot_rows: list[tuple[str, str]]) -> str:
         return ""
 
     rows = "".join(
-        '<tr>'
+        "<tr>"
         '<td style="padding:10px 0;border-top:1px solid #e2e8f0;width:34%;vertical-align:top;">'
         f'<div style="font-size:12px;line-height:1.4;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:#64748b;">{html.escape(label)}</div>'
         "</td>"
@@ -475,7 +479,7 @@ def _render_email_document(
             {summary_block}
             {snapshot_block}
             {notice_block}
-            {''.join(section_rows)}
+            {"".join(section_rows)}
             {reference_block}
             <tr>
               <td style="padding:8px 6px 0 6px;color:#64748b;font-size:12px;line-height:1.7;text-align:center;">

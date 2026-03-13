@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 import json
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from xai_sdk import Client
@@ -87,7 +87,9 @@ def _normalize_citations(value: object) -> list[str]:
     return urls
 
 
-def _build_prompt(*, group: str, lookback_hours: int, max_items: int, entities: list[dict[str, Any]]) -> str:
+def _build_prompt(
+    *, group: str, lookback_hours: int, max_items: int, entities: list[dict[str, Any]]
+) -> str:
     entity_lines = "\n".join(
         f"- {entity.get('entity_name', '')} ({entity.get('ticker', '')}) -> @{str(entity.get('x_handle', '')).strip().lstrip('@')}"
         for entity in entities
@@ -105,7 +107,7 @@ def _build_prompt(*, group: str, lookback_hours: int, max_items: int, entities: 
         "Ignore reposts, routine marketing copy, short greetings, or low-signal brand content.\n"
         "Return strict JSON only with this shape:\n"
         '{"items":[{"entity_id":"","headline":"","summary":"","why_it_matters":"","posted_at":"","source_handle":"","citations":[""]}]}\n'
-        "If nothing material is found, return {\"items\": []}.\n"
+        'If nothing material is found, return {"items": []}.\n'
         "Verified entities in this group:\n"
         f"{entity_lines}"
     )
@@ -131,12 +133,16 @@ def _search_group(
     entities: list[dict[str, Any]],
     lookback_hours: int,
     max_items: int,
- ) -> list[NewsItem]:
+) -> list[NewsItem]:
     unavailable_reason = disabled_reason(GROK_PROVIDER)
     if unavailable_reason:
         raise HttpFetchError(f"Grok은 이번 실행에서 더 이상 쓰지 않을게요: {unavailable_reason}")
 
-    handles = [str(entity.get("x_handle", "")).strip().lstrip("@") for entity in entities if entity.get("x_handle")]
+    handles = [
+        str(entity.get("x_handle", "")).strip().lstrip("@")
+        for entity in entities
+        if entity.get("x_handle")
+    ]
     if not handles:
         return []
 
@@ -153,12 +159,16 @@ def _search_group(
             response_format=XAI_RESPONSE_MODEL,
             include=["inline_citations"],
         )
-        chat.append(user(_build_prompt(
-            group=group,
-            lookback_hours=lookback_hours,
-            max_items=max_items,
-            entities=entities,
-        )))
+        chat.append(
+            user(
+                _build_prompt(
+                    group=group,
+                    lookback_hours=lookback_hours,
+                    max_items=max_items,
+                    entities=entities,
+                )
+            )
+        )
         response = chat.sample()
     except Exception as exc:
         record_failure(GROK_PROVIDER)
@@ -187,15 +197,21 @@ def _search_group(
             citations = fallback_citations
         title = _normalize_text(item.get("headline"))
         summary = _normalize_text(item.get("summary"))
-        why_it_matters = _normalize_text(item.get("why_it_matters")) or GROUP_IMPACT_LINES.get(topic, "공식 시그널이라 직접적인 확인 근거가 돼요.")
+        why_it_matters = _normalize_text(item.get("why_it_matters")) or GROUP_IMPACT_LINES.get(
+            topic, "공식 시그널이라 직접적인 확인 근거가 돼요."
+        )
         if not title or not summary:
             continue
 
         items.append(
             NewsItem(
                 title=title,
-                url=citations[0] if citations else str(entity.get("newsroom_or_ir_url", "")).strip(),
-                source=f"@{source_handle}" if source_handle else str(entity.get("entity_name", "Official X")).strip(),
+                url=citations[0]
+                if citations
+                else str(entity.get("newsroom_or_ir_url", "")).strip(),
+                source=f"@{source_handle}"
+                if source_handle
+                else str(entity.get("entity_name", "Official X")).strip(),
                 published_at=_normalize_datetime(item.get("posted_at")),
                 topic=topic,
                 provider="grok_official_x",
@@ -213,7 +229,7 @@ def fetch_official_x_signals(
     model: str,
     lookback_hours: int,
     max_items: int,
- ) -> list[NewsItem]:
+) -> list[NewsItem]:
     if not api_key.strip():
         return []
 
@@ -237,5 +253,8 @@ def fetch_official_x_signals(
         except HttpFetchError as exc:
             logger.warning("Grok에서 %s 그룹 공식 X를 확인하는 중 문제가 있었어요: %s", group, exc)
 
-    collected.sort(key=lambda item: item.published_at or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    collected.sort(
+        key=lambda item: item.published_at or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
     return collected[:max_items]

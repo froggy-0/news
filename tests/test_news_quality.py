@@ -11,12 +11,10 @@ from morning_brief.data.news_rollout import (
 from morning_brief.models import NewsItem
 
 
-
 def test_normalize_url_strips_tracking_params():
     raw = "https://example.com/path?a=1&utm_source=x&gclid=123#frag"
     normalized = news._normalize_url(raw)
     assert normalized == "https://example.com/path?a=1"
-
 
 
 def test_item_score_prefers_preferred_domain():
@@ -34,7 +32,6 @@ def test_item_score_prefers_preferred_domain():
         published_at=now,
     )
     assert news._item_score(preferred) > news._item_score(non_preferred)
-
 
 
 def test_dedup_and_rank_keeps_highest_scored_duplicate():
@@ -135,7 +132,9 @@ def test_fetch_news_prefers_rss_before_gdelt(monkeypatch):
     monkeypatch.setattr("morning_brief.data.news._collect_from_rss", lambda **_: [rss_item] * 3)
     monkeypatch.setattr(
         "morning_brief.data.news._collect_from_gdelt",
-        lambda **_: (_ for _ in ()).throw(AssertionError("gdelt should not run before rss is exhausted")),
+        lambda **_: (_ for _ in ()).throw(
+            AssertionError("gdelt should not run before rss is exhausted")
+        ),
     )
 
     items = news.fetch_news(max_items=3, newsapi_key="", allow_broad_fallback=False)
@@ -244,9 +243,7 @@ def test_build_news_packet_preserves_perplexity_metadata(monkeypatch):
     assert packet[0]["provider"] == "perplexity_search"
     assert packet[0]["summary"] == "The Fed kept markets steady."
     assert packet[0]["why_it_matters"] == "금리 경로를 읽는 데 도움이 되는 기사예요."
-    assert packet[0]["citations"] == [
-        "https://www.reuters.com/world/us/fed-keeps-markets-steady"
-    ]
+    assert packet[0]["citations"] == ["https://www.reuters.com/world/us/fed-keeps-markets-steady"]
 
 
 def test_build_news_packet_skips_legacy_when_perplexity_quality_is_good(monkeypatch):
@@ -295,7 +292,9 @@ def test_build_news_packet_skips_legacy_when_perplexity_quality_is_good(monkeypa
                 topic="bitcoin",
                 provider="perplexity_search",
                 why_it_matters="비트코인 자금 흐름을 읽는 데 도움이 돼요.",
-                citations=["https://www.coindesk.com/markets/2026/03/13/bitcoin-etfs-keep-drawing-demand"],
+                citations=[
+                    "https://www.coindesk.com/markets/2026/03/13/bitcoin-etfs-keep-drawing-demand"
+                ],
             ),
         ],
     )
@@ -348,7 +347,9 @@ def test_build_news_packet_does_not_trigger_legacy_fallback_for_uncited_grok_ite
                 topic="bitcoin",
                 provider="perplexity_search",
                 why_it_matters="비트코인 자금 흐름을 읽는 데 도움이 돼요.",
-                citations=["https://www.coindesk.com/markets/2026/03/13/bitcoin-etfs-keep-drawing-demand"],
+                citations=[
+                    "https://www.coindesk.com/markets/2026/03/13/bitcoin-etfs-keep-drawing-demand"
+                ],
             ),
         ],
     )

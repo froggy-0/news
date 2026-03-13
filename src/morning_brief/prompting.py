@@ -76,9 +76,7 @@ def _build_news_focus(packet: dict) -> dict:
             "source_tier": str(raw_item.get("source_tier", "")).strip(),
             "preferred_source": bool(raw_item.get("preferred_source")),
             "citations": [
-                str(value).strip()
-                for value in raw_item.get("citations", [])
-                if str(value).strip()
+                str(value).strip() for value in raw_item.get("citations", []) if str(value).strip()
             ]
             if isinstance(raw_item.get("citations", []), list)
             else [],
@@ -188,9 +186,6 @@ def build_prompt_cache_key(
     static_digest = hashlib.sha256(instructions.encode("utf-8")).hexdigest()[:12]
     cache_model = (model_name or settings.openai_model).strip() or settings.openai_model
     raw_key = (
-        f"{normalized_namespace}:"
-        f"{settings.prompt_template_version}:"
-        f"{cache_model}:"
-        f"{static_digest}"
+        f"{normalized_namespace}:{settings.prompt_template_version}:{cache_model}:{static_digest}"
     )
     return raw_key[:MAX_CACHE_KEY_LEN]

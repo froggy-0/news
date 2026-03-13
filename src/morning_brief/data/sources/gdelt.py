@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 import logging
+from datetime import datetime, timedelta, timezone
 
 from morning_brief.data.sources.domain_utils import domain_matches, normalize_domain
 from morning_brief.data.sources.http_client import HttpFetchError, get_json_with_retry
@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 
 GDELT_DOC_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
 DEFAULT_TIMESPAN_HOURS = 36
-
 
 
 def _parse_gdelt_time(raw: str) -> datetime | None:
@@ -25,17 +24,14 @@ def _parse_gdelt_time(raw: str) -> datetime | None:
     return None
 
 
-
 def _normalize_domain(url: str) -> str:
     return normalize_domain(url)
-
 
 
 def _build_query(topics: list[str]) -> str:
     if not topics:
         return "market OR stocks OR bitcoin"
     return " OR ".join(topics)
-
 
 
 def fetch_news_from_gdelt(
@@ -78,8 +74,12 @@ def fetch_news_from_gdelt(
             continue
 
         domain = _normalize_domain(link)
-        if preferred_only and preferred_domains and not any(
-            domain_matches(domain, preferred_domain) for preferred_domain in preferred_domains
+        if (
+            preferred_only
+            and preferred_domains
+            and not any(
+                domain_matches(domain, preferred_domain) for preferred_domain in preferred_domains
+            )
         ):
             continue
 

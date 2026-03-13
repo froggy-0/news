@@ -10,8 +10,21 @@ REFERENCE_MARKER = "\n참고 출처\n"
 
 CONCLUSION_LABELS = {"핵심 판단", "한줄 결론", "오늘의 한줄 결론"}
 METRIC_LABELS = {"주요 지표", "주요 수치", "핵심 수치", "수치 체크", "핵심 내용", "핵심 이슈"}
-INSIGHT_LABELS = {"배경과 해석", "쉽게 보면", "해석", "이렇게 읽으면 좋아요", "이렇게 읽으면 돼요", "왜 중요한지"}
-WATCH_LABELS = {"주목할 변수", "오늘 볼 점", "오늘 체크할 포인트", "지금 주의해서 볼 점", "체크 포인트"}
+INSIGHT_LABELS = {
+    "배경과 해석",
+    "쉽게 보면",
+    "해석",
+    "이렇게 읽으면 좋아요",
+    "이렇게 읽으면 돼요",
+    "왜 중요한지",
+}
+WATCH_LABELS = {
+    "주목할 변수",
+    "오늘 볼 점",
+    "오늘 체크할 포인트",
+    "지금 주의해서 볼 점",
+    "체크 포인트",
+}
 ALL_SUBSECTION_LABELS = CONCLUSION_LABELS | METRIC_LABELS | INSIGHT_LABELS | WATCH_LABELS
 
 
@@ -147,6 +160,5 @@ def split_section_groups(content: str) -> dict[str, tuple[str, str]]:
                     groups["insight"]["lines"].append(paragraph)
 
     return {
-        key: (value["label"], "\n".join(value["lines"]).strip())
-        for key, value in groups.items()
+        key: (value["label"], "\n".join(value["lines"]).strip()) for key, value in groups.items()
     }

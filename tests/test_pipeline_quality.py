@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from morning_brief.config import load_settings
 from morning_brief.data.data_quality import assess_perplexity_fallback_need
-from morning_brief.data.news_rollout import record_news_rollout_run, should_reduce_legacy_broad_fallback
+from morning_brief.data.news_rollout import (
+    record_news_rollout_run,
+    should_reduce_legacy_broad_fallback,
+)
 from morning_brief.pipeline import _assess_data_quality
-
 
 
 def _base_packet(price: float = 10.0) -> dict:
@@ -18,7 +19,6 @@ def _base_packet(price: float = 10.0) -> dict:
             "etf_points": [point.copy() for _ in range(5)],
         },
     }
-
 
 
 def test_assess_data_quality_ok():
@@ -54,7 +54,6 @@ def test_assess_data_quality_ok():
     assert quality["zero_price_ratio"] == 0.0
 
 
-
 def test_assess_data_quality_degraded_when_zero_ratio_high():
     packet = _base_packet(price=10.0)
     for point in packet["macro"]:
@@ -66,7 +65,6 @@ def test_assess_data_quality_degraded_when_zero_ratio_high():
     quality = _assess_data_quality(packet=packet, news_packet=[{}, {}, {}, {}])
     assert quality["status"] == "degraded"
     assert quality["zero_price_ratio"] >= 0.6
-
 
 
 def test_assess_data_quality_critical_when_zero_ratio_high():
@@ -288,7 +286,6 @@ def test_rollout_state_requires_three_stable_runs(tmp_path):
 
 
 def test_pipeline_quality_can_improve_after_web_search_backfill(monkeypatch):
-    settings = load_settings()
     packet = _base_packet(price=10.0)
     weak_news = [
         {
@@ -333,7 +330,10 @@ def test_pipeline_quality_can_improve_after_web_search_backfill(monkeypatch):
 
     monkeypatch.setattr(
         "morning_brief.pipeline.backfill_news_with_web_search",
-        lambda **_: (improved_news, [{"title": "Reuters", "url": "https://www.reuters.com/world/us/example"}]),
+        lambda **_: (
+            improved_news,
+            [{"title": "Reuters", "url": "https://www.reuters.com/world/us/example"}],
+        ),
     )
 
     final_quality = _assess_data_quality(packet=packet, news_packet=improved_news)

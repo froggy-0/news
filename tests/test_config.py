@@ -3,19 +3,16 @@ from __future__ import annotations
 from morning_brief.config import load_settings
 
 
-
 def test_max_news_items_lower_bound(monkeypatch):
     monkeypatch.setenv("MAX_NEWS_ITEMS", "1")
     settings = load_settings()
     assert settings.max_news_items == 3
 
 
-
 def test_max_news_items_upper_bound(monkeypatch):
     monkeypatch.setenv("MAX_NEWS_ITEMS", "99")
     settings = load_settings()
     assert settings.max_news_items == 5
-
 
 
 def test_fred_api_key_loaded(monkeypatch):

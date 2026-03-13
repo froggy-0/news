@@ -5,15 +5,12 @@ import pytest
 from morning_brief.data.sources import stooq
 
 
-
 def test_to_stooq_symbol_appends_us_suffix():
     assert stooq.to_stooq_symbol("AAPL") == "aapl.us"
 
 
-
 def test_to_stooq_symbol_keeps_existing_suffix():
     assert stooq.to_stooq_symbol("msft.us") == "msft.us"
-
 
 
 def test_fetch_close_change_and_volume_parses_csv(monkeypatch):

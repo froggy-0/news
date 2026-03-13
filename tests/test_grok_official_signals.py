@@ -66,7 +66,6 @@ VERIFIED_GROUPS = {
 }
 
 
-
 def test_fetch_official_x_signals_collects_verified_groups(monkeypatch):
     calls: list[dict] = []
     prompts: list[object] = []
@@ -132,7 +131,6 @@ def test_fetch_official_x_signals_collects_verified_groups(monkeypatch):
     assert items[1].published_at == datetime(2026, 3, 13, 1, 0, tzinfo=timezone.utc)
 
 
-
 def test_fetch_official_x_signals_uses_response_citations_fallback(monkeypatch):
     calls: list[dict] = []
     prompts: list[object] = []
@@ -176,7 +174,6 @@ def test_fetch_official_x_signals_uses_response_citations_fallback(monkeypatch):
     assert items[0].url == "https://x.com/AMD/status/3"
 
 
-
 def test_fetch_official_x_signals_does_not_fan_out_group_citations(monkeypatch):
     calls: list[dict] = []
     prompts: list[object] = []
@@ -213,7 +210,9 @@ def test_fetch_official_x_signals_does_not_fan_out_group_citations(monkeypatch):
     monkeypatch.setattr(
         gxs,
         "grouped_verified_x_entities",
-        lambda: {"mixed": VERIFIED_GROUPS["ai_bigtech_primary"] + VERIFIED_GROUPS["btc_etf_primary"]},
+        lambda: {
+            "mixed": VERIFIED_GROUPS["ai_bigtech_primary"] + VERIFIED_GROUPS["btc_etf_primary"]
+        },
     )
     monkeypatch.setattr(gxs, "GROUP_TOPIC_MAP", {"mixed": "ai_bigtech"})
     monkeypatch.setattr(gxs, "x_search", lambda **kwargs: {"name": "x_search", "kwargs": kwargs})
@@ -230,7 +229,6 @@ def test_fetch_official_x_signals_does_not_fan_out_group_citations(monkeypatch):
     assert items[0].url == "https://www.fidelity.com/etfs/fbtc"
     assert items[1].citations == []
     assert items[1].url == "https://www.amd.com/en/newsroom.html"
-
 
 
 def test_fetch_official_x_signals_returns_empty_without_api_key(monkeypatch):

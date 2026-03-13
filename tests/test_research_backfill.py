@@ -46,9 +46,7 @@ def test_extract_web_citations_reads_url_annotations():
 
     citations = _extract_web_citations(response)
 
-    assert citations == [
-        {"title": "Reuters", "url": "https://www.reuters.com/markets/example"}
-    ]
+    assert citations == [{"title": "Reuters", "url": "https://www.reuters.com/markets/example"}]
 
 
 def test_backfill_news_with_web_search_merges_items(monkeypatch):
@@ -71,7 +69,11 @@ def test_backfill_news_with_web_search_merges_items(monkeypatch):
         "macro": [],
         "us_indices": [],
         "tech_stocks": [],
-        "bitcoin": {"spot": {}, "official_etf_total_btc": None, "official_etf_daily_flow_btc": None},
+        "bitcoin": {
+            "spot": {},
+            "official_etf_total_btc": None,
+            "official_etf_daily_flow_btc": None,
+        },
     }
     quality = {
         "status": "degraded",

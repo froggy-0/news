@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import logging
+from datetime import datetime, timezone
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from morning_brief.config import Settings
@@ -11,6 +11,8 @@ from morning_brief.data.data_quality import (
 )
 from morning_brief.data.news_packet import (
     OFFICIAL_SIGNAL_PROVIDER,
+)
+from morning_brief.data.news_packet import (
     news_items_to_packet as _news_items_to_packet,
 )
 from morning_brief.data.news_policy import (
@@ -28,16 +30,16 @@ from morning_brief.data.news_policy import (
     keyword_score,
     recency_score,
 )
-from morning_brief.data.sources.gdelt import fetch_news_from_gdelt
-from morning_brief.data.sources.http_client import HttpFetchError
-from morning_brief.data.sources.google_news_rss import fetch_news_from_google_rss
-from morning_brief.data.sources.newsapi_provider import fetch_news_from_newsapi
-from morning_brief.data.sources.perplexity_search import fetch_news_from_perplexity
-from morning_brief.data.sources.grok_official_signals import fetch_official_x_signals
 from morning_brief.data.news_rollout import (
     record_news_rollout_run,
     should_reduce_legacy_broad_fallback,
 )
+from morning_brief.data.sources.gdelt import fetch_news_from_gdelt
+from morning_brief.data.sources.google_news_rss import fetch_news_from_google_rss
+from morning_brief.data.sources.grok_official_signals import fetch_official_x_signals
+from morning_brief.data.sources.http_client import HttpFetchError
+from morning_brief.data.sources.newsapi_provider import fetch_news_from_newsapi
+from morning_brief.data.sources.perplexity_search import fetch_news_from_perplexity
 from morning_brief.models import NewsItem
 
 logger = logging.getLogger(__name__)
@@ -72,20 +74,16 @@ def _normalize_url(url: str) -> str:
     )
 
 
-
 def _extract_domain(url: str) -> str:
     return extract_domain(url)
-
 
 
 def _is_preferred_domain(url: str) -> bool:
     return is_preferred_domain(url)
 
 
-
 def _recency_score(published_at: datetime | None) -> float:
     return recency_score(published_at)
-
 
 
 def _domain_score(url: str) -> float:
@@ -94,7 +92,6 @@ def _domain_score(url: str) -> float:
 
 def _keyword_score(title: str) -> float:
     return keyword_score(title)
-
 
 
 def _item_score(item: NewsItem) -> float:
@@ -107,7 +104,6 @@ def _item_score(item: NewsItem) -> float:
     )
 
 
-
 def _sort_by_score(items: list[NewsItem]) -> list[NewsItem]:
     return sorted(
         items,
@@ -117,7 +113,6 @@ def _sort_by_score(items: list[NewsItem]) -> list[NewsItem]:
         ),
         reverse=True,
     )
-
 
 
 def _apply_domain_diversity_limit(items: list[NewsItem], max_items: int) -> list[NewsItem]:
@@ -189,7 +184,6 @@ def _dedup_and_rank(items: list[NewsItem], max_items: int) -> list[NewsItem]:
     return _apply_domain_diversity_limit(ranked, max_items=max_items)
 
 
-
 def _collect_from_gdelt(max_items: int, preferred_only: bool = True) -> list[NewsItem]:
     try:
         return fetch_news_from_gdelt(
@@ -204,7 +198,6 @@ def _collect_from_gdelt(max_items: int, preferred_only: bool = True) -> list[New
         return []
 
 
-
 def _collect_from_rss(max_items: int, preferred_only: bool = True) -> list[NewsItem]:
     candidates = fetch_news_from_google_rss(
         queries=RSS_QUERIES,
@@ -217,7 +210,6 @@ def _collect_from_rss(max_items: int, preferred_only: bool = True) -> list[NewsI
     return _dedup_and_rank(candidates, max_items=max_items)
 
 
-
 def _collect_from_newsapi(api_key: str, max_items: int) -> list[NewsItem]:
     items = fetch_news_from_newsapi(
         api_key=api_key,
@@ -226,7 +218,6 @@ def _collect_from_newsapi(api_key: str, max_items: int) -> list[NewsItem]:
         query="(Fed OR Treasury OR Nasdaq OR S&P 500 OR semiconductor OR Bitcoin ETF OR Nvidia OR Apple OR Microsoft)",
     )
     return _dedup_and_rank(items, max_items=max_items)
-
 
 
 def _merge_rank(items: list[NewsItem], other: list[NewsItem], max_items: int) -> list[NewsItem]:
@@ -282,7 +273,6 @@ def _collect_official_signal_items(settings: Settings) -> list[NewsItem]:
     if items:
         logger.info("검증된 공식 X 시그널 %s건을 함께 반영했어요.", len(items))
     return items
-
 
 
 def fetch_news(
@@ -386,7 +376,9 @@ def build_news_packet(*, settings: Settings) -> list[dict]:
 
     if items:
         packet, final_summary = _packet_summary(items)
-        perplexity_count, official_signal_count, legacy_count, provider_breakdown = _provider_counts(items)
+        perplexity_count, official_signal_count, legacy_count, provider_breakdown = (
+            _provider_counts(items)
+        )
         logger.info(
             "최종 뉴스 구성은 Perplexity %s건, 공식 시그널 %s건, legacy %s건이었고 도메인 %s개, 토픽 %s개, provider 비중 %s로 정리됐어요.",
             perplexity_count,

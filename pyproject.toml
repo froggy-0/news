@@ -1,0 +1,23 @@
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+norecursedirs = [".git", ".venv", ".cache", "outputs"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+extend-exclude = [".cache", "outputs"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+docstring-code-format = true
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["morning_brief"]
+

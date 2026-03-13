@@ -91,7 +91,9 @@ def grouped_verified_x_entities() -> dict[str, list[OfficialSignalEntity]]:
 def grouped_verified_x_handles() -> dict[str, list[str]]:
     normalized: dict[str, list[str]] = {}
     for group, entities in grouped_verified_x_entities().items():
-        normalized[group] = [str(entity.get("x_handle", "")).strip().lstrip("@") for entity in entities]
+        normalized[group] = [
+            str(entity.get("x_handle", "")).strip().lstrip("@") for entity in entities
+        ]
     return normalized
 
 

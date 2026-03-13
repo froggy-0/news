@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import json
 import logging
 import re
+from datetime import datetime, timezone
 from typing import Any
 
 from openai import OpenAI
@@ -61,7 +61,9 @@ def _needs_web_search_backfill(quality: dict) -> bool:
 
 def _build_search_context(packet: dict, quality: dict, max_results: int) -> dict[str, Any]:
     news = packet.get("news", [])
-    existing_titles = [str(item.get("title", "")).strip() for item in news if isinstance(item, dict)]
+    existing_titles = [
+        str(item.get("title", "")).strip() for item in news if isinstance(item, dict)
+    ]
     existing_urls = [str(item.get("url", "")).strip() for item in news if isinstance(item, dict)]
     top_tech = [
         {
@@ -82,7 +84,9 @@ def _build_search_context(packet: dict, quality: dict, max_results: int) -> dict
         "bitcoin": {
             "spot": packet.get("bitcoin", {}).get("spot", {}),
             "official_etf_total_btc": packet.get("bitcoin", {}).get("official_etf_total_btc"),
-            "official_etf_daily_flow_btc": packet.get("bitcoin", {}).get("official_etf_daily_flow_btc"),
+            "official_etf_daily_flow_btc": packet.get("bitcoin", {}).get(
+                "official_etf_daily_flow_btc"
+            ),
         },
     }
 
@@ -177,7 +181,9 @@ def backfill_news_with_web_search(
 
     try:
         instructions, user_prompt = render_web_search_prompts(
-            search_context_json=json.dumps(search_context, ensure_ascii=False, separators=(",", ":")),
+            search_context_json=json.dumps(
+                search_context, ensure_ascii=False, separators=(",", ":")
+            ),
             settings=settings,
         )
         prompt_cache_key = build_prompt_cache_key(

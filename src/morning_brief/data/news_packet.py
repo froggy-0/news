@@ -37,9 +37,7 @@ def packet_item_to_news_item(item: dict) -> NewsItem | None:
         summary=str(item.get("summary", "")).strip(),
         why_it_matters=str(item.get("why_it_matters", "")).strip(),
         citations=[
-            str(citation).strip()
-            for citation in item.get("citations", [])
-            if str(citation).strip()
+            str(citation).strip() for citation in item.get("citations", []) if str(citation).strip()
         ]
         if isinstance(item.get("citations", []), list)
         else [],

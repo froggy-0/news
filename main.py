@@ -9,9 +9,6 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-from morning_brief.logging_utils import setup_logging
-
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Daily Morning Market Brief runner")
@@ -28,10 +25,10 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-
 def main() -> None:
     args = parse_args()
     from morning_brief.config import load_settings
+    from morning_brief.logging_utils import setup_logging
 
     settings = load_settings()
     setup_logging()

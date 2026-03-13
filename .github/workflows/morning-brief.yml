@@ -40,8 +40,14 @@ jobs:
           restore-keys: |
             btc-etf-snapshots-
 
+      - name: Check formatting
+        run: python -m ruff format --check .
+
+      - name: Run lint
+        run: python -m ruff check .
+
       - name: Run tests
-        run: pytest -q
+        run: python -m pytest -q
 
       - name: Restore Gmail OAuth files
         shell: bash

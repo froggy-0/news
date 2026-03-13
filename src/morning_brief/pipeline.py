@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
 import logging
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from morning_brief.briefing import generate_briefing
@@ -19,7 +19,6 @@ from morning_brief.research_backfill import backfill_news_with_web_search
 logger = logging.getLogger(__name__)
 
 _assess_data_quality = assess_data_quality
-
 
 
 def run_pipeline(settings: Settings) -> str:

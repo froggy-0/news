@@ -12,7 +12,6 @@ from morning_brief.briefing import (
 from morning_brief.config import load_settings
 
 
-
 def test_inject_quality_notice_under_title():
     packet = {
         "data_quality": {
@@ -81,7 +80,10 @@ def test_fallback_brief_mentions_official_btc_etf_flow_when_available():
 
     briefing = _fallback_brief(packet=packet, timezone="Asia/Seoul")
 
-    assert "공식 발행사 기준으로 집계한 IBIT, BITB, GBTC 합산 보유량은 981,234.56 BTC였습니다." in briefing
+    assert (
+        "공식 발행사 기준으로 집계한 IBIT, BITB, GBTC 합산 보유량은 981,234.56 BTC였습니다."
+        in briefing
+    )
     assert "직전 스냅샷과 비교한 공식 ETF 흐름은 1,234.56 BTC 순유입" in briefing
 
 
@@ -92,7 +94,11 @@ def test_generate_briefing_rewrites_when_validator_finds_plain_language_issue(mo
         "macro": [{"label": "US10Y", "price": 4.1, "change_pct": 0.1}],
         "us_indices": [],
         "tech_stocks": [],
-        "bitcoin": {"spot": {"price": 82_000.0, "change_pct": 1.1}, "etf_points": [], "etf_total_volume": 0},
+        "bitcoin": {
+            "spot": {"price": 82_000.0, "change_pct": 1.1},
+            "etf_points": [],
+            "etf_total_volume": 0,
+        },
         "news": [],
         "data_quality": {"status": "ok", "warnings": []},
     }
@@ -122,7 +128,9 @@ def test_generate_briefing_rewrites_when_validator_finds_plain_language_issue(mo
         SimpleNamespace(output_text=draft_text, usage=None),
         SimpleNamespace(output_text=json.dumps(review_payload, ensure_ascii=False), usage=None),
         SimpleNamespace(output_text=rewritten_text, usage=None),
-        SimpleNamespace(output_text=json.dumps(pass_review_payload, ensure_ascii=False), usage=None),
+        SimpleNamespace(
+            output_text=json.dumps(pass_review_payload, ensure_ascii=False), usage=None
+        ),
     ]
 
     def _create(**kwargs):
@@ -148,7 +156,11 @@ def test_generate_briefing_revalidates_after_rewrite(monkeypatch):
         "macro": [{"label": "US10Y", "price": 4.1, "change_pct": 0.1}],
         "us_indices": [],
         "tech_stocks": [],
-        "bitcoin": {"spot": {"price": 82_000.0, "change_pct": 1.1}, "etf_points": [], "etf_total_volume": 0},
+        "bitcoin": {
+            "spot": {"price": 82_000.0, "change_pct": 1.1},
+            "etf_points": [],
+            "etf_total_volume": 0,
+        },
         "news": [],
         "data_quality": {"status": "ok", "warnings": []},
     }
@@ -176,9 +188,13 @@ def test_generate_briefing_revalidates_after_rewrite(monkeypatch):
     calls: list[dict] = []
     responses = [
         SimpleNamespace(output_text=draft_text, usage=None),
-        SimpleNamespace(output_text=json.dumps(first_review_payload, ensure_ascii=False), usage=None),
+        SimpleNamespace(
+            output_text=json.dumps(first_review_payload, ensure_ascii=False), usage=None
+        ),
         SimpleNamespace(output_text=rewritten_text, usage=None),
-        SimpleNamespace(output_text=json.dumps(second_review_payload, ensure_ascii=False), usage=None),
+        SimpleNamespace(
+            output_text=json.dumps(second_review_payload, ensure_ascii=False), usage=None
+        ),
     ]
 
     def _create(**kwargs):

@@ -45,7 +45,6 @@ class Settings:
     send_email: bool
 
 
-
 def _env_bool(name: str, default: bool) -> bool:
     raw = os.getenv(name)
     if raw is None:
@@ -74,7 +73,6 @@ def _env_choice(name: str, default: str, allowed: set[str]) -> str:
     if value in allowed:
         return value
     return default
-
 
 
 def load_settings() -> Settings:

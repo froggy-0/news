@@ -3,12 +3,12 @@ from __future__ import annotations
 import pytest
 
 from morning_brief.data.market import fetch_us_index_points
+from morning_brief.data.sources import provider_runtime
 from morning_brief.data.sources.alpha_vantage import (
     HttpFetchError,
     _extract_daily_series,
     fetch_daily_close_change_volume,
 )
-from morning_brief.data.sources import provider_runtime
 
 
 def test_extract_daily_series_rejects_rate_limit_note():

@@ -5,7 +5,6 @@ from pathlib import Path
 from morning_brief.data.sources import btc_etf_official as official
 from morning_brief.models import BitcoinEtfIssuerSnapshot
 
-
 IBIT_SAMPLE = """
 Net Assets of Fund as of Mar 11, 2026 $53,660,350,151
 Shares Outstanding as of Mar 11, 2026 1,340,640,000

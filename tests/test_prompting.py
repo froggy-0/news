@@ -33,7 +33,7 @@ def test_render_brief_prompts_contains_contract_and_packet(monkeypatch):
                 "summary": "AMD 공식 계정이 투자 계획을 다시 설명했어요.",
                 "why_it_matters": "공식 채널 확인이라 해석의 우선 근거가 돼요.",
                 "citations": ["https://x.com/AMD/status/1"],
-            }
+            },
         ],
         "data_quality": {"status": "ok", "warnings": []},
     }
@@ -59,7 +59,9 @@ def test_prompt_cache_key_is_stable_and_sanitized(monkeypatch):
 
     key_one = build_prompt_cache_key(settings=settings, instructions="same-static-instructions")
     key_two = build_prompt_cache_key(settings=settings, instructions="same-static-instructions")
-    key_three = build_prompt_cache_key(settings=settings, instructions="changed-static-instructions")
+    key_three = build_prompt_cache_key(
+        settings=settings, instructions="changed-static-instructions"
+    )
 
     assert key_one == key_two
     assert key_one != key_three

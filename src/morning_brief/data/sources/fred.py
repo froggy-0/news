@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import logging
+from datetime import datetime, timezone
 
 from morning_brief.data.sources.http_client import HttpFetchError, get_json_with_retry
 from morning_brief.models import MarketPoint
@@ -29,7 +29,6 @@ def _parse_observation_value(raw: str) -> float | None:
         return float(text)
     except ValueError:
         return None
-
 
 
 def _latest_two_values(series_id: str, api_key: str) -> tuple[float, float]:
@@ -65,7 +64,6 @@ def _latest_two_values(series_id: str, api_key: str) -> tuple[float, float]:
     return values[0], values[1]
 
 
-
 def fetch_macro_points_from_fred(api_key: str) -> list[MarketPoint]:
     if not api_key:
         raise ValueError("FRED API 키가 필요해요.")
@@ -88,7 +86,6 @@ def fetch_macro_points_from_fred(api_key: str) -> list[MarketPoint]:
         )
 
     return points
-
 
 
 def build_fred_packet(points: list[MarketPoint]) -> dict:

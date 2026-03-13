@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import time
+from dataclasses import asdict, dataclass
 
 
 @dataclass(frozen=True)
@@ -112,7 +112,4 @@ def record_circuit_opened(provider: str | None) -> None:
 
 
 def provider_stats_snapshot() -> dict[str, dict[str, int]]:
-    return {
-        provider: asdict(stats)
-        for provider, stats in sorted(_provider_stats.items())
-    }
+    return {provider: asdict(stats) for provider, stats in sorted(_provider_stats.items())}
