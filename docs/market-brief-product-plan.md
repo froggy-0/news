@@ -48,9 +48,12 @@ Morning Market Brief는 미국 기술주와 비트코인을 중심으로, 밤사
 
 ### 2026-03 운영 보강 메모
 - 핵심 수집 경로는 `FRED + Stooq/yfinance + Perplexity + 공식 X` 중심으로 유지하고, `RSS/NewsAPI`만 보강 레이어로 둔다.
+- LLM provider 역할은 `Perplexity=뉴스/ETF 참조`, `Grok=공식 X`, `OpenAI=브리핑 생성·검수`로 고정하고 교차 수집을 막는다.
 - 공급자별 요청 간격, 재시도 가능 상태코드, 회로 차단 규칙을 분리해서 운영해야 한다.
 - BTC ETF 보유량/순유입은 HTML 스크래핑 대신 Perplexity가 공식 issuer 도메인만 참조해 구조화한 스냅샷을 사용한다.
 - 품질 게이트는 provider별로 분리해야 하며, 공식 X citation 부족이 Perplexity legacy fallback을 유발해서는 안 된다.
+- observability는 단계별 duration, provider usage, 이상값 처리 결과, Perplexity URL audit를 JSON으로 남겨야 한다.
+- GitHub Actions 캐시는 `btc-etf-snapshots-YYYYMMDD`, `market-snapshot-YYYYMMDD`, `pip-{requirements 해시}` 기준으로 관리하고 cache miss가 나도 파이프라인은 degraded 모드로 계속 가야 한다.
 
 ### 루트 1. 정형 수치 레이어
 역할: 숫자 원본만 담당한다.

@@ -3,6 +3,7 @@ from __future__ import annotations
 from morning_brief.data.sources import perplexity_search as ps
 from morning_brief.data.sources import provider_runtime
 from morning_brief.data.sources.http_client import HttpFetchError
+from morning_brief.observability import PipelineObserver
 
 
 class _SearchResource:
@@ -250,3 +251,53 @@ def test_search_once_retries_timeout_with_provider_backoff(monkeypatch):
     assert len(calls) == 2
     assert payload["results"][0]["title"] == "Fed keeps options open"
     assert sleeps and round(sleeps[0], 2) == 1.5
+
+
+def test_fetch_news_from_perplexity_records_usage_and_topic_audit(monkeypatch, tmp_path):
+    observer = PipelineObserver(output_dir=tmp_path)
+    monkeypatch.setattr(
+        ps,
+        "TOPIC_SPECS",
+        (
+            ps.SearchTopic(
+                name="macro",
+                query="macro query",
+                retry_query="",
+                domain_filter=("reuters.com",),
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        ps,
+        "_build_client",
+        lambda api_key: _Client(
+            [
+                _SDKResponse(
+                    {
+                        "results": [
+                            {
+                                "title": "Fed keeps options open",
+                                "url": "https://www.reuters.com/world/us/fed-keeps-options-open",
+                                "snippet": "The Fed kept its options open.",
+                                "date": "2026-03-13T01:00:00Z",
+                            }
+                        ]
+                    }
+                )
+            ],
+            [],
+        ),
+    )
+
+    items = ps.fetch_news_from_perplexity(
+        max_items=5,
+        api_key="pplx-test-key",
+        observer=observer,
+    )
+
+    assert len(items) == 1
+    assert observer.provider_usage["perplexity"].requests == 1
+    assert observer.provider_usage["perplexity"].response_sources == 1
+    assert observer.perplexity_topic_audit["macro"]["candidate_urls"] == [
+        "https://www.reuters.com/world/us/fed-keeps-options-open"
+    ]

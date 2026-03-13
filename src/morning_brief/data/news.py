@@ -26,6 +26,7 @@ from morning_brief.data.sources.http_client import HttpFetchError
 from morning_brief.data.sources.newsapi_provider import fetch_news_from_newsapi
 from morning_brief.data.sources.perplexity_search import fetch_news_from_perplexity
 from morning_brief.models import NewsItem
+from morning_brief.observability import PipelineObserver
 
 logger = logging.getLogger(__name__)
 
@@ -77,16 +78,27 @@ def _needs_full_legacy_backfill(fallback_review: dict) -> bool:
     )
 
 
-def _collect_official_signal_items(settings: Settings) -> list[NewsItem]:
+def _collect_official_signal_items(
+    settings: Settings,
+    *,
+    observer: PipelineObserver | None = None,
+) -> list[NewsItem]:
     if not settings.enable_official_x_signals or not settings.grok_api_key:
         return []
 
-    items = fetch_official_x_signals(
-        api_key=settings.grok_api_key,
-        model=settings.grok_model,
-        lookback_hours=settings.official_x_lookback_hours,
-        max_items=settings.official_x_max_items,
-    )
+    try:
+        items = fetch_official_x_signals(
+            api_key=settings.grok_api_key,
+            model=settings.grok_model,
+            lookback_hours=settings.official_x_lookback_hours,
+            max_items=settings.official_x_max_items,
+            observer=observer,
+        )
+    except Exception as exc:
+        logger.warning("Grok 공식 X 시그널을 가져오지 못해 해당 섹션은 생략할게요: %s", exc)
+        if observer is not None:
+            observer.log_event("grok_signal_omitted", reason=str(exc))
+        return []
     if items:
         logger.info("검증된 공식 X 시그널 %s건을 함께 반영했어요.", len(items))
     return items
@@ -135,10 +147,14 @@ def fetch_news(
     return final_items
 
 
-def build_news_packet(*, settings: Settings) -> list[dict]:
+def build_news_packet(
+    *,
+    settings: Settings,
+    observer: PipelineObserver | None = None,
+) -> list[dict]:
     items: list[NewsItem] = []
     legacy_items: list[NewsItem] = []
-    official_signal_items = _collect_official_signal_items(settings)
+    official_signal_items = _collect_official_signal_items(settings, observer=observer)
     allow_broad_fallback = True
     fallback_review: dict | None = None
 
@@ -146,7 +162,13 @@ def build_news_packet(*, settings: Settings) -> list[dict]:
         items = fetch_news_from_perplexity(
             max_items=settings.max_news_items,
             api_key=settings.perplexity_api_key,
+            observer=observer,
         )
+        if not items and observer is not None:
+            observer.log_event(
+                "perplexity_degraded",
+                reason="Perplexity 결과가 비어 있어 legacy 뉴스와 Grok 보조 모드로 전환했어요.",
+            )
         if official_signal_items:
             items = _merge_rank(items, official_signal_items, max_items=settings.max_news_items)
         items = _dedup_and_rank(items, max_items=settings.max_news_items)
@@ -191,6 +213,8 @@ def build_news_packet(*, settings: Settings) -> list[dict]:
 
     if items:
         packet, final_summary = _packet_summary(items)
+        if observer is not None:
+            observer.record_perplexity_final_selection(packet)
         perplexity_count, official_signal_count, legacy_count, provider_breakdown = (
             _provider_counts(items)
         )

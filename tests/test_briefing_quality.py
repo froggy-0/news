@@ -10,6 +10,7 @@ from morning_brief.briefing import (
     generate_briefing,
 )
 from morning_brief.config import load_settings
+from morning_brief.llm_errors import BriefGenerationError
 
 
 def test_inject_quality_notice_under_title():
@@ -29,7 +30,7 @@ def test_inject_quality_notice_under_title():
     assert lines[1].startswith("[데이터 품질 알림]")
 
 
-def test_generate_briefing_falls_back_when_prompt_rendering_fails(monkeypatch):
+def test_generate_briefing_raises_when_prompt_rendering_fails(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     settings = load_settings()
     packet = {
@@ -46,9 +47,12 @@ def test_generate_briefing_falls_back_when_prompt_rendering_fails(monkeypatch):
         lambda **_: (_ for _ in ()).throw(RuntimeError("template missing")),
     )
 
-    briefing = generate_briefing(packet=packet, settings=settings)
-
-    assert briefing == _fallback_brief(packet=packet, timezone=settings.timezone)
+    try:
+        generate_briefing(packet=packet, settings=settings)
+    except BriefGenerationError as exc:
+        assert "template missing" in str(exc)
+    else:
+        raise AssertionError("BriefGenerationError was expected")
 
 
 def test_improve_readability_spacing_breaks_sentences():

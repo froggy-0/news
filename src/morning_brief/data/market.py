@@ -26,6 +26,7 @@ from morning_brief.data.sources.provider_runtime import (
 )
 from morning_brief.data.sources.stooq import fetch_close_change_and_volume, to_stooq_symbol
 from morning_brief.models import BitcoinEtfIssuerSnapshot, BitcoinSnapshot, MarketPoint
+from morning_brief.observability import PipelineObserver
 
 logger = logging.getLogger(__name__)
 
@@ -688,6 +689,7 @@ def _fetch_official_btc_etf_data(
     cache_dir: Path,
     spot_price_usd: float,
     perplexity_api_key: str = "",
+    observer: PipelineObserver | None = None,
 ) -> tuple[
     list[BitcoinEtfIssuerSnapshot],
     float | None,
@@ -700,7 +702,10 @@ def _fetch_official_btc_etf_data(
     previous_by_ticker = load_official_btc_etf_cache(cache_file)
 
     try:
-        snapshots = fetch_official_btc_etf_snapshots(api_key=perplexity_api_key)
+        snapshots = fetch_official_btc_etf_snapshots(
+            api_key=perplexity_api_key,
+            observer=observer,
+        )
     except Exception as exc:
         _warn_once(
             "btc_etf_official_fallback",
@@ -727,6 +732,7 @@ def fetch_bitcoin_snapshot(
     alpha_vantage_api_key: str = "",
     cache_dir: Path | None = None,
     perplexity_api_key: str = "",
+    observer: PipelineObserver | None = None,
 ) -> BitcoinSnapshot:
     spot = _fetch_btc_spot_point()
     volumes: list[int | None] = []
@@ -754,6 +760,7 @@ def fetch_bitcoin_snapshot(
         cache_dir=cache_dir or Path(".cache").resolve(),
         spot_price_usd=spot.price or 0.0,
         perplexity_api_key=perplexity_api_key,
+        observer=observer,
     )
 
     return BitcoinSnapshot(
@@ -777,6 +784,7 @@ def build_market_packet(
     alpha_vantage_api_key: str = "",
     perplexity_api_key: str = "",
     cache_dir: Path | None = None,
+    observer: PipelineObserver | None = None,
 ) -> dict:
     effective_cache_dir = cache_dir or Path(".cache").resolve()
     cache_file = _market_point_cache_file(effective_cache_dir)
@@ -788,6 +796,7 @@ def build_market_packet(
         alpha_vantage_api_key=alpha_vantage_api_key,
         cache_dir=effective_cache_dir,
         perplexity_api_key=perplexity_api_key,
+        observer=observer,
     )
     all_current_points = [
         *macro_points,
@@ -816,7 +825,7 @@ def build_market_packet(
         *([spot_note] if spot_note else []),
         *etf_notes,
     ]
-    return {
+    packet = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "macro": [point.__dict__ for point in macro_points],
         "us_indices": [point.__dict__ for point in us_index_points],
@@ -839,3 +848,6 @@ def build_market_packet(
             "official_etf_compared_tickers": btc_snapshot.official_etf_compared_tickers,
         },
     }
+    if observer is not None:
+        observer.record_market_anomalies(packet)
+    return packet

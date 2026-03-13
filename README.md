@@ -11,9 +11,10 @@
 - 뉴스 수집: `Perplexity Search API`를 토픽별 메인 리서치 레이어로 사용하고, 결과가 약할 때만 legacy 뉴스 경로로 보강
   - Reuters/Bloomberg/WSJ/FT/CNBC/CoinDesk 도메인 우선
   - Perplexity 품질 평가는 Perplexity 항목 기준으로만 계산하고, Grok 공식 X citation 부족이 legacy fallback을 과도하게 켜지 않도록 분리
-- 브리핑 생성: OpenAI API 기반 한국어 해석형 리포트(실패 시 템플릿 폴백)
+- 브리핑 생성: OpenAI API 기반 한국어 해석형 리포트(실패 시 생성 중단, 메일 발송 스킵)
   - Jinja 템플릿 기반 프롬프트 관리 (`src/morning_brief/prompts`)
   - OpenAI `prompt_cache_key` 기반 프롬프트 캐싱 최적화
+- 관측성: 단계별 duration, provider usage, 이상값 감지 결과, Perplexity audit log를 JSON으로 저장
 - 이메일 발송: Gmail API
 - 자동 실행: 로컬 스케줄러 또는 GitHub Actions
 
@@ -24,13 +25,14 @@
 - `docs/development-standards.md`: 개발 표준과 리뷰 루브릭
 - `src/morning_brief/config.py`: 환경설정 로더
 - `src/morning_brief/data/market.py`: 시장 데이터 수집 (재시도 포함)
-- `src/morning_brief/data/news.py`: 뉴스 수집 오케스트레이션 (우선소스 + 백필)
+- `src/morning_brief/data/news.py`: 뉴스 수집 오케스트레이션 (Perplexity + 공식 X + legacy fallback)
 - `src/morning_brief/data/news_selection.py`: 뉴스 정규화/랭킹/중복 제거 헬퍼
 - `src/morning_brief/data/sources/`: FRED/Stooq/CoinGecko/Perplexity/Grok/BTC ETF 참조/공급자 정책 어댑터
 - `src/morning_brief/briefing.py`: 브리핑 생성
 - `src/morning_brief/prompting.py`: Jinja 프롬프트 렌더링/캐시 키 생성
 - `src/morning_brief/prompts/*.j2`: 프롬프트 템플릿
 - `src/morning_brief/emailer.py`: 브리핑 HTML 렌더링 + Gmail 발송
+- `src/morning_brief/observability.py`: 구조화 실행 로그 / audit 파일 기록
 - `src/morning_brief/pipeline.py`: 전체 파이프라인
 - `src/morning_brief/scheduler.py`: 일일 스케줄러
 - `.github/workflows/morning-brief.yml`: GitHub Actions 일일 실행
@@ -63,9 +65,6 @@ cp .env.example .env
 - `OPENAI_REASONING_EFFORT` (기본 `low`)
 - `OPENAI_MAX_OUTPUT_TOKENS` (기본 `1700`)
 - `OPENAI_PROMPT_CACHE_KEY` (고정 프롬프트 캐시 네임스페이스)
-- `OPENAI_WEB_SEARCH_ENABLED` (기본 `true`, 뉴스 품질 저하 시 OpenAI web search 검증 사용)
-- `OPENAI_WEB_SEARCH_MODEL` (기본 `gpt-5-mini`)
-- `OPENAI_WEB_SEARCH_MAX_RESULTS` (기본 `3`)
 - `PROMPT_TEMPLATE_DIR` (기본 `src/morning_brief/prompts`)
 - `PROMPT_TEMPLATE_VERSION` (프롬프트 변경 시 버전 증가 권장)
 - `FRED_API_KEY` (권장, 매크로 공식 소스)
@@ -85,6 +84,7 @@ cp .env.example .env
 
 참고:
 - `ALPHA_VANTAGE_API_KEY`는 하위 호환용 환경변수 이름만 남아 있고 현재 파이프라인에서는 사용하지 않습니다.
+- `OPENAI_WEB_SEARCH_*` 환경변수는 하위 호환용으로만 남아 있고 현재 파이프라인에서는 사용하지 않습니다.
 
 ## 3) Gmail API 준비 (최초 1회)
 1. Google Cloud Console에서 Gmail API 활성화
@@ -119,13 +119,20 @@ python3 main.py schedule
 
 ## 5) 출력
 - 파일 저장: `outputs/brief_YYYYMMDD_HHMM.md`
+- 관측성 로그: `outputs/observability/pipeline-run-YYYYMMDDTHHMMSSZ.json`
+- Perplexity 감사 로그: `outputs/observability/perplexity-audit-YYYYMMDDTHHMMSSZ.json`
 - 이메일 제목: `미국 기술주·비트코인 시장 브리핑 (YYYY-MM-DD)`
 - 데이터 커버리지 저하 시 제목 아래 `[데이터 품질 알림]` 자동 표시
+- OpenAI 생성 실패 시 브리핑 파일과 메일 발송은 건너뛰고 관측성 요약만 남깁니다.
 - 이메일 본문: HTML + plain text fallback 동시 전송
 - 비트코인 ETF 공식 보유량/순유입: Perplexity가 공식 issuer 도메인을 바탕으로 정리한 참조 스냅샷을 캐시와 비교해 계산
 - 검증된 공식 X 시그널: allowlist에 등록된 공식 계정만 Grok `x_search`로 확인해 뉴스와 함께 반영
 
 ## 6) 수집 신뢰성 운영 원칙
+- LLM provider 역할은 고정합니다.
+  - Perplexity: 뉴스 수집, 출처 URL 추적, BTC ETF structured response
+  - Grok: 공식 X 실시간 시그널만 담당
+  - OpenAI: 브리핑 생성과 검수만 담당
 - 공급자별로 요청 간격과 재시도 규칙이 다르게 적용됩니다. `404` 같은 영구 실패는 바로 중단하고, `429/5xx/timeout` 중심으로만 다시 시도합니다.
 - HTTP 요청뿐 아니라 Perplexity/Grok SDK 호출과 yfinance 폴백도 공통 `provider_runtime` 계층의 지수 백오프와 provider별 간격 제어를 따릅니다.
 - Alpha Vantage free tier는 구조적 quota 한계 때문에 비활성화했고, 시장 가격 수집은 Stooq/yfinance 경로로 고정했습니다.
@@ -133,6 +140,7 @@ python3 main.py schedule
 - GDELT는 제거했고, legacy 뉴스 fallback은 RSS와 NewsAPI만 사용합니다.
 - Perplexity legacy fallback은 Perplexity 기사 자체의 개수/신선도/도메인/근거 링크 기준으로 판단합니다. 공식 X 항목의 citation 부족은 별도 취급합니다.
 - 파이프라인 종료 시 공급자별 요청/성공/실패/재시도/skip 요약 로그를 남깁니다.
+- 이상값 검증은 canonical key 기준으로 수행하고, 생략/전일 대체 결과를 브리핑 footer note와 관측성 로그에 함께 남깁니다.
 
 ## 7) 테스트
 ```bash
@@ -191,9 +199,6 @@ make validate-pre-commit
 - `OPENAI_MAX_OUTPUT_TOKENS` (기본 `1700`)
 - `OPENAI_PROMPT_CACHE_KEY` (기본 `morning-market-brief`)
 - `PROMPT_TEMPLATE_VERSION` (기본 `market_brief_v3`)
-- `OPENAI_WEB_SEARCH_ENABLED` (기본 `true`)
-- `OPENAI_WEB_SEARCH_MODEL` (기본 `gpt-5-mini`)
-- `OPENAI_WEB_SEARCH_MAX_RESULTS` (기본 `3`)
 - `RESEARCH_PROVIDER` (기본 `perplexity`)
 - `ENABLE_LEGACY_NEWS_FALLBACK` (기본 `true`)
 - `GROK_MODEL` (기본 `grok-4.20-beta-latest-non-reasoning`)
@@ -201,9 +206,12 @@ make validate-pre-commit
 - `OFFICIAL_X_LOOKBACK_HOURS` (기본 `48`)
 - `OFFICIAL_X_MAX_ITEMS` (기본 `4`)
 
-워크플로우는 `.cache/btc_etf/official_snapshots.json`을 GitHub Actions 캐시로 복원/저장합니다.
-이 파일을 기준으로 다음 실행에서 비트코인 ETF 공식 보유량의 전일 대비 순유입/순유출을 계산합니다.
-뉴스 품질이 낮을 때는 OpenAI `web_search`를 사용해 Reuters/Bloomberg/WSJ/FT/CNBC/CoinDesk 등 허용 도메인 안에서만 검증용 백필을 시도합니다.
+워크플로우는 날짜 단위 key로 아래 캐시를 복원/저장합니다.
+- BTC ETF 참조 스냅샷: `btc-etf-snapshots-YYYYMMDD`
+- 마지막 성공 시장 지표: `market-snapshot-YYYYMMDD`
+- pip 의존성: `pip-{requirements 해시}`
+
+각 캐시는 날짜 prefix restore-keys를 사용하고, miss가 나도 파이프라인은 계속 실행됩니다. 캐시 상태는 `outputs/observability` 요약 로그에 함께 기록됩니다.
 브리핑 본문은 생성 후 한 번 더 OpenAI 검수를 거치고, 일반인이 이해하기 어려운 표현이나 숫자-해석 불일치가 있으면 최대 1회 자동으로 다시 다듬습니다.
 품질 게이트는 `python -m ruff format --check .`, `python -m ruff check .`, `python -m pytest -q` 순서로 실행됩니다.
 

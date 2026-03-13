@@ -20,6 +20,7 @@ from morning_brief.data.sources.provider_runtime import (
     record_skip,
 )
 from morning_brief.models import NewsItem
+from morning_brief.observability import PipelineObserver
 
 logger = logging.getLogger(__name__)
 GROK_PROVIDER = "grok"
@@ -187,6 +188,7 @@ def _search_group(
     entities: list[dict[str, Any]],
     lookback_hours: int,
     max_items: int,
+    observer: PipelineObserver | None = None,
 ) -> list[NewsItem]:
     unavailable_reason = disabled_reason(GROK_PROVIDER)
     if unavailable_reason:
@@ -248,6 +250,8 @@ def _search_group(
         if isinstance(exc, HttpFetchError)
         else None,
     )
+    if observer is not None:
+        observer.record_provider_usage(GROK_PROVIDER, requests=1)
 
     can_apply_group_fallback = len(payload_items) == 1
     handle_map = {
@@ -301,6 +305,7 @@ def fetch_official_x_signals(
     model: str,
     lookback_hours: int,
     max_items: int,
+    observer: PipelineObserver | None = None,
 ) -> list[NewsItem]:
     if not api_key.strip():
         return []
@@ -320,6 +325,7 @@ def fetch_official_x_signals(
                     entities=entities,
                     lookback_hours=lookback_hours,
                     max_items=max_items,
+                    observer=observer,
                 )
             )
         except HttpFetchError as exc:

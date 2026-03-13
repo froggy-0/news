@@ -60,12 +60,15 @@
 
 추가 검증:
 - `tests/test_pipeline_quality.py`
+- `tests/test_pipeline_observability.py`
 - `tests/test_news_quality.py`
 - `tests/test_research_backfill.py`
 
 확인 질문:
 - fallback 트리거가 더 정확해졌는가
+- Perplexity/Grok/OpenAI 역할 경계가 코드와 로그에 명시됐는가
 - 품질 저하 시 보강 경로가 예상대로 열리는가
+- OpenAI 실패 시 발송을 건너뛰고 observability 산출물이 남는가
 - rollout 판단이 노이즈 없이 작동하는가
 
 ## 4. 설정/환경변수/운영 변경

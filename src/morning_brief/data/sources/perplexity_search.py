@@ -24,6 +24,7 @@ from morning_brief.data.sources.provider_runtime import (
     record_skip,
 )
 from morning_brief.models import NewsItem
+from morning_brief.observability import PipelineObserver
 
 logger = logging.getLogger(__name__)
 PERPLEXITY_PROVIDER = "perplexity"
@@ -392,7 +393,12 @@ def _parse_results(*, payload: dict[str, Any], topic: SearchTopic) -> list[NewsI
     return items
 
 
-def fetch_news_from_perplexity(*, max_items: int, api_key: str) -> list[NewsItem]:
+def _fetch_news_from_perplexity(
+    *,
+    max_items: int,
+    api_key: str,
+    observer: PipelineObserver | None,
+) -> list[NewsItem]:
     del max_items
 
     if not api_key:
@@ -410,6 +416,14 @@ def fetch_news_from_perplexity(*, max_items: int, api_key: str) -> list[NewsItem
                 domain_filter=topic.domain_filter,
                 recency_filter=topic.recency_filter,
             )
+            if observer is not None:
+                observer.record_provider_usage(
+                    PERPLEXITY_PROVIDER,
+                    requests=1,
+                    response_sources=len(payload.get("results", []))
+                    if isinstance(payload.get("results", []), list)
+                    else 0,
+                )
             topic_items = _parse_results(payload=payload, topic=topic)
             if len(topic_items) < TOPIC_RESULT_TARGET and topic.retry_query:
                 retry_payload = _search_once(
@@ -418,7 +432,20 @@ def fetch_news_from_perplexity(*, max_items: int, api_key: str) -> list[NewsItem
                     domain_filter=topic.domain_filter,
                     recency_filter=topic.recency_filter,
                 )
+                if observer is not None:
+                    observer.record_provider_usage(
+                        PERPLEXITY_PROVIDER,
+                        requests=1,
+                        response_sources=len(retry_payload.get("results", []))
+                        if isinstance(retry_payload.get("results", []), list)
+                        else 0,
+                    )
                 topic_items.extend(_parse_results(payload=retry_payload, topic=topic))
+            if observer is not None:
+                observer.record_perplexity_topic_results(
+                    topic.name,
+                    [item.url for item in topic_items],
+                )
 
             logger.info(
                 "Perplexity에서 %s 토픽 후보를 %s건 확인했어요.",
@@ -432,3 +459,12 @@ def fetch_news_from_perplexity(*, max_items: int, api_key: str) -> list[NewsItem
             )
 
     return collected
+
+
+def fetch_news_from_perplexity(
+    *,
+    max_items: int,
+    api_key: str,
+    observer: PipelineObserver | None = None,
+) -> list[NewsItem]:
+    return _fetch_news_from_perplexity(max_items=max_items, api_key=api_key, observer=observer)

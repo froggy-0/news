@@ -28,6 +28,7 @@ from morning_brief.data.sources.provider_runtime import (
     record_skip,
 )
 from morning_brief.models import BitcoinEtfIssuerSnapshot
+from morning_brief.observability import PipelineObserver
 
 logger = logging.getLogger(__name__)
 
@@ -449,7 +450,11 @@ def _parse_reference_snapshot_response(payload: dict[str, Any]) -> list[BitcoinE
     return snapshots
 
 
-def _request_reference_snapshots(api_key: str) -> list[BitcoinEtfIssuerSnapshot]:
+def _request_reference_snapshots(
+    api_key: str,
+    *,
+    observer: PipelineObserver | None = None,
+) -> list[BitcoinEtfIssuerSnapshot]:
     if not api_key:
         logger.info("Perplexity API 키가 없어 BTC ETF 참조 스냅샷은 건너뛸게요.")
         return []
@@ -501,7 +506,7 @@ def _request_reference_snapshots(api_key: str) -> list[BitcoinEtfIssuerSnapshot]
 
         return _parse_reference_snapshot_response(payload)
 
-    return execute_with_provider_retry(
+    snapshots = execute_with_provider_retry(
         provider=PERPLEXITY_PROVIDER,
         operation=request_once,
         should_retry=lambda exc: isinstance(exc, HttpFetchError) and exc.retryable,
@@ -516,10 +521,21 @@ def _request_reference_snapshots(api_key: str) -> list[BitcoinEtfIssuerSnapshot]
         if isinstance(exc, HttpFetchError)
         else None,
     )
+    if observer is not None:
+        observer.record_provider_usage(
+            PERPLEXITY_PROVIDER,
+            requests=1,
+            response_sources=len(snapshots),
+        )
+    return snapshots
 
 
-def fetch_official_btc_etf_snapshots(*, api_key: str = "") -> list[BitcoinEtfIssuerSnapshot]:
-    return _request_reference_snapshots(api_key)
+def fetch_official_btc_etf_snapshots(
+    *,
+    api_key: str = "",
+    observer: PipelineObserver | None = None,
+) -> list[BitcoinEtfIssuerSnapshot]:
+    return _request_reference_snapshots(api_key, observer=observer)
 
 
 def load_official_btc_etf_cache(cache_file: Path) -> dict[str, BitcoinEtfIssuerSnapshot]:

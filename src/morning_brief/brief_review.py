@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 
 from openai import OpenAI
 
 from morning_brief.config import Settings
-from morning_brief.openai_utils import cached_input_tokens
+from morning_brief.llm_errors import BriefGenerationError
+from morning_brief.observability import PipelineObserver
+from morning_brief.openai_utils import cached_input_tokens, usage_snapshot
 from morning_brief.prompting import (
     build_prompt_cache_key,
     render_brief_rewrite_prompts,
@@ -74,6 +77,7 @@ def _review_briefing(
     packet: dict,
     settings: Settings,
     client: OpenAI,
+    observer: PipelineObserver | None = None,
 ) -> dict | None:
     packet_json = json.dumps(packet, ensure_ascii=False, separators=(",", ":"))
     instructions, user_prompt = render_brief_validator_prompts(
@@ -86,24 +90,28 @@ def _review_briefing(
         instructions=instructions + ":brief-validator",
         model_name=settings.openai_brief_validation_model,
     )
-    response = client.responses.create(
-        model=settings.openai_brief_validation_model,
-        instructions=instructions,
-        input=user_prompt,
-        reasoning={"effort": "minimal"},
-        max_output_tokens=VALIDATOR_MAX_OUTPUT_TOKENS,
-        prompt_cache_key=prompt_cache_key,
-        text={
-            "verbosity": "low",
-            "format": {
-                "type": "json_schema",
-                "name": "brief_review",
-                "strict": True,
-                "schema": BRIEF_REVIEW_SCHEMA,
-                "description": "Review result for the Korean morning market brief.",
+    started_at = time.perf_counter()
+    try:
+        response = client.responses.create(
+            model=settings.openai_brief_validation_model,
+            instructions=instructions,
+            input=user_prompt,
+            reasoning={"effort": "minimal"},
+            max_output_tokens=VALIDATOR_MAX_OUTPUT_TOKENS,
+            prompt_cache_key=prompt_cache_key,
+            text={
+                "verbosity": "low",
+                "format": {
+                    "type": "json_schema",
+                    "name": "brief_review",
+                    "strict": True,
+                    "schema": BRIEF_REVIEW_SCHEMA,
+                    "description": "Review result for the Korean morning market brief.",
+                },
             },
-        },
-    )
+        )
+    except Exception as exc:
+        raise BriefGenerationError(f"브리핑 검수 OpenAI 호출에 실패했어요: {exc}") from exc
     payload = json.loads((response.output_text or "").strip() or "{}")
     review = _normalize_review_payload(payload)
     cached_tokens = cached_input_tokens(response)
@@ -112,6 +120,12 @@ def _review_briefing(
             "브리핑 검수 프롬프트 캐시를 사용했어요. key=%s | cached_input_tokens=%s",
             prompt_cache_key,
             cached_tokens,
+        )
+    if observer is not None:
+        observer.record_provider_usage("openai", requests=1, **usage_snapshot(response))
+        observer.record_phase_duration(
+            "review",
+            int(round((time.perf_counter() - started_at) * 1000)),
         )
     return review
 
@@ -123,6 +137,7 @@ def _rewrite_briefing(
     review: dict,
     settings: Settings,
     client: OpenAI,
+    observer: PipelineObserver | None = None,
 ) -> str:
     packet_json = json.dumps(packet, ensure_ascii=False, separators=(",", ":"))
     review_json = json.dumps(review, ensure_ascii=False, separators=(",", ":"))
@@ -137,23 +152,33 @@ def _rewrite_briefing(
         instructions=instructions + ":brief-rewrite",
         model_name=settings.openai_model,
     )
-    response = client.responses.create(
-        model=settings.openai_model,
-        instructions=instructions,
-        input=user_prompt,
-        reasoning={"effort": settings.openai_reasoning_effort},
-        max_output_tokens=settings.openai_max_output_tokens,
-        prompt_cache_key=prompt_cache_key,
-    )
+    started_at = time.perf_counter()
+    try:
+        response = client.responses.create(
+            model=settings.openai_model,
+            instructions=instructions,
+            input=user_prompt,
+            reasoning={"effort": settings.openai_reasoning_effort},
+            max_output_tokens=settings.openai_max_output_tokens,
+            prompt_cache_key=prompt_cache_key,
+        )
+    except Exception as exc:
+        raise BriefGenerationError(f"브리핑 재작성 OpenAI 호출에 실패했어요: {exc}") from exc
     rewritten = (response.output_text or "").strip()
     if not rewritten:
-        raise ValueError("검수 반영 재작성 결과가 비어 있어요.")
+        raise BriefGenerationError("검수 반영 재작성 결과가 비어 있어요.")
     cached_tokens = cached_input_tokens(response)
     if cached_tokens is not None:
         logger.info(
             "브리핑 재작성 프롬프트 캐시를 사용했어요. key=%s | cached_input_tokens=%s",
             prompt_cache_key,
             cached_tokens,
+        )
+    if observer is not None:
+        observer.record_provider_usage("openai", requests=1, **usage_snapshot(response))
+        observer.record_phase_duration(
+            "review",
+            int(round((time.perf_counter() - started_at) * 1000)),
         )
     return rewritten
 
@@ -164,20 +189,18 @@ def validate_and_rewrite_briefing(
     packet: dict,
     settings: Settings,
     client: OpenAI,
+    observer: PipelineObserver | None = None,
 ) -> str:
     if not settings.openai_brief_validation_enabled:
         return draft_text
 
-    try:
-        review = _review_briefing(
-            draft_text=draft_text,
-            packet=packet,
-            settings=settings,
-            client=client,
-        )
-    except Exception as exc:
-        logger.warning("브리핑 최종 검수 중 문제가 있어 초안으로 이어갈게요: %s", exc)
-        return draft_text
+    review = _review_briefing(
+        draft_text=draft_text,
+        packet=packet,
+        settings=settings,
+        client=client,
+        observer=observer,
+    )
 
     if review is None:
         return draft_text
@@ -205,24 +228,21 @@ def validate_and_rewrite_briefing(
                 review=current_review,
                 settings=settings,
                 client=client,
+                observer=observer,
             )
             logger.info("검수 지적을 반영해 브리핑을 %s회 다듬었어요.", attempt)
+        except BriefGenerationError:
+            raise
         except Exception as exc:
-            logger.warning("브리핑 재작성 중 문제가 있어 기존 초안을 유지할게요: %s", exc)
-            return draft_text
+            raise BriefGenerationError(f"브리핑 재작성 중 문제가 생겼어요: {exc}") from exc
 
-        try:
-            current_review = _review_briefing(
-                draft_text=rewritten,
-                packet=packet,
-                settings=settings,
-                client=client,
-            )
-        except Exception as exc:
-            logger.warning(
-                "재작성한 브리핑을 다시 검수하는 중 문제가 있어 현재 버전으로 이어갈게요: %s", exc
-            )
-            return rewritten
+        current_review = _review_briefing(
+            draft_text=rewritten,
+            packet=packet,
+            settings=settings,
+            client=client,
+            observer=observer,
+        )
 
         if current_review is None or current_review["pass"]:
             logger.info("재작성한 브리핑도 다시 확인했고, 최종 검수를 통과했어요.")

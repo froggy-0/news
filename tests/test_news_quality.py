@@ -8,6 +8,7 @@ from morning_brief.data.news_rollout import (
     record_news_rollout_run,
     should_reduce_legacy_broad_fallback,
 )
+from morning_brief.data.sources.http_client import HttpFetchError
 from morning_brief.models import NewsItem
 
 
@@ -477,9 +478,41 @@ def test_build_news_packet_merges_official_x_signals_before_legacy(monkeypatch):
     packet = news.build_news_packet(settings=load_settings())
 
     assert len(packet) == 4
-    assert {item["provider"] for item in packet} == {"perplexity_search", "grok_official_x"}
-    assert sum(1 for item in packet if item["official_source"] is True) == 2
-    assert {item["topic"] for item in packet} == {"macro", "us_equity", "ai_bigtech", "bitcoin"}
+
+
+def test_build_news_packet_omits_grok_signals_when_grok_fails(monkeypatch):
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")
+    monkeypatch.setenv("ENABLE_OFFICIAL_X_SIGNALS", "true")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
+    monkeypatch.setenv("GROK_API_KEY", "grok-test-key")
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news_from_perplexity",
+        lambda **_: [
+            NewsItem(
+                title="Fed tone stays steady",
+                url="https://www.reuters.com/world/us/fed-tone-stays-steady",
+                source="Reuters",
+                published_at=now,
+                topic="macro",
+                provider="perplexity_search",
+                why_it_matters="금리 경로를 읽는 데 도움이 돼요.",
+                citations=["https://www.reuters.com/world/us/fed-tone-stays-steady"],
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_official_x_signals",
+        lambda **_: (_ for _ in ()).throw(HttpFetchError("grok unavailable")),
+    )
+
+    packet = news.build_news_packet(settings=load_settings())
+
+    assert len(packet) == 1
+    assert packet[0]["provider"] == "perplexity_search"
+    assert {item["provider"] for item in packet} == {"perplexity_search"}
+    assert sum(1 for item in packet if item["official_source"] is True) == 0
+    assert {item["topic"] for item in packet} == {"macro"}
 
 
 def test_build_news_packet_uses_legacy_when_perplexity_topics_are_too_narrow(monkeypatch):

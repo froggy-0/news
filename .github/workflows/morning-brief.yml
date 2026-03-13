@@ -27,18 +27,70 @@ jobs:
         uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
         with:
           python-version: "3.11"
-          cache: pip
+
+      - name: Compute cache keys
+        id: cache-meta
+        shell: bash
+        run: |
+          echo "day=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pip cache
+        id: cache-pip
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
+          restore-keys: |
+            pip-
 
       - name: Install dependencies
         run: pip install --disable-pip-version-check -r requirements-dev.txt
 
       - name: Restore BTC ETF snapshot cache
+        id: cache-btc-etf
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
         with:
           path: .cache/btc_etf
-          key: btc-etf-snapshots-${{ github.run_id }}
+          key: btc-etf-snapshots-${{ steps.cache-meta.outputs.day }}
           restore-keys: |
             btc-etf-snapshots-
+
+      - name: Restore market snapshot cache
+        id: cache-market
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
+        with:
+          path: .cache/market
+          key: market-snapshot-${{ steps.cache-meta.outputs.day }}
+          restore-keys: |
+            market-snapshot-
+
+      - name: Resolve cache restore status
+        id: cache-status
+        shell: bash
+        run: |
+          if [ "${{ steps.cache-btc-etf.outputs.cache-hit }}" = "true" ]; then
+            echo "btc_etf_status=primary_hit" >> "$GITHUB_OUTPUT"
+          elif [ -f .cache/btc_etf/official_snapshots.json ]; then
+            echo "btc_etf_status=restore_hit" >> "$GITHUB_OUTPUT"
+          else
+            echo "btc_etf_status=miss" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "${{ steps.cache-market.outputs.cache-hit }}" = "true" ]; then
+            echo "market_status=primary_hit" >> "$GITHUB_OUTPUT"
+          elif [ -f .cache/market/last_success_points.json ]; then
+            echo "market_status=restore_hit" >> "$GITHUB_OUTPUT"
+          else
+            echo "market_status=miss" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "${{ steps.cache-pip.outputs.cache-hit }}" = "true" ]; then
+            echo "pip_status=primary_hit" >> "$GITHUB_OUTPUT"
+          elif [ -d ~/.cache/pip ]; then
+            echo "pip_status=restore_hit" >> "$GITHUB_OUTPUT"
+          else
+            echo "pip_status=miss" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Check formatting
         run: python -m ruff format --check .
@@ -89,15 +141,11 @@ jobs:
           OPENAI_BRIEF_VALIDATION_ENABLED: ${{ vars.OPENAI_BRIEF_VALIDATION_ENABLED || 'true' }}
           OPENAI_BRIEF_VALIDATION_MODEL: ${{ vars.OPENAI_BRIEF_VALIDATION_MODEL || vars.OPENAI_MODEL || 'gpt-5-mini' }}
           OPENAI_BRIEF_MAX_REWRITES: ${{ vars.OPENAI_BRIEF_MAX_REWRITES || '1' }}
-          OPENAI_WEB_SEARCH_ENABLED: ${{ vars.OPENAI_WEB_SEARCH_ENABLED || 'true' }}
-          OPENAI_WEB_SEARCH_MODEL: ${{ vars.OPENAI_WEB_SEARCH_MODEL || vars.OPENAI_MODEL || 'gpt-5-mini' }}
-          OPENAI_WEB_SEARCH_MAX_RESULTS: ${{ vars.OPENAI_WEB_SEARCH_MAX_RESULTS || '3' }}
           OPENAI_REASONING_EFFORT: ${{ vars.OPENAI_REASONING_EFFORT || 'low' }}
           OPENAI_MAX_OUTPUT_TOKENS: ${{ vars.OPENAI_MAX_OUTPUT_TOKENS || '1700' }}
           OPENAI_PROMPT_CACHE_KEY: ${{ vars.OPENAI_PROMPT_CACHE_KEY || 'morning-market-brief' }}
           PROMPT_TEMPLATE_VERSION: ${{ vars.PROMPT_TEMPLATE_VERSION || 'market_brief_v3' }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
           PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
           GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
           GROK_MODEL: ${{ vars.GROK_MODEL || 'grok-4.20-beta-latest-non-reasoning' }}
@@ -114,13 +162,36 @@ jobs:
           GMAIL_OAUTH_INTERACTIVE: "false"
           SEND_EMAIL: "true"
           MAX_NEWS_ITEMS: "5"
+          CACHE_BTC_ETF_KEY: btc-etf-snapshots-${{ steps.cache-meta.outputs.day }}
+          CACHE_BTC_ETF_HIT: ${{ steps.cache-btc-etf.outputs.cache-hit || 'false' }}
+          CACHE_BTC_ETF_STATUS: ${{ steps.cache-status.outputs.btc_etf_status }}
+          CACHE_MARKET_KEY: market-snapshot-${{ steps.cache-meta.outputs.day }}
+          CACHE_MARKET_HIT: ${{ steps.cache-market.outputs.cache-hit || 'false' }}
+          CACHE_MARKET_STATUS: ${{ steps.cache-status.outputs.market_status }}
+          CACHE_PIP_KEY: pip-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
+          CACHE_PIP_HIT: ${{ steps.cache-pip.outputs.cache-hit || 'false' }}
+          CACHE_PIP_STATUS: ${{ steps.cache-status.outputs.pip_status }}
 
       - name: Save BTC ETF snapshot cache
         if: always()
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
         with:
           path: .cache/btc_etf
-          key: btc-etf-snapshots-${{ github.run_id }}
+          key: btc-etf-snapshots-${{ steps.cache-meta.outputs.day }}
+
+      - name: Save market snapshot cache
+        if: always()
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
+        with:
+          path: .cache/market
+          key: market-snapshot-${{ steps.cache-meta.outputs.day }}
+
+      - name: Save pip cache
+        if: always()
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
 
       - name: Upload run artifacts
         if: always()
@@ -129,5 +200,6 @@ jobs:
           name: morning-brief-artifacts
           path: |
             outputs/*.md
+            outputs/observability/*.json
             run.log
           if-no-files-found: warn

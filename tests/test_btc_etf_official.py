@@ -165,8 +165,9 @@ def test_fetch_official_btc_etf_snapshots_uses_perplexity_request(monkeypatch):
     ]
     captured: dict[str, str] = {}
 
-    def fake_request(api_key: str):
+    def fake_request(api_key: str, *, observer=None):
         captured["api_key"] = api_key
+        assert observer is None
         return expected
 
     monkeypatch.setattr(official, "_request_reference_snapshots", fake_request)

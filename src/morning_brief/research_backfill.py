@@ -1,3 +1,9 @@
+"""Deprecated OpenAI collection path kept only for reference.
+
+OpenAI is now restricted to briefing generation and review. News collection and
+backfill must stay on Perplexity, Grok, or legacy non-LLM providers.
+"""
+
 from __future__ import annotations
 
 import json
@@ -11,6 +17,11 @@ from openai import OpenAI
 from morning_brief.config import Settings
 from morning_brief.data.news_packet import merge_news_packets
 from morning_brief.data.news_selection import _merge_rank
+from morning_brief.llm_provider_policy import (
+    CAPABILITY_WEB_BACKFILL,
+    OPENAI_PROVIDER,
+    capability_allowed,
+)
 from morning_brief.models import NewsItem
 from morning_brief.prompting import build_prompt_cache_key, render_web_search_prompts
 
@@ -167,9 +178,10 @@ def backfill_news_with_web_search(
     quality: dict,
     settings: Settings,
 ) -> tuple[list[dict], list[dict[str, str]]]:
-    if not settings.openai_api_key or not settings.openai_web_search_enabled:
-        return packet.get("news", []), []
-    if not _needs_web_search_backfill(quality):
+    if not capability_allowed(OPENAI_PROVIDER, CAPABILITY_WEB_BACKFILL):
+        logger.warning(
+            "OpenAI web_search 백필은 비활성화돼 있어서 현재 뉴스 묶음을 그대로 유지할게요."
+        )
         return packet.get("news", []), []
 
     client = OpenAI(api_key=settings.openai_api_key)
