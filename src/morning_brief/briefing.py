@@ -84,8 +84,14 @@ def _append_reference_block(text: str, packet: dict) -> str:
     return f"{text.rstrip()}\n\n" + "\n".join(lines)
 
 
-def _improve_readability_spacing(text: str) -> str:
-    return improve_readability_spacing(text)
+_improve_readability_spacing = improve_readability_spacing
+
+
+def _finalize_briefing(text: str, packet: dict) -> str:
+    return _append_reference_block(
+        _inject_quality_notice(_improve_readability_spacing(text), packet),
+        packet,
+    )
 
 
 def _bullet_lines(items: list[str]) -> str:
@@ -310,10 +316,7 @@ ETF 자금 유입 강도와 가격 반응이 엇갈리면 단기 변동성이 �
         )
     }
 """
-    return _append_reference_block(
-        _improve_readability_spacing(_inject_quality_notice(body, packet)),
-        packet,
-    )
+    return _finalize_briefing(body, packet)
 
 
 def generate_briefing(packet: dict, settings: Settings) -> str:
@@ -350,10 +353,7 @@ def generate_briefing(packet: dict, settings: Settings) -> str:
             settings=settings,
             client=client,
         )
-        return _append_reference_block(
-            _inject_quality_notice(_improve_readability_spacing(text), packet),
-            packet,
-        )
+        return _finalize_briefing(text, packet)
     except Exception as exc:
         logger.warning("LLM 브리핑 생성에 문제가 있어 기본 템플릿으로 이어갈게요: %s", exc)
         return _fallback_brief(packet=packet, timezone=settings.timezone)

@@ -4,6 +4,7 @@ import base64
 import html
 import logging
 import re
+from dataclasses import dataclass
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import TYPE_CHECKING, Any
@@ -33,6 +34,13 @@ if TYPE_CHECKING:
     from google.oauth2.credentials import Credentials
 else:  # pragma: no cover - runtime import guard
     Credentials = Any
+
+
+@dataclass(frozen=True)
+class _EmailSection:
+    heading: str
+    content: str
+    groups: dict[str, tuple[str, str]]
 
 
 def _gmail_dependencies() -> tuple[Any, Any, Any, Any]:
@@ -95,12 +103,22 @@ def _format_display_date(title: str, subject: str) -> str:
     return f"{year}.{month}.{day} {weekday}".strip()
 
 
-def _build_top_summary_lines(sections: list[tuple[str, str]]) -> list[str]:
+def _build_email_sections(sections: list[tuple[str, str]]) -> list[_EmailSection]:
+    return [
+        _EmailSection(
+            heading=heading,
+            content=content,
+            groups=_split_section_groups(content),
+        )
+        for heading, content in sections
+    ]
+
+
+def _build_top_summary_lines(sections: list[_EmailSection]) -> list[str]:
     lines: list[str] = []
-    for heading, content in sections:
-        groups = _split_section_groups(content)
-        conclusion = groups["conclusion"][1]
-        insight = groups["insight"][1]
+    for section in sections:
+        conclusion = section.groups["conclusion"][1]
+        insight = section.groups["insight"][1]
         candidate = _first_non_empty_paragraph(conclusion) or _first_non_empty_paragraph(insight)
         if candidate:
             if candidate.startswith("- "):
@@ -111,13 +129,12 @@ def _build_top_summary_lines(sections: list[tuple[str, str]]) -> list[str]:
     return lines
 
 
-def _build_snapshot_rows(sections: list[tuple[str, str]]) -> list[tuple[str, str]]:
+def _build_snapshot_rows(sections: list[_EmailSection]) -> list[tuple[str, str]]:
     rows: list[tuple[str, str]] = []
-    for heading, content in sections[:4]:
-        groups = _split_section_groups(content)
-        metric_line = _first_metric_line(groups["metrics"][1])
+    for section in sections[:4]:
+        metric_line = _first_metric_line(section.groups["metrics"][1])
         if metric_line:
-            rows.append((heading, metric_line))
+            rows.append((section.heading, metric_line))
     return rows
 
 
@@ -232,23 +249,23 @@ def _text_to_html_blocks(content: str) -> str:
     )
 
 
-def _preheader_text(title: str, notice: str, sections: list[tuple[str, str]]) -> str:
+def _preheader_text(title: str, notice: str, sections: list[_EmailSection]) -> str:
     if notice:
         return notice[:140]
     summary_lines = _build_top_summary_lines(sections)
     if summary_lines:
         return " | ".join(summary_lines)[:140]
     if sections:
-        return f"{title} | {sections[0][1][:120]}".strip()
+        return f"{title} | {sections[0].content[:120]}".strip()
     return title
 
 
-def _render_section_row(index: int, heading: str, content: str) -> str:
-    groups = _split_section_groups(content)
-    conclusion_label, conclusion_content = groups["conclusion"]
-    metrics_label, metrics_content = groups["metrics"]
-    insight_label, insight_content = groups["insight"]
-    watch_label, watch_content = groups["watch"]
+def _render_section_row(index: int, section: _EmailSection) -> str:
+    conclusion_label, conclusion_content = section.groups["conclusion"]
+    metrics_label, metrics_content = section.groups["metrics"]
+    insight_label, insight_content = section.groups["insight"]
+    watch_label, watch_content = section.groups["watch"]
+    heading = section.heading
     if heading == "중요한 뉴스":
         metrics_label = "핵심 이슈"
 
@@ -497,13 +514,14 @@ def _render_email_document(
 def render_briefing_email_html(subject: str, body: str) -> str:
     main_body, references = _split_reference_block(body)
     title, notice, sections = _extract_brief_structure(main_body)
+    parsed_sections = _build_email_sections(sections)
     display_date = _format_display_date(title=title, subject=subject)
-    summary_lines = _build_top_summary_lines(sections)
-    snapshot_rows = _build_snapshot_rows(sections)
-    preheader = _preheader_text(title=title, notice=notice, sections=sections)
+    summary_lines = _build_top_summary_lines(parsed_sections)
+    snapshot_rows = _build_snapshot_rows(parsed_sections)
+    preheader = _preheader_text(title=title, notice=notice, sections=parsed_sections)
     section_rows = [
-        _render_section_row(index=index, heading=heading, content=content)
-        for index, (heading, content) in enumerate(sections, start=1)
+        _render_section_row(index=index, section=section)
+        for index, section in enumerate(parsed_sections, start=1)
     ]
     return _render_email_document(
         subject=subject,

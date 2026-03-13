@@ -9,8 +9,8 @@ from typing import Any
 from openai import OpenAI
 
 from morning_brief.config import Settings
-from morning_brief.data.news import _merge_rank
 from morning_brief.data.news_packet import merge_news_packets
+from morning_brief.data.news_selection import _merge_rank
 from morning_brief.models import NewsItem
 from morning_brief.prompting import build_prompt_cache_key, render_web_search_prompts
 

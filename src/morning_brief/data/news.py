@@ -1,34 +1,21 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from morning_brief.config import Settings
+from morning_brief.data import data_quality, news_policy, news_selection
 from morning_brief.data.data_quality import (
     assess_perplexity_fallback_need,
-    summarize_news_packet_quality,
-)
-from morning_brief.data.news_packet import (
-    OFFICIAL_SIGNAL_PROVIDER,
 )
 from morning_brief.data.news_packet import (
     news_items_to_packet as _news_items_to_packet,
 )
 from morning_brief.data.news_policy import (
-    MAX_ITEMS_PER_DOMAIN,
     MIN_NEWS_ITEMS,
     NEWS_RECENCY_HOURS,
     PREFERRED_DOMAINS,
     RSS_QUERIES,
     TOPIC_KEYWORDS,
-    TRACKING_QUERY_KEYS,
-    TRACKING_QUERY_PREFIXES,
-    domain_score,
-    extract_domain,
-    is_preferred_domain,
-    keyword_score,
-    recency_score,
 )
 from morning_brief.data.news_rollout import (
     record_news_rollout_run,
@@ -43,145 +30,20 @@ from morning_brief.data.sources.perplexity_search import fetch_news_from_perplex
 from morning_brief.models import NewsItem
 
 logger = logging.getLogger(__name__)
-PERPLEXITY_PROVIDER = "perplexity_search"
 
-
-def _normalize_url(url: str) -> str:
-    parsed = urlparse(url.strip())
-    if not parsed.netloc:
-        return url.strip()
-
-    filtered_params = []
-    for key, value in parse_qsl(parsed.query, keep_blank_values=False):
-        key_l = key.lower()
-        if key_l.startswith(TRACKING_QUERY_PREFIXES):
-            continue
-        if key_l in TRACKING_QUERY_KEYS:
-            continue
-        filtered_params.append((key, value))
-
-    filtered_query = urlencode(filtered_params)
-
-    return urlunparse(
-        (
-            parsed.scheme or "https",
-            parsed.netloc.lower(),
-            parsed.path.rstrip("/"),
-            "",
-            filtered_query,
-            "",
-        )
-    )
-
-
-def _extract_domain(url: str) -> str:
-    return extract_domain(url)
-
-
-def _is_preferred_domain(url: str) -> bool:
-    return is_preferred_domain(url)
-
-
-def _recency_score(published_at: datetime | None) -> float:
-    return recency_score(published_at)
-
-
-def _domain_score(url: str) -> float:
-    return domain_score(url)
-
-
-def _keyword_score(title: str) -> float:
-    return keyword_score(title)
-
-
-def _item_score(item: NewsItem) -> float:
-    provider_bonus = 4.2 if item.provider == OFFICIAL_SIGNAL_PROVIDER else 0.0
-    return (
-        _domain_score(item.url)
-        + _recency_score(item.published_at)
-        + _keyword_score(item.title)
-        + provider_bonus
-    )
-
-
-def _sort_by_score(items: list[NewsItem]) -> list[NewsItem]:
-    return sorted(
-        items,
-        key=lambda x: (
-            _item_score(x),
-            x.published_at or datetime.min.replace(tzinfo=timezone.utc),
-        ),
-        reverse=True,
-    )
-
-
-def _apply_domain_diversity_limit(items: list[NewsItem], max_items: int) -> list[NewsItem]:
-    selected: list[NewsItem] = []
-    per_domain: dict[str, int] = {}
-
-    for item in items:
-        domain = (
-            f"{OFFICIAL_SIGNAL_PROVIDER}:{item.source.lower()}"
-            if item.provider == OFFICIAL_SIGNAL_PROVIDER
-            else _extract_domain(item.url)
-        )
-        count = per_domain.get(domain, 0)
-        if count >= MAX_ITEMS_PER_DOMAIN:
-            continue
-        selected.append(item)
-        per_domain[domain] = count + 1
-        if len(selected) >= max_items:
-            break
-
-    if len(selected) >= max_items:
-        return selected
-
-    for item in items:
-        if item in selected:
-            continue
-        selected.append(item)
-        if len(selected) >= max_items:
-            break
-
-    return selected[:max_items]
-
-
-def _dedup_and_rank(items: list[NewsItem], max_items: int) -> list[NewsItem]:
-    by_key: dict[str, NewsItem] = {}
-
-    for item in items:
-        title = item.title.strip()
-        if not title:
-            continue
-
-        normalized_url = _normalize_url(item.url)
-        if not normalized_url:
-            continue
-
-        source_domain = _extract_domain(normalized_url)
-        normalized_item = NewsItem(
-            title=title,
-            url=normalized_url,
-            source=item.source if item.source and item.source != "Unknown" else source_domain,
-            published_at=item.published_at,
-            topic=item.topic,
-            provider=item.provider,
-            summary=item.summary,
-            why_it_matters=item.why_it_matters,
-            citations=list(item.citations),
-        )
-
-        key = normalized_url or title.lower()
-        existing = by_key.get(key)
-        if existing is None:
-            by_key[key] = normalized_item
-            continue
-
-        if _item_score(normalized_item) > _item_score(existing):
-            by_key[key] = normalized_item
-
-    ranked = _sort_by_score(list(by_key.values()))
-    return _apply_domain_diversity_limit(ranked, max_items=max_items)
+# Re-export ranking helpers for tests and adjacent modules while keeping
+# ranking/selection responsibilities in news_selection.py.
+_dedup_and_rank = news_selection._dedup_and_rank
+_domain_score = news_policy.domain_score
+_extract_domain = news_policy.extract_domain
+_is_preferred_domain = news_policy.is_preferred_domain
+_item_score = news_selection._item_score
+_merge_rank = news_selection._merge_rank
+_normalize_url = news_selection._normalize_url
+_packet_summary = news_selection._packet_summary
+_provider_breakdown = news_selection._provider_breakdown
+_provider_counts = news_selection._provider_counts
+summarize_news_packet_quality = data_quality.summarize_news_packet_quality
 
 
 def _collect_from_gdelt(max_items: int, preferred_only: bool = True) -> list[NewsItem]:
@@ -218,35 +80,6 @@ def _collect_from_newsapi(api_key: str, max_items: int) -> list[NewsItem]:
         query="(Fed OR Treasury OR Nasdaq OR S&P 500 OR semiconductor OR Bitcoin ETF OR Nvidia OR Apple OR Microsoft)",
     )
     return _dedup_and_rank(items, max_items=max_items)
-
-
-def _merge_rank(items: list[NewsItem], other: list[NewsItem], max_items: int) -> list[NewsItem]:
-    return _dedup_and_rank(items + other, max_items=max_items)
-
-
-def _provider_breakdown(items: list[NewsItem]) -> dict[str, int]:
-    counts: dict[str, int] = {}
-    for item in items:
-        provider = item.provider or "unknown"
-        counts[provider] = counts.get(provider, 0) + 1
-    return counts
-
-
-def _provider_counts(items: list[NewsItem]) -> tuple[int, int, int, dict[str, int]]:
-    breakdown = _provider_breakdown(items)
-    perplexity_count = breakdown.get(PERPLEXITY_PROVIDER, 0)
-    official_signal_count = breakdown.get(OFFICIAL_SIGNAL_PROVIDER, 0)
-    legacy_count = sum(
-        count
-        for provider, count in breakdown.items()
-        if provider not in {PERPLEXITY_PROVIDER, OFFICIAL_SIGNAL_PROVIDER}
-    )
-    return perplexity_count, official_signal_count, legacy_count, breakdown
-
-
-def _packet_summary(items: list[NewsItem]) -> tuple[list[dict], dict]:
-    packet = _news_items_to_packet(items)
-    return packet, summarize_news_packet_quality(packet)
 
 
 def _needs_full_legacy_backfill(fallback_review: dict) -> bool:

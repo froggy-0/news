@@ -15,6 +15,7 @@
 대상:
 - `src/morning_brief/data/`
 - `src/morning_brief/data/sources/`
+- `src/morning_brief/data/news_selection.py`
 
 추가 검증:
 - `tests/test_http_client.py`

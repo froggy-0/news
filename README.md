@@ -24,12 +24,13 @@
 - `docs/development-standards.md`: 개발 표준과 리뷰 루브릭
 - `src/morning_brief/config.py`: 환경설정 로더
 - `src/morning_brief/data/market.py`: 시장 데이터 수집 (재시도 포함)
-- `src/morning_brief/data/news.py`: 뉴스 수집 (우선소스 + 백필)
+- `src/morning_brief/data/news.py`: 뉴스 수집 오케스트레이션 (우선소스 + 백필)
+- `src/morning_brief/data/news_selection.py`: 뉴스 정규화/랭킹/중복 제거 헬퍼
 - `src/morning_brief/data/sources/`: FRED/GDELT/Stooq/CoinGecko/Perplexity/Grok/공식 ETF/공급자 정책 어댑터
 - `src/morning_brief/briefing.py`: 브리핑 생성
 - `src/morning_brief/prompting.py`: Jinja 프롬프트 렌더링/캐시 키 생성
 - `src/morning_brief/prompts/*.j2`: 프롬프트 템플릿
-- `src/morning_brief/emailer.py`: Gmail 발송
+- `src/morning_brief/emailer.py`: 브리핑 HTML 렌더링 + Gmail 발송
 - `src/morning_brief/pipeline.py`: 전체 파이프라인
 - `src/morning_brief/scheduler.py`: 일일 스케줄러
 - `.github/workflows/morning-brief.yml`: GitHub Actions 일일 실행
