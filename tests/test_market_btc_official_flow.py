@@ -38,15 +38,17 @@ def test_fetch_bitcoin_snapshot_computes_official_daily_flow(monkeypatch, tmp_pa
         lambda: (60, "Greed"),
     )
     monkeypatch.setattr(
-        "morning_brief.data.market._safe_stooq_point",
-        lambda label, ticker, stooq_symbol=None: MarketPoint(
-            label=label,
-            ticker=ticker,
-            price=50.0,
-            change_pct=1.0,
+        "morning_brief.data.market._safe_stooq_point_and_volume",
+        lambda label, ticker, stooq_symbol=None: (
+            MarketPoint(
+                label=label,
+                ticker=ticker,
+                price=50.0,
+                change_pct=1.0,
+            ),
+            10,
         ),
     )
-    monkeypatch.setattr("morning_brief.data.market._safe_stooq_volume", lambda **_: 10)
     monkeypatch.setattr(
         "morning_brief.data.market.fetch_official_btc_etf_snapshots",
         lambda: [
@@ -104,12 +106,12 @@ def test_fetch_bitcoin_snapshot_leaves_official_flow_empty_without_prior_cache(
     )
     monkeypatch.setattr("morning_brief.data.market._fetch_fear_greed", lambda: (60, "Greed"))
     monkeypatch.setattr(
-        "morning_brief.data.market._safe_stooq_point",
-        lambda label, ticker, stooq_symbol=None: MarketPoint(
-            label=label, ticker=ticker, price=50.0, change_pct=1.0
+        "morning_brief.data.market._safe_stooq_point_and_volume",
+        lambda label, ticker, stooq_symbol=None: (
+            MarketPoint(label=label, ticker=ticker, price=50.0, change_pct=1.0),
+            10,
         ),
     )
-    monkeypatch.setattr("morning_brief.data.market._safe_stooq_volume", lambda **_: 10)
     monkeypatch.setattr(
         "morning_brief.data.market.fetch_official_btc_etf_snapshots",
         lambda: [
@@ -165,6 +167,41 @@ def test_fetch_bitcoin_snapshot_calls_alpha_vantage_once_per_etf_when_key_presen
     assert calls == ["IBIT", "FBTC", "ARKB", "BITB", "GBTC"]
 
 
+def test_fetch_bitcoin_snapshot_calls_stooq_once_per_etf_without_alpha_vantage(
+    monkeypatch, tmp_path: Path
+):
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "morning_brief.data.market._fetch_btc_spot_point",
+        lambda: MarketPoint(label="BTC-USD", ticker="BTC-USD", price=80_000.0, change_pct=1.2),
+    )
+    monkeypatch.setattr("morning_brief.data.market._fetch_fear_greed", lambda: (60, "Greed"))
+    monkeypatch.setattr(
+        "morning_brief.data.market._safe_stooq_point_and_volume",
+        lambda label, ticker, stooq_symbol=None: (
+            calls.append(ticker)
+            or MarketPoint(label=label, ticker=ticker, price=50.0, change_pct=1.0),
+            10,
+        ),
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.market._fetch_official_btc_etf_data",
+        lambda **_: ([], None, None, None, None, []),
+    )
+
+    snapshot = fetch_bitcoin_snapshot(cache_dir=tmp_path)
+
+    assert [point.ticker for point in snapshot.etf_points] == [
+        "IBIT",
+        "FBTC",
+        "ARKB",
+        "BITB",
+        "GBTC",
+    ]
+    assert snapshot.etf_total_volume == 50
+    assert calls == ["IBIT", "FBTC", "ARKB", "BITB", "GBTC"]
+
+
 def test_fetch_bitcoin_snapshot_stops_reusing_alpha_vantage_after_rate_limit(
     monkeypatch, tmp_path: Path
 ):
@@ -185,12 +222,12 @@ def test_fetch_bitcoin_snapshot_stops_reusing_alpha_vantage_after_rate_limit(
         "morning_brief.data.market.fetch_daily_close_change_volume", fake_alpha_vantage
     )
     monkeypatch.setattr(
-        "morning_brief.data.market._safe_stooq_point",
-        lambda label, ticker, stooq_symbol=None: MarketPoint(
-            label=label, ticker=ticker, price=50.0, change_pct=1.0
+        "morning_brief.data.market._safe_stooq_point_and_volume",
+        lambda label, ticker, stooq_symbol=None: (
+            MarketPoint(label=label, ticker=ticker, price=50.0, change_pct=1.0),
+            10,
         ),
     )
-    monkeypatch.setattr("morning_brief.data.market._safe_stooq_volume", lambda **_: 10)
     monkeypatch.setattr(
         "morning_brief.data.market._fetch_official_btc_etf_data",
         lambda **_: ([], None, None, None, None, []),

@@ -151,6 +151,15 @@ def _latest_price_point_from_yfinance(
     )
 
 
+def _market_point(label: str, ticker: str, close: float, change_pct: float) -> MarketPoint:
+    return MarketPoint(
+        label=label,
+        ticker=ticker,
+        price=round(close, 4),
+        change_pct=round(change_pct, 2),
+    )
+
+
 def _safe_with_fallback(
     *,
     warning_key: str,
@@ -191,12 +200,17 @@ def _safe_yfinance_point(
 def _point_from_stooq(label: str, ticker: str, stooq_symbol: str | None = None) -> MarketPoint:
     symbol = stooq_symbol or to_stooq_symbol(ticker)
     close, change_pct, _ = fetch_close_change_and_volume(symbol)
-    return MarketPoint(
-        label=label,
-        ticker=ticker,
-        price=round(close, 4),
-        change_pct=round(change_pct, 2),
-    )
+    return _market_point(label=label, ticker=ticker, close=close, change_pct=change_pct)
+
+
+def _point_and_volume_from_stooq(
+    label: str,
+    ticker: str,
+    stooq_symbol: str | None = None,
+) -> tuple[MarketPoint, int]:
+    symbol = stooq_symbol or to_stooq_symbol(ticker)
+    close, change_pct, volume = fetch_close_change_and_volume(symbol)
+    return _market_point(label=label, ticker=ticker, close=close, change_pct=change_pct), volume
 
 
 def _safe_stooq_point(label: str, ticker: str, stooq_symbol: str | None = None) -> MarketPoint:
@@ -212,12 +226,7 @@ def _safe_stooq_point(label: str, ticker: str, stooq_symbol: str | None = None) 
 
 def _point_from_alpha_vantage(label: str, ticker: str, api_key: str) -> MarketPoint:
     close, change_pct, _ = fetch_daily_close_change_volume(ticker, api_key)
-    return MarketPoint(
-        label=label,
-        ticker=ticker,
-        price=round(close, 4),
-        change_pct=round(change_pct, 2),
-    )
+    return _market_point(label=label, ticker=ticker, close=close, change_pct=change_pct)
 
 
 def _safe_alpha_vantage_point(label: str, ticker: str, api_key: str) -> MarketPoint:
@@ -237,12 +246,6 @@ def _safe_alpha_vantage_point(label: str, ticker: str, api_key: str) -> MarketPo
     )
 
 
-def _volume_from_stooq(ticker: str, stooq_symbol: str | None = None) -> int:
-    symbol = stooq_symbol or to_stooq_symbol(ticker)
-    _, _, volume = fetch_close_change_and_volume(symbol)
-    return volume
-
-
 def _volume_from_yfinance(ticker: str) -> int:
     try:
         history = _history_with_retry(ticker=ticker, period="2d", interval="1d")
@@ -260,34 +263,26 @@ def _volume_from_yfinance(ticker: str) -> int:
     return 0
 
 
-def _safe_stooq_volume(ticker: str, stooq_symbol: str | None = None) -> int:
+def _safe_stooq_point_and_volume(
+    *,
+    label: str,
+    ticker: str,
+    stooq_symbol: str | None = None,
+) -> tuple[MarketPoint, int]:
     symbol = stooq_symbol or to_stooq_symbol(ticker)
     return _safe_with_fallback(
-        warning_key=f"stooq_volume_fallback_{symbol}",
-        warning_message="Stooq에서 %s 거래량을 바로 가져오지 못해 yfinance로 이어서 볼게요: %s",
-        warning_args=(symbol,),
-        primary_fetch=lambda: _volume_from_stooq(ticker=ticker, stooq_symbol=symbol),
-        fallback_fetch=lambda: _volume_from_yfinance(ticker=ticker),
-    )
-
-
-def _volume_from_alpha_vantage(ticker: str, api_key: str) -> int:
-    _, _, volume = fetch_daily_close_change_volume(ticker, api_key)
-    return volume
-
-
-def _safe_alpha_vantage_volume(ticker: str, api_key: str) -> int:
-    disabled_reason = _alpha_vantage_disabled_reason()
-    if disabled_reason:
-        _warn_alpha_vantage_disabled_once(disabled_reason)
-        return _safe_stooq_volume(ticker=ticker)
-
-    return _safe_with_fallback(
-        warning_key=f"alpha_vantage_volume_fallback_{ticker}",
-        warning_message="Alpha Vantage에서 %s 거래량을 바로 가져오지 못해 Stooq/yfinance로 이어서 볼게요: %s",
-        warning_args=(ticker,),
-        primary_fetch=lambda: _volume_from_alpha_vantage(ticker=ticker, api_key=api_key),
-        fallback_fetch=lambda: _safe_stooq_volume(ticker=ticker),
+        warning_key=f"stooq_point_volume_fallback_{symbol}",
+        warning_message="Stooq에서 %s (%s) 가격과 거래량을 바로 가져오지 못해 yfinance로 이어서 볼게요: %s",
+        warning_args=(label, symbol),
+        primary_fetch=lambda: _point_and_volume_from_stooq(
+            label=label,
+            ticker=ticker,
+            stooq_symbol=symbol,
+        ),
+        fallback_fetch=lambda: (
+            _safe_yfinance_point(label=label, ticker=ticker),
+            _volume_from_yfinance(ticker=ticker),
+        ),
     )
 
 
@@ -300,19 +295,11 @@ def _safe_alpha_vantage_point_and_volume(
     disabled_reason = _alpha_vantage_disabled_reason()
     if disabled_reason:
         _warn_alpha_vantage_disabled_once(disabled_reason)
-        return _safe_stooq_point(label=label, ticker=ticker), _safe_stooq_volume(ticker=ticker)
+        return _safe_stooq_point_and_volume(label=label, ticker=ticker)
 
     try:
         close, change_pct, volume = fetch_daily_close_change_volume(ticker, api_key)
-        return (
-            MarketPoint(
-                label=label,
-                ticker=ticker,
-                price=round(close, 4),
-                change_pct=round(change_pct, 2),
-            ),
-            volume,
-        )
+        return _market_point(label=label, ticker=ticker, close=close, change_pct=change_pct), volume
     except Exception as exc:
         disabled_reason = _alpha_vantage_disabled_reason()
         if disabled_reason:
@@ -325,7 +312,7 @@ def _safe_alpha_vantage_point_and_volume(
                 ticker,
                 exc,
             )
-        return _safe_stooq_point(label=label, ticker=ticker), _safe_stooq_volume(ticker=ticker)
+        return _safe_stooq_point_and_volume(label=label, ticker=ticker)
 
 
 def fetch_macro_points(fred_api_key: str = "") -> list[MarketPoint]:
@@ -520,10 +507,12 @@ def fetch_bitcoin_snapshot(
             etf_points.append(point)
             volume_total += volume
     else:
-        etf_points = [_safe_stooq_point(label=ticker, ticker=ticker) for ticker in BTC_ETF_TICKERS]
+        etf_points = []
         volume_total = 0
         for ticker in BTC_ETF_TICKERS:
-            volume_total += _safe_stooq_volume(ticker=ticker)
+            point, volume = _safe_stooq_point_and_volume(label=ticker, ticker=ticker)
+            etf_points.append(point)
+            volume_total += volume
 
     fear_greed_value, fear_greed_label = _fetch_fear_greed()
     (
