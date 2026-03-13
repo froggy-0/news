@@ -13,93 +13,134 @@ OFFICIAL_SIGNAL_PROVIDER = "grok_official_x"
 
 def _safe_price(value: object) -> float:
     try:
-        return float(value)
+        if isinstance(value, (int, float)):
+            return float(value)
+        return float(str(value).strip())
     except (TypeError, ValueError):
         return 0.0
 
 
+def _blank_news_quality_summary() -> dict[str, int | set[str]]:
+    return {
+        "count": 0,
+        "preferred_count": 0,
+        "tier_1_count": 0,
+        "fresh_count": 0,
+        "citation_backed_count": 0,
+        "explained_count": 0,
+        "perplexity_item_count": 0,
+        "perplexity_citation_backed_count": 0,
+        "perplexity_explained_count": 0,
+        "official_signal_count": 0,
+        "unique_domains": set(),
+        "unique_topics": set(),
+    }
+
+
+def _has_citations(item: dict) -> bool:
+    citations = item.get("citations", [])
+    return isinstance(citations, list) and any(str(value).strip() for value in citations)
+
+
+def _is_fresh_item(item: dict) -> bool:
+    age_hours = item.get("age_hours")
+    try:
+        return age_hours is not None and float(age_hours) <= FRESH_NEWS_HOURS
+    except (TypeError, ValueError):
+        return False
+
+
+def _record_news_domain(item: dict, summary: dict[str, int | set[str]]) -> None:
+    if bool(item.get("official_source")):
+        source = str(item.get("source", "")).strip().lower()
+        if source:
+            cast_set = summary["unique_domains"]
+            assert isinstance(cast_set, set)
+            cast_set.add(f"official:{source}")
+        return
+
+    domain = str(item.get("domain", "")).strip().lower()
+    if domain:
+        cast_set = summary["unique_domains"]
+        assert isinstance(cast_set, set)
+        cast_set.add(domain)
+
+
+def _record_news_topic(item: dict, summary: dict[str, int | set[str]]) -> None:
+    topic = str(item.get("topic", "")).strip().lower()
+    if topic:
+        cast_set = summary["unique_topics"]
+        assert isinstance(cast_set, set)
+        cast_set.add(topic)
+
+
+def _increment(summary: dict[str, int | set[str]], key: str) -> None:
+    value = summary[key]
+    assert isinstance(value, int)
+    summary[key] = value + 1
+
+
+def _record_provider_counts(item: dict, summary: dict[str, int | set[str]]) -> str:
+    provider = str(item.get("provider", "")).strip().lower()
+    if provider == PERPLEXITY_PROVIDER:
+        _increment(summary, "perplexity_item_count")
+    if provider == OFFICIAL_SIGNAL_PROVIDER or bool(item.get("official_source")):
+        _increment(summary, "official_signal_count")
+    return provider
+
+
+def _record_citation_and_explanation_counts(
+    item: dict,
+    summary: dict[str, int | set[str]],
+    *,
+    provider: str,
+) -> None:
+    has_citations = _has_citations(item)
+    if has_citations:
+        _increment(summary, "citation_backed_count")
+
+    has_explanation = bool(str(item.get("why_it_matters", "")).strip())
+    if has_explanation:
+        _increment(summary, "explained_count")
+
+    if provider != PERPLEXITY_PROVIDER:
+        return
+    if has_citations:
+        _increment(summary, "perplexity_citation_backed_count")
+    if has_explanation:
+        _increment(summary, "perplexity_explained_count")
+
+
+def _update_news_quality_summary(summary: dict[str, int | set[str]], item: dict) -> None:
+    _increment(summary, "count")
+    if bool(item.get("preferred_source")):
+        _increment(summary, "preferred_count")
+    if str(item.get("source_tier", "")).strip().lower() == "tier_1":
+        _increment(summary, "tier_1_count")
+
+    _record_news_domain(item, summary)
+    _record_news_topic(item, summary)
+    provider = _record_provider_counts(item, summary)
+    _record_citation_and_explanation_counts(item, summary, provider=provider)
+    if _is_fresh_item(item):
+        _increment(summary, "fresh_count")
+
+
 def summarize_news_packet_quality(packet: list[dict]) -> dict:
-    count = 0
-    preferred_count = 0
-    tier_1_count = 0
-    fresh_count = 0
-    citation_backed_count = 0
-    explained_count = 0
-    perplexity_item_count = 0
-    perplexity_citation_backed_count = 0
-    perplexity_explained_count = 0
-    official_signal_count = 0
-    unique_domains: set[str] = set()
-    unique_topics: set[str] = set()
+    summary = _blank_news_quality_summary()
 
     for item in packet:
-        if not isinstance(item, dict):
-            continue
+        if isinstance(item, dict):
+            _update_news_quality_summary(summary, item)
 
-        count += 1
-
-        if bool(item.get("preferred_source")):
-            preferred_count += 1
-
-        if str(item.get("source_tier", "")).strip().lower() == "tier_1":
-            tier_1_count += 1
-
-        if bool(item.get("official_source")):
-            source = str(item.get("source", "")).strip().lower()
-            if source:
-                unique_domains.add(f"official:{source}")
-        else:
-            domain = str(item.get("domain", "")).strip().lower()
-            if domain:
-                unique_domains.add(domain)
-
-        topic = str(item.get("topic", "")).strip().lower()
-        if topic:
-            unique_topics.add(topic)
-
-        provider = str(item.get("provider", "")).strip().lower()
-        if provider == PERPLEXITY_PROVIDER:
-            perplexity_item_count += 1
-        if provider == OFFICIAL_SIGNAL_PROVIDER or bool(item.get("official_source")):
-            official_signal_count += 1
-
-        citations = item.get("citations", [])
-        has_citations = isinstance(citations, list) and any(
-            str(value).strip() for value in citations
-        )
-        if has_citations:
-            citation_backed_count += 1
-
-        has_explanation = bool(str(item.get("why_it_matters", "")).strip())
-        if has_explanation:
-            explained_count += 1
-
-        if provider == PERPLEXITY_PROVIDER:
-            if has_citations:
-                perplexity_citation_backed_count += 1
-            if has_explanation:
-                perplexity_explained_count += 1
-
-        age_hours = item.get("age_hours")
-        try:
-            if age_hours is not None and float(age_hours) <= FRESH_NEWS_HOURS:
-                fresh_count += 1
-        except (TypeError, ValueError):
-            continue
-
+    unique_domains = summary.pop("unique_domains")
+    unique_topics = summary.pop("unique_topics")
+    assert isinstance(unique_domains, set)
+    assert isinstance(unique_topics, set)
     return {
-        "count": count,
-        "preferred_count": preferred_count,
-        "tier_1_count": tier_1_count,
+        **summary,
         "unique_domains": len(unique_domains),
-        "fresh_count": fresh_count,
         "topic_coverage_count": len(unique_topics),
-        "citation_backed_count": citation_backed_count,
-        "explained_count": explained_count,
-        "perplexity_item_count": perplexity_item_count,
-        "perplexity_citation_backed_count": perplexity_citation_backed_count,
-        "perplexity_explained_count": perplexity_explained_count,
-        "official_signal_count": official_signal_count,
     }
 
 
@@ -131,37 +172,25 @@ def _append_perplexity_quality_warnings(warnings: list[str], news_quality: dict)
         warnings.append("Perplexity 결과 일부에 시장 해석 메모가 빠져 있습니다")
 
 
-def assess_perplexity_fallback_need(news_packet: list[dict]) -> dict:
-    summary = summarize_news_packet_quality(news_packet)
-    reasons = _build_perplexity_fallback_reasons(summary)
-
-    return {
-        **summary,
-        "needs_legacy_fallback": bool(reasons),
-        "reasons": reasons,
-    }
-
-
-def assess_data_quality(packet: dict, news_packet: list[dict]) -> dict:
+def _zero_ratio(packet: dict) -> float:
     macro = packet.get("macro", [])
     us_indices = packet.get("us_indices", [])
     tech_stocks = packet.get("tech_stocks", [])
     btc = packet.get("bitcoin", {})
-
     numeric_points = (
         macro + us_indices + tech_stocks + btc.get("etf_points", []) + [btc.get("spot", {})]
     )
     zero_points = [
         p for p in numeric_points if isinstance(p, dict) and _safe_price(p.get("price", 0.0)) <= 0.0
     ]
+    return (len(zero_points) / len(numeric_points)) if numeric_points else 1.0
 
-    zero_ratio = (len(zero_points) / len(numeric_points)) if numeric_points else 1.0
-    news_quality = summarize_news_packet_quality(news_packet)
+
+def _build_data_quality_warnings(news_quality: dict, zero_ratio: float) -> list[str]:
     trusted_signal_count = news_quality["preferred_count"] + news_quality["official_signal_count"]
     authoritative_signal_count = (
         news_quality["tier_1_count"] + news_quality["official_signal_count"]
     )
-
     warnings: list[str] = []
     if zero_ratio >= 0.6:
         warnings.append(f"가격 데이터의 {zero_ratio * 100:.0f}%가 누락됐거나 생략 상태입니다")
@@ -187,6 +216,24 @@ def assess_data_quality(packet: dict, news_packet: list[dict]) -> dict:
     ):
         warnings.append(f"24시간 내 최신 뉴스가 {news_quality['fresh_count']}건으로 부족합니다")
     _append_perplexity_quality_warnings(warnings, news_quality)
+    return warnings
+
+
+def assess_perplexity_fallback_need(news_packet: list[dict]) -> dict:
+    summary = summarize_news_packet_quality(news_packet)
+    reasons = _build_perplexity_fallback_reasons(summary)
+
+    return {
+        **summary,
+        "needs_legacy_fallback": bool(reasons),
+        "reasons": reasons,
+    }
+
+
+def assess_data_quality(packet: dict, news_packet: list[dict]) -> dict:
+    zero_ratio = _zero_ratio(packet)
+    news_quality = summarize_news_packet_quality(news_packet)
+    warnings = _build_data_quality_warnings(news_quality, zero_ratio)
 
     if news_quality["count"] < MIN_NEWS_ITEMS or zero_ratio >= 0.8:
         status = "critical"

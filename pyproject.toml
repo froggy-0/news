@@ -21,3 +21,27 @@ select = ["E4", "E7", "E9", "F", "I"]
 [tool.ruff.lint.isort]
 known-first-party = ["morning_brief"]
 
+[tool.mypy]
+python_version = "3.11"
+strict = true
+mypy_path = ["src"]
+files = [
+    "src/morning_brief/brief_formatting.py",
+    "src/morning_brief/brief_review.py",
+    "src/morning_brief/briefing.py",
+    "src/morning_brief/config.py",
+    "src/morning_brief/emailer.py",
+    "src/morning_brief/observability.py",
+    "src/morning_brief/pipeline.py",
+    "src/morning_brief/data/data_quality.py",
+    "src/morning_brief/data/market.py",
+    "src/morning_brief/data/sources/btc_etf_official.py",
+    "src/morning_brief/data/sources/fred.py",
+    "src/morning_brief/data/sources/provider_runtime.py",
+]
+ignore_missing_imports = true
+follow_imports = "skip"
+warn_unused_configs = true
+show_error_codes = true
+exclude = ["^outputs/", "^\\.cache/", "^\\.venv/"]
+disable_error_code = ["import-untyped", "type-arg", "no-any-return", "no-untyped-def"]

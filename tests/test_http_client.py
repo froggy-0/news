@@ -93,7 +93,7 @@ def test_get_text_with_retry_retries_429_and_uses_retry_after(monkeypatch):
     provider_runtime.reset_provider_runtime_state()
 
     text = http_client.get_text_with_retry(
-        "https://example.com/rate-limited", provider="alpha_vantage"
+        "https://example.com/rate-limited", provider="perplexity"
     )
 
     assert text == "ok"
@@ -128,7 +128,7 @@ def test_get_text_with_retry_parses_http_date_retry_after(monkeypatch):
     provider_runtime.reset_provider_runtime_state()
 
     text = http_client.get_text_with_retry(
-        "https://example.com/retry-after-date", provider="alpha_vantage"
+        "https://example.com/retry-after-date", provider="perplexity"
     )
 
     assert text == "ok"
@@ -168,9 +168,9 @@ def test_get_text_with_retry_uses_exponential_backoff_without_retry_after(monkey
 def test_get_text_with_retry_skips_provider_with_open_circuit(monkeypatch):
     monkeypatch.setattr(http_client, "is_host_resolvable", lambda *_: True)
     provider_runtime.reset_provider_runtime_state()
-    provider_runtime.open_circuit("alpha_vantage", "quota exhausted")
+    provider_runtime.open_circuit("perplexity", "quota exhausted")
 
     with pytest.raises(http_client.HttpFetchError) as exc_info:
-        http_client.get_text_with_retry("https://example.com/data", provider="alpha_vantage")
+        http_client.get_text_with_retry("https://example.com/data", provider="perplexity")
 
     assert "quota exhausted" in str(exc_info.value)

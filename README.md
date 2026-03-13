@@ -83,7 +83,6 @@ cp .env.example .env
 - `GMAIL_OAUTH_INTERACTIVE` (로컬 OAuth 로그인 필요 시 `true`)
 
 참고:
-- `ALPHA_VANTAGE_API_KEY`는 하위 호환용 환경변수 이름만 남아 있고 현재 파이프라인에서는 사용하지 않습니다.
 - `OPENAI_WEB_SEARCH_*` 환경변수는 하위 호환용으로만 남아 있고 현재 파이프라인에서는 사용하지 않습니다.
 
 ## 3) Gmail API 준비 (최초 1회)
@@ -155,6 +154,7 @@ pytest -q
 make fmt
 make lint
 make test
+make typecheck
 make check
 make validate-pre-commit
 ```

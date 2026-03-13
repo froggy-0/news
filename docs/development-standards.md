@@ -24,7 +24,7 @@
 1. 관련 코드, 테스트, 문서를 읽고 변경 범위를 정합니다.
 2. 구현은 하나의 책임 단위로 나눠 진행합니다.
 3. 동작이 달라지면 테스트를 먼저 추가하거나 함께 수정합니다.
-4. `make fmt`, `make lint`, `make test`, `make check` 순서로 검증합니다.
+4. `make fmt`, `make lint`, `make test`, `make typecheck`, `make check` 순서로 검증합니다.
 5. 설정, 환경변수, 운영 절차가 바뀌면 `README.md`를 갱신합니다.
 
 ## 4. Python 코드 규칙

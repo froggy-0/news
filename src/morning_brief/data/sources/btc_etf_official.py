@@ -192,10 +192,10 @@ def _extract_bitb_structured_values(text: str) -> tuple[str, float, float, int, 
 
     return (
         as_of,
-        float(total_btc_raw),
-        float(aum_usd_raw),
-        int(float(shares_outstanding_raw)),
-        int(float(daily_volume_raw)),
+        float(_parse_numeric(total_btc_raw)),
+        float(_parse_numeric(aum_usd_raw)),
+        int(_parse_numeric(shares_outstanding_raw, integer=True)),
+        int(_parse_numeric(daily_volume_raw, integer=True)),
     )
 
 
@@ -230,9 +230,11 @@ def parse_bitb_snapshot(text: str) -> BitcoinEtfIssuerSnapshot:
     except HttpFetchError:
         as_of = _extract_page_date(normalized)
         aum_usd = _extract_first_matching_value(normalized, ["Net Assets (AUM)", "Net Assets"])
-        shares_outstanding = _extract_value(normalized, "Shares Outstanding")
-        daily_volume = _extract_first_matching_value(
-            normalized, ["Daily Volume (Shares)", "Daily Volume"]
+        shares_outstanding = int(round(_extract_value(normalized, "Shares Outstanding")))
+        daily_volume = int(
+            round(
+                _extract_first_matching_value(normalized, ["Daily Volume (Shares)", "Daily Volume"])
+            )
         )
         total_btc = _extract_value(normalized, "Bitcoin in Trust")
         bitcoin_per_share = _extract_value(normalized, "Bitcoin per Share")
@@ -355,26 +357,36 @@ def _extract_response_text(payload: dict[str, Any]) -> str:
     if isinstance(output_text, str) and output_text.strip():
         return output_text.strip()
 
-    choices = payload.get("choices")
-    if isinstance(choices, list) and choices:
-        first = choices[0]
-        if isinstance(first, dict):
-            message = first.get("message")
-            if isinstance(message, dict):
-                content = message.get("content")
-                if isinstance(content, str) and content.strip():
-                    return content.strip()
-                if isinstance(content, list):
-                    parts: list[str] = []
-                    for item in content:
-                        if isinstance(item, dict):
-                            text = str(item.get("text", "")).strip()
-                            if text:
-                                parts.append(text)
-                    if parts:
-                        return "\n".join(parts)
+    choice_text = _extract_choice_message_text(payload.get("choices"))
+    if choice_text:
+        return choice_text
 
     raise HttpFetchError("Perplexity ETF 참조 응답에서 JSON 본문을 찾지 못했어요.")
+
+
+def _extract_choice_message_text(choices: object) -> str:
+    if not isinstance(choices, list) or not choices:
+        return ""
+    first = choices[0]
+    if not isinstance(first, dict):
+        return ""
+    message = first.get("message")
+    if not isinstance(message, dict):
+        return ""
+    content = message.get("content")
+    if isinstance(content, str) and content.strip():
+        return content.strip()
+    if not isinstance(content, list):
+        return ""
+
+    parts = [
+        text
+        for item in content
+        if isinstance(item, dict)
+        for text in [str(item.get("text", "")).strip()]
+        if text
+    ]
+    return "\n".join(parts)
 
 
 def _decode_reference_snapshot_json(text: str) -> dict[str, Any]:

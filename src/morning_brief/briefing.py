@@ -175,6 +175,83 @@ def _news_reference(item: dict) -> str:
     return str(item.get("url", "")).strip() or "출처 없음"
 
 
+def _fallback_news_lines(news: list[dict]) -> list[str]:
+    lines: list[str] = []
+    for item in news[:5]:
+        why_it_matters = (
+            str(item.get("why_it_matters", "")).strip() or "시장 해석에 바로 연결되는 기사입니다."
+        )
+        lines.append(f"- {item['title']} | {why_it_matters} | {_news_reference(item)}")
+    return lines
+
+
+def _fallback_btc_spot_line(btc_spot: dict) -> tuple[str, float | None, float | None]:
+    btc_spot_price = _point_price(btc_spot)
+    btc_spot_change = _point_change_pct(btc_spot)
+    if btc_spot_price is None or btc_spot_change is None:
+        return "비트코인 현물은 이번 집계에서 확인되지 않았습니다.", btc_spot_price, btc_spot_change
+    return (
+        f"비트코인 현물은 {btc_spot_price:.2f}달러({btc_spot_change:+.2f}%)"
+        f"{_point_suffix(btc_spot)} 수준이었습니다.",
+        btc_spot_price,
+        btc_spot_change,
+    )
+
+
+def _fear_greed_line(btc: dict) -> str:
+    fg_value = btc.get("fear_greed_value")
+    fg_label = btc.get("fear_greed_label")
+    if fg_value is not None and fg_label:
+        return f"공포탐욕지수는 {fg_value}({fg_label})로 확인됐습니다."
+    return "공포탐욕지수는 이번 집계에서 확인되지 않았습니다."
+
+
+def _fallback_macro_lines(macro: list[dict], sentiment_text: str) -> list[str]:
+    lines = [
+        f"{_fmt_point(point)} [출처: {_market_source_label(point)}]"
+        for point in macro
+        if _fmt_point(point)
+    ]
+    if sentiment_text:
+        lines.append(f"{sentiment_text} [출처: alternative.me]")
+    return lines[:4]
+
+
+def _fallback_stock_lines(
+    tech: list[dict],
+    btc: dict,
+    btc_spot: dict,
+    btc_spot_price: float | None,
+    btc_spot_change: float | None,
+) -> list[str]:
+    stock_lines = [
+        f"{point['label']} | {(_point_change_pct(point) or 0.0):+.2f}% | {point['label']} 흐름을 확인했습니다{_point_suffix(point)} | [출처: Stooq]"
+        for point in tech
+        if _point_change_pct(point) is not None
+    ][:4]
+    if btc_spot_price is not None and btc_spot_change is not None:
+        stock_lines.append(
+            f"BTC-USD | {btc_spot_change:+.2f}% | 비트코인 현물은 {btc_spot_price:.2f}달러였습니다{_point_suffix(btc_spot)} | [출처: CoinGecko]"
+        )
+    official_flow_btc = btc.get("official_etf_daily_flow_btc")
+    official_supported = btc.get("official_etf_supported_tickers", [])
+    official_total_btc = btc.get("official_etf_total_btc")
+    if official_flow_btc is not None:
+        stock_lines.append(
+            f"BTC ETF | {official_flow_btc:+,.2f} BTC | 직전 스냅샷 대비 {'순유입' if official_flow_btc >= 0 else '순유출'}입니다 | [출처: Perplexity structured response]"
+        )
+    if official_supported and official_total_btc:
+        stock_lines.append(
+            f"BTC ETF 보유량 | {official_total_btc:,.2f} BTC | 공식 발행사 기준으로 집계한 {', '.join(official_supported)} 합산 보유량입니다 | [출처: Perplexity structured response]"
+        )
+    etf_total_volume = btc.get("etf_total_volume")
+    if etf_total_volume is not None:
+        stock_lines.append(
+            f"BTC ETF 거래량 | {etf_total_volume:,}주 | 주요 ETF 합산 거래량입니다 | [출처: Stooq/yfinance]"
+        )
+    return stock_lines
+
+
 def _fallback_brief(packet: dict, timezone: str) -> str:
     now = datetime.now(ZoneInfo(timezone))
     date_str = now.strftime("%Y-%m-%d")
@@ -186,96 +263,18 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
     ]
     btc = packet.get("bitcoin", {})
     news = packet.get("news", [])[:5]
-
-    top_gainers = sorted(tech, key=lambda x: _point_change_pct(x) or 0.0, reverse=True)[:3]
-    top_losers = sorted(tech, key=lambda x: _point_change_pct(x) or 0.0)[:3]
-    mover_parts: list[str] = []
-    seen_labels: set[str] = set()
-    for point in top_gainers + top_losers:
-        label = point.get("label", "")
-        change_pct = _point_change_pct(point)
-        if not label or label in seen_labels:
-            continue
-        if change_pct is None:
-            continue
-        seen_labels.add(label)
-        mover_parts.append(f"{label}({change_pct:+.2f}%){_point_suffix(point)}")
-        if len(mover_parts) >= 4:
-            break
-    news_lines = []
-    for item in news[:5]:
-        why_it_matters = (
-            str(item.get("why_it_matters", "")).strip() or "시장 해석에 바로 연결되는 기사입니다."
-        )
-        news_lines.append(f"- {item['title']} | {why_it_matters} | {_news_reference(item)}")
+    news_lines = _fallback_news_lines(news)
 
     macro_text = _format_points(macro, "핵심 매크로 지표 데이터가 일부 누락되었습니다.")
     index_text = _format_points(indices, "주요 지수 데이터가 일부 누락되었습니다.")
 
     btc_spot = btc.get("spot", {})
-    fg_value = btc.get("fear_greed_value")
-    fg_label = btc.get("fear_greed_label")
-    official_supported = btc.get("official_etf_supported_tickers", [])
-    official_compared = btc.get("official_etf_compared_tickers", [])
-    official_total_btc = btc.get("official_etf_total_btc")
-    official_flow_btc = btc.get("official_etf_daily_flow_btc")
-    official_flow_usd = btc.get("official_etf_daily_flow_usd")
-
-    if fg_value is not None and fg_label:
-        sentiment_text = f"공포탐욕지수는 {fg_value}({fg_label})로 확인됐습니다."
-    else:
-        sentiment_text = "공포탐욕지수는 이번 집계에서 확인되지 않았습니다."
-
-    btc_spot_line = "비트코인 현물은 이번 집계에서 확인되지 않았습니다."
-    btc_spot_price = _point_price(btc_spot) if isinstance(btc_spot, dict) else None
-    btc_spot_change = _point_change_pct(btc_spot) if isinstance(btc_spot, dict) else None
-    if btc_spot_price is not None and btc_spot_change is not None:
-        btc_spot_line = (
-            f"비트코인 현물은 {btc_spot_price:.2f}달러({btc_spot_change:+.2f}%)"
-            f"{_point_suffix(btc_spot)} 수준이었습니다."
-        )
-
-    official_etf_lines: list[str] = []
-    if official_supported and official_total_btc:
-        supported_text = ", ".join(official_supported)
-        official_etf_lines.append(
-            f"공식 발행사 기준으로 집계한 {supported_text} 합산 보유량은 {official_total_btc:,.2f} BTC였습니다."
-        )
-    if official_compared and official_flow_btc is not None:
-        direction = "순유입" if official_flow_btc >= 0 else "순유출"
-        flow_usd_text = ""
-        if official_flow_usd is not None:
-            flow_usd_text = f", 달러 기준 약 {abs(official_flow_usd):,.0f}달러"
-        official_etf_lines.append(
-            f"직전 스냅샷과 비교한 공식 ETF 흐름은 {abs(official_flow_btc):,.2f} BTC {direction}{flow_usd_text}로 계산됐습니다."
-        )
-
-    macro_lines = [
-        f"{_fmt_point(point)} [출처: {_market_source_label(point)}]"
-        for point in macro
-        if _fmt_point(point)
-    ]
-    stock_lines = [
-        f"{point['label']} | {(_point_change_pct(point) or 0.0):+.2f}% | {point['label']} 흐름을 확인했습니다{_point_suffix(point)} | [출처: Stooq]"
-        for point in tech
-        if _point_change_pct(point) is not None
-    ][:4]
-    if isinstance(btc_spot, dict) and btc_spot_price is not None and btc_spot_change is not None:
-        stock_lines.append(
-            f"BTC-USD | {btc_spot_change:+.2f}% | 비트코인 현물은 {btc_spot_price:.2f}달러였습니다{_point_suffix(btc_spot)} | [출처: CoinGecko]"
-        )
-    if official_flow_btc is not None:
-        stock_lines.append(
-            f"BTC ETF | {official_flow_btc:+,.2f} BTC | 직전 스냅샷 대비 {'순유입' if official_flow_btc >= 0 else '순유출'}입니다 | [출처: Perplexity structured response]"
-        )
-    if official_supported and official_total_btc:
-        stock_lines.append(
-            f"BTC ETF 보유량 | {official_total_btc:,.2f} BTC | 공식 발행사 기준으로 집계한 {', '.join(official_supported)} 합산 보유량입니다 | [출처: Perplexity structured response]"
-        )
-    if btc.get("etf_total_volume") is not None:
-        stock_lines.append(
-            f"BTC ETF 거래량 | {btc.get('etf_total_volume', 0):,}주 | 주요 ETF 합산 거래량입니다 | [출처: Stooq/yfinance]"
-        )
+    if not isinstance(btc_spot, dict):
+        btc_spot = {}
+    sentiment_text = _fear_greed_line(btc)
+    btc_spot_line, btc_spot_price, btc_spot_change = _fallback_btc_spot_line(btc_spot)
+    macro_lines = _fallback_macro_lines(macro, sentiment_text)
+    stock_lines = _fallback_stock_lines(tech, btc, btc_spot, btc_spot_price, btc_spot_change)
 
     body = f"""Morning Market Brief ({date_str})
 
@@ -342,12 +341,7 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
     }
 
 거시 지표
-{
-        _bullet_lines(
-            macro_lines[:3]
-            + ([f"{sentiment_text} [출처: alternative.me]"] if sentiment_text else [])
-        )
-    }
+{_bullet_lines(macro_lines)}
 
 배경과 해석
 종목별로는 같은 AI 테마 안에서도 차이가 보였고, 비트코인과 ETF 흐름도 가격과 완전히 같은 방향으로만 움직이지는 않았습니다.

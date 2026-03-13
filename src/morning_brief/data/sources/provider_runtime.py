@@ -31,15 +31,8 @@ class ProviderStats:
 
 DEFAULT_POLICY = ProviderPolicy(name="default")
 PROVIDER_POLICIES = {
-    "alpha_vantage": ProviderPolicy(
-        name="alpha_vantage",
-        min_interval_seconds=1.05,
-        base_backoff_seconds=1.5,
-        max_backoff_seconds=8.0,
-    ),
     "coingecko": ProviderPolicy(name="coingecko", min_interval_seconds=0.25),
     "fred": ProviderPolicy(name="fred", min_interval_seconds=0.1, base_backoff_seconds=1.0),
-    "gdelt": ProviderPolicy(name="gdelt", min_interval_seconds=0.4, base_backoff_seconds=1.0),
     "btc_etf_official": ProviderPolicy(
         name="btc_etf_official",
         min_interval_seconds=0.25,

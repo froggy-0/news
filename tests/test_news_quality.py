@@ -144,7 +144,7 @@ def test_fetch_news_stays_on_rss_path_when_minimum_is_met(monkeypatch):
     assert items[0].provider == "legacy_rss"
 
 
-def test_fetch_news_uses_broad_rss_without_gdelt(monkeypatch):
+def test_fetch_news_uses_broad_rss_only(monkeypatch):
     now = datetime.now(timezone.utc)
     narrow_item = NewsItem(
         title="Fed signals patience",

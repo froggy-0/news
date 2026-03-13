@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 
 from morning_brief.data.market_policy import canonical_key_for, canonical_label_for
 from morning_brief.data.sources.http_client import HttpFetchError, get_json_with_retry
@@ -92,17 +91,8 @@ def fetch_macro_points_from_fred(api_key: str) -> list[MarketPoint]:
     return points
 
 
-def build_fred_packet(points: list[MarketPoint]) -> dict:
-    return {
-        "provider": "FRED",
-        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-        "points": [point.__dict__ for point in points],
-    }
-
-
 __all__ = [
     "HttpFetchError",
     "SERIES_MAP",
     "fetch_macro_points_from_fred",
-    "build_fred_packet",
 ]

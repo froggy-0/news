@@ -28,7 +28,6 @@ class Settings:
     prompt_template_dir: Path
     prompt_template_version: str
     fred_api_key: str
-    alpha_vantage_api_key: str
     perplexity_api_key: str
     grok_api_key: str
     grok_model: str
@@ -125,8 +124,6 @@ def load_settings() -> Settings:
             "PROMPT_TEMPLATE_VERSION", DEFAULT_PROMPT_TEMPLATE_VERSION
         ).strip(),
         fred_api_key=os.getenv("FRED_API_KEY", "").strip(),
-        # Alpha Vantage free tier is intentionally disabled in the pipeline.
-        alpha_vantage_api_key="",
         perplexity_api_key=os.getenv("PERPLEXITY_API_KEY", "").strip(),
         grok_api_key=os.getenv("GROK_API_KEY", "").strip(),
         grok_model=os.getenv("GROK_MODEL", "grok-4.20-beta-latest-non-reasoning").strip(),

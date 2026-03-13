@@ -81,13 +81,6 @@ def _warn_once(key: str, message: str, *args) -> None:
     logger.warning(message, *args)
 
 
-def _warn_alpha_vantage_disabled_once() -> None:
-    _warn_once(
-        "alpha_vantage_disabled",
-        "Alpha Vantage free tier는 비활성화돼 있어서 이 설정값은 무시할게요.",
-    )
-
-
 def _history_with_retry(ticker: str, period: str, interval: str):
     if not is_host_resolvable(YAHOO_FINANCE_HOST):
         _warn_once(
@@ -370,11 +363,8 @@ def fetch_macro_points(fred_api_key: str = "") -> list[MarketPoint]:
     return _fallback_macro_points()
 
 
-def fetch_us_index_points(alpha_vantage_api_key: str = "") -> list[MarketPoint]:
+def fetch_us_index_points() -> list[MarketPoint]:
     # Stooq index symbols are inconsistent; use liquid ETF proxies for stability.
-    if alpha_vantage_api_key:
-        _warn_alpha_vantage_disabled_once()
-
     points = [
         _safe_stooq_point(
             label=canonical_label_for(canonical_key),
@@ -388,10 +378,7 @@ def fetch_us_index_points(alpha_vantage_api_key: str = "") -> list[MarketPoint]:
     return points
 
 
-def fetch_tech_stock_points(alpha_vantage_api_key: str = "") -> list[MarketPoint]:
-    if alpha_vantage_api_key:
-        _warn_alpha_vantage_disabled_once()
-
+def fetch_tech_stock_points() -> list[MarketPoint]:
     points = [
         _safe_stooq_point(
             label=ticker,
@@ -744,15 +731,12 @@ def _fetch_official_btc_etf_data(
 
 
 def fetch_bitcoin_snapshot(
-    alpha_vantage_api_key: str = "",
     cache_dir: Path | None = None,
     perplexity_api_key: str = "",
     observer: PipelineObserver | None = None,
 ) -> BitcoinSnapshot:
     spot = _fetch_btc_spot_point()
     volumes: list[int | None] = []
-    if alpha_vantage_api_key:
-        _warn_alpha_vantage_disabled_once()
 
     etf_points = []
     for ticker in BTC_ETF_TICKERS:
@@ -796,7 +780,6 @@ def fetch_bitcoin_snapshot(
 
 def build_market_packet(
     fred_api_key: str = "",
-    alpha_vantage_api_key: str = "",
     perplexity_api_key: str = "",
     cache_dir: Path | None = None,
     observer: PipelineObserver | None = None,
@@ -805,10 +788,9 @@ def build_market_packet(
     cache_file = _market_point_cache_file(effective_cache_dir)
     previous_by_key = _load_market_point_cache(cache_file)
     macro_points = fetch_macro_points(fred_api_key=fred_api_key)
-    us_index_points = fetch_us_index_points(alpha_vantage_api_key=alpha_vantage_api_key)
-    tech_stock_points = fetch_tech_stock_points(alpha_vantage_api_key=alpha_vantage_api_key)
+    us_index_points = fetch_us_index_points()
+    tech_stock_points = fetch_tech_stock_points()
     btc_snapshot = fetch_bitcoin_snapshot(
-        alpha_vantage_api_key=alpha_vantage_api_key,
         cache_dir=effective_cache_dir,
         perplexity_api_key=perplexity_api_key,
         observer=observer,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from typing import TypedDict
 
 SECTION_HEADING_RE = re.compile(r"^(\d+)\.\s+(.+)$")
 SENTENCE_BREAK_RE = re.compile(r"(?<=[.!?])\s+(?=[\"'“”‘’(]*[A-Za-z가-힣])")
@@ -27,6 +28,17 @@ WATCH_LABELS = {
     "체크 포인트",
 }
 ALL_SUBSECTION_LABELS = CONCLUSION_LABELS | METRIC_LABELS | INSIGHT_LABELS | WATCH_LABELS
+SECTION_KIND_BY_LABEL = {
+    **{label: "conclusion" for label in CONCLUSION_LABELS},
+    **{label: "metrics" for label in METRIC_LABELS},
+    **{label: "insight" for label in INSIGHT_LABELS},
+    **{label: "watch" for label in WATCH_LABELS},
+}
+
+
+class _SectionGroupState(TypedDict):
+    label: str
+    lines: list[str]
 
 
 def split_reference_block(body: str) -> tuple[str, list[str]]:
@@ -123,54 +135,58 @@ def extract_brief_structure(body: str) -> tuple[str, str, list[tuple[str, str]]]
 
 def split_section_groups(content: str) -> dict[str, tuple[str, str]]:
     normalized = improve_readability_spacing(content)
-    current_kind = "conclusion"
-    groups = {
+    groups: dict[str, _SectionGroupState] = {
         "conclusion": {"label": "핵심 판단", "lines": []},
         "metrics": {"label": "주요 지표", "lines": []},
         "insight": {"label": "배경과 해석", "lines": []},
         "watch": {"label": "주목할 변수", "lines": []},
     }
-    explicit_labels_found = False
+    explicit_labels_found = _collect_section_groups(
+        normalized,
+        groups,
+    )
+    if not explicit_labels_found:
+        _backfill_section_groups_without_labels(normalized, groups)
 
+    return {
+        key: (value["label"], "\n".join(value["lines"]).strip()) for key, value in groups.items()
+    }
+
+
+def _collect_section_groups(
+    normalized: str,
+    groups: dict[str, _SectionGroupState],
+) -> bool:
+    current_kind = "conclusion"
+    explicit_labels_found = False
     for raw_line in normalized.splitlines():
         line = raw_line.strip()
         if not line:
             groups[current_kind]["lines"].append("")
             continue
 
-        if line in CONCLUSION_LABELS:
-            current_kind = "conclusion"
-            explicit_labels_found = True
-            continue
-
-        if line in METRIC_LABELS:
-            current_kind = "metrics"
-            explicit_labels_found = True
-            continue
-
-        if line in INSIGHT_LABELS:
-            current_kind = "insight"
-            explicit_labels_found = True
-            continue
-
-        if line in WATCH_LABELS:
-            current_kind = "watch"
+        next_kind = SECTION_KIND_BY_LABEL.get(line)
+        if next_kind is not None:
+            current_kind = next_kind
             explicit_labels_found = True
             continue
 
         groups[current_kind]["lines"].append(line)
+    return explicit_labels_found
 
-    if not explicit_labels_found:
-        paragraphs = [part.strip() for part in normalized.split("\n\n") if part.strip()]
-        if paragraphs:
-            groups["conclusion"]["lines"] = [paragraphs[0]]
-            for paragraph in paragraphs[1:]:
-                lines = [line.strip() for line in paragraph.splitlines() if line.strip()]
-                if lines and all(line.startswith("- ") for line in lines):
-                    groups["metrics"]["lines"].extend(lines)
-                else:
-                    groups["insight"]["lines"].append(paragraph)
 
-    return {
-        key: (value["label"], "\n".join(value["lines"]).strip()) for key, value in groups.items()
-    }
+def _backfill_section_groups_without_labels(
+    normalized: str,
+    groups: dict[str, _SectionGroupState],
+) -> None:
+    paragraphs = [part.strip() for part in normalized.split("\n\n") if part.strip()]
+    if not paragraphs:
+        return
+
+    groups["conclusion"]["lines"] = [paragraphs[0]]
+    for paragraph in paragraphs[1:]:
+        lines = [line.strip() for line in paragraph.splitlines() if line.strip()]
+        if lines and all(line.startswith("- ") for line in lines):
+            groups["metrics"]["lines"].extend(lines)
+        else:
+            groups["insight"]["lines"].append(paragraph)
