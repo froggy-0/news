@@ -484,6 +484,7 @@ def test_build_news_packet_omits_grok_signals_when_grok_fails(monkeypatch):
     now = datetime.now(timezone.utc)
     monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")
     monkeypatch.setenv("ENABLE_OFFICIAL_X_SIGNALS", "true")
+    monkeypatch.setenv("ENABLE_LEGACY_NEWS_FALLBACK", "false")
     monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
     monkeypatch.setenv("GROK_API_KEY", "grok-test-key")
     monkeypatch.setattr(
