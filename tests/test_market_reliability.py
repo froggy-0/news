@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from morning_brief.data.market import build_market_packet
+from morning_brief.data.market import build_market_packet, fetch_macro_points
 from morning_brief.models import BitcoinSnapshot, MarketPoint
 
 
@@ -173,3 +173,44 @@ def test_build_market_packet_omits_anomalous_values_and_records_footer_note(
     assert dxy["resolved_value"] is None
     assert dxy["validation_status"] == "anomaly"
     assert any("허용 범위" in note for note in packet["data_footer_notes"])
+
+
+def test_fetch_macro_points_uses_yfinance_for_dxy_even_when_fred_is_available(monkeypatch):
+    monkeypatch.setattr(
+        "morning_brief.data.market.fetch_macro_points_from_fred",
+        lambda _: [
+            _point(
+                label="미국 10년물 국채금리",
+                ticker="DGS10",
+                canonical_key="us10y",
+                price=4.2,
+                change_pct=0.1,
+            ),
+            _point(
+                label="VIX",
+                ticker="VIXCLS",
+                canonical_key="vix",
+                price=18.5,
+                change_pct=-1.2,
+            ),
+        ],
+    )
+
+    def fake_yfinance_point(*, label: str, ticker: str, canonical_key: str, price_scale: float):
+        return _point(
+            label=label,
+            ticker=ticker,
+            canonical_key=canonical_key,
+            price=104.3 if canonical_key == "dxy" else 4.4,
+            change_pct=0.2,
+        )
+
+    monkeypatch.setattr("morning_brief.data.market._safe_yfinance_point", fake_yfinance_point)
+
+    points = fetch_macro_points(fred_api_key="fred-key")
+
+    by_key = {point.canonical_key: point for point in points}
+    assert by_key["us10y"].ticker == "DGS10"
+    assert by_key["vix"].ticker == "VIXCLS"
+    assert by_key["dxy"].ticker == "DX-Y.NYB"
+    assert by_key["dxy"].price == 104.3

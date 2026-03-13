@@ -15,7 +15,6 @@ FRED_OBSERVATION_URL = "https://api.stlouisfed.org/fred/series/observations"
 SERIES_MAP = [
     ("us10y", "DGS10"),
     ("us2y", "DGS2"),
-    ("dxy", "DTWEXBGS"),
     ("vix", "VIXCLS"),
 ]
 

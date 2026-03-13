@@ -149,6 +149,37 @@ def test_parse_reference_snapshot_response_keeps_only_valid_official_entries():
     assert snapshots[0].total_btc == 752_989.52
 
 
+def test_parse_reference_snapshot_response_accepts_member_only_json():
+    payload = {
+        "choices": [
+            {
+                "message": {
+                    "content": """
+                    "snapshots": [
+                      {
+                        "ticker": "IBIT",
+                        "issuer": "iShares",
+                        "source_url": "https://www.ishares.com/us/products/333011/ishares-bitcoin-trust-etf",
+                        "as_of": "03/11/2026",
+                        "shares_outstanding": 1340640000,
+                        "daily_volume": 51079056,
+                        "aum_usd": 53660350151,
+                        "total_btc": 752989.52,
+                        "bitcoin_per_share": 0.00056165
+                      }
+                    ]
+                    """.strip()
+                }
+            }
+        ]
+    }
+
+    snapshots = official._parse_reference_snapshot_response(payload)
+
+    assert [snapshot.ticker for snapshot in snapshots] == ["IBIT"]
+    assert snapshots[0].source_url == official.IBIT_URL
+
+
 def test_fetch_official_btc_etf_snapshots_uses_perplexity_request(monkeypatch):
     expected = [
         BitcoinEtfIssuerSnapshot(

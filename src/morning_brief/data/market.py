@@ -331,11 +331,34 @@ def _safe_stooq_point_and_volume(
 
 
 def fetch_macro_points(fred_api_key: str = "") -> list[MarketPoint]:
+    def _fallback_macro_points(
+        existing_canonical_keys: set[str] | None = None,
+    ) -> list[MarketPoint]:
+        existing = existing_canonical_keys or set()
+        return [
+            _safe_yfinance_point(
+                label=canonical_label_for(canonical_key),
+                ticker=ticker,
+                canonical_key=canonical_key_for(ticker, canonical_key),
+                price_scale=scale,
+            )
+            for canonical_key, ticker, scale in MACRO_FALLBACK_TARGETS
+            if canonical_key not in existing
+        ]
+
     if fred_api_key:
         try:
             points = fetch_macro_points_from_fred(fred_api_key)
-            logger.info("거시 지표는 FRED 기준으로 가져왔어요.")
-            return points
+            existing_keys = {point.canonical_key for point in points if point.canonical_key}
+            supplemental_points = _fallback_macro_points(existing_keys)
+            if supplemental_points:
+                logger.info(
+                    "거시 지표는 FRED 기준으로 가져오고, 일부 보완 지표(%s)는 yfinance 기준으로 채웠어요.",
+                    ", ".join(point.label for point in supplemental_points),
+                )
+            else:
+                logger.info("거시 지표는 FRED 기준으로 가져왔어요.")
+            return [*points, *supplemental_points]
         except Exception as exc:
             _warn_once(
                 "fred_fallback",
@@ -344,15 +367,7 @@ def fetch_macro_points(fred_api_key: str = "") -> list[MarketPoint]:
             )
 
     logger.info("거시 지표는 yfinance 폴백 기준으로 가져왔어요.")
-    return [
-        _safe_yfinance_point(
-            label=canonical_label_for(canonical_key),
-            ticker=ticker,
-            canonical_key=canonical_key_for(ticker, canonical_key),
-            price_scale=scale,
-        )
-        for canonical_key, ticker, scale in MACRO_FALLBACK_TARGETS
-    ]
+    return _fallback_macro_points()
 
 
 def fetch_us_index_points(alpha_vantage_api_key: str = "") -> list[MarketPoint]:

@@ -75,6 +75,10 @@ NEXT_DATA_RE = re.compile(
     r'<script[^>]+id="__NEXT_DATA__"[^>]*>\s*(?P<payload>\{.*?\})\s*</script>',
     flags=re.DOTALL | re.IGNORECASE,
 )
+JSON_CODE_BLOCK_RE = re.compile(
+    r"```(?:json)?\s*(?P<payload>\{.*?\})\s*```",
+    flags=re.DOTALL | re.IGNORECASE,
+)
 
 
 def _normalize_page_text(text: str) -> str:
@@ -373,6 +377,48 @@ def _extract_response_text(payload: dict[str, Any]) -> str:
     raise HttpFetchError("Perplexity ETF 참조 응답에서 JSON 본문을 찾지 못했어요.")
 
 
+def _decode_reference_snapshot_json(text: str) -> dict[str, Any]:
+    stripped = text.strip()
+    candidates: list[str] = []
+
+    if not stripped:
+        raise HttpFetchError("Perplexity ETF 참조 응답에서 JSON 본문을 찾지 못했어요.")
+
+    code_block_match = JSON_CODE_BLOCK_RE.search(stripped)
+    if code_block_match:
+        candidates.append(code_block_match.group("payload").strip())
+
+    candidates.append(stripped)
+
+    snapshot_member_index = stripped.find('"snapshots"')
+    if snapshot_member_index != -1:
+        member_payload = stripped[snapshot_member_index:].strip().strip(",")
+        candidates.append(f"{{{member_payload}}}")
+
+    first_brace = stripped.find("{")
+    last_brace = stripped.rfind("}")
+    if first_brace != -1 and last_brace != -1 and first_brace < last_brace:
+        candidates.append(stripped[first_brace : last_brace + 1].strip())
+
+    seen: set[str] = set()
+    for candidate in candidates:
+        normalized_candidate = candidate.strip()
+        if not normalized_candidate or normalized_candidate in seen:
+            continue
+        seen.add(normalized_candidate)
+        try:
+            decoded = json.loads(normalized_candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(decoded, dict) and (
+            "snapshots" in decoded
+            or {"ticker", "source_url", "shares_outstanding", "total_btc"} <= decoded.keys()
+        ):
+            return decoded
+
+    raise HttpFetchError("Perplexity ETF 참조 JSON을 읽지 못했어요.")
+
+
 def _parse_numeric(value: object, *, integer: bool = False) -> int | float:
     if isinstance(value, (int, float)):
         return int(value) if integer else float(value)
@@ -425,13 +471,21 @@ def _snapshot_from_item(item: dict[str, Any]) -> BitcoinEtfIssuerSnapshot:
 
 def _parse_reference_snapshot_response(payload: dict[str, Any]) -> list[BitcoinEtfIssuerSnapshot]:
     text = _extract_response_text(payload)
-    try:
-        decoded = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise HttpFetchError("Perplexity ETF 참조 JSON을 읽지 못했어요.") from exc
-
+    decoded = _decode_reference_snapshot_json(text)
     if not isinstance(decoded, dict):
         raise HttpFetchError("Perplexity ETF 참조 JSON 구조가 예상과 달라요.")
+
+    if (
+        "snapshots" not in decoded
+        and {
+            "ticker",
+            "source_url",
+            "shares_outstanding",
+            "total_btc",
+        }
+        <= decoded.keys()
+    ):
+        decoded = {"snapshots": [decoded]}
 
     raw_snapshots = decoded.get("snapshots", [])
     if not isinstance(raw_snapshots, list):

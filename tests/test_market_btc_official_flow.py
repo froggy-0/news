@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from morning_brief.data.market import fetch_bitcoin_snapshot
+from morning_brief.data.sources.http_client import HttpFetchError
 from morning_brief.models import BitcoinEtfIssuerSnapshot, MarketPoint
 
 
@@ -202,6 +203,33 @@ def test_fetch_bitcoin_snapshot_ignores_alpha_vantage_key_and_uses_stooq(
     assert calls == ["IBIT", "FBTC", "ARKB", "BITB", "GBTC"]
     assert len(snapshot.etf_points) == 5
     assert snapshot.etf_total_volume == 50
+
+
+def test_fetch_bitcoin_snapshot_keeps_pipeline_alive_when_perplexity_etf_parsing_fails(
+    monkeypatch, tmp_path: Path
+):
+    monkeypatch.setattr(
+        "morning_brief.data.market._fetch_btc_spot_point",
+        lambda: MarketPoint(label="BTC-USD", ticker="BTC-USD", price=80_000.0, change_pct=1.2),
+    )
+    monkeypatch.setattr("morning_brief.data.market._fetch_fear_greed", lambda: (60, "Greed"))
+    monkeypatch.setattr(
+        "morning_brief.data.market._safe_stooq_point_and_volume",
+        lambda label, ticker, stooq_symbol=None: (
+            MarketPoint(label=label, ticker=ticker, price=50.0, change_pct=1.0),
+            10,
+        ),
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.market.fetch_official_btc_etf_snapshots",
+        lambda **_: (_ for _ in ()).throw(HttpFetchError("broken snapshots")),
+    )
+
+    snapshot = fetch_bitcoin_snapshot(cache_dir=tmp_path, perplexity_api_key="pplx-test-key")
+
+    assert snapshot.official_etf_snapshots == []
+    assert snapshot.official_etf_total_btc is None
+    assert snapshot.official_etf_daily_flow_btc is None
 
 
 @pytest.mark.skip(reason="Alpha Vantage free tier is intentionally disabled.")
