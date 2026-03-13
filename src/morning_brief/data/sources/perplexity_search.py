@@ -232,7 +232,6 @@ def _search_once(
             search_domain_filter=list(domain_filter),
             search_recency_filter=recency_filter,
             country="US",
-            search_mode="web",
         )
     except RateLimitError as exc:
         raise HttpFetchError(

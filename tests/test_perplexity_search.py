@@ -80,6 +80,7 @@ def test_fetch_news_from_perplexity_calls_search_api_with_expected_payload(monke
     assert calls[0]["query"] == "macro query"
     assert calls[0]["search_domain_filter"] == ["reuters.com", "federalreserve.gov"]
     assert calls[0]["max_results"] == ps.SEARCH_MAX_RESULTS
+    assert "search_mode" not in calls[0]
     assert items[0].source == "Reuters"
     assert items[0].provider == "perplexity_search"
     assert items[0].topic == "macro"
