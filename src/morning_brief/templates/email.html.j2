@@ -118,11 +118,17 @@
                       <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#2563eb;font-size:12px;line-height:1.4;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;">Layer 2 · 주요 뉴스</div>
                       {% for item in news_items %}
                       <div style="padding:16px 0 0 0;{% if not loop.first %}border-top:1px solid #e2e8f0; margin-top:16px;{% endif %}">
-                        <div class="text-strong" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#0f172a;font-size:18px;line-height:1.45;font-weight:800;">{{ item.headline }}</div>
+                        <div class="text-strong" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#0f172a;font-size:18px;line-height:1.45;font-weight:800;">
+                          {% if item.safe_url %}
+                          <a href="{{ item.safe_url }}" style="color:#0f172a;text-decoration:none;">{{ item.headline }}</a>
+                          {% else %}
+                          {{ item.headline }}
+                          {% endif %}
+                        </div>
                         <div class="text-body" style="padding:8px 0 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:14px;line-height:1.75;">{{ item.interpretation }}</div>
-                        {% if item.safe_url %}
+                        {% if item.source_label %}
                         <div style="padding:8px 0 0 0;">
-                          <a href="{{ item.safe_url }}" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#1d4ed8;font-size:13px;line-height:1.7;text-decoration:underline;word-break:break-all;">{{ item.url_label }}</a>
+                          <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#64748b;font-size:13px;line-height:1.7;">출처: {{ item.source_label }}</div>
                         </div>
                         {% endif %}
                       </div>

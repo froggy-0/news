@@ -183,6 +183,60 @@ def test_render_briefing_email_html_renders_reference_links():
     assert 'href="https://www.reuters.com/world/us/example"' in html
 
 
+def test_render_briefing_email_html_links_headlines_and_shows_domain_label():
+    body = """Morning Market Brief (2026-03-12)
+
+2. LAYER 2 | 주요 뉴스
+핵심 이슈
+- Nvidia unveils new AI cluster | 데이터센터 투자 기대를 다시 자극했습니다. | https://www.reuters.com/world/us/example
+"""
+
+    html = render_briefing_email_html(
+        subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
+        body=body,
+    )
+
+    assert 'href="https://www.reuters.com/world/us/example"' in html
+    assert ">Nvidia unveils new AI cluster<" in html
+    assert "출처: reuters.com" in html
+    assert ">https://www.reuters.com/world/us/example<" not in html
+
+
+def test_render_briefing_email_html_leaves_headline_plain_text_when_url_missing():
+    body = """Morning Market Brief (2026-03-12)
+
+2. LAYER 2 | 주요 뉴스
+핵심 이슈
+- Nvidia unveils new AI cluster | 데이터센터 투자 기대를 다시 자극했습니다.
+"""
+
+    html = render_briefing_email_html(
+        subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
+        body=body,
+    )
+
+    assert "Nvidia unveils new AI cluster" in html
+    assert 'href="https://"' not in html
+    assert "출처:" not in html
+
+
+def test_render_briefing_email_html_formats_x_signal_source_label():
+    body = """Morning Market Brief (2026-03-12)
+
+2. LAYER 2 | 주요 뉴스
+핵심 이슈
+- BlackRock updates BTC ETF flow note | 공식 X 업데이트입니다. | https://x.com/BlackRock/status/1234567890
+"""
+
+    html = render_briefing_email_html(
+        subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
+        body=body,
+    )
+
+    assert 'href="https://x.com/BlackRock/status/1234567890"' in html
+    assert "출처: x.com/BlackRock" in html
+
+
 def test_render_briefing_email_html_omits_unsafe_reference_links():
     body = SAMPLE_BRIEF + "\n\n참고 출처\n- Bad Link — javascript:alert(1)"
 
@@ -219,6 +273,20 @@ def test_render_briefing_email_text_builds_plain_text_fallback():
     assert "[LAYER 3 | 종목 브리핑]" in text
     assert "구독 해지: mailto:sender@example.com" in text
     assert "GitHub: https://github.com/froggy-0/news" in text
+
+
+def test_render_briefing_email_text_renders_full_news_url_when_present():
+    text = render_briefing_email_text(
+        subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
+        body="""Morning Market Brief (2026-03-12)
+
+2. LAYER 2 | 주요 뉴스
+핵심 이슈
+- Nvidia unveils new AI cluster | 데이터센터 투자 기대를 다시 자극했습니다. | https://www.reuters.com/world/us/example
+""",
+    )
+
+    assert "출처 URL: https://www.reuters.com/world/us/example" in text
 
 
 def test_split_reference_block_separates_reference_lines():

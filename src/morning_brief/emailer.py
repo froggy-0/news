@@ -59,7 +59,7 @@ class _EmailNewsItem:
     interpretation: str
     url: str
     safe_url: str | None
-    url_label: str
+    source_label: str | None
 
 
 @dataclass(frozen=True)
@@ -193,6 +193,46 @@ def _safe_link(url: str) -> str | None:
     return None
 
 
+def _source_label(url: str | None) -> str | None:
+    if not url:
+        return None
+
+    safe_url = _safe_link(url)
+    if safe_url is None:
+        return None
+
+    parsed = urlparse(safe_url)
+    hostname = parsed.netloc.lower()
+    if not hostname:
+        return None
+
+    if hostname.startswith("www."):
+        hostname = hostname[4:]
+
+    if hostname.endswith("twitter.com"):
+        hostname = "x.com"
+
+    if hostname == "x.com":
+        path_parts = [part for part in parsed.path.split("/") if part]
+        if path_parts:
+            return f"x.com/{path_parts[0]}"
+        return hostname
+
+    return hostname
+
+
+def _parse_news_metric_line(line: str) -> tuple[str, str, str | None]:
+    parts = [part.strip() for part in line.split("|")]
+    if len(parts) >= 3:
+        headline = " | ".join(parts[:-2]).strip()
+        interpretation = parts[-2].strip()
+        source_url = parts[-1].strip()
+        return headline or line.strip(), interpretation, source_url or None
+    if len(parts) == 2:
+        return parts[0].strip() or line.strip(), parts[1].strip(), None
+    return line.strip(), "", None
+
+
 def _extract_layer_one_text(sections: list[_EmailSection], notice: str, title: str) -> str:
     summary_lines = _build_top_summary_lines(sections)
     if summary_lines:
@@ -236,17 +276,20 @@ def _build_news_items(
             _first_sentence(important_news.groups["watch"][1]),
         ]
         fallback_interpretation = next((item for item in interpretations if item), "")
-        for index, headline in enumerate(
+        for index, line in enumerate(
             _first_metric_lines(important_news.groups["metrics"][1], limit=limit)
         ):
-            safe_url = safe_reference_urls[index] if index < len(safe_reference_urls) else None
+            headline, interpretation, source_url = _parse_news_metric_line(line)
+            safe_url = _safe_link(source_url or "")
+            if safe_url is None and index < len(safe_reference_urls):
+                safe_url = safe_reference_urls[index]
             items.append(
                 _EmailNewsItem(
                     headline=headline,
-                    interpretation=fallback_interpretation,
+                    interpretation=interpretation or fallback_interpretation,
                     url=safe_url or "",
                     safe_url=safe_url,
-                    url_label=safe_url or "출처 없음",
+                    source_label=_source_label(safe_url),
                 )
             )
 
@@ -264,7 +307,7 @@ def _build_news_items(
                 interpretation=interpretation or _first_non_empty_paragraph(section.content),
                 url=safe_url or "",
                 safe_url=safe_url,
-                url_label=safe_url or "출처 없음",
+                source_label=_source_label(safe_url),
             )
         )
     return items

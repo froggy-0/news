@@ -12,7 +12,7 @@ Morning Market Brief
 {% for item in news_items -%}
 - {{ item.headline }}
   해석: {{ item.interpretation }}
-  {% if item.safe_url %}출처: {{ item.safe_url }}{% else %}출처: 없음{% endif %}
+  {% if item.safe_url %}출처 URL: {{ item.safe_url }}{% else %}출처: 없음{% endif %}
 {% endfor %}
 
 {% endif -%}

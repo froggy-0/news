@@ -4,6 +4,7 @@ import json
 from types import SimpleNamespace
 
 from morning_brief.briefing import (
+    _append_reference_block,
     _fallback_brief,
     _improve_readability_spacing,
     _inject_quality_notice,
@@ -134,6 +135,24 @@ def test_fallback_brief_marks_previous_values_and_appends_footer_notes():
     assert "(전일 값)" in briefing
     assert "데이터 처리 메모" in briefing
     assert "달러 인덱스는 허용 범위를 벗어나 생략했어요." in briefing
+
+
+def test_append_reference_block_includes_news_item_urls():
+    text = "Morning Market Brief (2026-03-14)\n\n1. LAYER 1 | 오늘 한줄 판단\n본문"
+    packet = {
+        "news": [
+            {
+                "title": "Nvidia unveils new AI cluster",
+                "url": "https://www.reuters.com/world/us/example",
+                "citations": ["https://www.reuters.com/world/us/example"],
+            }
+        ]
+    }
+
+    updated = _append_reference_block(text, packet)
+
+    assert "참고 출처" in updated
+    assert "- Nvidia unveils new AI cluster — https://www.reuters.com/world/us/example" in updated
 
 
 def test_generate_briefing_rewrites_when_validator_finds_plain_language_issue(monkeypatch):

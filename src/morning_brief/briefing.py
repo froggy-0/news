@@ -98,13 +98,28 @@ def _inject_quality_notice(text: str, packet: dict) -> str:
 
 
 def _append_reference_block(text: str, packet: dict) -> str:
-    references = packet.get("web_search_references", [])
-    if not isinstance(references, list) or not references:
+    news_items = packet.get("news", [])
+    web_references = packet.get("web_search_references", [])
+    if not isinstance(news_items, list):
+        news_items = []
+    if not isinstance(web_references, list):
+        web_references = []
+    if not news_items and not web_references:
         return text
 
     lines = ["참고 출처"]
     seen: set[str] = set()
-    for item in references[:5]:
+    for item in news_items[:5]:
+        if not isinstance(item, dict):
+            continue
+        url = _news_reference(item)
+        if not url or url == "출처 없음" or url in seen:
+            continue
+        seen.add(url)
+        title = str(item.get("title", "")).strip() or "출처"
+        lines.append(f"- {title} — {url}")
+
+    for item in web_references[:5]:
         if not isinstance(item, dict):
             continue
         title = str(item.get("title", "")).strip() or "출처"
