@@ -242,7 +242,7 @@ def test_search_once_retries_timeout_with_provider_backoff(monkeypatch):
     )
     monkeypatch.setattr(provider_runtime.random, "random", lambda: 0.5)
 
-    payload, usage = ps._search_once(
+    payload, usage, usage_present = ps._search_once(
         client=client,
         query="macro query",
         domain_filter=("reuters.com",),
@@ -252,6 +252,7 @@ def test_search_once_retries_timeout_with_provider_backoff(monkeypatch):
     assert len(calls) == 2
     assert payload["results"][0]["title"] == "Fed keeps options open"
     assert usage["input_tokens"] is None
+    assert usage_present is False
     assert sleeps and round(sleeps[0], 2) == 1.5
 
 
@@ -370,7 +371,8 @@ def test_fetch_news_from_perplexity_leaves_token_usage_null_when_usage_missing(
     assert usage.input_tokens is None
     assert usage.output_tokens is None
     assert usage.cached_input_tokens is None
-    assert usage.usage_parse_failures == 1
+    assert usage.usage_parse_failures == 0
+    assert not [event for event in observer.events if event["event"] == "provider_usage_unparsed"]
 
 
 def test_fetch_news_from_perplexity_records_empty_reason(monkeypatch, tmp_path):
@@ -406,3 +408,115 @@ def test_fetch_news_from_perplexity_records_empty_reason(monkeypatch, tmp_path):
     assert events[0]["count"] == 0
     assert events[0]["items"] == []
     assert events[0]["reason"] == "api_empty"
+
+
+def test_parse_results_filters_ft_market_data_pages():
+    topic = ps.SearchTopic(
+        name="us_equity",
+        query="equity query",
+        retry_query="",
+        domain_filter=("reuters.com", ps.FT_CONTENT_URL_PREFIX),
+    )
+
+    items = ps._parse_results(
+        payload={
+            "results": [
+                {
+                    "title": "Markets data - stock market, bond, equity, commodity prices - FT.com",
+                    "url": "https://markets.ft.com/data/equities/tearsheet/summary?s=DJI:DJI",
+                    "snippet": "Not a news story.",
+                    "date": "2026-03-13T01:00:00Z",
+                },
+                {
+                    "title": "Meta Platforms Inc, FB2A:FRA Summary - FT.com",
+                    "url": "https://www.ft.com/content/summary?foo=bar",
+                    "snippet": "Still not a news story.",
+                    "date": "2026-03-13T01:00:00Z",
+                },
+            ]
+        },
+        topic=topic,
+    )
+
+    assert items == []
+
+
+def test_parse_results_accepts_ft_article_paths():
+    topic = ps.SearchTopic(
+        name="macro",
+        query="macro query",
+        retry_query="",
+        domain_filter=(ps.FT_CONTENT_URL_PREFIX,),
+    )
+
+    items = ps._parse_results(
+        payload={
+            "results": [
+                {
+                    "title": "Fed outlook keeps bond investors cautious",
+                    "url": "https://www.ft.com/content/abcd1234",
+                    "snippet": "A valid FT article.",
+                    "date": "2026-03-13T01:00:00Z",
+                }
+            ]
+        },
+        topic=topic,
+    )
+
+    assert len(items) == 1
+    assert items[0].url == "https://www.ft.com/content/abcd1234"
+
+
+def test_fetch_news_from_perplexity_logs_filtered_empty_results(monkeypatch, tmp_path):
+    observer = PipelineObserver(output_dir=tmp_path)
+    monkeypatch.setattr(
+        ps,
+        "TOPIC_SPECS",
+        (
+            ps.SearchTopic(
+                name="us_equity",
+                query="equity query",
+                retry_query="",
+                domain_filter=("reuters.com", ps.FT_CONTENT_URL_PREFIX),
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        ps,
+        "_build_client",
+        lambda api_key: _Client(
+            [
+                _SDKResponse(
+                    {
+                        "results": [
+                            {
+                                "title": "Dow Jones Industrial Average, DJI:DJI Summary - FT.com",
+                                "url": "https://markets.ft.com/data/indices/tearsheet/summary?s=DJI:DJI",
+                                "snippet": "Bad FT data page.",
+                                "date": "2026-03-13T01:00:00Z",
+                            }
+                        ]
+                    }
+                )
+            ],
+            [],
+        ),
+    )
+
+    items = ps.fetch_news_from_perplexity(
+        max_items=5,
+        api_key="pplx-test-key",
+        observer=observer,
+    )
+
+    assert items == []
+    collected_events = [
+        event for event in observer.events if event["event"] == "perplexity_items_collected"
+    ]
+    assert collected_events[0]["reason"] == "no_results"
+    filter_events = [
+        event for event in observer.events if event["event"] == "perplexity_result_filter_empty"
+    ]
+    assert len(filter_events) == 1
+    assert filter_events[0]["topic"] == "us_equity"
+    assert filter_events[0]["raw_result_count"] == 1

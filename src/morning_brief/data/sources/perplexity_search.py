@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -69,6 +70,14 @@ TOPIC_IMPACT_LINES = {
     "bitcoin": "비트코인 가격 심리와 ETF 흐름을 이해하는 데 도움이 되는 기사예요.",
 }
 
+FT_CONTENT_URL_PREFIX = "https://www.ft.com/content/"
+DISALLOWED_MARKET_DATA_DOMAINS = {"markets.ft.com"}
+DISALLOWED_MARKET_DATA_URL_PARTS = ("/data/", "/tearsheet/", "/summary?", "/summary/")
+DISALLOWED_MARKET_DATA_TITLE_PATTERNS = (
+    re.compile(r"markets data\b.*ft\.com$", re.IGNORECASE),
+    re.compile(r"\bsummary\s*-\s*ft\.com$", re.IGNORECASE),
+)
+
 
 @dataclass(frozen=True)
 class SearchTopic:
@@ -83,18 +92,20 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
     SearchTopic(
         name="macro",
         query=(
-            "Latest U.S. market-moving macro news about Federal Reserve, Treasury yields, "
-            "dollar, and VIX. Prefer reliable reporting and official releases only."
+            "Latest U.S. market-moving macro news article or report published within the last 24 "
+            "hours about the Federal Reserve, Treasury yields, dollar, and VIX. Prefer reliable "
+            "reporting and official releases only. Exclude market data pages and summary pages."
         ),
         retry_query=(
-            "Latest Federal Reserve or U.S. Treasury or VIX news affecting U.S. markets today. "
-            "Prefer reliable reporting and official releases only."
+            "Latest Federal Reserve or U.S. Treasury or VIX news article or report published "
+            "within the last 24 hours affecting U.S. markets. Prefer reliable reporting and "
+            "official releases only. Exclude market data pages and summary pages."
         ),
         domain_filter=(
             "reuters.com",
             "bloomberg.com",
             "wsj.com",
-            "ft.com",
+            FT_CONTENT_URL_PREFIX,
             "cnbc.com",
             "federalreserve.gov",
             "home.treasury.gov",
@@ -103,18 +114,20 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
     SearchTopic(
         name="us_equity",
         query=(
-            "Latest U.S. stock market news on S&P 500, Nasdaq, semiconductors, or market breadth. "
-            "Prefer reliable reporting and exchange coverage."
+            "Latest U.S. stock market news article or report published within the last 24 hours "
+            "on the S&P 500, Nasdaq, semiconductors, or market breadth. Prefer reliable "
+            "reporting and exchange coverage. Exclude market data pages and summary pages."
         ),
         retry_query=(
-            "Latest Nasdaq or S&P 500 or semiconductor sector news moving the U.S. market today. "
-            "Prefer reliable reporting."
+            "Latest Nasdaq or S&P 500 or semiconductor sector news article or report published "
+            "within the last 24 hours moving the U.S. market. Prefer reliable reporting. Exclude "
+            "market data pages and summary pages."
         ),
         domain_filter=(
             "reuters.com",
             "bloomberg.com",
             "wsj.com",
-            "ft.com",
+            FT_CONTENT_URL_PREFIX,
             "cnbc.com",
             "nasdaq.com",
         ),
@@ -122,18 +135,21 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
     SearchTopic(
         name="ai_bigtech",
         query=(
-            "Latest AI and big tech market-moving news on Nvidia, Microsoft, Apple, Amazon, "
-            "Google, Meta, AMD, TSMC, ASML, or Broadcom. Prefer reliable reporting and company IR."
+            "Latest AI and big tech market-moving news article or report published within the "
+            "last 24 hours on Nvidia, Microsoft, Apple, Amazon, Google, Meta, AMD, TSMC, ASML, "
+            "or Broadcom. Prefer reliable reporting and company IR. Exclude market data pages "
+            "and summary pages."
         ),
         retry_query=(
-            "Latest AI infrastructure, data center, semiconductor, or big tech capex news today. "
-            "Prefer reliable reporting and company IR."
+            "Latest AI infrastructure, data center, semiconductor, or big tech capex news article "
+            "or report published within the last 24 hours. Prefer reliable reporting and company "
+            "IR. Exclude market data pages and summary pages."
         ),
         domain_filter=(
             "reuters.com",
             "bloomberg.com",
             "wsj.com",
-            "ft.com",
+            FT_CONTENT_URL_PREFIX,
             "cnbc.com",
             "investor.nvidia.com",
             "news.microsoft.com",
@@ -150,18 +166,21 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
     SearchTopic(
         name="bitcoin",
         query=(
-            "Latest bitcoin market news on BTC ETF flows, regulation, institutional demand, or "
-            "price-moving events. Prefer reliable reporting, ETF issuers, and regulators."
+            "Latest bitcoin market news article or report published within the last 24 hours on "
+            "BTC ETF flows, regulation, institutional demand, or price-moving events. Prefer "
+            "reliable reporting, ETF issuers, and regulators. Exclude market data pages and "
+            "summary pages."
         ),
         retry_query=(
-            "Latest spot bitcoin ETF flow or bitcoin regulation news today. Prefer reliable reporting "
-            "and official sources."
+            "Latest spot bitcoin ETF flow or bitcoin regulation news article or report published "
+            "within the last 24 hours. Prefer reliable reporting and official sources. Exclude "
+            "market data pages and summary pages."
         ),
         domain_filter=(
             "reuters.com",
             "bloomberg.com",
             "wsj.com",
-            "ft.com",
+            FT_CONTENT_URL_PREFIX,
             "cnbc.com",
             "coindesk.com",
             "sec.gov",
@@ -206,9 +225,22 @@ def _parse_datetime(value: object) -> datetime | None:
     return parsed.replace(tzinfo=timezone.utc)
 
 
+def _matches_source_filter(url: str, source_filter: str) -> bool:
+    normalized_url = str(url or "").strip()
+    candidate = str(source_filter or "").strip()
+    if not normalized_url or not candidate:
+        return False
+    if candidate.startswith(("http://", "https://")):
+        return normalized_url.lower().startswith(candidate.lower())
+    domain = normalize_domain(normalized_url)
+    return domain_matches(domain, candidate)
+
+
 def _is_allowed_domain(url: str, allowed_domains: tuple[str, ...]) -> bool:
     domain = normalize_domain(url)
-    return any(domain_matches(domain, candidate) for candidate in allowed_domains)
+    if not domain:
+        return False
+    return any(_matches_source_filter(url, candidate) for candidate in allowed_domains)
 
 
 def _build_client(api_key: str) -> Perplexity:
@@ -250,9 +282,7 @@ def _first_usage_int(container: object, *paths: tuple[str, ...]) -> int | None:
 
 
 def _usage_snapshot(response: object, payload: dict[str, Any]) -> dict[str, int | None]:
-    usage = _usage_field(response, "usage")
-    if usage is None:
-        usage = payload.get("usage") if isinstance(payload, dict) else None
+    usage = _usage_container(response, payload)
 
     return {
         "input_tokens": _usage_int(usage, "prompt_tokens"),
@@ -269,6 +299,15 @@ def _usage_snapshot(response: object, payload: dict[str, Any]) -> dict[str, int 
             ("reasoning_tokens",),
         ),
     }
+
+
+def _usage_container(response: object, payload: dict[str, Any]) -> object | None:
+    usage = _usage_field(response, "usage")
+    if usage is not None:
+        return usage
+    if isinstance(payload, dict):
+        return payload.get("usage")
+    return None
 
 
 def _format_status_error(exc: APIStatusError) -> str:
@@ -355,7 +394,7 @@ def _search_once(
     query: str,
     domain_filter: tuple[str, ...],
     recency_filter: str,
-) -> tuple[dict[str, Any], dict[str, int | None]]:
+) -> tuple[dict[str, Any], dict[str, int | None], bool]:
     unavailable_reason = disabled_reason(PERPLEXITY_PROVIDER)
     if unavailable_reason:
         record_skip(PERPLEXITY_PROVIDER)
@@ -363,7 +402,7 @@ def _search_once(
             f"Perplexity는 이번 실행에서 더 이상 쓰지 않을게요: {unavailable_reason}"
         )
 
-    def perform_search() -> tuple[dict[str, Any], dict[str, int | None]]:
+    def perform_search() -> tuple[dict[str, Any], dict[str, int | None], bool]:
         try:
             response = client.search.create(
                 query=query,
@@ -392,7 +431,8 @@ def _search_once(
                 provider=PERPLEXITY_PROVIDER,
             )
 
-        return payload, _usage_snapshot(response, payload)
+        usage_present = _usage_container(response, payload) is not None
+        return payload, _usage_snapshot(response, payload), usage_present
 
     return execute_with_provider_retry(
         provider=PERPLEXITY_PROVIDER,
@@ -424,7 +464,12 @@ def _parse_results(*, payload: dict[str, Any], topic: SearchTopic) -> list[NewsI
 
         title = str(raw.get("title", "")).strip()
         url = str(raw.get("url", "")).strip()
-        if not title or not url or not _is_allowed_domain(url, topic.domain_filter):
+        if (
+            not title
+            or not url
+            or not _is_allowed_domain(url, topic.domain_filter)
+            or _is_disallowed_market_data_result(title=title, url=url)
+        ):
             continue
 
         snippet = _normalize_summary(raw.get("snippet"))
@@ -443,6 +488,19 @@ def _parse_results(*, payload: dict[str, Any], topic: SearchTopic) -> list[NewsI
         )
 
     return items
+
+
+def _is_disallowed_market_data_result(*, title: str, url: str) -> bool:
+    normalized_url = str(url or "").strip().lower()
+    normalized_title = str(title or "").strip()
+    domain = normalize_domain(normalized_url)
+    if domain in DISALLOWED_MARKET_DATA_DOMAINS:
+        return True
+    if any(part in normalized_url for part in DISALLOWED_MARKET_DATA_URL_PARTS):
+        return True
+    return any(
+        pattern.search(normalized_title) for pattern in DISALLOWED_MARKET_DATA_TITLE_PATTERNS
+    )
 
 
 def _collection_timestamp(item: NewsItem) -> str:
@@ -486,7 +544,7 @@ def _fetch_news_from_perplexity(
     for topic in TOPIC_SPECS:
         try:
             total_result_count = 0
-            payload, usage = _search_once(
+            payload, usage, usage_present = _search_once(
                 client=client,
                 query=topic.query,
                 domain_filter=topic.domain_filter,
@@ -504,9 +562,11 @@ def _fetch_news_from_perplexity(
                     output_tokens=usage["output_tokens"],
                     cached_input_tokens=usage["cached_input_tokens"],
                     reasoning_tokens=usage["reasoning_tokens"],
-                    usage_parse_failures=1 if all(value is None for value in usage.values()) else 0,
+                    usage_parse_failures=1
+                    if usage_present and all(value is None for value in usage.values())
+                    else 0,
                 )
-                if all(value is None for value in usage.values()):
+                if usage_present and all(value is None for value in usage.values()):
                     observer.log_event(
                         "provider_usage_unparsed",
                         provider=PERPLEXITY_PROVIDER,
@@ -514,7 +574,7 @@ def _fetch_news_from_perplexity(
                     )
             topic_items = _parse_results(payload=payload, topic=topic)
             if len(topic_items) < TOPIC_RESULT_TARGET and topic.retry_query:
-                retry_payload, retry_usage = _search_once(
+                retry_payload, retry_usage, retry_usage_present = _search_once(
                     client=client,
                     query=topic.retry_query,
                     domain_filter=topic.domain_filter,
@@ -535,10 +595,11 @@ def _fetch_news_from_perplexity(
                         cached_input_tokens=retry_usage["cached_input_tokens"],
                         reasoning_tokens=retry_usage["reasoning_tokens"],
                         usage_parse_failures=1
-                        if all(value is None for value in retry_usage.values())
+                        if retry_usage_present
+                        and all(value is None for value in retry_usage.values())
                         else 0,
                     )
-                    if all(value is None for value in retry_usage.values()):
+                    if retry_usage_present and all(value is None for value in retry_usage.values()):
                         observer.log_event(
                             "provider_usage_unparsed",
                             provider=PERPLEXITY_PROVIDER,
@@ -553,6 +614,13 @@ def _fetch_news_from_perplexity(
                 reason = None
                 if not topic_items:
                     reason = "api_empty" if total_result_count == 0 else "no_results"
+                    if total_result_count > 0:
+                        observer.log_event(
+                            "perplexity_result_filter_empty",
+                            topic=topic.name,
+                            raw_result_count=total_result_count,
+                            reason="non_article_results",
+                        )
                 observer.record_perplexity_items_collected(
                     topic=topic.name,
                     items=_loggable_perplexity_items(topic_items),
