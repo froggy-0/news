@@ -303,10 +303,12 @@ def _usage_snapshot(response: object, payload: dict[str, Any]) -> dict[str, int 
     usage = _usage_container(response, payload)
 
     return {
-        "input_tokens": _usage_int(usage, "prompt_tokens"),
-        "output_tokens": _usage_int(usage, "completion_tokens"),
+        "input_tokens": _first_usage_int(usage, ("prompt_tokens",), ("input_tokens",)),
+        "output_tokens": _first_usage_int(usage, ("completion_tokens",), ("output_tokens",)),
         "cached_input_tokens": _first_usage_int(
             usage,
+            ("input_tokens_details", "cache_read_input_tokens"),
+            ("input_tokens_details", "cache_creation_input_tokens"),
             ("input_tokens_details", "cached_tokens"),
             ("prompt_tokens_details", "cached_tokens"),
         ),
@@ -320,9 +322,14 @@ def _usage_snapshot(response: object, payload: dict[str, Any]) -> dict[str, int 
 
 
 def _usage_container(response: object, payload: dict[str, Any]) -> object | None:
-    usage = _usage_field(response, "usage")
-    if usage is not None:
-        return usage
+    usage_candidates = (
+        _usage_field(response, "usage"),
+        _usage_field(response, "model_extra", "usage"),
+        _usage_field(response, "__pydantic_extra__", "usage"),
+    )
+    for usage in usage_candidates:
+        if usage is not None:
+            return usage
     if isinstance(payload, dict):
         return payload.get("usage")
     return None

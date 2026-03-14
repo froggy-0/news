@@ -25,9 +25,10 @@ class _Client:
 
 
 class _SDKResponse:
-    def __init__(self, payload, *, usage=None):
+    def __init__(self, payload, *, usage=None, model_extra=None):
         self._payload = payload
         self.usage = usage
+        self.model_extra = model_extra or {}
 
     def model_dump(self):
         return self._payload
@@ -320,6 +321,64 @@ def test_fetch_news_from_perplexity_records_usage_and_topic_audit(monkeypatch, t
     assert events[0]["items"][0]["url"] == "https://www.reuters.com/world/us/fed-keeps-options-open"
     assert events[0]["items"][0]["domain"] == "reuters.com"
     assert "collected_at" in events[0]["items"][0]
+
+
+def test_fetch_news_from_perplexity_reads_usage_from_model_extra(monkeypatch, tmp_path):
+    observer = PipelineObserver(output_dir=tmp_path)
+    monkeypatch.setattr(
+        ps,
+        "TOPIC_SPECS",
+        (
+            ps.SearchTopic(
+                name="macro",
+                query="macro query",
+                retry_query="",
+                domain_filter=("reuters.com",),
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        ps,
+        "_build_client",
+        lambda api_key: _Client(
+            [
+                _SDKResponse(
+                    {
+                        "results": [
+                            {
+                                "title": "Fed keeps options open",
+                                "url": "https://www.reuters.com/world/us/fed-keeps-options-open",
+                                "snippet": "The Fed kept its options open.",
+                                "date": "2026-03-13T01:00:00Z",
+                            }
+                        ]
+                    },
+                    model_extra={
+                        "usage": {
+                            "input_tokens": 210,
+                            "output_tokens": 55,
+                            "input_tokens_details": {
+                                "cache_read_input_tokens": 11,
+                            },
+                        }
+                    },
+                )
+            ],
+            [],
+        ),
+    )
+
+    ps.fetch_news_from_perplexity(
+        max_items=5,
+        api_key="pplx-test-key",
+        observer=observer,
+    )
+
+    usage = observer.provider_usage["perplexity"]
+    assert usage.input_tokens == 210
+    assert usage.output_tokens == 55
+    assert usage.cached_input_tokens == 11
+    assert usage.usage_parse_failures == 0
 
 
 def test_fetch_news_from_perplexity_leaves_token_usage_null_when_usage_missing(
