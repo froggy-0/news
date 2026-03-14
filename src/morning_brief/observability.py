@@ -13,6 +13,26 @@ from morning_brief.data.sources.domain_utils import normalize_domain
 
 PREFERRED_PROVIDER_ORDER = ("openai", "perplexity", "grok")
 COLLECTED_ITEM_LOG_LIMIT = 20
+LLM_PRICING_USD_PER_1M = {
+    "openai": {
+        "input": 0.150,
+        "output": 0.600,
+        "cached_input": 0.075,
+        "reasoning": 0.600,
+    },
+    "perplexity": {
+        "input": 1.000,
+        "output": 1.000,
+        "cached_input": None,
+        "reasoning": None,
+    },
+    "grok": {
+        "input": None,
+        "output": None,
+        "cached_input": None,
+        "reasoning": None,
+    },
+}
 
 
 @dataclass
@@ -24,6 +44,63 @@ class ProviderUsageTotals:
     cached_input_tokens: int | None = None
     reasoning_tokens: int | None = None
     usage_parse_failures: int = 0
+
+
+def _token_cost_usd(*, tokens: int | None, rate_per_million: float | None) -> float | None:
+    if tokens is None or rate_per_million is None:
+        return None
+    return (tokens / 1_000_000.0) * rate_per_million
+
+
+def _provider_cost_usd(
+    *,
+    provider: str,
+    input_tokens: int | None,
+    output_tokens: int | None,
+    cached_input_tokens: int | None,
+    reasoning_tokens: int | None,
+) -> float | None:
+    pricing = LLM_PRICING_USD_PER_1M.get(provider)
+    if not pricing:
+        return None
+
+    input_rate = pricing.get("input")
+    output_rate = pricing.get("output")
+    cached_rate = pricing.get("cached_input")
+    reasoning_rate = pricing.get("reasoning")
+
+    if input_rate is None and output_rate is None:
+        return None
+
+    regular_input_tokens = input_tokens
+    if regular_input_tokens is not None and cached_input_tokens is not None:
+        regular_input_tokens = max(regular_input_tokens - cached_input_tokens, 0)
+
+    regular_output_tokens = output_tokens
+    if regular_output_tokens is not None and reasoning_tokens is not None:
+        regular_output_tokens = max(regular_output_tokens - reasoning_tokens, 0)
+
+    cost_parts = [
+        _token_cost_usd(tokens=regular_input_tokens, rate_per_million=input_rate),
+        _token_cost_usd(tokens=cached_input_tokens, rate_per_million=cached_rate),
+        _token_cost_usd(tokens=regular_output_tokens, rate_per_million=output_rate),
+        _token_cost_usd(tokens=reasoning_tokens, rate_per_million=reasoning_rate),
+    ]
+    non_null_parts = [part for part in cost_parts if part is not None]
+    if not non_null_parts:
+        return None
+    return round(sum(non_null_parts), 6)
+
+
+def _total_cost_usd(usage_summary: dict[str, dict[str, int | float | None]]) -> float | None:
+    costs = [
+        float(metrics["cost_usd"])
+        for metrics in usage_summary.values()
+        if metrics.get("cost_usd") is not None
+    ]
+    if not costs:
+        return None
+    return round(sum(costs), 6)
 
 
 class PipelineObserver:
@@ -220,10 +297,17 @@ class PipelineObserver:
         )
         return [*prioritized, *remaining]
 
-    def provider_usage_summary_payload(self) -> dict[str, dict[str, int | None]]:
-        payload: dict[str, dict[str, int | None]] = {}
+    def provider_usage_summary_payload(self) -> dict[str, dict[str, int | float | None]]:
+        payload: dict[str, dict[str, int | float | None]] = {}
         for provider in self._ordered_provider_names():
             totals = self.provider_usage[provider]
+            cost_usd = _provider_cost_usd(
+                provider=provider,
+                input_tokens=totals.input_tokens,
+                output_tokens=totals.output_tokens,
+                cached_input_tokens=totals.cached_input_tokens,
+                reasoning_tokens=totals.reasoning_tokens,
+            )
             payload[provider] = {
                 "requests": totals.requests,
                 "input_tokens": totals.input_tokens,
@@ -232,6 +316,7 @@ class PipelineObserver:
                 "reasoning_tokens": totals.reasoning_tokens,
                 "response_sources": totals.response_sources,
                 "usage_parse_failures": totals.usage_parse_failures,
+                "cost_usd": cost_usd,
             }
         return payload
 
@@ -240,7 +325,7 @@ class PipelineObserver:
         if not payload:
             return ""
 
-        def fmt(value: int | None) -> str:
+        def fmt(value: int | float | None) -> str:
             return "null" if value is None else str(value)
 
         parts = []
@@ -253,7 +338,8 @@ class PipelineObserver:
                     f"cached={fmt(metrics['cached_input_tokens'])}, "
                     f"reasoning={fmt(metrics['reasoning_tokens'])}, "
                     f"sources={fmt(metrics['response_sources'])}, "
-                    f"parse_failures={fmt(metrics['usage_parse_failures'])}]"
+                    f"parse_failures={fmt(metrics['usage_parse_failures'])}, "
+                    f"cost_usd={fmt(metrics['cost_usd'])}]"
                 )
             )
         return " | ".join(parts)
@@ -282,6 +368,7 @@ class PipelineObserver:
             "anomaly_count": len(self.anomalies),
             "anomalies": self.anomalies,
             "cache_statuses": self.cache_statuses,
+            "total_cost_usd": _total_cost_usd(usage_summary),
         }
         if extra:
             summary.update(extra)
