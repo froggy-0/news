@@ -42,6 +42,10 @@ MACRO_FALLBACK_TARGETS = [
     ("dxy", "DX-Y.NYB", 1.0),
     ("vix", "^VIX", 1.0),
 ]
+KOREA_INVESTOR_TARGETS = [
+    ("usdkrw", "KRW=X", 1.0),
+    ("nq_futures", "NQ=F", 1.0),
+]
 US_INDEX_TARGETS = [
     ("spy", "SPY", "spy.us"),
     ("qqq", "QQQ", "qqq.us"),
@@ -398,6 +402,36 @@ def fetch_tech_stock_points() -> list[MarketPoint]:
     return points
 
 
+def fetch_korea_investor_points() -> list[MarketPoint]:
+    points = [
+        _safe_yfinance_point(
+            label=canonical_label_for(canonical_key),
+            ticker=ticker,
+            canonical_key=canonical_key_for(ticker, canonical_key),
+            price_scale=scale,
+        )
+        for canonical_key, ticker, scale in KOREA_INVESTOR_TARGETS
+    ]
+    logger.info("한국 투자자 참고 지표는 yfinance 기준으로 가져왔어요.")
+    return points
+
+
+def _fear_greed_level_label(value: int | None) -> str | None:
+    if value is None:
+        return None
+    if 0 <= value <= 25:
+        return "극단적 공포"
+    if 26 <= value <= 45:
+        return "공포"
+    if 46 <= value <= 55:
+        return "중립"
+    if 56 <= value <= 75:
+        return "탐욕"
+    if 76 <= value <= 100:
+        return "극단적 탐욕"
+    return None
+
+
 def _fetch_fear_greed() -> tuple[int | None, str | None]:
     url = "https://api.alternative.me/fng/?limit=1"
     last_error: Exception | None = None
@@ -412,7 +446,7 @@ def _fetch_fear_greed() -> tuple[int | None, str | None]:
         )
         item = payload.get("data", [{}])[0]
         value = int(item.get("value"))
-        label = str(item.get("value_classification"))
+        label = _fear_greed_level_label(value)
         return value, label
     except Exception as exc:
         last_error = exc
@@ -791,6 +825,7 @@ def build_market_packet(
     cache_file = _market_point_cache_file(effective_cache_dir)
     previous_by_key = _load_market_point_cache(cache_file)
     macro_points = fetch_macro_points(fred_api_key=fred_api_key)
+    korea_watch_points = fetch_korea_investor_points()
     us_index_points = fetch_us_index_points()
     tech_stock_points = fetch_tech_stock_points()
     btc_snapshot = fetch_bitcoin_snapshot(
@@ -800,18 +835,21 @@ def build_market_packet(
     )
     all_current_points = [
         *macro_points,
+        *korea_watch_points,
         *us_index_points,
         *tech_stock_points,
         btc_snapshot.spot,
         *btc_snapshot.etf_points,
     ]
     macro_points = _resolve_points_from_cache(macro_points, previous_by_key)
+    korea_watch_points = _resolve_points_from_cache(korea_watch_points, previous_by_key)
     us_index_points = _resolve_points_from_cache(us_index_points, previous_by_key)
     tech_stock_points = _resolve_points_from_cache(tech_stock_points, previous_by_key)
     btc_snapshot.spot = _resolve_point_from_cache(btc_snapshot.spot, previous_by_key)
     btc_snapshot.etf_points = _resolve_points_from_cache(btc_snapshot.etf_points, previous_by_key)
     _save_market_point_cache(cache_file, all_current_points)
     macro_points, macro_notes = _validate_market_points(macro_points)
+    korea_watch_points, korea_watch_notes = _validate_market_points(korea_watch_points)
     us_index_points, index_notes = _validate_market_points(us_index_points)
     tech_stock_points, tech_notes = _validate_market_points(tech_stock_points)
     validated_spot, spot_note = _validate_market_point(btc_snapshot.spot)
@@ -820,6 +858,7 @@ def build_market_packet(
     btc_snapshot.etf_points = validated_etf_points
     data_footer_notes = [
         *macro_notes,
+        *korea_watch_notes,
         *index_notes,
         *tech_notes,
         *([spot_note] if spot_note else []),
@@ -828,6 +867,7 @@ def build_market_packet(
     packet = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "macro": [point.__dict__ for point in macro_points],
+        "korea_watch": [point.__dict__ for point in korea_watch_points],
         "us_indices": [point.__dict__ for point in us_index_points],
         "tech_stocks": [point.__dict__ for point in tech_stock_points],
         "data_footer_notes": data_footer_notes,

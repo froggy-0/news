@@ -46,7 +46,11 @@ def test_render_brief_prompts_contains_contract_and_packet(monkeypatch):
     assert "한국어로 번역" in instructions
     assert "최대 40자 안팎" in instructions
     assert "None" in instructions
-    assert "종목명 | 등락률 | 한줄 맥락 | 출처" in instructions
+    assert "오늘은 매수 관심 국면입니다" in instructions
+    assert "원/달러 환율" in instructions
+    assert "나스닥 선물" in instructions
+    assert "코스피" in instructions
+    assert "종목명은 {원인 한줄}로 {N}% {상승/하락}했습니다." in instructions
     assert "상관관계 중심" in instructions or "상관관계" in instructions
     assert "Prompt Version: market_brief_test" in instructions
     assert "<market_data_json>" in user_prompt
@@ -56,6 +60,8 @@ def test_render_brief_prompts_contains_contract_and_packet(monkeypatch):
     assert '"why_it_matters":"금리 흐름을 읽는 데 도움이 되는 기사예요."' in user_prompt
     assert '"official_signals"' in user_prompt
     assert "하단 `참고 출처` 섹션" in user_prompt
+    assert "원/달러 환율" in user_prompt
+    assert "오늘 미국 증시 흐름이 코스피에 미치는 영향" in user_prompt
 
 
 def test_prompt_cache_key_is_stable_and_sanitized(monkeypatch):
@@ -137,6 +143,8 @@ def test_render_brief_validator_prompts_contains_draft_and_packet(monkeypatch):
     assert "LAYER 2" in instructions
     assert "헤드라인 | 한줄 해석" in instructions
     assert "None" in instructions
+    assert "오늘은 매수 관심 국면입니다" in instructions
+    assert "코스피" in instructions
     assert "Prompt Version: market_brief_test" in instructions
     assert "<brief_text>" in user_prompt
     assert '"macro":[{"label":"US10Y"}]' in user_prompt
@@ -156,5 +164,7 @@ def test_render_brief_rewrite_prompts_contains_review_feedback(monkeypatch):
     assert "교정 에디터" in instructions
     assert "3개 번호 섹션 구조" in instructions
     assert "헤드라인 | 한줄 해석" in instructions
+    assert "오늘은 매수 관심 국면입니다" in instructions
+    assert "코스피" in instructions
     assert "<review_json>" in user_prompt
     assert '"rewrite_guidance":["쉬운 말로 바꾸기"]' in user_prompt

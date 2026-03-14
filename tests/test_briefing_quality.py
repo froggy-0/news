@@ -187,6 +187,99 @@ def test_fallback_brief_marks_previous_values_and_appends_footer_notes():
     assert "달러 인덱스는 허용 범위를 벗어나 생략했어요." in briefing
 
 
+def test_fallback_brief_includes_korean_investor_signals():
+    packet = {
+        "macro": [
+            {
+                "label": "미국 10년물 국채금리",
+                "ticker": "DGS10",
+                "price": 4.1,
+                "resolved_value": 4.1,
+                "change_pct": 0.2,
+                "canonical_key": "us10y",
+            },
+            {
+                "label": "VIX",
+                "ticker": "VIXCLS",
+                "price": 17.5,
+                "resolved_value": 17.5,
+                "change_pct": -1.1,
+                "canonical_key": "vix",
+            },
+        ],
+        "korea_watch": [
+            {
+                "label": "원/달러 환율",
+                "ticker": "KRW=X",
+                "price": 1330.5,
+                "resolved_value": 1330.5,
+                "change_pct": 0.12,
+                "canonical_key": "usdkrw",
+            },
+            {
+                "label": "나스닥 선물",
+                "ticker": "NQ=F",
+                "price": 20150.0,
+                "resolved_value": 20150.0,
+                "change_pct": 0.48,
+                "canonical_key": "nq_futures",
+            },
+        ],
+        "us_indices": [
+            {
+                "label": "S&P500",
+                "ticker": "SPY",
+                "price": 610.2,
+                "resolved_value": 610.2,
+                "change_pct": 0.9,
+                "canonical_key": "spy",
+            }
+        ],
+        "tech_stocks": [
+            {
+                "label": "AVGO",
+                "ticker": "AVGO",
+                "price": 150.0,
+                "resolved_value": 150.0,
+                "change_pct": -4.11,
+                "canonical_key": "avgo",
+            }
+        ],
+        "bitcoin": {
+            "spot": {
+                "label": "BTC-USD",
+                "ticker": "BTC-USD",
+                "price": 71_282.0,
+                "resolved_value": 71_282.0,
+                "change_pct": -0.16,
+                "canonical_key": "btc",
+            },
+            "etf_points": [],
+            "etf_total_volume": None,
+            "fear_greed_value": 60,
+            "fear_greed_label": "탐욕",
+            "official_etf_supported_tickers": [],
+            "official_etf_compared_tickers": [],
+            "official_etf_total_btc": None,
+            "official_etf_daily_flow_btc": None,
+            "official_etf_daily_flow_usd": None,
+        },
+        "news": [{"topic": "ai_bigtech", "title": "Example", "why_it_matters": "AI 투자 기대"}],
+        "data_quality": {"status": "ok", "warnings": []},
+    }
+
+    briefing = _fallback_brief(packet=packet, timezone="Asia/Seoul")
+
+    assert "오늘은 매수 관심 국면입니다." in briefing
+    assert "원/달러 환율은 1,330.50원으로 전일 대비 +0.12%였습니다." in briefing
+    assert "나스닥 선물은 전일 대비 +0.48%로 상승 방향입니다." in briefing
+    assert "공포탐욕지수는 60로 탐욕 구간입니다." not in briefing
+    assert "공포탐욕지수는 60으로 탐욕 구간입니다." in briefing
+    assert "오늘 미국 증시 흐름이 코스피에 미치는 영향:" in briefing
+    assert "AVGO은" not in briefing
+    assert "AVGO는" in briefing
+
+
 def test_append_reference_block_includes_news_item_urls():
     text = "Morning Market Brief (2026-03-14)\n\n1. LAYER 1 | 오늘 한줄 판단\n본문"
     packet = {

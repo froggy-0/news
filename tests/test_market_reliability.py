@@ -3,7 +3,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from morning_brief.data.market import build_market_packet, fetch_macro_points
+from morning_brief.data.market import (
+    _fear_greed_level_label,
+    build_market_packet,
+    fetch_korea_investor_points,
+    fetch_macro_points,
+)
 from morning_brief.models import BitcoinSnapshot, MarketPoint
 
 
@@ -75,6 +80,7 @@ def test_build_market_packet_uses_previous_value_cache_for_missing_points(
     )
     monkeypatch.setattr("morning_brief.data.market.fetch_us_index_points", lambda **_: [])
     monkeypatch.setattr("morning_brief.data.market.fetch_tech_stock_points", lambda **_: [])
+    monkeypatch.setattr("morning_brief.data.market.fetch_korea_investor_points", lambda: [])
     monkeypatch.setattr(
         "morning_brief.data.market.fetch_bitcoin_snapshot",
         lambda **_: _btc_snapshot(
@@ -111,6 +117,7 @@ def test_build_market_packet_keeps_missing_points_empty_without_cache(monkeypatc
     )
     monkeypatch.setattr("morning_brief.data.market.fetch_us_index_points", lambda **_: [])
     monkeypatch.setattr("morning_brief.data.market.fetch_tech_stock_points", lambda **_: [])
+    monkeypatch.setattr("morning_brief.data.market.fetch_korea_investor_points", lambda: [])
     monkeypatch.setattr(
         "morning_brief.data.market.fetch_bitcoin_snapshot",
         lambda **_: _btc_snapshot(
@@ -152,6 +159,7 @@ def test_build_market_packet_omits_anomalous_values_and_records_footer_note(
     )
     monkeypatch.setattr("morning_brief.data.market.fetch_us_index_points", lambda **_: [])
     monkeypatch.setattr("morning_brief.data.market.fetch_tech_stock_points", lambda **_: [])
+    monkeypatch.setattr("morning_brief.data.market.fetch_korea_investor_points", lambda: [])
     monkeypatch.setattr(
         "morning_brief.data.market.fetch_bitcoin_snapshot",
         lambda **_: _btc_snapshot(
@@ -214,3 +222,78 @@ def test_fetch_macro_points_uses_yfinance_for_dxy_even_when_fred_is_available(mo
     assert by_key["vix"].ticker == "VIXCLS"
     assert by_key["dxy"].ticker == "DX-Y.NYB"
     assert by_key["dxy"].price == 104.3
+
+
+def test_fetch_korea_investor_points_uses_yfinance_targets(monkeypatch):
+    calls: list[tuple[str, str, str, float]] = []
+
+    def fake_yfinance_point(*, label: str, ticker: str, canonical_key: str, price_scale: float):
+        calls.append((label, ticker, canonical_key, price_scale))
+        return _point(
+            label=label,
+            ticker=ticker,
+            canonical_key=canonical_key,
+            price=1_330.0 if canonical_key == "usdkrw" else 20_150.0,
+            change_pct=0.2 if canonical_key == "usdkrw" else -0.4,
+        )
+
+    monkeypatch.setattr("morning_brief.data.market._safe_yfinance_point", fake_yfinance_point)
+
+    points = fetch_korea_investor_points()
+
+    assert [point.canonical_key for point in points] == ["usdkrw", "nq_futures"]
+    assert calls == [
+        ("원/달러 환율", "KRW=X", "usdkrw", 1.0),
+        ("나스닥 선물", "NQ=F", "nq_futures", 1.0),
+    ]
+
+
+def test_build_market_packet_includes_korea_watch_points(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr("morning_brief.data.market.fetch_macro_points", lambda **_: [])
+    monkeypatch.setattr(
+        "morning_brief.data.market.fetch_korea_investor_points",
+        lambda: [
+            _point(
+                label="원/달러 환율",
+                ticker="KRW=X",
+                canonical_key="usdkrw",
+                price=1_330.0,
+                change_pct=0.2,
+            ),
+            _point(
+                label="나스닥 선물",
+                ticker="NQ=F",
+                canonical_key="nq_futures",
+                price=20_150.0,
+                change_pct=-0.4,
+            ),
+        ],
+    )
+    monkeypatch.setattr("morning_brief.data.market.fetch_us_index_points", lambda **_: [])
+    monkeypatch.setattr("morning_brief.data.market.fetch_tech_stock_points", lambda **_: [])
+    monkeypatch.setattr(
+        "morning_brief.data.market.fetch_bitcoin_snapshot",
+        lambda **_: _btc_snapshot(
+            _point(
+                label="BTC-USD",
+                ticker="BTC-USD",
+                canonical_key="btc",
+                price=82_000.0,
+                change_pct=1.1,
+            )
+        ),
+    )
+
+    packet = build_market_packet(cache_dir=tmp_path)
+
+    assert [point["canonical_key"] for point in packet["korea_watch"]] == ["usdkrw", "nq_futures"]
+    assert packet["korea_watch"][0]["ticker"] == "KRW=X"
+    assert packet["korea_watch"][1]["ticker"] == "NQ=F"
+
+
+def test_fear_greed_level_label_uses_korean_bands():
+    assert _fear_greed_level_label(10) == "극단적 공포"
+    assert _fear_greed_level_label(40) == "공포"
+    assert _fear_greed_level_label(50) == "중립"
+    assert _fear_greed_level_label(60) == "탐욕"
+    assert _fear_greed_level_label(90) == "극단적 탐욕"

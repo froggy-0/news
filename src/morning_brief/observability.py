@@ -100,7 +100,7 @@ class PipelineObserver:
         self.anomalies.append(item)
 
     def record_market_anomalies(self, packet: dict) -> None:
-        for section in ("macro", "us_indices", "tech_stocks"):
+        for section in ("macro", "korea_watch", "us_indices", "tech_stocks"):
             for point in packet.get(section, []):
                 if isinstance(point, dict):
                     self.record_anomaly(point)

@@ -74,6 +74,13 @@ def _format_points(points: list[dict], empty_text: str) -> str:
     return " / ".join(formatted)
 
 
+def _point_by_key(points: list[dict], canonical_key: str) -> dict:
+    for point in points:
+        if str(point.get("canonical_key", "")).strip() == canonical_key:
+            return point
+    return {}
+
+
 def _quality_notice(packet: dict) -> str:
     quality = packet.get("data_quality", {})
     if not isinstance(quality, dict):
@@ -255,7 +262,7 @@ def _market_source_label(point: dict) -> str:
     ticker = str(point.get("ticker", "")).strip()
     if ticker in {"DGS10", "DGS2", "VIXCLS"}:
         return "FRED"
-    if ticker in {"DX-Y.NYB", "^IRX", "^TNX", "^VIX"}:
+    if ticker in {"DX-Y.NYB", "^IRX", "^TNX", "^VIX", "KRW=X", "NQ=F"}:
         return "yfinance"
     if ticker == "BTC-USD":
         return "CoinGecko"
@@ -295,11 +302,25 @@ def _fallback_btc_spot_line(btc_spot: dict) -> tuple[str, float | None, float | 
     )
 
 
+def _change_direction(change_pct: float | None, *, flat_threshold: float = 0.05) -> str:
+    if change_pct is None:
+        return "보합"
+    if change_pct > flat_threshold:
+        return "상승"
+    if change_pct < -flat_threshold:
+        return "하락"
+    return "보합"
+
+
+def _abs_change_text(change_pct: float | None) -> str:
+    return f"{abs(change_pct or 0.0):.2f}%"
+
+
 def _fear_greed_line(btc: dict) -> str:
     fg_value = btc.get("fear_greed_value")
     fg_label = btc.get("fear_greed_label")
     if fg_value is not None and fg_label:
-        return f"공포탐욕지수는 {fg_value}({fg_label})로 확인됐습니다."
+        return f"공포탐욕지수는 {fg_value}으로 {fg_label} 구간입니다."
     return "공포탐욕지수는 이번 집계에서 확인되지 않았습니다."
 
 
@@ -314,37 +335,186 @@ def _fallback_macro_lines(macro: list[dict], sentiment_text: str) -> list[str]:
     return lines[:4]
 
 
+def _korea_watch_lines(korea_watch: list[dict], btc: dict) -> list[str]:
+    lines: list[str] = []
+
+    usdkrw = _point_by_key(korea_watch, "usdkrw")
+    usdkrw_price = _point_price(usdkrw)
+    usdkrw_change = _point_change_pct(usdkrw)
+    if usdkrw_price is not None and usdkrw_change is not None:
+        lines.append(
+            f"원/달러 환율은 {usdkrw_price:,.2f}원으로 전일 대비 {usdkrw_change:+.2f}%였습니다{_point_suffix(usdkrw)}. [출처: yfinance]"
+        )
+
+    nq_futures = _point_by_key(korea_watch, "nq_futures")
+    nq_change = _point_change_pct(nq_futures)
+    if nq_change is not None:
+        lines.append(
+            f"나스닥 선물은 전일 대비 {nq_change:+.2f}%로 {_change_direction(nq_change)} 방향입니다{_point_suffix(nq_futures)}. [출처: yfinance]"
+        )
+
+    sentiment_text = _fear_greed_line(btc)
+    if sentiment_text:
+        lines.append(f"{sentiment_text} [출처: alternative.me]")
+
+    return lines[:4]
+
+
+def _judgement_and_reason(
+    *,
+    macro: list[dict],
+    indices: list[dict],
+    korea_watch: list[dict],
+) -> tuple[str, str]:
+    vix = _point_price(_point_by_key(macro, "vix"))
+    us10y_point = _point_by_key(macro, "us10y")
+    us10y = _point_price(us10y_point)
+    us10y_change = _point_change_pct(us10y_point)
+    spy_change = _point_change_pct(_point_by_key(indices, "spy"))
+    nq_change = _point_change_pct(_point_by_key(korea_watch, "nq_futures"))
+    usdkrw_change = _point_change_pct(_point_by_key(korea_watch, "usdkrw"))
+
+    if (
+        (vix is not None and vix >= 24.0)
+        or (nq_change is not None and nq_change <= -0.7)
+        or (spy_change is not None and spy_change <= -1.0)
+        or (usdkrw_change is not None and usdkrw_change >= 0.5)
+    ):
+        if vix is not None and vix >= 24.0:
+            return (
+                "리스크 주의",
+                f"VIX가 {vix:.2f}로 높은 편이라 변동성 경계가 우선입니다.",
+            )
+        if nq_change is not None and nq_change <= -0.7:
+            return (
+                "리스크 주의",
+                f"나스닥 선물이 전일 대비 {nq_change:+.2f}%로 약해 개장 전 위험 선호가 약합니다.",
+            )
+        if usdkrw_change is not None and usdkrw_change >= 0.5:
+            return (
+                "리스크 주의",
+                f"원/달러 환율이 전일 대비 {usdkrw_change:+.2f}% 올라 외국인 수급 부담을 함께 봐야 합니다.",
+            )
+        return (
+            "리스크 주의",
+            f"S&P500이 전일 대비 {spy_change:+.2f}% 밀려 위험자산 심리가 약해졌습니다.",
+        )
+
+    if (
+        (vix is not None and vix <= 18.0)
+        and (nq_change is not None and nq_change >= 0.4)
+        and (spy_change is not None and spy_change >= 0.5)
+    ):
+        return (
+            "매수 관심",
+            f"VIX가 {vix:.2f}로 안정적이고 나스닥 선물과 S&P500 흐름이 함께 강합니다.",
+        )
+
+    if us10y is not None and us10y_change is not None:
+        return (
+            "관망",
+            f"미국 10년물 금리가 {us10y:.2f}%로 높고 전일 대비 {us10y_change:+.2f}% 움직여 금리 부담을 더 확인할 필요가 있습니다.",
+        )
+    if nq_change is not None:
+        return (
+            "관망",
+            f"나스닥 선물이 전일 대비 {nq_change:+.2f}%로 한쪽 방향이 뚜렷하지 않아 추가 확인이 필요합니다.",
+        )
+    return ("관망", "금리와 지수 흐름이 한 방향으로 정리되지 않아 추가 확인이 필요합니다.")
+
+
+def _kospi_impact_line(*, korea_watch: list[dict], indices: list[dict]) -> str:
+    usdkrw_change = _point_change_pct(_point_by_key(korea_watch, "usdkrw"))
+    nq_change = _point_change_pct(_point_by_key(korea_watch, "nq_futures"))
+    spy_change = _point_change_pct(_point_by_key(indices, "spy"))
+
+    if (nq_change is not None and nq_change > 0.2) and (
+        usdkrw_change is None or usdkrw_change <= 0.2
+    ):
+        detail = "나스닥 선물이 강하고 원/달러 환율이 비교적 안정돼, 대형 기술주 심리를 받쳐줄"
+    elif (nq_change is not None and nq_change < -0.2) or (
+        usdkrw_change is not None and usdkrw_change > 0.3
+    ):
+        detail = "나스닥 선물이 약하거나 원/달러 환율이 올라, 외국인 수급과 성장주 심리에 부담을 줄"
+    elif spy_change is not None and spy_change > 0.3:
+        detail = "미국 지수 전반이 견조해, 코스피도 낙폭을 제한하는 데 도움을 줄"
+    else:
+        detail = "미국 증시 신호가 엇갈려, 코스피는 업종별 차별화 장세로 이어질"
+    return f"오늘 미국 증시 흐름이 코스피에 미치는 영향: {detail} 수 있습니다."
+
+
+def _fallback_stock_cause(label: str, change_pct: float | None, news: list[dict]) -> str:
+    normalized = label.strip().upper()
+    topics = {
+        str(item.get("topic", "")).strip()
+        for item in news
+        if isinstance(item, dict) and str(item.get("topic", "")).strip()
+    }
+    if normalized in {"BTC", "BTC-USD", "비트코인"} and "bitcoin" in topics:
+        return "비트코인 ETF 수급 뉴스 흐름으로"
+    if normalized in {
+        "NVDA",
+        "MSFT",
+        "AAPL",
+        "AMZN",
+        "GOOGL",
+        "META",
+        "AMD",
+        "TSM",
+        "ASML",
+        "AVGO",
+    }:
+        if "ai_bigtech" in topics:
+            return "AI 투자 관련 뉴스 흐름 속에"
+        if "us_equity" in topics:
+            return "기술주 전반 흐름 속에"
+    if "macro" in topics:
+        return "금리와 달러 흐름 영향으로"
+    if change_pct is not None and change_pct > 0:
+        return "전반적 시장 상승 흐름 속에"
+    return "전반적 시장 하락 영향으로"
+
+
 def _fallback_stock_lines(
     tech: list[dict],
     btc: dict,
     btc_spot: dict,
     btc_spot_price: float | None,
     btc_spot_change: float | None,
+    news: list[dict],
 ) -> list[str]:
-    stock_lines = [
-        f"{point['label']} | {(_point_change_pct(point) or 0.0):+.2f}% | {point['label']} 흐름을 확인했습니다{_point_suffix(point)} | [출처: Stooq]"
-        for point in tech
-        if _point_change_pct(point) is not None
-    ][:4]
-    if btc_spot_price is not None and btc_spot_change is not None:
+    stock_lines = []
+    for point in tech:
+        change_pct = _point_change_pct(point)
+        if change_pct is None:
+            continue
+        cause = _fallback_stock_cause(point["label"], change_pct, news)
         stock_lines.append(
-            f"BTC-USD | {btc_spot_change:+.2f}% | 비트코인 현물은 {btc_spot_price:.2f}달러였습니다{_point_suffix(btc_spot)} | [출처: CoinGecko]"
+            f"{point['label']}는 {cause} {_abs_change_text(change_pct)} {_change_direction(change_pct)}했습니다{_point_suffix(point)}. [출처: Stooq]"
+        )
+        if len(stock_lines) >= 4:
+            break
+
+    if btc_spot_price is not None and btc_spot_change is not None:
+        cause = _fallback_stock_cause("BTC-USD", btc_spot_change, news)
+        stock_lines.append(
+            f"비트코인은 {cause} {_abs_change_text(btc_spot_change)} {_change_direction(btc_spot_change)}했고, 현재 {btc_spot_price:,.2f}달러입니다{_point_suffix(btc_spot)}. [출처: CoinGecko]"
         )
     official_flow_btc = btc.get("official_etf_daily_flow_btc")
     official_supported = btc.get("official_etf_supported_tickers", [])
     official_total_btc = btc.get("official_etf_total_btc")
     if official_flow_btc is not None:
         stock_lines.append(
-            f"BTC ETF | {official_flow_btc:+,.2f} BTC | 직전 스냅샷 대비 {'순유입' if official_flow_btc >= 0 else '순유출'}입니다 | [출처: Perplexity structured response]"
+            f"BTC ETF는 직전 스냅샷 대비 {'순유입' if official_flow_btc >= 0 else '순유출'} {abs(official_flow_btc):,.2f} BTC가 확인됐습니다. [출처: Perplexity structured response]"
         )
     if official_supported and official_total_btc:
         stock_lines.append(
-            f"BTC ETF 보유량 | {official_total_btc:,.2f} BTC | 공식 발행사 기준으로 집계한 {', '.join(official_supported)} 합산 보유량입니다 | [출처: Perplexity structured response]"
+            f"BTC ETF 보유량은 공식 발행사 기준 {', '.join(official_supported)} 합산 보유량 {official_total_btc:,.2f} BTC입니다. [출처: Perplexity structured response]"
         )
     etf_total_volume = btc.get("etf_total_volume")
     if etf_total_volume is not None:
         stock_lines.append(
-            f"BTC ETF 거래량 | {etf_total_volume:,}주 | 주요 ETF 합산 거래량입니다 | [출처: Stooq/yfinance]"
+            f"BTC ETF 거래량은 주요 ETF 합산 {etf_total_volume:,}주입니다. [출처: Stooq/yfinance]"
         )
     return stock_lines
 
@@ -354,6 +524,7 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
     date_str = now.strftime("%Y-%m-%d")
 
     macro = packet.get("macro", [])
+    korea_watch = packet.get("korea_watch", [])
     indices = packet.get("us_indices", [])
     tech = [
         point for point in packet.get("tech_stocks", []) if _point_change_pct(point) is not None
@@ -369,20 +540,30 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
     if not isinstance(btc_spot, dict):
         btc_spot = {}
     sentiment_text = _fear_greed_line(btc)
+    investor_lines = _korea_watch_lines(korea_watch, btc)
     btc_spot_line, btc_spot_price, btc_spot_change = _fallback_btc_spot_line(btc_spot)
     macro_lines = _fallback_macro_lines(macro, sentiment_text)
-    stock_lines = _fallback_stock_lines(tech, btc, btc_spot, btc_spot_price, btc_spot_change)
+    stock_lines = _fallback_stock_lines(tech, btc, btc_spot, btc_spot_price, btc_spot_change, news)
+    judgement, judgement_reason = _judgement_and_reason(
+        macro=macro,
+        indices=indices,
+        korea_watch=korea_watch,
+    )
+    kospi_impact = _kospi_impact_line(korea_watch=korea_watch, indices=indices)
 
     body = f"""Morning Market Brief ({date_str})
 
 1. LAYER 1 | 오늘 한줄 판단
 핵심 판단
-- 금리, 기술주, 비트코인 흐름은 한 방향으로만 정렬되기보다 서로 다른 반응이 함께 관찰됐습니다.
+오늘은 {judgement} 국면입니다.
+
+{judgement_reason}
 
 주요 지표
 {
         _bullet_lines(
-            [
+            investor_lines
+            or [
                 f"{macro_text} [출처: FRED/yfinance]",
                 f"{index_text} [출처: Stooq]",
                 f"{btc_spot_line} [출처: CoinGecko]",
@@ -391,9 +572,9 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
     }
 
 배경과 해석
-금리와 달러, 주가, 비트코인 흐름은 같은 방향으로만 움직이지 않았고 시장에서는 이를 함께 비교하는 분위기가 이어졌습니다.
+금리와 달러, 지수 흐름이 한 방향으로 정렬되지 않아 미국 장 마감 신호를 함께 비교할 필요가 있습니다.
 
-지표 사이에 괴리가 있으면 단일 원인보다 수급과 기대 차이를 같이 보는 편이 더 안전해 보입니다.
+{kospi_impact}
 
 주목할 변수
 {
@@ -430,12 +611,7 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
 
 3. LAYER 3 | 종목 브리핑
 주요 지표
-{
-        _bullet_lines(
-            stock_lines
-            or ["주요 종목 등락률은 이번 집계에서 충분히 확인되지 않았습니다. | 출처 없음"]
-        )
-    }
+{_bullet_lines(stock_lines or ["주요 종목 등락률은 이번 집계에서 충분히 확인되지 않았습니다."])}
 
 거시 지표
 {_bullet_lines(macro_lines)}
