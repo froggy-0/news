@@ -26,8 +26,8 @@ REQUIRED_LAYER_HEADINGS = (
     "LAYER 2 | 주요 뉴스",
     "LAYER 3 | 종목 브리핑",
 )
-MIN_LAYER_TWO_BULLETS = 3
-MIN_LAYER_THREE_BULLETS = 3
+MIN_LAYER_TWO_BULLETS = 2
+MIN_LAYER_THREE_BULLETS = 2
 
 
 def _point_price(point: dict) -> float | None:

@@ -141,9 +141,9 @@ def test_render_brief_validator_prompts_contains_draft_and_packet(monkeypatch):
 
     assert "품질 검수 에디터" in instructions
     assert "LAYER 2" in instructions
-    assert "헤드라인 | 한줄 해석" in instructions
+    assert "한국어 제목과 시장 의미" in instructions
     assert "None" in instructions
-    assert "오늘은 매수 관심 국면입니다" in instructions
+    assert "매수 관심" in instructions
     assert "코스피" in instructions
     assert "Prompt Version: market_brief_test" in instructions
     assert "<brief_text>" in user_prompt
@@ -163,8 +163,8 @@ def test_render_brief_rewrite_prompts_contains_review_feedback(monkeypatch):
 
     assert "교정 에디터" in instructions
     assert "3개 번호 섹션 구조" in instructions
-    assert "헤드라인 | 한줄 해석" in instructions
-    assert "오늘은 매수 관심 국면입니다" in instructions
+    assert "한국어 제목" in instructions
+    assert "매수 관심" in instructions
     assert "코스피" in instructions
     assert "<review_json>" in user_prompt
     assert '"rewrite_guidance":["쉬운 말로 바꾸기"]' in user_prompt
