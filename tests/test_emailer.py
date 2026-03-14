@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from morning_brief.emailer import (
+    _build_email_context,
     _extract_brief_structure,
     _split_recipients,
     _split_reference_block,
@@ -325,6 +326,41 @@ def test_render_briefing_email_keeps_layer_sections_when_item_parsing_fails():
     assert "기사 형식이 완전하지 않아도 이 섹션은 그대로 보여야 합니다." in text
     assert "[LAYER 3 | 종목 브리핑]" in text
     assert "엔비디아 흐름을 점검했습니다." in text
+
+
+def test_build_email_context_scopes_stock_and_macro_rows_to_layer_three_only():
+    body = """Morning Market Brief (2026-03-12)
+
+1. LAYER 1 | 오늘 한줄 판단
+주요 지표
+- S&P500은 610.25 (+1.20%)였습니다.
+- 달러 인덱스는 99.40이었습니다.
+
+2. LAYER 2 | 주요 뉴스
+핵심 이슈
+- Nvidia unveils new AI cluster | 데이터센터 투자 기대를 다시 자극했습니다. | https://www.reuters.com/world/us/example
+
+3. LAYER 3 | 종목 브리핑
+주요 지표
+- NVDA | +1.20% | 데이터센터 투자 기대가 이어졌습니다. | [출처: Stooq]
+- AMD | -0.80% | 반도체 종목 안에서도 차이가 있었습니다. | [출처: Stooq]
+
+거시 지표
+- 달러 인덱스는 99.40이었습니다.
+- 미국 10년물 금리는 4.10%였습니다.
+"""
+
+    context = _build_email_context(
+        subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
+        body=body,
+    )
+
+    stock_rows = context["stock_rows"]
+    macro_rows = context["macro_rows"]
+    assert [row.name for row in stock_rows] == ["NVDA", "AMD"]
+    assert len(macro_rows) == 2
+    assert "S&amp;P500" not in context["layer_one_html"]
+    assert [label for label, _value in macro_rows] == ["달러 인덱스", "미국 10년물 금리"]
 
 
 def test_split_reference_block_separates_reference_lines():

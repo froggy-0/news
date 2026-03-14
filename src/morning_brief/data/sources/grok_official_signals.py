@@ -139,6 +139,13 @@ def _normalize_citations(value: object) -> list[str]:
     return urls
 
 
+def _fallback_x_url(source_handle: str) -> str:
+    normalized = source_handle.strip().lstrip("@")
+    if normalized:
+        return f"https://x.com/{normalized}"
+    return "https://x.com"
+
+
 def _status_code_from_exception(exc: Exception) -> int | None:
     status_code = getattr(exc, "status_code", None)
     if isinstance(status_code, int):
@@ -345,9 +352,7 @@ def _search_group(
         items.append(
             NewsItem(
                 title=title,
-                url=citations[0]
-                if citations
-                else str(entity.get("newsroom_or_ir_url", "")).strip(),
+                url=citations[0] if citations else _fallback_x_url(source_handle),
                 source=f"@{source_handle}"
                 if source_handle
                 else str(entity.get("entity_name", "Official X")).strip(),

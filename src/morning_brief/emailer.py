@@ -265,6 +265,30 @@ def _fallback_section_text(section: _EmailSection | None) -> str:
     return section.content.strip()
 
 
+def _split_layer_three_metric_lines(section: _EmailSection | None) -> tuple[list[str], list[str]]:
+    if section is None:
+        return [], []
+
+    stock_lines: list[str] = []
+    macro_lines: list[str] = []
+    in_macro_block = False
+    for raw_line in section.groups["metrics"][1].splitlines():
+        stripped = raw_line.strip()
+        if not stripped:
+            continue
+        if stripped == "거시 지표":
+            in_macro_block = True
+            continue
+        if not stripped.startswith("- "):
+            continue
+        line = stripped[2:].strip()
+        if in_macro_block:
+            macro_lines.append(line)
+        else:
+            stock_lines.append(line)
+    return stock_lines, macro_lines
+
+
 def _build_news_items(
     sections: list[_EmailSection],
     references: list[str],
@@ -354,7 +378,29 @@ def _row_tone(line: str, change_text: str) -> str:
 
 
 def _build_stock_rows(sections: list[_EmailSection], *, limit: int = 6) -> list[_EmailBriefRow]:
+    layer_three_section = _find_layer_section(sections, contains_heading="LAYER 3")
     rows: list[_EmailBriefRow] = []
+    if layer_three_section is not None:
+        candidate_lines, _ = _split_layer_three_metric_lines(layer_three_section)
+        fallback_heading = layer_three_section.heading
+        for line in candidate_lines[:limit]:
+            percent_match = PERCENT_RE.search(line)
+            if percent_match is None:
+                continue
+            change_text = percent_match.group(0)
+            rows.append(
+                _EmailBriefRow(
+                    name=_stock_name_from_line(line, fallback=fallback_heading),
+                    change_text=change_text,
+                    context_text=line,
+                    context_html=Markup(_render_body_line(line)),
+                    tone=_row_tone(line, change_text),
+                )
+            )
+            if len(rows) >= limit:
+                return rows
+        return rows
+
     for section in sections:
         candidate_lines = [
             *_first_metric_lines(section.groups["metrics"][1], limit=limit),
@@ -380,19 +426,27 @@ def _build_stock_rows(sections: list[_EmailSection], *, limit: int = 6) -> list[
 
 
 def _build_macro_rows(sections: list[_EmailSection]) -> list[tuple[str, Markup]]:
-    macro_section = next((section for section in sections if section.heading == "거시 환경"), None)
+    layer_three_section = _find_layer_section(sections, contains_heading="LAYER 3")
     candidate_lines: list[str] = []
-    if macro_section is not None:
-        candidate_lines.extend(_first_metric_lines(macro_section.groups["metrics"][1], limit=4))
+    if layer_three_section is not None:
+        _, layer_three_macro_lines = _split_layer_three_metric_lines(layer_three_section)
+        candidate_lines.extend(layer_three_macro_lines[:4])
     else:
         macro_keywords = ("미국 10년물", "달러 인덱스", "VIX", "공포탐욕", "US10Y", "DXY")
-        for section in sections:
-            for line in _first_metric_lines(section.groups["metrics"][1], limit=8):
-                if any(keyword in line for keyword in macro_keywords):
-                    candidate_lines.append(line)
-            if len(candidate_lines) >= 4:
-                break
-
+        macro_section = next(
+            (section for section in sections if section.heading == "거시 환경"), None
+        )
+        if macro_section is not None:
+            candidate_lines.extend(_first_metric_lines(macro_section.groups["metrics"][1], limit=4))
+        else:
+            layer_one_section = _find_layer_section(sections, contains_heading="LAYER 1")
+            fallback_sections = [layer_one_section] if layer_one_section is not None else sections
+            for section in fallback_sections:
+                for line in _first_metric_lines(section.groups["metrics"][1], limit=8):
+                    if any(keyword in line for keyword in macro_keywords):
+                        candidate_lines.append(line)
+                if len(candidate_lines) >= 4:
+                    break
     rows: list[tuple[str, Markup]] = []
     for line in candidate_lines[:4]:
         label = line.split("는 ", 1)[0].split("은 ", 1)[0].strip() or "거시 지표"

@@ -235,9 +235,9 @@ def test_fetch_official_x_signals_does_not_fan_out_group_citations(monkeypatch):
     )
 
     assert items[0].citations == []
-    assert items[0].url == "https://www.fidelity.com/etfs/fbtc"
+    assert items[0].url == "https://x.com/Fidelity"
     assert items[1].citations == []
-    assert items[1].url == "https://www.amd.com/en/newsroom.html"
+    assert items[1].url == "https://x.com/AMD"
 
 
 def test_fetch_official_x_signals_returns_empty_without_api_key(monkeypatch):
