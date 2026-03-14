@@ -139,6 +139,37 @@ def test_run_pipeline_writes_observability_and_perplexity_audit(monkeypatch, tmp
     ]
 
 
+def test_run_pipeline_marks_brief_fallback_status_when_safe_brief_is_used(monkeypatch, tmp_path):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
+    settings = load_settings()
+
+    def fake_generate_briefing(*, observer=None, **_):
+        assert observer is not None
+        observer.log_event(
+            "brief_fallback_used",
+            reason="incomplete_structure",
+            issues=["LAYER 2 bullet 수가 부족해요."],
+        )
+        return "Morning Market Brief (2026-03-14)\n\n기본 브리핑"
+
+    monkeypatch.setattr("morning_brief.pipeline.build_market_packet", lambda **_: _market_packet())
+    monkeypatch.setattr("morning_brief.pipeline.build_news_packet", lambda **_: [])
+    monkeypatch.setattr("morning_brief.pipeline.generate_briefing", fake_generate_briefing)
+    monkeypatch.setattr(
+        "morning_brief.pipeline.GmailSender",
+        lambda _settings: SimpleNamespace(send=lambda **_: None),
+    )
+
+    run_pipeline(settings=settings)
+
+    run_files = list((settings.output_dir / "observability").glob("pipeline-run-*.json"))
+    assert len(run_files) == 1
+    payload = json.loads(run_files[0].read_text(encoding="utf-8"))
+    assert payload["summary"]["status"] == "brief_fallback"
+    assert payload["summary"]["brief_fallback_used"] is True
+
+
 def test_pipeline_observability_serializes_null_provider_token_usage(tmp_path):
     from morning_brief.observability import PipelineObserver
 

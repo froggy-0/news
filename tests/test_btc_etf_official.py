@@ -213,6 +213,41 @@ def test_parse_reference_snapshot_response_accepts_string_wrapped_member_json():
     assert snapshots[0].source_url == official.IBIT_URL
 
 
+def test_parse_reference_snapshot_response_accepts_nested_snapshot_payload():
+    payload = {
+        "choices": [
+            {
+                "message": {
+                    "content": json.dumps(
+                        {
+                            "result": {
+                                "snapshots": [
+                                    {
+                                        "ticker": "IBIT",
+                                        "issuer": "iShares",
+                                        "source_url": official.IBIT_URL,
+                                        "as_of": "03/11/2026",
+                                        "shares_outstanding": 1340640000,
+                                        "daily_volume": 51079056,
+                                        "aum_usd": 53660350151,
+                                        "total_btc": 752989.52,
+                                        "bitcoin_per_share": 0.00056165,
+                                    }
+                                ]
+                            }
+                        }
+                    )
+                }
+            }
+        ]
+    }
+
+    snapshots = official._parse_reference_snapshot_response(payload)
+
+    assert [snapshot.ticker for snapshot in snapshots] == ["IBIT"]
+    assert snapshots[0].source_url == official.IBIT_URL
+
+
 def test_parse_reference_snapshot_response_includes_preview_on_failure():
     payload = {
         "choices": [

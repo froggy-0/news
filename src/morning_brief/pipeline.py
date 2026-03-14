@@ -38,6 +38,7 @@ def run_pipeline(settings: Settings) -> str:
     briefing = ""
     output_path = None
     status = "ok"
+    brief_fallback_used = False
     failure_message = ""
     failure_exc: Exception | None = None
 
@@ -73,6 +74,14 @@ def run_pipeline(settings: Settings) -> str:
             )
 
         briefing = generate_briefing(packet=packet, settings=settings, observer=observer)
+        brief_fallback_used = any(
+            str(event.get("event", "")).strip() == "brief_fallback_used" for event in observer.events
+        )
+        if brief_fallback_used and status == "ok":
+            status = "brief_fallback"
+            logger.warning(
+                "최종 브리핑이 안전한 기본 브리핑으로 대체돼 실행 상태를 brief_fallback으로 남길게요."
+            )
 
         now = datetime.now(ZoneInfo(settings.timezone))
         file_name = now.strftime("brief_%Y%m%d_%H%M.md")
@@ -109,6 +118,7 @@ def run_pipeline(settings: Settings) -> str:
                 "total_duration_ms": total_duration_ms,
                 "news_count": len(news_packet),
                 "brief_path": str(output_path) if output_path else None,
+                "brief_fallback_used": brief_fallback_used,
                 "failure_message": failure_message or None,
             },
         )

@@ -410,8 +410,9 @@ def _decode_reference_snapshot_json(text: str) -> dict[str, Any]:
         if isinstance(decoded, str):
             _append_nested_json_candidates(decoded, pending_candidates, seen)
             continue
-        if _is_snapshot_payload(decoded):
-            return decoded
+        found = _find_snapshot_payload(decoded)
+        if found is not None:
+            return found
 
     raise HttpFetchError(
         f"Perplexity ETF 참조 JSON을 읽지 못했어요. preview={_response_preview(stripped)}"
@@ -465,6 +466,23 @@ def _is_snapshot_payload(decoded: object) -> bool:
         "snapshots" in decoded
         or {"ticker", "source_url", "shares_outstanding", "total_btc"} <= decoded.keys()
     )
+
+
+def _find_snapshot_payload(decoded: object) -> dict[str, Any] | None:
+    if _is_snapshot_payload(decoded):
+        assert isinstance(decoded, dict)
+        return decoded
+    if isinstance(decoded, dict):
+        for value in decoded.values():
+            found = _find_snapshot_payload(value)
+            if found is not None:
+                return found
+    if isinstance(decoded, list):
+        for value in decoded:
+            found = _find_snapshot_payload(value)
+            if found is not None:
+                return found
+    return None
 
 
 def _response_preview(text: str) -> str:
@@ -576,6 +594,8 @@ def _request_reference_snapshots(
         )
 
     client = _build_client(api_key)
+    if observer is not None:
+        observer.record_provider_usage(PERPLEXITY_PROVIDER, requests=1)
 
     def request_once() -> list[BitcoinEtfIssuerSnapshot]:
         try:
@@ -633,7 +653,6 @@ def _request_reference_snapshots(
     if observer is not None:
         observer.record_provider_usage(
             PERPLEXITY_PROVIDER,
-            requests=1,
             response_sources=len(snapshots),
         )
     return snapshots

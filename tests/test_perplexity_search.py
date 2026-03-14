@@ -195,6 +195,53 @@ def test_fetch_news_from_perplexity_filters_unallowed_domain(monkeypatch):
     assert items == []
 
 
+def test_fetch_news_from_perplexity_filters_non_newsroom_apple_urls(monkeypatch):
+    monkeypatch.setattr(
+        ps,
+        "TOPIC_SPECS",
+        (
+            ps.SearchTopic(
+                name="ai_bigtech",
+                query="ai query",
+                retry_query="",
+                domain_filter=("apple.com",),
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        ps,
+        "_build_client",
+        lambda api_key: _Client(
+            [
+                _SDKResponse(
+                    {
+                        "results": [
+                            {
+                                "title": "Polish-English Language App App - App Store",
+                                "url": "https://apps.apple.com/me/app/polish-english-language-app/id6470241051",
+                                "snippet": "ignore",
+                                "date": "2026-03-13T01:00:00Z",
+                            },
+                            {
+                                "title": "Apple unveils new tools for developers",
+                                "url": "https://www.apple.com/newsroom/2026/03/apple-unveils-new-tools-for-developers/",
+                                "snippet": "Apple shared a newsroom update.",
+                                "date": "2026-03-13T02:00:00Z",
+                            },
+                        ]
+                    }
+                )
+            ],
+            [],
+        ),
+    )
+
+    items = ps.fetch_news_from_perplexity(max_items=5, api_key="pplx-test-key")
+
+    assert len(items) == 1
+    assert items[0].url.startswith("https://www.apple.com/newsroom/")
+
+
 def test_search_once_exposes_status_details(monkeypatch):
     client = _Client([_StatusError(401, "invalid api key")], [])
 

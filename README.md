@@ -123,6 +123,7 @@ python3 main.py schedule
 - 이메일 제목: `미국 기술주·비트코인 시장 브리핑 (YYYY-MM-DD)`
 - 데이터 커버리지 저하 시 제목 아래 `[데이터 품질 알림]` 자동 표시
 - OpenAI 생성 실패 시 브리핑 파일과 메일 발송은 건너뛰고 관측성 요약만 남깁니다.
+- 구조 검증에 실패해 안전 기본 브리핑으로 대체되면 observability 요약 상태는 `brief_fallback`으로 기록됩니다.
 - 이메일 본문: HTML + plain text fallback 동시 전송
 - 비트코인 ETF 공식 보유량/순유입: Perplexity가 공식 issuer 도메인을 바탕으로 정리한 참조 스냅샷을 캐시와 비교해 계산
 - 검증된 공식 X 시그널: allowlist에 등록된 공식 계정만 Grok `x_search`로 확인해 뉴스와 함께 반영

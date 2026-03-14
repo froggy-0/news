@@ -78,6 +78,7 @@ EXCLUDE_URL_PATTERNS = (
     "/data/",
     "/summary?",
     "/summary/",
+    "apps.apple.com",
     "podcasts.apple.com",
     "tv.apple.com",
     "cn.wsj.com",
@@ -258,7 +259,12 @@ def _is_allowed_domain(url: str, allowed_domains: tuple[str, ...]) -> bool:
     domain = normalize_domain(url)
     if not domain:
         return False
-    return any(_matches_source_filter(url, candidate) for candidate in allowed_domains)
+    if not any(_matches_source_filter(url, candidate) for candidate in allowed_domains):
+        return False
+    if domain_matches(domain, "apple.com"):
+        normalized_url = str(url or "").strip().lower()
+        return "/newsroom/" in normalized_url
+    return True
 
 
 def _build_client(api_key: str) -> Perplexity:
