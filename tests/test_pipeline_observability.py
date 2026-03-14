@@ -162,3 +162,57 @@ def test_pipeline_observability_serializes_null_provider_token_usage(tmp_path):
     assert usage["output_tokens"] is None
     assert usage["cached_input_tokens"] is None
     assert usage["usage_parse_failures"] == 1
+    assert (
+        summary["provider_usage_line"]
+        == "perplexity[requests=1, input=null, output=null, cached=null, reasoning=null, sources=1, parse_failures=1]"
+    )
+
+
+def test_pipeline_observability_writes_provider_usage_summary_event(tmp_path):
+    from morning_brief.observability import PipelineObserver
+
+    observer = PipelineObserver(output_dir=tmp_path)
+    observer.record_provider_usage(
+        "perplexity",
+        requests=2,
+        response_sources=10,
+        input_tokens=None,
+        output_tokens=None,
+        cached_input_tokens=None,
+        reasoning_tokens=None,
+        usage_parse_failures=2,
+    )
+    observer.record_provider_usage(
+        "grok",
+        requests=1,
+        input_tokens=120,
+        output_tokens=30,
+        cached_input_tokens=8,
+        reasoning_tokens=0,
+    )
+    observer.record_provider_usage(
+        "openai",
+        requests=3,
+        input_tokens=900,
+        output_tokens=150,
+        cached_input_tokens=40,
+        reasoning_tokens=12,
+    )
+
+    summary = observer.write_outputs(status="ok", provider_stats={}, extra={})
+    run_files = list(tmp_path.glob("observability/pipeline-run-*.json"))
+    assert len(run_files) == 1
+
+    payload = json.loads(run_files[0].read_text(encoding="utf-8"))
+    summary_event = next(
+        event for event in payload["events"] if event["event"] == "provider_usage_summary"
+    )
+
+    assert summary["provider_usage_line"] == (
+        "openai[requests=3, input=900, output=150, cached=40, reasoning=12, sources=0, parse_failures=0] | "
+        "perplexity[requests=2, input=null, output=null, cached=null, reasoning=null, sources=10, parse_failures=2] | "
+        "grok[requests=1, input=120, output=30, cached=8, reasoning=0, sources=0, parse_failures=0]"
+    )
+    assert summary_event["line"] == summary["provider_usage_line"]
+    assert summary_event["providers"]["openai"]["input_tokens"] == 900
+    assert summary_event["providers"]["perplexity"]["input_tokens"] is None

@@ -11,6 +11,8 @@ from typing import Iterator
 
 from morning_brief.data.sources.domain_utils import normalize_domain
 
+PREFERRED_PROVIDER_ORDER = ("openai", "perplexity", "grok")
+
 
 @dataclass
 class ProviderUsageTotals:
@@ -178,6 +180,53 @@ class PipelineObserver:
                 dict.fromkeys(normalize_domain(url) for url in unique_urls if normalize_domain(url))
             )
 
+    def _ordered_provider_names(self) -> list[str]:
+        prioritized = [
+            provider for provider in PREFERRED_PROVIDER_ORDER if provider in self.provider_usage
+        ]
+        remaining = sorted(
+            provider for provider in self.provider_usage if provider not in PREFERRED_PROVIDER_ORDER
+        )
+        return [*prioritized, *remaining]
+
+    def provider_usage_summary_payload(self) -> dict[str, dict[str, int | None]]:
+        payload: dict[str, dict[str, int | None]] = {}
+        for provider in self._ordered_provider_names():
+            totals = self.provider_usage[provider]
+            payload[provider] = {
+                "requests": totals.requests,
+                "input_tokens": totals.input_tokens,
+                "output_tokens": totals.output_tokens,
+                "cached_input_tokens": totals.cached_input_tokens,
+                "reasoning_tokens": totals.reasoning_tokens,
+                "response_sources": totals.response_sources,
+                "usage_parse_failures": totals.usage_parse_failures,
+            }
+        return payload
+
+    def provider_usage_summary_line(self) -> str:
+        payload = self.provider_usage_summary_payload()
+        if not payload:
+            return ""
+
+        def fmt(value: int | None) -> str:
+            return "null" if value is None else str(value)
+
+        parts = []
+        for provider, metrics in payload.items():
+            parts.append(
+                (
+                    f"{provider}[requests={metrics['requests']}, "
+                    f"input={fmt(metrics['input_tokens'])}, "
+                    f"output={fmt(metrics['output_tokens'])}, "
+                    f"cached={fmt(metrics['cached_input_tokens'])}, "
+                    f"reasoning={fmt(metrics['reasoning_tokens'])}, "
+                    f"sources={fmt(metrics['response_sources'])}, "
+                    f"parse_failures={fmt(metrics['usage_parse_failures'])}]"
+                )
+            )
+        return " | ".join(parts)
+
     def write_outputs(
         self,
         *,
@@ -188,9 +237,8 @@ class PipelineObserver:
         observability_dir = self.output_dir / "observability"
         observability_dir.mkdir(parents=True, exist_ok=True)
 
-        usage_summary = {
-            provider: totals.__dict__ for provider, totals in sorted(self.provider_usage.items())
-        }
+        usage_summary = self.provider_usage_summary_payload()
+        usage_summary_line = self.provider_usage_summary_line()
         summary = {
             "run_id": self.run_id,
             "status": status,
@@ -198,6 +246,7 @@ class PipelineObserver:
             "finished_at_utc": datetime.now(timezone.utc).isoformat(),
             "durations_ms": dict(sorted(self.phase_durations_ms.items())),
             "provider_usage": usage_summary,
+            "provider_usage_line": usage_summary_line or None,
             "provider_runtime_stats": provider_stats or {},
             "anomaly_count": len(self.anomalies),
             "anomalies": self.anomalies,
@@ -205,6 +254,13 @@ class PipelineObserver:
         }
         if extra:
             summary.update(extra)
+
+        if usage_summary_line:
+            self._emit(
+                "provider_usage_summary",
+                line=usage_summary_line,
+                providers=usage_summary,
+            )
 
         run_file = observability_dir / f"pipeline-run-{self.run_id}.json"
         run_file.write_text(

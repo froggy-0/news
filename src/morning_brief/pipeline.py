@@ -115,6 +115,9 @@ def run_pipeline(settings: Settings) -> str:
         if provider_stats:
             logger.info("이번 실행의 수집 공급자 상태는 %s", provider_stats)
         logger.info("브리핑 파이프라인을 마쳤어요. status=%s", summary["status"])
+        provider_usage_line = str(summary.get("provider_usage_line") or "").strip()
+        if provider_usage_line:
+            logger.info("이번 실행의 LLM 토큰 사용량은 %s", provider_usage_line)
 
     if failure_exc is not None:
         raise failure_exc
