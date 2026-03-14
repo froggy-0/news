@@ -9,6 +9,7 @@ from morning_brief.data.market import (
     fetch_korea_investor_points,
     fetch_macro_points,
 )
+from morning_brief.data.market_policy import CANONICAL_KEY_BY_SOURCE
 from morning_brief.models import BitcoinSnapshot, MarketPoint
 
 
@@ -222,6 +223,11 @@ def test_fetch_macro_points_uses_yfinance_for_dxy_even_when_fred_is_available(mo
     assert by_key["vix"].ticker == "VIXCLS"
     assert by_key["dxy"].ticker == "DX-Y.NYB"
     assert by_key["dxy"].price == 104.3
+
+
+def test_market_policy_excludes_fred_broad_dollar_index_from_dxy_mapping():
+    assert CANONICAL_KEY_BY_SOURCE["DX-Y.NYB"] == "dxy"
+    assert "DTWE" + "XBGS" not in CANONICAL_KEY_BY_SOURCE
 
 
 def test_fetch_korea_investor_points_uses_yfinance_targets(monkeypatch):
