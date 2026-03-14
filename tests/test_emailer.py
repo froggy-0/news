@@ -289,6 +289,44 @@ def test_render_briefing_email_text_renders_full_news_url_when_present():
     assert "출처 URL: https://www.reuters.com/world/us/example" in text
 
 
+def test_render_briefing_email_keeps_layer_sections_when_item_parsing_fails():
+    body = """Morning Market Brief (2026-03-12)
+
+2. LAYER 2 | 주요 뉴스
+핵심 이슈
+시장 영향이 큰 뉴스 후보를 우선 정리했습니다.
+
+배경과 해석
+기사 형식이 완전하지 않아도 이 섹션은 그대로 보여야 합니다.
+
+3. LAYER 3 | 종목 브리핑
+주요 지표
+- 엔비디아 흐름을 점검했습니다.
+- 비트코인 ETF 흐름을 점검했습니다.
+
+거시 지표
+- 달러 인덱스를 함께 봤습니다.
+"""
+
+    html = render_briefing_email_html(
+        subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
+        body=body,
+    )
+    text = render_briefing_email_text(
+        subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
+        body=body,
+    )
+
+    assert "Layer 2 · 주요 뉴스" in html
+    assert "기사 형식이 완전하지 않아도 이 섹션은 그대로 보여야 합니다." in html
+    assert "Layer 3 · 종목 브리핑" in html
+    assert "엔비디아 흐름을 점검했습니다." in html
+    assert "[LAYER 2 | 주요 뉴스]" in text
+    assert "기사 형식이 완전하지 않아도 이 섹션은 그대로 보여야 합니다." in text
+    assert "[LAYER 3 | 종목 브리핑]" in text
+    assert "엔비디아 흐름을 점검했습니다." in text
+
+
 def test_split_reference_block_separates_reference_lines():
     body = SAMPLE_BRIEF + "\n\n참고 출처\n- Reuters — https://www.reuters.com/world/us/example"
 

@@ -19,7 +19,7 @@ from morning_brief.prompting import (
 
 logger = logging.getLogger(__name__)
 
-VALIDATOR_MAX_OUTPUT_TOKENS = 700
+VALIDATOR_MAX_OUTPUT_TOKENS = 1100
 REVIEW_PARSE_PREVIEW_LEN = 240
 
 BRIEF_REVIEW_SCHEMA = {

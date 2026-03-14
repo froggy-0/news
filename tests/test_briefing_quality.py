@@ -15,6 +15,56 @@ from morning_brief.llm_errors import BriefGenerationError
 from morning_brief.observability import PipelineObserver
 
 
+def _complete_layered_brief(
+    *,
+    title_date: str = "2026-03-13",
+    layer_one_body: str = "금리와 기술주 흐름을 함께 봐야 합니다.",
+    layer_three_body: str | None = None,
+) -> str:
+    stock_block = layer_three_body or (
+        "- NVDA | +1.20% | 데이터센터 투자 기대가 이어졌습니다. | [출처: Stooq]\n"
+        "- AMD | -0.80% | 반도체 종목 안에서도 차이가 있었습니다. | [출처: Stooq]\n"
+        "- BTC-USD | +1.10% | 비트코인 현물은 82,000달러 수준이었습니다. | [출처: CoinGecko]\n"
+        "- BTC ETF 거래량 | +0.50% | 주요 ETF 거래가 이어졌습니다. | [출처: Stooq/yfinance]"
+    )
+    return f"""Morning Market Brief ({title_date})
+
+1. LAYER 1 | 오늘 한줄 판단
+핵심 판단
+- {layer_one_body}
+
+주요 지표
+- 미국 10년물 금리는 4.10%였습니다. [출처: FRED]
+- 비트코인 현물은 82,000달러였습니다. [출처: CoinGecko]
+
+배경과 해석
+금리와 기술주, 비트코인 흐름을 함께 비교할 필요가 있습니다.
+
+주목할 변수
+- 금리와 기술주 반응이 다시 같은 방향으로 모이는지 보겠습니다.
+
+2. LAYER 2 | 주요 뉴스
+핵심 이슈
+- Nvidia unveils new AI cluster | AI 투자 기대를 다시 자극했습니다. | https://www.reuters.com/world/us/example
+- Bitcoin ETF inflows resume | 비트코인 ETF 수급 개선을 같이 봐야 합니다. | https://www.cnbc.com/example
+- Treasury yields stay firm | 금리 흐름을 이해하는 데 필요한 기사입니다. | https://www.wsj.com/example
+
+배경과 해석
+주요 뉴스는 금리와 AI 투자, 비트코인 ETF 수급에 집중됐습니다.
+
+주목할 변수
+- 같은 주제를 다른 신뢰 출처도 같이 다루는지 보겠습니다.
+
+3. LAYER 3 | 종목 브리핑
+주요 지표
+{stock_block}
+
+거시 지표
+- 달러 인덱스는 99.40이었습니다. [출처: yfinance]
+- 미국 10년물 금리는 4.10%였습니다. [출처: FRED]
+"""
+
+
 def test_inject_quality_notice_under_title():
     packet = {
         "data_quality": {
@@ -170,7 +220,7 @@ def test_generate_briefing_rewrites_when_validator_finds_plain_language_issue(mo
         "news": [],
         "data_quality": {"status": "ok", "warnings": []},
     }
-    draft_text = "Morning Market Brief (2026-03-13)\n\n1. 거시 환경\n수치 체크\n- 미국 금리가 올랐습니다.\n\n해석\n성장주 멀티플이 압박받았습니다.\n\n2. 미국 증시 흐름\n해석\n조용했어요.\n\n3. AI / 빅테크 동향\n해석\n조용했어요.\n\n4. 비트코인 시장\n해석\n조용했어요.\n\n5. 중요한 뉴스\n핵심 내용\n- 없음\n\n6. 시장 해석\n해석\n조용했어요."
+    draft_text = _complete_layered_brief(layer_one_body="성장주 멀티플이 압박받았습니다.")
     review_payload = {
         "pass": False,
         "rewrite_needed": True,
@@ -189,7 +239,9 @@ def test_generate_briefing_rewrites_when_validator_finds_plain_language_issue(mo
         "issues": [],
         "rewrite_guidance": [],
     }
-    rewritten_text = "Morning Market Brief (2026-03-13)\n\n1. 거시 환경\n수치 체크\n- 미국 금리가 올랐어요.\n\n해석\n미국 금리가 올라서, 미래 기대가 큰 기술주 주가가 부담을 받았어요.\n\n2. 미국 증시 흐름\n해석\n조용했어요.\n\n3. AI / 빅테크 동향\n해석\n조용했어요.\n\n4. 비트코인 시장\n해석\n조용했어요.\n\n5. 중요한 뉴스\n핵심 내용\n- 없음\n\n6. 시장 해석\n해석\n조용했어요."
+    rewritten_text = _complete_layered_brief(
+        layer_one_body="미래 기대가 큰 기술주 주가가 부담을 받았어요."
+    )
 
     calls: list[dict] = []
     responses = [
@@ -216,6 +268,89 @@ def test_generate_briefing_rewrites_when_validator_finds_plain_language_issue(mo
     assert calls[1]["text"]["format"]["type"] == "json_schema"
 
 
+def test_generate_briefing_falls_back_when_draft_structure_is_incomplete(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    settings = load_settings()
+    packet = {
+        "macro": [{"label": "US10Y", "price": 4.1, "change_pct": 0.1}],
+        "us_indices": [],
+        "tech_stocks": [
+            {"label": "NVDA", "price": 120.0, "change_pct": 1.2},
+            {"label": "AMD", "price": 140.0, "change_pct": -0.8},
+        ],
+        "bitcoin": {
+            "spot": {"price": 82_000.0, "change_pct": 1.1},
+            "etf_points": [],
+            "etf_total_volume": 123_456,
+            "official_etf_supported_tickers": [],
+            "official_etf_compared_tickers": [],
+            "official_etf_total_btc": None,
+            "official_etf_daily_flow_btc": None,
+            "official_etf_daily_flow_usd": None,
+        },
+        "news": [
+            {
+                "title": "Nvidia unveils new AI cluster",
+                "url": "https://www.reuters.com/world/us/example",
+                "citations": ["https://www.reuters.com/world/us/example"],
+                "why_it_matters": "AI 투자 기대를 다시 자극한 기사입니다.",
+            },
+            {
+                "title": "Bitcoin ETF inflows resume",
+                "url": "https://www.cnbc.com/example",
+                "citations": ["https://www.cnbc.com/example"],
+                "why_it_matters": "비트코인 ETF 수급 해석에 바로 연결됩니다.",
+            },
+            {
+                "title": "Treasury yields stay firm",
+                "url": "https://www.wsj.com/example",
+                "citations": ["https://www.wsj.com/example"],
+                "why_it_matters": "금리 흐름을 이해하는 데 필요한 기사입니다.",
+            },
+        ],
+        "data_quality": {"status": "ok", "warnings": []},
+    }
+    truncated_draft = """Morning Market Brief (2026-03-13)
+
+1. LAYER 1 | 오늘 한줄 판단
+핵심 판단
+- 금리와 기술주 흐름이 함께 관찰됐습니다.
+
+주요 지표
+- 미국 10년물 금리는 4.10%였습니다. [출처: FRED]
+
+2. LAYER 2 | 주요 뉴스
+핵심 이슈
+- Nvidia unveils new AI cluster | AI 투자 기대를 다시 자극했습니다. | https://www.reuters.com/world/us/example
+- Bitcoin ETF inflows resume | 비트코인 ETF 수급 개선을 같이 봐야 합니다. | https://www.cnbc.com/example
+
+3. LAYER 3 | 종목 브리핑
+주요 지표
+- NVDA | +1.20% |"""
+
+    responses = [
+        SimpleNamespace(output_text=truncated_draft, usage=None),
+        SimpleNamespace(
+            output_text='{"pass":false,"rewrite_needed":true,"issues":["LAYER 3 truncated',
+            usage=None,
+        ),
+    ]
+
+    def _create(**_kwargs):
+        return responses.pop(0)
+
+    fake_client = SimpleNamespace(responses=SimpleNamespace(create=_create))
+    monkeypatch.setattr("morning_brief.briefing.OpenAI", lambda **_: fake_client)
+
+    briefing = generate_briefing(packet=packet, settings=settings)
+
+    assert "1. LAYER 1 | 오늘 한줄 판단" in briefing
+    assert "2. LAYER 2 | 주요 뉴스" in briefing
+    assert "3. LAYER 3 | 종목 브리핑" in briefing
+    assert "거시 지표" in briefing
+    assert "주요 종목 등락률은 이번 집계에서 충분히 확인되지 않았습니다." not in briefing
+
+
 def test_generate_briefing_revalidates_after_rewrite(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("OPENAI_BRIEF_MAX_REWRITES", "2")
@@ -232,7 +367,7 @@ def test_generate_briefing_revalidates_after_rewrite(monkeypatch):
         "news": [],
         "data_quality": {"status": "ok", "warnings": []},
     }
-    draft_text = "Morning Market Brief (2026-03-13)\n\n1. 거시 환경\n해석\n어려운 표현이 남아 있어요.\n\n2. 미국 증시 흐름\n해석\n조용했어요.\n\n3. AI / 빅테크 동향\n해석\n조용했어요.\n\n4. 비트코인 시장\n해석\n조용했어요.\n\n5. 중요한 뉴스\n핵심 내용\n- 없음\n\n6. 시장 해석\n해석\n조용했어요."
+    draft_text = _complete_layered_brief(layer_one_body="어려운 표현이 남아 있어요.")
     first_review_payload = {
         "pass": False,
         "rewrite_needed": True,
@@ -242,7 +377,7 @@ def test_generate_briefing_revalidates_after_rewrite(monkeypatch):
         "issues": ["어려운 금융 용어가 남아 있어요."],
         "rewrite_guidance": ["쉬운 한국어로 다시 써 주세요."],
     }
-    rewritten_text = "Morning Market Brief (2026-03-13)\n\n1. 거시 환경\n해석\n쉬운 한국어로 바꿨어요.\n\n2. 미국 증시 흐름\n해석\n조용했어요.\n\n3. AI / 빅테크 동향\n해석\n조용했어요.\n\n4. 비트코인 시장\n해석\n조용했어요.\n\n5. 중요한 뉴스\n핵심 내용\n- 없음\n\n6. 시장 해석\n해석\n조용했어요."
+    rewritten_text = _complete_layered_brief(layer_one_body="쉬운 한국어로 바꿨어요.")
     second_review_payload = {
         "pass": True,
         "rewrite_needed": False,
@@ -343,7 +478,7 @@ def test_generate_briefing_respects_validator_no_rewrite_guidance(monkeypatch):
         "news": [],
         "data_quality": {"status": "ok", "warnings": []},
     }
-    draft_text = "Morning Market Brief (2026-03-13)\n\n1. 거시 환경\n해석\n사람 확인이 필요해요.\n\n2. 미국 증시 흐름\n해석\n조용했어요.\n\n3. AI / 빅테크 동향\n해석\n조용했어요.\n\n4. 비트코인 시장\n해석\n조용했어요.\n\n5. 중요한 뉴스\n핵심 내용\n- 없음\n\n6. 시장 해석\n해석\n조용했어요."
+    draft_text = _complete_layered_brief(layer_one_body="사람 확인이 필요해요.")
     review_payload = {
         "pass": False,
         "rewrite_needed": False,
@@ -369,7 +504,7 @@ def test_generate_briefing_respects_validator_no_rewrite_guidance(monkeypatch):
 
     briefing = generate_briefing(packet=packet, settings=settings)
 
-    assert briefing == draft_text
+    assert briefing.strip() == draft_text.strip()
     assert len(calls) == 2
 
 
@@ -384,15 +519,9 @@ def test_generate_briefing_keeps_draft_when_validator_json_is_invalid(monkeypatc
         "news": [],
         "data_quality": {"status": "ok", "warnings": []},
     }
-    draft_text = (
-        "Morning Market Brief (2026-03-14)\n\n"
-        "1. LAYER 1 | 오늘 한줄 판단\n"
-        "핵심 판단\n"
-        "미국 시장은 혼조 흐름을 보였어요.\n\n"
-        "2. LAYER 2 | 주요 뉴스\n"
-        "- 주요 뉴스 없음 | 추가 해석 없음 | 출처 없음\n\n"
-        "3. LAYER 3 | 종목 브리핑\n"
-        "- 주요 종목 데이터 없음 | 0.00% | 출처 없음"
+    draft_text = _complete_layered_brief(
+        title_date="2026-03-14",
+        layer_one_body="미국 시장은 혼조 흐름을 보였어요.",
     )
     malformed_review = '{"pass": false, "rewrite_needed": true, "issues": ["문장 길이를 줄여 주세요'
 
@@ -411,7 +540,7 @@ def test_generate_briefing_keeps_draft_when_validator_json_is_invalid(monkeypatc
 
     briefing = generate_briefing(packet=packet, settings=settings)
 
-    assert briefing == draft_text
+    assert briefing.strip() == draft_text.strip()
     assert len(calls) == 2
 
 

@@ -245,6 +245,26 @@ def _extract_layer_one_text(sections: list[_EmailSection], notice: str, title: s
     return notice or title
 
 
+def _find_layer_section(
+    sections: list[_EmailSection],
+    *,
+    exact_heading: str | None = None,
+    contains_heading: str | None = None,
+) -> _EmailSection | None:
+    for section in sections:
+        if exact_heading is not None and section.heading == exact_heading:
+            return section
+        if contains_heading is not None and contains_heading in section.heading:
+            return section
+    return None
+
+
+def _fallback_section_text(section: _EmailSection | None) -> str:
+    if section is None:
+        return ""
+    return section.content.strip()
+
+
 def _build_news_items(
     sections: list[_EmailSection],
     references: list[str],
@@ -424,6 +444,11 @@ def _build_email_context(subject: str, body: str, *, sender: str = "") -> dict[s
     main_body, footer_notes = _split_footer_note_block(body_without_references)
     title, notice, sections = _extract_brief_structure(main_body)
     parsed_sections = _build_email_sections(sections)
+    layer_two_section = _find_layer_section(
+        parsed_sections,
+        exact_heading="중요한 뉴스",
+    ) or _find_layer_section(parsed_sections, contains_heading="LAYER 2")
+    layer_three_section = _find_layer_section(parsed_sections, contains_heading="LAYER 3")
     display_date = _format_display_date(title=title, subject=subject)
     layer_one_text = _extract_layer_one_text(parsed_sections, notice, title)
     reference_items = _build_reference_items(references)
@@ -440,7 +465,9 @@ def _build_email_context(subject: str, body: str, *, sender: str = "") -> dict[s
         "layer_one_text": layer_one_text,
         "layer_one_html": Markup(_render_body_line(layer_one_text)),
         "news_items": news_items,
+        "news_fallback_text": "" if news_items else _fallback_section_text(layer_two_section),
         "stock_rows": stock_rows,
+        "stock_fallback_text": "" if stock_rows else _fallback_section_text(layer_three_section),
         "macro_rows": macro_rows,
         "footer_notes": footer_notes,
         "reference_items": reference_items,

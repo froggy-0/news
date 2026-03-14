@@ -7,7 +7,11 @@ from zoneinfo import ZoneInfo
 
 from openai import OpenAI
 
-from morning_brief.brief_formatting import improve_readability_spacing
+from morning_brief.brief_formatting import (
+    extract_brief_structure,
+    improve_readability_spacing,
+    split_section_groups,
+)
 from morning_brief.brief_review import validate_and_rewrite_briefing
 from morning_brief.config import Settings
 from morning_brief.llm_errors import BriefGenerationError
@@ -16,6 +20,14 @@ from morning_brief.openai_utils import cached_input_tokens, usage_snapshot
 from morning_brief.prompting import build_prompt_cache_key, render_brief_prompts
 
 logger = logging.getLogger(__name__)
+
+REQUIRED_LAYER_HEADINGS = (
+    "LAYER 1 | 오늘 한줄 판단",
+    "LAYER 2 | 주요 뉴스",
+    "LAYER 3 | 종목 브리핑",
+)
+MIN_LAYER_TWO_BULLETS = 3
+MIN_LAYER_THREE_BULLETS = 3
 
 
 def _point_price(point: dict) -> float | None:
@@ -153,6 +165,76 @@ def _append_footer_note_block(text: str, packet: dict) -> str:
 
 
 _improve_readability_spacing = improve_readability_spacing
+
+
+def _count_metric_bullets(text: str, *, stop_at_label: str | None = None) -> int:
+    count = 0
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if stop_at_label is not None and stripped == stop_at_label:
+            break
+        if stripped.startswith("- "):
+            count += 1
+    return count
+
+
+def _brief_structure_issues(text: str) -> list[str]:
+    _, _, sections = extract_brief_structure(text)
+    section_map = {heading: content for heading, content in sections}
+    issues: list[str] = []
+
+    for heading in REQUIRED_LAYER_HEADINGS:
+        if heading not in section_map:
+            issues.append(f"{heading} 섹션이 없어요.")
+
+    layer_two = section_map.get("LAYER 2 | 주요 뉴스")
+    if layer_two:
+        layer_two_groups = split_section_groups(layer_two)
+        layer_two_bullets = _count_metric_bullets(layer_two_groups["metrics"][1])
+        if layer_two_bullets < MIN_LAYER_TWO_BULLETS:
+            issues.append(
+                f"LAYER 2 bullet 수가 부족해요. count={layer_two_bullets}, expected>={MIN_LAYER_TWO_BULLETS}"
+            )
+
+    layer_three = section_map.get("LAYER 3 | 종목 브리핑")
+    if layer_three:
+        layer_three_groups = split_section_groups(layer_three)
+        layer_three_bullets = _count_metric_bullets(
+            layer_three_groups["metrics"][1],
+            stop_at_label="거시 지표",
+        )
+        if layer_three_bullets < MIN_LAYER_THREE_BULLETS:
+            issues.append(
+                f"LAYER 3 종목 bullet 수가 부족해요. count={layer_three_bullets}, expected>={MIN_LAYER_THREE_BULLETS}"
+            )
+        if "거시 지표" not in layer_three:
+            issues.append("LAYER 3 안에 거시 지표 소제목이 없어요.")
+
+    return issues
+
+
+def _fallback_if_incomplete(
+    *,
+    text: str,
+    packet: dict,
+    settings: Settings,
+    observer: PipelineObserver | None = None,
+) -> str:
+    issues = _brief_structure_issues(text)
+    if not issues:
+        return _finalize_briefing(text, packet)
+
+    logger.warning(
+        "브리핑 구조가 완전하지 않아 안전한 기본 브리핑으로 대체할게요: %s",
+        "; ".join(issues[:3]),
+    )
+    if observer is not None:
+        observer.log_event(
+            "brief_fallback_used",
+            reason="incomplete_structure",
+            issues=issues,
+        )
+    return _fallback_brief(packet=packet, timezone=settings.timezone)
 
 
 def _finalize_briefing(text: str, packet: dict) -> str:
@@ -423,7 +505,12 @@ def generate_briefing(
             client=client,
             observer=observer,
         )
-        return _finalize_briefing(text, packet)
+        return _fallback_if_incomplete(
+            text=text,
+            packet=packet,
+            settings=settings,
+            observer=observer,
+        )
     except BriefGenerationError:
         raise
     except Exception as exc:
