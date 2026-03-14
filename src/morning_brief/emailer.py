@@ -39,6 +39,7 @@ FLAT_TOKENS = ("보합", "유지", "비슷", "변동이 크지", "큰 변화는 
 EMAIL_TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 PROJECT_GITHUB_URL = "https://github.com/froggy-0/news"
 DEFAULT_UNSUBSCRIBE_EMAIL = "unsubscribe@example.com"
+NONE_LIKE_TEXTS = {"", "none", "null", "n/a", "na"}
 
 if TYPE_CHECKING:
     from google.oauth2.credentials import Credentials
@@ -69,6 +70,13 @@ class _EmailBriefRow:
     context_text: str
     context_html: Markup
     tone: str
+
+
+@dataclass(frozen=True)
+class _EmailSourceItem:
+    label: str
+    url: str
+    safe_url: str | None
 
 
 def _gmail_dependencies() -> tuple[Any, Any, Any, Any]:
@@ -221,15 +229,32 @@ def _source_label(url: str | None) -> str | None:
     return hostname
 
 
+def _sanitize_optional_text(value: str) -> str:
+    normalized = " ".join(value.split()).strip()
+    if normalized.lower() in NONE_LIKE_TEXTS:
+        return ""
+    return normalized
+
+
 def _parse_news_metric_line(line: str) -> tuple[str, str, str | None]:
     parts = [part.strip() for part in line.split("|")]
-    if len(parts) >= 3:
+    if len(parts) >= 3 and _safe_link(parts[-1] or ""):
         headline = " | ".join(parts[:-2]).strip()
-        interpretation = parts[-2].strip()
+        interpretation = _sanitize_optional_text(parts[-2].strip())
         source_url = parts[-1].strip()
         return headline or line.strip(), interpretation, source_url or None
     if len(parts) == 2:
-        return parts[0].strip() or line.strip(), parts[1].strip(), None
+        return (
+            parts[0].strip() or line.strip(),
+            _sanitize_optional_text(parts[1].strip()),
+            None,
+        )
+    if len(parts) >= 3:
+        return (
+            parts[0].strip() or line.strip(),
+            _sanitize_optional_text(" | ".join(parts[1:])),
+            None,
+        )
     return line.strip(), "", None
 
 
@@ -330,7 +355,9 @@ def _build_news_items(
             items.append(
                 _EmailNewsItem(
                     headline=headline,
-                    interpretation=interpretation or fallback_interpretation,
+                    interpretation=_sanitize_optional_text(
+                        interpretation or fallback_interpretation
+                    ),
                     url=safe_url or "",
                     safe_url=safe_url,
                     source_label=_source_label(safe_url),
@@ -348,7 +375,9 @@ def _build_news_items(
         items.append(
             _EmailNewsItem(
                 headline=section.heading,
-                interpretation=interpretation or _first_non_empty_paragraph(section.content),
+                interpretation=_sanitize_optional_text(
+                    interpretation or _first_non_empty_paragraph(section.content)
+                ),
                 url=safe_url or "",
                 safe_url=safe_url,
                 source_label=_source_label(safe_url),
@@ -381,6 +410,32 @@ def _strip_inline_source(text: str) -> str:
     return re.sub(r"\s*\|\s*\[출처:[^\]]+\]\s*$", "", text).strip()
 
 
+def _abs_percent_text(change_text: str) -> str:
+    return change_text.strip().lstrip("+-")
+
+
+def _stock_summary_text(*, name: str, change_text: str, context_text: str) -> str:
+    direction = _percent_direction(change_text) or _token_direction(context_text) or "flat"
+    abs_change = _abs_percent_text(change_text)
+    if direction == "up":
+        verb = "상승"
+    elif direction == "down":
+        verb = "하락"
+    else:
+        verb = "보합"
+
+    normalized_name = name.strip()
+    if normalized_name in {"BTC", "BTC-USD", "비트코인", "비트코인 현물"}:
+        price_match = re.search(r"([\d,]+(?:\.\d+)?)달러", context_text)
+        if price_match is not None:
+            return (
+                f"비트코인은 전일 대비 {abs_change} {verb}, 현재 {price_match.group(1)}달러입니다."
+            )
+        return f"비트코인은 전일 대비 {abs_change} {verb}했습니다."
+
+    return f"{normalized_name}는 전일 대비 {abs_change} {verb}했습니다."
+
+
 def _build_stock_row(line: str, fallback_heading: str) -> _EmailBriefRow | None:
     parts = [part.strip() for part in line.split("|")]
     normalized_line = _strip_inline_source(line)
@@ -398,11 +453,17 @@ def _build_stock_row(line: str, fallback_heading: str) -> _EmailBriefRow | None:
         name = _stock_name_from_line(normalized_line, fallback=fallback_heading)
         context_text = normalized_line
 
-    return _EmailBriefRow(
+    summary_text = _stock_summary_text(
         name=name,
         change_text=change_text,
         context_text=context_text or normalized_line,
-        context_html=Markup(_render_body_line(context_text or normalized_line)),
+    )
+
+    return _EmailBriefRow(
+        name=name,
+        change_text=change_text,
+        context_text=summary_text,
+        context_html=Markup(_render_body_line(summary_text)),
         tone=_row_tone(normalized_line, change_text),
     )
 
@@ -495,6 +556,45 @@ def _build_reference_items(references: list[str]) -> list[dict[str, str | None]]
     return items
 
 
+def _build_news_source_items(
+    news_items: list[_EmailNewsItem],
+    reference_items: list[dict[str, str | None]],
+) -> list[_EmailSourceItem]:
+    items: list[_EmailSourceItem] = []
+    seen: set[str] = set()
+
+    for item in news_items:
+        safe_url = item.safe_url
+        if not safe_url or safe_url in seen:
+            continue
+        seen.add(safe_url)
+        items.append(_EmailSourceItem(label=item.headline, url=safe_url, safe_url=safe_url))
+
+    for item in reference_items:
+        safe_url = item.get("safe_url")
+        if not isinstance(safe_url, str) or not safe_url or safe_url in seen:
+            continue
+        seen.add(safe_url)
+        items.append(
+            _EmailSourceItem(
+                label=str(item.get("label") or safe_url),
+                url=safe_url,
+                safe_url=safe_url,
+            )
+        )
+
+    return items
+
+
+def _market_source_lines() -> list[str]:
+    return [
+        "거시 지표: FRED, yfinance",
+        "미국 지수/기술주: Stooq",
+        "비트코인: CoinGecko",
+        "X 시그널: Grok",
+    ]
+
+
 def _unsubscribe_url(sender: str) -> str:
     target = sender.strip() or DEFAULT_UNSUBSCRIBE_EMAIL
     subject = quote("Morning Market Brief 구독 해지")
@@ -532,6 +632,7 @@ def _build_email_context(subject: str, body: str, *, sender: str = "") -> dict[s
     news_items = _build_news_items(parsed_sections, references)
     stock_rows = _build_stock_rows(parsed_sections)
     macro_rows = _build_macro_rows(parsed_sections)
+    news_source_items = _build_news_source_items(news_items, reference_items)
 
     return {
         "subject": subject,
@@ -548,6 +649,8 @@ def _build_email_context(subject: str, body: str, *, sender: str = "") -> dict[s
         "macro_rows": macro_rows,
         "footer_notes": footer_notes,
         "reference_items": reference_items,
+        "news_source_items": news_source_items,
+        "market_source_lines": _market_source_lines(),
         "primary_cta": _primary_cta(reference_items),
         "unsubscribe_url": _unsubscribe_url(sender),
         "github_url": PROJECT_GITHUB_URL,

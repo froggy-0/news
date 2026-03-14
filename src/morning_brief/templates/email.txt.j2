@@ -12,8 +12,7 @@ Morning Market Brief
 {% if news_items -%}
 {% for item in news_items -%}
 - {{ item.headline }}
-  해석: {{ item.interpretation }}
-  {% if item.safe_url %}출처 URL: {{ item.safe_url }}{% else %}출처: 없음{% endif %}
+  {% if item.interpretation %}해석: {{ item.interpretation }}{% endif %}
 {% endfor %}
 {% else -%}
 {{ news_fallback_text }}
@@ -24,7 +23,7 @@ Morning Market Brief
 [LAYER 3 | 종목 브리핑]
 {% if stock_rows -%}
 {% for row in stock_rows -%}
-- {{ row.name }} | {{ row.change_text }} | {{ row.context_text }}
+- {{ row.context_text }}
 {% endfor %}
 {% else -%}
 {{ stock_fallback_text }}
@@ -45,6 +44,20 @@ Morning Market Brief
 {% endfor %}
 
 {% endif -%}
+[출처]
+{% if news_source_items -%}
+뉴스
+{% for item in news_source_items -%}
+· {{ item.label }}
+{{ item.url }}
+{% endfor %}
+
+{% endif -%}
+시장 데이터
+{% for line in market_source_lines -%}
+· {{ line }}
+{% endfor %}
+
 [링크]
 - 대표 링크: {{ primary_cta.url }}
 - 구독 해지: {{ unsubscribe_url }}

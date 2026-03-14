@@ -120,17 +120,10 @@
                       {% for item in news_items %}
                       <div style="padding:16px 0 0 0;{% if not loop.first %}border-top:1px solid #e2e8f0; margin-top:16px;{% endif %}">
                         <div class="text-strong" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#0f172a;font-size:18px;line-height:1.45;font-weight:800;">
-                          {% if item.safe_url %}
-                          <a href="{{ item.safe_url }}" style="color:#0f172a;text-decoration:none;">{{ item.headline }}</a>
-                          {% else %}
                           {{ item.headline }}
-                          {% endif %}
                         </div>
+                        {% if item.interpretation %}
                         <div class="text-body" style="padding:8px 0 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:14px;line-height:1.75;">{{ item.interpretation }}</div>
-                        {% if item.source_label %}
-                        <div style="padding:8px 0 0 0;">
-                          <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#64748b;font-size:13px;line-height:1.7;">출처: {{ item.source_label }}</div>
-                        </div>
                         {% endif %}
                       </div>
                       {% endfor %}
@@ -155,8 +148,6 @@
                       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:12px;">
                         {% for row in stock_rows %}
                         <tr>
-                          <td class="stock-name" style="padding:12px 10px 12px 0;border-top:1px solid #e2e8f0;width:24%;vertical-align:top;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#0f172a;font-size:14px;line-height:1.6;font-weight:800;">{{ row.name }}</td>
-                          <td class="stock-change" style="padding:12px 10px 12px 0;border-top:1px solid #e2e8f0;width:16%;vertical-align:top;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:14px;line-height:1.6;font-weight:800;color:{% if row.tone == 'up' %}#16a34a{% elif row.tone == 'down' %}#dc2626{% else %}#64748b{% endif %};">{{ row.change_text }}</td>
                           <td class="stock-context text-body" style="padding:12px 0;border-top:1px solid #e2e8f0;vertical-align:top;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:14px;line-height:1.75;">{{ row.context_html }}</td>
                         </tr>
                         {% endfor %}
@@ -210,11 +201,29 @@
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" style="border-collapse:separate;border-spacing:0;width:100%;background:#ffffff;border:1px solid #dde6f1;border-radius:24px;box-shadow:0 12px 30px rgba(15,23,42,0.06);">
                   <tr>
                     <td class="card-pad" style="padding:20px 22px;">
-                      <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#475569;font-size:12px;line-height:1.4;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;">데이터 소스</div>
-                      <div class="text-body" style="padding:10px 0 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:14px;line-height:1.75;">
-                        시장 데이터는 FRED, Stooq, yfinance, CoinGecko를 조합하고, 뉴스는 Perplexity와 공식 X 시그널, RSS/NewsAPI fallback을 사용합니다.
+                      <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#475569;font-size:12px;line-height:1.4;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;">출처</div>
+                      {% if news_source_items %}
+                      <div style="padding:14px 0 0 0;">
+                        <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#0f172a;font-size:13px;line-height:1.5;font-weight:800;">뉴스</div>
+                        {% for item in news_source_items %}
+                        <div class="text-body" style="padding:10px 0 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:14px;line-height:1.75;">· {{ item.label }}</div>
+                        {% if item.safe_url %}
+                        <div style="padding:4px 0 0 0;">
+                          <a href="{{ item.safe_url }}" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#1d4ed8;font-size:13px;line-height:1.7;text-decoration:underline;word-break:break-all;">{{ item.url }}</a>
+                        </div>
+                        {% else %}
+                        <div class="text-body" style="padding:4px 0 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:13px;line-height:1.7;word-break:break-all;">{{ item.url }}</div>
+                        {% endif %}
+                        {% endfor %}
                       </div>
-                      {% if reference_items %}
+                      {% endif %}
+                      <div style="padding:14px 0 0 0;">
+                        <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#0f172a;font-size:13px;line-height:1.5;font-weight:800;">시장 데이터</div>
+                        {% for line in market_source_lines %}
+                        <div class="text-body" style="padding:10px 0 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:14px;line-height:1.75;">· {{ line }}</div>
+                        {% endfor %}
+                      </div>
+                      {% if reference_items and not news_source_items %}
                       <div style="padding:14px 0 0 0;">
                         {% for item in reference_items[:5] %}
                           {% if item.safe_url %}

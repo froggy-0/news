@@ -129,9 +129,11 @@ def test_render_briefing_email_html_colors_each_signed_percent_individually():
         subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
         body="""Morning Market Brief (2026-03-12)
 
-1. 미국 증시 흐름
+3. LAYER 3 | 종목 브리핑
 주요 지표
-- 주요 지수는 S&P500 610.25 (+1.20%) / NASDAQ 18250.11 (-0.85%) / SOXX 245.10 (+0.10%) 흐름으로 마감했습니다.
+- S&P500 | +1.20% | 지수 흐름입니다. | [출처: Stooq]
+- NASDAQ | -0.85% | 기술주 흐름입니다. | [출처: Stooq]
+- SOXX | +0.10% | 반도체 흐름입니다. | [출처: Stooq]
 """,
     )
 
@@ -180,16 +182,20 @@ def test_render_briefing_email_html_renders_reference_links():
         body=body,
     )
 
-    assert "데이터 소스" in html
+    assert "출처" in html
+    assert "시장 데이터" in html
     assert 'href="https://www.reuters.com/world/us/example"' in html
 
 
-def test_render_briefing_email_html_links_headlines_and_shows_domain_label():
+def test_render_briefing_email_html_moves_news_url_to_source_section():
     body = """Morning Market Brief (2026-03-12)
 
 2. LAYER 2 | 주요 뉴스
 핵심 이슈
-- Nvidia unveils new AI cluster | 데이터센터 투자 기대를 다시 자극했습니다. | https://www.reuters.com/world/us/example
+- 엔비디아가 새 AI 클러스터를 공개했습니다 | 데이터센터 투자 기대를 자극했습니다.
+
+참고 출처
+- 엔비디아가 새 AI 클러스터를 공개했습니다 — https://www.reuters.com/world/us/example
 """
 
     html = render_briefing_email_html(
@@ -197,10 +203,10 @@ def test_render_briefing_email_html_links_headlines_and_shows_domain_label():
         body=body,
     )
 
-    assert 'href="https://www.reuters.com/world/us/example"' in html
-    assert ">Nvidia unveils new AI cluster<" in html
-    assert "출처: reuters.com" in html
-    assert ">https://www.reuters.com/world/us/example<" not in html
+    assert "엔비디아가 새 AI 클러스터를 공개했습니다" in html
+    assert "출처: reuters.com" not in html
+    assert '<a href="https://www.reuters.com/world/us/example"' in html
+    assert ">https://www.reuters.com/world/us/example<" in html
 
 
 def test_render_briefing_email_html_leaves_headline_plain_text_when_url_missing():
@@ -208,7 +214,7 @@ def test_render_briefing_email_html_leaves_headline_plain_text_when_url_missing(
 
 2. LAYER 2 | 주요 뉴스
 핵심 이슈
-- Nvidia unveils new AI cluster | 데이터센터 투자 기대를 다시 자극했습니다.
+- 엔비디아가 새 AI 클러스터를 공개했습니다 | 데이터센터 투자 기대를 다시 자극했습니다.
 """
 
     html = render_briefing_email_html(
@@ -216,17 +222,19 @@ def test_render_briefing_email_html_leaves_headline_plain_text_when_url_missing(
         body=body,
     )
 
-    assert "Nvidia unveils new AI cluster" in html
+    assert "엔비디아가 새 AI 클러스터를 공개했습니다" in html
     assert 'href="https://"' not in html
-    assert "출처:" not in html
 
 
-def test_render_briefing_email_html_formats_x_signal_source_label():
+def test_render_briefing_email_html_keeps_x_signal_url_only_in_source_section():
     body = """Morning Market Brief (2026-03-12)
 
 2. LAYER 2 | 주요 뉴스
 핵심 이슈
-- BlackRock updates BTC ETF flow note | 공식 X 업데이트입니다. | https://x.com/BlackRock/status/1234567890
+- 블랙록이 BTC ETF 유입 현황을 업데이트했습니다 | 공식 X 업데이트입니다.
+
+참고 출처
+- 블랙록이 BTC ETF 유입 현황을 업데이트했습니다 — https://x.com/BlackRock/status/1234567890
 """
 
     html = render_briefing_email_html(
@@ -234,8 +242,9 @@ def test_render_briefing_email_html_formats_x_signal_source_label():
         body=body,
     )
 
+    assert "블랙록이 BTC ETF 유입 현황을 업데이트했습니다" in html
+    assert "출처: x.com/BlackRock" not in html
     assert 'href="https://x.com/BlackRock/status/1234567890"' in html
-    assert "출처: x.com/BlackRock" in html
 
 
 def test_render_briefing_email_html_omits_unsafe_reference_links():
@@ -283,11 +292,16 @@ def test_render_briefing_email_text_renders_full_news_url_when_present():
 
 2. LAYER 2 | 주요 뉴스
 핵심 이슈
-- Nvidia unveils new AI cluster | 데이터센터 투자 기대를 다시 자극했습니다. | https://www.reuters.com/world/us/example
+- 엔비디아가 새 AI 클러스터를 공개했습니다 | 데이터센터 투자 기대를 다시 자극했습니다.
+
+참고 출처
+- 엔비디아가 새 AI 클러스터를 공개했습니다 — https://www.reuters.com/world/us/example
 """,
     )
 
-    assert "출처 URL: https://www.reuters.com/world/us/example" in text
+    assert "출처 URL:" not in text
+    assert "[출처]" in text
+    assert "https://www.reuters.com/world/us/example" in text
 
 
 def test_render_briefing_email_keeps_layer_sections_when_item_parsing_fails():
@@ -397,12 +411,61 @@ def test_render_briefing_email_html_does_not_repeat_stock_or_macro_values():
     assert html.count("META") == 1
     assert html.count("달러 인덱스") == 1
     assert html.count("미국 10년물 금리") == 1
-    assert "서버 투자 기대가 둔화됐습니다." in html
-    assert "광고 업종 전반이 약했습니다." in html
+    assert "AVGO는 전일 대비" in html
+    assert "META는 전일 대비" in html
+    assert "하락했습니다." in html
     assert text.count("AVGO") == 1
     assert text.count("META") == 1
     assert text.count("달러 인덱스") == 1
     assert text.count("미국 10년물 금리") == 1
+    assert "AVGO는 전일 대비 4.11% 하락했습니다." in text
+    assert "META는 전일 대비 3.83% 하락했습니다." in text
+
+
+def test_build_email_context_formats_stock_rows_as_single_sentences():
+    body = """Morning Market Brief (2026-03-12)
+
+3. LAYER 3 | 종목 브리핑
+주요 지표
+- AVGO | -4.11% | 서버 투자 기대가 둔화됐습니다. | [출처: Stooq]
+- BTC-USD | -0.16% | 비트코인 현물은 71,282달러였습니다. | [출처: CoinGecko]
+"""
+
+    context = _build_email_context(
+        subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
+        body=body,
+    )
+
+    stock_rows = context["stock_rows"]
+    assert [row.context_text for row in stock_rows] == [
+        "AVGO는 전일 대비 4.11% 하락했습니다.",
+        "비트코인은 전일 대비 0.16% 하락, 현재 71,282달러입니다.",
+    ]
+
+
+def test_build_email_context_omits_none_interpretation_and_dedupes_source_urls():
+    body = """Morning Market Brief (2026-03-12)
+
+2. LAYER 2 | 주요 뉴스
+핵심 이슈
+- 엔비디아가 새 AI 클러스터를 공개했습니다 | None
+- 같은 뉴스가 다시 들어왔습니다 | null
+
+참고 출처
+- 엔비디아가 새 AI 클러스터를 공개했습니다 — https://news.google.com/rss/articles/CBMiQWh0dHBzOi8vd3d3LnJldXRlcnMuY29tL3dvcmxkL3VzL2V4YW1wbGXSAQA?oc=5
+- 같은 뉴스가 다시 들어왔습니다 — https://news.google.com/rss/articles/CBMiQWh0dHBzOi8vd3d3LnJldXRlcnMuY29tL3dvcmxkL3VzL2V4YW1wbGXSAQA?oc=5
+"""
+
+    context = _build_email_context(
+        subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
+        body=body,
+    )
+
+    news_items = context["news_items"]
+    news_source_items = context["news_source_items"]
+    assert [item.interpretation for item in news_items] == ["", ""]
+    assert len(news_source_items) == 1
+    assert news_source_items[0].url.startswith("https://news.google.com/")
 
 
 def test_split_reference_block_separates_reference_lines():
