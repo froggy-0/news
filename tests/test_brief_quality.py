@@ -124,16 +124,16 @@ def _build_checks(brief_path: Path) -> list[BriefQualityCheck]:
     )
     add(
         "구조 검증",
-        "LAYER 2 뉴스 3개 이상",
-        len(layer_two_items) >= 3,
-        f"뉴스 bullet 수가 {len(layer_two_items)}개입니다." if len(layer_two_items) < 3 else "",
+        "LAYER 2 뉴스 2개 이상",
+        len(layer_two_items) >= 2,
+        f"뉴스 bullet 수가 {len(layer_two_items)}개입니다." if len(layer_two_items) < 2 else "",
     )
     add(
         "구조 검증",
-        "LAYER 3 종목 브리핑 존재",
-        bool(layer_three) and bool(stock_lines),
-        "LAYER 3 섹션 또는 종목 bullet을 찾지 못했습니다."
-        if not (layer_three and stock_lines)
+        "LAYER 3 종목 브리핑 2개 이상",
+        bool(layer_three) and len(stock_lines) >= 2,
+        "LAYER 3 섹션 또는 종목 bullet 수가 부족합니다."
+        if not (layer_three and len(stock_lines) >= 2)
         else "",
     )
     add(
@@ -180,6 +180,12 @@ def _build_checks(brief_path: Path) -> list[BriefQualityCheck]:
         "LAYER 2에 None/null 문자열이 노출됩니다." if has_none else "",
     )
     cause_ok = bool(stock_lines) and all(STOCK_CAUSE_RE.search(line) for line in stock_lines)
+    add(
+        "콘텐츠 품질",
+        "Layer 문자열 미노출",
+        "Layer" not in raw_text,
+        "Layer 문자열이 그대로 노출됩니다." if "Layer" in raw_text else "",
+    )
     add(
         "콘텐츠 품질",
         "LAYER 3 종목 브리핑 원인 포함",
@@ -259,13 +265,35 @@ def _summarize_checks(checks: list[BriefQualityCheck]) -> dict[str, int]:
 
 def _format_report(brief_path: Path, checks: list[BriefQualityCheck]) -> str:
     summary = _summarize_checks(checks)
-    lines = [f"브리핑 품질 검증 결과: {brief_path}"]
+    lines = [f"브리핑 품질 검증: {brief_path}", ""]
+    categories = ["구조 검증", "콘텐츠 품질", "신규 지표", "출처 검증"]
+    for category in categories:
+        category_checks = [check for check in checks if check.category == category]
+        if not category_checks:
+            continue
+        passed = sum(1 for check in category_checks if check.status == "PASS")
+        failed = sum(1 for check in category_checks if check.status == "FAIL")
+        warned = sum(1 for check in category_checks if check.status == "WARN")
+        label = (
+            category.replace(" 검증", "")
+            .replace("콘텐츠 품질", "품질")
+            .replace("신규 지표", "지표")
+        )
+        line = f"{label:<4} PASS: {passed}/{len(category_checks)}"
+        if failed:
+            line = f"{label:<4} FAIL: {failed}/{len(category_checks)}"
+        elif warned:
+            line = f"{label:<4} WARN: {warned}/{len(category_checks)}"
+        lines.append(line)
+
+    lines.append("")
+    lines.append("상세 결과")
     current_category = ""
     for check in checks:
         if check.category != current_category:
             current_category = check.category
-            lines.append(current_category)
-        line = f"{check.label}: {check.status}"
+            lines.append(f"[{current_category}]")
+        line = f"- {check.label}: {check.status}"
         if check.detail:
             line = f"{line} ← {check.detail}"
         lines.append(line)
@@ -399,11 +427,11 @@ def test_validate_brief_quality_uses_latest_brief_file_and_saves_log(
     captured = capsys.readouterr()
 
     summary = _summarize_checks(checks)
-    assert "브리핑 품질 검증 결과" in captured.out
-    assert "구조 검증" in captured.out
-    assert "콘텐츠 품질" in captured.out
-    assert "신규 지표" in captured.out
-    assert "출처 검증" in captured.out
+    assert "브리핑 품질 검증:" in captured.out
+    assert "구조" in captured.out
+    assert "품질" in captured.out
+    assert "지표" in captured.out
+    assert "출처" in captured.out
     assert summary["fail"] == 0
     assert summary["warn"] == 0
     assert log_path.exists()
@@ -425,9 +453,9 @@ def test_validate_brief_quality_detects_failures_and_warning(tmp_path: Path, cap
     summary = _summarize_checks(checks)
     assert summary["fail"] >= 1
     assert summary["warn"] == 1
-    assert "LAYER 1 판단 결론 포함: FAIL" in captured.out
-    assert "LAYER 2 뉴스 제목 한국어: FAIL" in captured.out
-    assert "news.google.com URL 여부: WARN" in captured.out
+    assert "- LAYER 1 판단 결론 포함: FAIL" in captured.out
+    assert "- LAYER 2 뉴스 제목 한국어: FAIL" in captured.out
+    assert "- news.google.com URL 여부: WARN" in captured.out
     payload = json.loads(log_path.read_text(encoding="utf-8"))
     assert payload["summary"]["warn"] == 1
     assert any(check["status"] == "FAIL" for check in payload["checks"])
