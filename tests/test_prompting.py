@@ -46,10 +46,13 @@ def test_render_brief_prompts_contains_contract_and_packet(monkeypatch):
     assert "한국어로 번역" in instructions
     assert "최대 40자 안팎" in instructions
     assert "None" in instructions
-    assert "오늘은 매수 관심 국면입니다" in instructions
+    assert "오늘은 매수 관심 국면입니다." in instructions
+    assert "오늘은 관망 국면입니다." in instructions
+    assert "오늘은 리스크 주의 국면입니다." in instructions
     assert "원/달러 환율" in instructions
     assert "나스닥 선물" in instructions
     assert "코스피" in instructions
+    assert "한국 투자자에게 왜 중요한지" in instructions
     assert "종목명은 {원인 한줄}로 {N}% {상승/하락}했습니다." in instructions
     assert "상관관계 중심" in instructions or "상관관계" in instructions
     assert "Prompt Version: market_brief_test" in instructions
