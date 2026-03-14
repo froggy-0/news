@@ -328,6 +328,9 @@ def fetch_macro_points(fred_api_key: str = "") -> list[MarketPoint]:
         existing_canonical_keys: set[str] | None = None,
     ) -> list[MarketPoint]:
         existing = existing_canonical_keys or set()
+        # ICE DXY is sourced only from Yahoo Finance's DX-Y.NYB path.
+        # Stooq does not expose a compatible symbol, and FRED broad dollar indices
+        # are intentionally excluded because they do not match the ICE DXY definition.
         return [
             _safe_yfinance_point(
                 label=canonical_label_for(canonical_key),

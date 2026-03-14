@@ -19,7 +19,6 @@ CANONICAL_KEY_BY_SOURCE = {
     "^TNX": "us10y",
     "DGS2": "us2y",
     "^IRX": "us3m",
-    "DTWEXBGS": "dxy",
     "DX-Y.NYB": "dxy",
     "VIXCLS": "vix",
     "^VIX": "vix",

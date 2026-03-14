@@ -51,7 +51,7 @@ def test_build_market_packet_uses_previous_value_cache_for_missing_points(
             {
                 "dxy": {
                     "label": "달러 인덱스",
-                    "ticker": "DTWEXBGS",
+                    "ticker": "DX-Y.NYB",
                     "price": 104.2,
                     "change_pct": 0.3,
                     "canonical_key": "dxy",
@@ -66,7 +66,7 @@ def test_build_market_packet_uses_previous_value_cache_for_missing_points(
         lambda **_: [
             _point(
                 label="달러 인덱스",
-                ticker="DTWEXBGS",
+                ticker="DX-Y.NYB",
                 canonical_key="dxy",
                 price=None,
                 change_pct=None,
@@ -102,7 +102,7 @@ def test_build_market_packet_keeps_missing_points_empty_without_cache(monkeypatc
         lambda **_: [
             _point(
                 label="달러 인덱스",
-                ticker="DTWEXBGS",
+                ticker="DX-Y.NYB",
                 canonical_key="dxy",
                 price=None,
                 change_pct=None,
@@ -143,7 +143,7 @@ def test_build_market_packet_omits_anomalous_values_and_records_footer_note(
         lambda **_: [
             _point(
                 label="달러 인덱스",
-                ticker="DTWEXBGS",
+                ticker="DX-Y.NYB",
                 canonical_key="dxy",
                 price=119.0,
                 change_pct=0.5,
