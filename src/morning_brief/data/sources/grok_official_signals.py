@@ -87,6 +87,7 @@ def _usage_snapshot(response: object) -> dict[str, int | None]:
         "output_tokens": _usage_int(usage, "completion_tokens"),
         "cached_input_tokens": _first_usage_int(
             usage,
+            ("cached_prompt_text_tokens",),
             ("prompt_tokens_details", "cached_tokens"),
             ("input_tokens_details", "cached_tokens"),
         ),

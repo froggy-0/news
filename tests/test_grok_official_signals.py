@@ -313,6 +313,55 @@ def test_fetch_official_x_signals_records_usage(monkeypatch, tmp_path):
     assert "collected_at" in events[0]["items"][0]
 
 
+def test_fetch_official_x_signals_reads_cached_prompt_text_tokens(monkeypatch, tmp_path):
+    calls: list[dict] = []
+    prompts: list[object] = []
+    observer = PipelineObserver(output_dir=tmp_path)
+    responses = [
+        _Response(
+            content=json.dumps(
+                {
+                    "items": [
+                        {
+                            "entity_id": "amd",
+                            "headline": "AMD가 새 AI 서버 투자 계획을 공개했어요",
+                            "summary": "공식 계정이 데이터센터 투자 계획을 설명했어요.",
+                            "why_it_matters": "AI 투자 지출 기대를 다시 키울 수 있어요.",
+                            "posted_at": "2026-03-13T01:00:00Z",
+                            "source_handle": "AMD",
+                            "citations": ["https://x.com/AMD/status/1"],
+                        }
+                    ]
+                }
+            ),
+            usage={
+                "prompt_tokens": 88,
+                "completion_tokens": 16,
+                "cached_prompt_text_tokens": 9,
+            },
+        )
+    ]
+
+    monkeypatch.setattr(
+        gxs,
+        "grouped_verified_x_entities",
+        lambda: {"ai_bigtech_primary": VERIFIED_GROUPS["ai_bigtech_primary"]},
+    )
+    monkeypatch.setattr(gxs, "x_search", lambda **kwargs: {"name": "x_search", "kwargs": kwargs})
+    monkeypatch.setattr(gxs, "_build_client", lambda api_key: _Client(responses, calls, prompts))
+
+    gxs.fetch_official_x_signals(
+        api_key="grok-test-key",
+        model="grok-test-model",
+        lookback_hours=24,
+        max_items=2,
+        observer=observer,
+    )
+
+    usage = observer.provider_usage["grok"]
+    assert usage.cached_input_tokens == 9
+
+
 def test_fetch_official_x_signals_leaves_usage_null_when_missing(monkeypatch, tmp_path):
     calls: list[dict] = []
     prompts: list[object] = []
