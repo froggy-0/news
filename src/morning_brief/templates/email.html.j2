@@ -7,71 +7,78 @@
     <meta name="supported-color-schemes" content="light dark">
     <title>{{ subject }}</title>
     <style>
+      :root {
+        color-scheme: light dark;
+      }
       @media (prefers-color-scheme: dark) {
-        body, .shell {
-          background: #08111f !important;
+        body,
+        .shell {
+          background: #0f172a !important;
         }
         .card {
-          background: #0f1b2d !important;
-          border-color: #22324a !important;
+          background: #1e293b !important;
+          border-color: #334155 !important;
           box-shadow: none !important;
         }
-        .soft-card {
-          background: #11233a !important;
-          border-color: #2a466e !important;
+        .section-fill {
+          background: #162133 !important;
         }
         .text-strong,
         .text-body,
-        .text-muted a {
-          color: #e2e8f0 !important;
-          -webkit-text-fill-color: #e2e8f0 !important;
+        .text-link {
+          color: #f1f5f9 !important;
+          -webkit-text-fill-color: #f1f5f9 !important;
         }
         .text-subtle,
-        .text-muted {
+        .text-muted,
+        .source-name {
           color: #94a3b8 !important;
           -webkit-text-fill-color: #94a3b8 !important;
+        }
+        .rule {
+          border-color: #334155 !important;
         }
       }
       @media screen and (max-width: 600px) {
         .shell-pad {
-          padding: 18px 12px !important;
+          padding: 16px 12px !important;
         }
         .card-pad {
           padding: 18px !important;
         }
         .hero-title {
-          font-size: 24px !important;
-          line-height: 1.18 !important;
+          font-size: 26px !important;
         }
         .layer-one {
           font-size: 24px !important;
         }
-        .stock-name,
-        .stock-change,
-        .stock-context {
+        .source-row {
           display: block !important;
-          width: 100% !important;
+        }
+        .source-name {
+          display: block !important;
+          padding-top: 4px !important;
           text-align: left !important;
-          padding: 0 0 6px 0 !important;
         }
       }
     </style>
   </head>
-  <body style="margin:0;padding:0;background:#f5f7fb;">
+  <body style="margin:0;padding:0;background:#f8fafc;">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
       {{ preheader }}
     </div>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="shell" style="width:100%;background:#f5f7fb;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="shell" style="width:100%;background:#f8fafc;">
       <tr>
         <td align="center" class="shell-pad" style="padding:24px 14px;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:640px;">
             <tr>
               <td style="padding:0 0 14px 0;">
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" style="border-collapse:separate;border-spacing:0;width:100%;background:#ffffff;border:1px solid #dde6f1;border-radius:24px;overflow:hidden;box-shadow:0 12px 30px rgba(15,23,42,0.06);">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" style="width:100%;background:#ffffff;border:1px solid #e2e8f0;border-radius:24px;box-shadow:0 12px 30px rgba(15,23,42,0.06);">
                   <tr>
-                    <td class="card-pad" style="padding:22px 22px 18px 22px;background:linear-gradient(135deg, #ecfdf5 0%, #eff6ff 58%, #fff7ed 100%);">
-                      <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#475569;font-size:12px;line-height:1.5;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">{{ display_date or title }}</div>
-                      <div class="hero-title text-strong" style="padding:10px 0 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#0f172a;font-size:30px;line-height:1.14;font-weight:800;letter-spacing:-0.03em;-webkit-text-fill-color:#0f172a;">Morning Market Brief</div>
+                    <td class="card-pad" style="padding:24px 24px 20px 24px;">
+                      <div class="hero-title text-strong" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#0f172a;font-size:20px;line-height:1.2;font-weight:700;letter-spacing:-0.02em;">Morning Market Brief</div>
+                      <div class="text-subtle" style="padding-top:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#64748b;font-size:14px;line-height:1.6;font-weight:600;">{{ display_date or title }}</div>
+                      <div class="rule" style="margin-top:16px;border-top:1px solid #e2e8f0;"></div>
                     </td>
                   </tr>
                 </table>
@@ -81,7 +88,7 @@
             {% if notice %}
             <tr>
               <td style="padding:0 0 14px 0;">
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card soft-card" style="border-collapse:separate;border-spacing:0;width:100%;background:#fff7ed;border:1px solid #fdba74;border-radius:20px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card section-fill" style="width:100%;background:#fff7ed;border:1px solid #fdba74;border-radius:24px;">
                   <tr>
                     <td class="card-pad" style="padding:16px 18px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#9a3412;font-size:14px;line-height:1.7;font-weight:700;">
                       {{ notice }}
@@ -94,13 +101,13 @@
 
             <tr>
               <td style="padding:0 0 14px 0;">
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" style="border-collapse:separate;border-spacing:0;width:100%;background:#ffffff;border:1px solid #dde6f1;border-radius:24px;box-shadow:0 12px 30px rgba(15,23,42,0.06);">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" style="width:100%;background:#ffffff;border:1px solid #e2e8f0;border-radius:24px;box-shadow:0 12px 30px rgba(15,23,42,0.06);">
                   <tr>
                     <td class="card-pad" style="padding:22px;">
-                      <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#16a34a;font-size:12px;line-height:1.4;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;">Layer 1 · 오늘 한줄 판단</div>
-                      <div class="layer-one text-strong" style="padding:12px 0 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#0f172a;font-size:28px;line-height:1.32;font-weight:800;letter-spacing:-0.03em;">{{ layer_one_html }}</div>
-                      <div style="padding:18px 0 0 0;">
-                        <a href="{{ primary_cta.url }}" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;border-radius:999px;padding:12px 18px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:14px;line-height:1;font-weight:700;">{{ primary_cta.label }}</a>
+                      <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#1e40af;font-size:13px;line-height:1.4;font-weight:600;">📌 오늘의 판단</div>
+                      <div class="layer-one text-strong" style="padding-top:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#0f172a;font-size:28px;line-height:1.45;font-weight:800;letter-spacing:-0.03em;font-variant-numeric:tabular-nums;">{{ layer_one_html }}</div>
+                      <div style="padding-top:18px;">
+                        <a href="{{ primary_cta.url }}" style="display:inline-block;background:#1e40af;color:#ffffff;text-decoration:none;border-radius:999px;padding:12px 18px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:14px;line-height:1;font-weight:700;">{{ primary_cta.label }}</a>
                       </div>
                     </td>
                   </tr>
@@ -111,23 +118,21 @@
             {% if news_items or news_fallback_text %}
             <tr>
               <td style="padding:0 0 14px 0;">
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" style="border-collapse:separate;border-spacing:0;width:100%;background:#ffffff;border:1px solid #dde6f1;border-radius:24px;box-shadow:0 12px 30px rgba(15,23,42,0.06);">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" style="width:100%;background:#ffffff;border:1px solid #e2e8f0;border-radius:24px;box-shadow:0 12px 30px rgba(15,23,42,0.06);">
                   <tr>
                     <td class="card-pad" style="padding:22px;">
-                      <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#2563eb;font-size:12px;line-height:1.4;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;">Layer 2 · 주요 뉴스</div>
+                      <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#1e40af;font-size:13px;line-height:1.4;font-weight:600;">📰 주요 뉴스</div>
                       {% if news_items %}
                       {% for item in news_items %}
-                      <div style="padding:16px 0 0 0;{% if not loop.first %}border-top:1px solid #e2e8f0; margin-top:16px;{% endif %}">
-                        <div class="text-strong" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#0f172a;font-size:18px;line-height:1.45;font-weight:800;">
-                          {{ item.headline }}
-                        </div>
+                      <div style="padding:16px 0 0 0;{% if not loop.first %}border-top:1px solid #e2e8f0;margin-top:16px;{% endif %}">
+                        <div class="text-strong" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#0f172a;font-size:18px;line-height:1.5;font-weight:800;">{{ item.headline }}</div>
                         {% if item.interpretation %}
-                        <div class="text-body" style="padding:8px 0 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:14px;line-height:1.75;">{{ item.interpretation }}</div>
+                        <div class="text-body" style="padding-top:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:15px;line-height:1.6;">{{ item.interpretation }}</div>
                         {% endif %}
                       </div>
                       {% endfor %}
                       {% else %}
-                      <div class="text-body" style="padding:14px 0 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:14px;line-height:1.75;white-space:pre-line;">{{ news_fallback_text }}</div>
+                      <div class="text-body" style="padding-top:14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:15px;line-height:1.6;white-space:pre-line;">{{ news_fallback_text }}</div>
                       {% endif %}
                     </td>
                   </tr>
@@ -139,20 +144,20 @@
             {% if stock_rows or stock_fallback_text %}
             <tr>
               <td style="padding:0 0 14px 0;">
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" style="border-collapse:separate;border-spacing:0;width:100%;background:#ffffff;border:1px solid #dde6f1;border-radius:24px;box-shadow:0 12px 30px rgba(15,23,42,0.06);">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" style="width:100%;background:#ffffff;border:1px solid #e2e8f0;border-radius:24px;box-shadow:0 12px 30px rgba(15,23,42,0.06);">
                   <tr>
                     <td class="card-pad" style="padding:22px;">
-                      <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#0f766e;font-size:12px;line-height:1.4;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;">Layer 3 · 종목 브리핑</div>
+                      <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#0f766e;font-size:13px;line-height:1.4;font-weight:600;">📊 시장 흐름</div>
                       {% if stock_rows %}
                       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:12px;">
                         {% for row in stock_rows %}
                         <tr>
-                          <td class="stock-context text-body" style="padding:12px 0;border-top:1px solid #e2e8f0;vertical-align:top;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:14px;line-height:1.75;">{{ row.context_html }}</td>
+                          <td class="text-body" style="padding:12px 0;border-top:1px solid #e2e8f0;vertical-align:top;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:15px;line-height:1.6;font-variant-numeric:tabular-nums;">{{ row.context_html }}</td>
                         </tr>
                         {% endfor %}
                       </table>
                       {% else %}
-                      <div class="text-body" style="padding:14px 0 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:14px;line-height:1.75;white-space:pre-line;">{{ stock_fallback_text }}</div>
+                      <div class="text-body" style="padding-top:14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:15px;line-height:1.6;white-space:pre-line;">{{ stock_fallback_text }}</div>
                       {% endif %}
                     </td>
                   </tr>
@@ -164,23 +169,23 @@
             {% if macro_rows or footer_notes %}
             <tr>
               <td style="padding:0 0 14px 0;">
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card soft-card" style="border-collapse:separate;border-spacing:0;width:100%;background:#f8fafc;border:1px solid #dbe4ee;border-radius:24px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card section-fill" style="width:100%;background:#f8fafc;border:1px solid #e2e8f0;border-radius:24px;">
                   <tr>
                     <td class="card-pad" style="padding:22px;">
-                      <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#475569;font-size:12px;line-height:1.4;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;">거시 지표</div>
+                      <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#475569;font-size:13px;line-height:1.4;font-weight:600;">🔢 거시 지표</div>
                       {% if macro_rows %}
                       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:10px;">
                         {% for label, value in macro_rows %}
                         <tr>
-                          <td style="padding:10px 10px 10px 0;border-top:1px solid #e2e8f0;width:24%;vertical-align:top;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#475569;font-size:13px;line-height:1.6;font-weight:800;">{{ label }}</td>
-                          <td class="text-body" style="padding:10px 0;border-top:1px solid #e2e8f0;vertical-align:top;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:14px;line-height:1.75;">{{ value }}</td>
+                          <td style="padding:10px 12px 10px 0;border-top:1px solid #e2e8f0;width:28%;vertical-align:top;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#475569;font-size:13px;line-height:1.6;font-weight:700;">{{ label }}</td>
+                          <td class="text-body" style="padding:10px 0;border-top:1px solid #e2e8f0;vertical-align:top;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:15px;line-height:1.6;font-variant-numeric:tabular-nums;">{{ value }}</td>
                         </tr>
                         {% endfor %}
                       </table>
                       {% endif %}
                       {% if footer_notes %}
-                      <div style="padding:14px 0 0 0;">
-                        <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#92400e;font-size:12px;line-height:1.4;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;">데이터 처리 메모</div>
+                      <div style="padding-top:14px;">
+                        <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#92400e;font-size:12px;line-height:1.4;font-weight:700;">데이터 처리 메모</div>
                         <ul style="margin:10px 0 0 0;padding:0;list-style:none;">
                           {% for note in footer_notes %}
                           <li style="margin:0 0 8px 0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#475569;font-size:13px;line-height:1.7;">{{ note }}</li>
@@ -197,44 +202,35 @@
 
             <tr>
               <td style="padding:0 0 14px 0;">
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" style="border-collapse:separate;border-spacing:0;width:100%;background:#ffffff;border:1px solid #dde6f1;border-radius:24px;box-shadow:0 12px 30px rgba(15,23,42,0.06);">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" style="width:100%;background:#ffffff;border:1px solid #e2e8f0;border-radius:24px;box-shadow:0 12px 30px rgba(15,23,42,0.06);">
                   <tr>
                     <td class="card-pad" style="padding:20px 22px;">
-                      <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#475569;font-size:12px;line-height:1.4;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;">출처</div>
+                      <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#475569;font-size:13px;line-height:1.4;font-weight:600;">📎 데이터 출처</div>
                       {% if news_source_items %}
-                      <div style="padding:14px 0 0 0;">
-                        <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#0f172a;font-size:13px;line-height:1.5;font-weight:800;">뉴스</div>
+                      <div style="padding-top:14px;">
+                        <div class="text-strong" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#0f172a;font-size:13px;line-height:1.5;font-weight:800;">뉴스</div>
                         {% for item in news_source_items %}
-                        <div class="text-body" style="padding:10px 0 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:14px;line-height:1.75;">· {{ item.label }}</div>
-                        {% if item.safe_url %}
-                        <div style="padding:4px 0 0 0;">
-                          <a href="{{ item.safe_url }}" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#1d4ed8;font-size:13px;line-height:1.7;text-decoration:underline;word-break:break-all;">{{ item.url }}</a>
-                        </div>
-                        {% else %}
-                        <div class="text-body" style="padding:4px 0 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:13px;line-height:1.7;word-break:break-all;">{{ item.url }}</div>
-                        {% endif %}
+                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="source-row" style="padding-top:10px;">
+                          <tr>
+                            <td class="text-body text-link" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:14px;line-height:1.6;">
+                              {% if item.safe_url %}
+                              <a href="{{ item.safe_url }}" style="color:#334155;text-decoration:none;font-weight:600;">· {{ item.headline }}</a>
+                              {% else %}
+                              · {{ item.headline }}
+                              {% endif %}
+                            </td>
+                            <td class="source-name" align="right" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#64748b;font-size:12px;line-height:1.6;font-weight:600;white-space:nowrap;">{{ item.source_name }}</td>
+                          </tr>
+                        </table>
                         {% endfor %}
                       </div>
                       {% endif %}
-                      <div style="padding:14px 0 0 0;">
-                        <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#0f172a;font-size:13px;line-height:1.5;font-weight:800;">시장 데이터</div>
+                      <div style="padding-top:14px;">
+                        <div class="text-strong" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#0f172a;font-size:13px;line-height:1.5;font-weight:800;">시장 데이터</div>
                         {% for line in market_source_lines %}
-                        <div class="text-body" style="padding:10px 0 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:14px;line-height:1.75;">· {{ line }}</div>
+                        <div class="text-body" style="padding-top:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:14px;line-height:1.6;">· {{ line }}</div>
                         {% endfor %}
                       </div>
-                      {% if reference_items and not news_source_items %}
-                      <div style="padding:14px 0 0 0;">
-                        {% for item in reference_items[:5] %}
-                          {% if item.safe_url %}
-                          <div style="padding:0 0 8px 0;">
-                            <a href="{{ item.safe_url }}" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#1d4ed8;font-size:13px;line-height:1.7;text-decoration:underline;word-break:break-all;">{{ item.label }}</a>
-                          </div>
-                          {% else %}
-                          <div class="text-body" style="padding:0 0 8px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:13px;line-height:1.7;">{{ item.label }}</div>
-                          {% endif %}
-                        {% endfor %}
-                      </div>
-                      {% endif %}
                     </td>
                   </tr>
                 </table>

@@ -60,7 +60,7 @@ class _EmailNewsItem:
     interpretation: str
     url: str
     safe_url: str | None
-    source_label: str | None
+    source_name: str | None
 
 
 @dataclass(frozen=True)
@@ -74,8 +74,8 @@ class _EmailBriefRow:
 
 @dataclass(frozen=True)
 class _EmailSourceItem:
-    label: str
-    url: str
+    headline: str
+    source_name: str
     safe_url: str | None
 
 
@@ -136,7 +136,7 @@ def _format_display_date(title: str, subject: str) -> str:
         weekday = weekdays[datetime(int(year), int(month), int(day)).weekday()]
     except ValueError:
         weekday = ""
-    return f"{year}.{month}.{day} {weekday}".strip()
+    return f"{year}년 {int(month)}월 {int(day)}일 {weekday} · 오전 8시 브리핑".strip()
 
 
 def _build_email_sections(sections: list[tuple[str, str]]) -> list[_EmailSection]:
@@ -201,7 +201,7 @@ def _safe_link(url: str) -> str | None:
     return None
 
 
-def _source_label(url: str | None) -> str | None:
+def _source_name(url: str | None) -> str | None:
     if not url:
         return None
 
@@ -223,9 +223,33 @@ def _source_label(url: str | None) -> str | None:
     if hostname == "x.com":
         path_parts = [part for part in parsed.path.split("/") if part]
         if path_parts:
-            return f"x.com/{path_parts[0]}"
-        return hostname
+            return f"X (@{path_parts[0]})"
+        return "X"
 
+    if hostname == "news.google.com":
+        return "Google News"
+    if hostname == "markets.ft.com":
+        if "/data/" in parsed.path:
+            return None
+        return "Financial Times"
+    if hostname.endswith("ft.com"):
+        return "Financial Times"
+    if hostname.endswith("reuters.com"):
+        return "Reuters"
+    if hostname.endswith("wsj.com"):
+        return "The Wall Street Journal"
+    if hostname.endswith("bloomberg.com"):
+        return "Bloomberg"
+    if hostname.endswith("cnbc.com"):
+        return "CNBC"
+    if hostname.endswith("bitcoin.com"):
+        return "Bitcoin.com News"
+    if hostname.endswith("finance.yahoo.com") or hostname.endswith("yahoo.com"):
+        return "Yahoo Finance"
+
+    root = hostname.split(".")
+    if len(root) >= 2:
+        return root[-2].replace("-", " ").title()
     return hostname
 
 
@@ -234,6 +258,18 @@ def _sanitize_optional_text(value: str) -> str:
     if normalized.lower() in NONE_LIKE_TEXTS:
         return ""
     return normalized
+
+
+def _display_percent_token(token: str) -> str:
+    direction = _percent_direction(token)
+    abs_change = _abs_percent_text(token)
+    if direction == "up":
+        return f"▲{abs_change}"
+    if direction == "down":
+        return f"▼{abs_change}"
+    if direction == "flat":
+        return "—"
+    return token
 
 
 def _parse_news_metric_line(line: str) -> tuple[str, str, str | None]:
@@ -360,7 +396,7 @@ def _build_news_items(
                     ),
                     url=safe_url or "",
                     safe_url=safe_url,
-                    source_label=_source_label(safe_url),
+                    source_name=_source_name(safe_url),
                 )
             )
 
@@ -380,7 +416,7 @@ def _build_news_items(
                 ),
                 url=safe_url or "",
                 safe_url=safe_url,
-                source_label=_source_label(safe_url),
+                source_name=_source_name(safe_url),
             )
         )
     return items
@@ -573,24 +609,33 @@ def _build_news_source_items(
     reference_items: list[dict[str, str | None]],
 ) -> list[_EmailSourceItem]:
     items: list[_EmailSourceItem] = []
-    seen: set[str] = set()
+    seen_source_names: set[str] = set()
 
     for item in news_items:
-        safe_url = item.safe_url
-        if not safe_url or safe_url in seen:
+        source_name = item.source_name or _source_name(item.safe_url)
+        if not source_name or source_name in seen_source_names:
             continue
-        seen.add(safe_url)
-        items.append(_EmailSourceItem(label=item.headline, url=safe_url, safe_url=safe_url))
+        seen_source_names.add(source_name)
+        items.append(
+            _EmailSourceItem(
+                headline=item.headline,
+                source_name=source_name,
+                safe_url=item.safe_url,
+            )
+        )
 
     for item in reference_items:
         safe_url = item.get("safe_url")
-        if not isinstance(safe_url, str) or not safe_url or safe_url in seen:
+        if not isinstance(safe_url, str) or not safe_url:
             continue
-        seen.add(safe_url)
+        source_name = _source_name(safe_url)
+        if not source_name or source_name in seen_source_names:
+            continue
+        seen_source_names.add(source_name)
         items.append(
             _EmailSourceItem(
-                label=str(item.get("label") or safe_url),
-                url=safe_url,
+                headline=str(item.get("label") or source_name),
+                source_name=source_name,
                 safe_url=safe_url,
             )
         )
@@ -619,7 +664,9 @@ def _primary_cta(reference_items: list[dict[str, str | None]]) -> dict[str, str]
         (
             item
             for item in reference_items
-            if isinstance(item.get("safe_url"), str) and item["safe_url"]
+            if isinstance(item.get("safe_url"), str)
+            and item["safe_url"]
+            and _source_name(str(item["safe_url"])) is not None
         ),
         None,
     )
@@ -729,7 +776,10 @@ def _highlight_metric_text(text: str, default_direction: str) -> str:
             )
         color = _direction_color(token_direction)
         parts.append(html.escape(text[last_index:start]))
-        parts.append(f'<span style="color:{color};font-weight:700;">{html.escape(token)}</span>')
+        display_token = _display_percent_token(token)
+        parts.append(
+            f'<span style="color:{color};font-weight:700;">{html.escape(display_token)}</span>'
+        )
         last_index = end
 
     if not parts:

@@ -79,10 +79,10 @@ def test_render_briefing_email_html_contains_layered_mobile_layout():
     )
 
     assert "Morning Market Brief" in html
-    assert "Layer 1 · 오늘 한줄 판단" in html
-    assert "Layer 2 · 주요 뉴스" in html
-    assert "Layer 3 · 종목 브리핑" in html
-    assert "2026.03.12" in html
+    assert "📌 오늘의 판단" in html
+    assert "📰 주요 뉴스" in html
+    assert "2026년 3월 12일" in html
+    assert "오전 8시 브리핑" in html
     assert "prefers-color-scheme: dark" in html
     assert "-apple-system" in html
     assert "display:none;max-height:0" in html
@@ -92,7 +92,10 @@ def test_render_briefing_email_html_contains_layered_mobile_layout():
     assert "GitHub" in html
     assert "[데이터 품질 알림] 뉴스 수가 부족합니다." in html
     assert "거시 지표" in html
-    assert html.count("2026.03.12") == 1
+    assert "Layer 1" not in html
+    assert "Layer 2" not in html
+    assert "Layer 3" not in html
+    assert html.count("오전 8시 브리핑") == 1
 
 
 def test_split_section_groups_separates_summary_and_insight():
@@ -132,17 +135,20 @@ def test_render_briefing_email_html_colors_each_signed_percent_individually():
 
 3. LAYER 3 | 종목 브리핑
 주요 지표
-- S&P500 | +1.20% | 지수 흐름입니다. | [출처: Stooq]
-- NASDAQ | -0.85% | 기술주 흐름입니다. | [출처: Stooq]
-- SOXX | +0.10% | 반도체 흐름입니다. | [출처: Stooq]
+- NVDA | +1.20% | 데이터센터 수요 기대가 이어졌습니다. | [출처: Stooq]
+
+거시 지표
+- 나스닥 선물은 전일 대비 +1.20%로 상승 방향입니다.
+- 달러 인덱스는 전일 대비 -0.85%였습니다.
+- 공포탐욕지수는 전일 대비 +0.10%였습니다.
 """,
     )
 
     assert "#16a34a" in html
     assert "#dc2626" in html
-    assert "+1.20%" in html
-    assert "-0.85%" in html
-    assert "+0.10%" in html
+    assert "▲1.20%" in html
+    assert "▼0.85%" in html
+    assert "▲0.10%" in html
 
 
 def test_render_briefing_email_html_prefers_negative_numeric_direction_over_positive_words():
@@ -183,9 +189,11 @@ def test_render_briefing_email_html_renders_reference_links():
         body=body,
     )
 
-    assert "출처" in html
+    assert "📎 데이터 출처" in html
     assert "시장 데이터" in html
     assert 'href="https://www.reuters.com/world/us/example"' in html
+    assert ">https://www.reuters.com/world/us/example<" not in html
+    assert "Reuters" in html
 
 
 def test_render_briefing_email_html_moves_news_url_to_source_section():
@@ -205,9 +213,9 @@ def test_render_briefing_email_html_moves_news_url_to_source_section():
     )
 
     assert "엔비디아가 새 AI 클러스터를 공개했습니다" in html
-    assert "출처: reuters.com" not in html
+    assert "Reuters" in html
     assert '<a href="https://www.reuters.com/world/us/example"' in html
-    assert ">https://www.reuters.com/world/us/example<" in html
+    assert ">https://www.reuters.com/world/us/example<" not in html
 
 
 def test_render_briefing_email_html_leaves_headline_plain_text_when_url_missing():
@@ -244,8 +252,9 @@ def test_render_briefing_email_html_keeps_x_signal_url_only_in_source_section():
     )
 
     assert "블랙록이 BTC ETF 유입 현황을 업데이트했습니다" in html
-    assert "출처: x.com/BlackRock" not in html
+    assert "X (@BlackRock)" in html
     assert 'href="https://x.com/BlackRock/status/1234567890"' in html
+    assert ">https://x.com/BlackRock/status/1234567890<" not in html
 
 
 def test_render_briefing_email_html_omits_unsafe_reference_links():
@@ -256,7 +265,7 @@ def test_render_briefing_email_html_omits_unsafe_reference_links():
         body=body,
     )
 
-    assert "Bad Link" in html
+    assert "Bad Link" not in html
     assert "javascript:alert(1)" not in html
     assert 'href="javascript:alert(1)"' not in html
 
@@ -280,13 +289,14 @@ def test_render_briefing_email_text_builds_plain_text_fallback():
         sender="sender@example.com",
     )
 
-    assert "[LAYER 2 | 주요 뉴스]" in text
-    assert "[LAYER 3 | 종목 브리핑]" in text
-    assert "구독 해지: mailto:sender@example.com" in text
-    assert "GitHub: https://github.com/froggy-0/news" in text
+    assert "📰 주요 뉴스" in text
+    assert "📊 시장 흐름" in text
+    assert "구독 해지: HTML 메일 하단 링크" in text
+    assert "GitHub: froggy-0/news" in text
+    assert "https://" not in text
 
 
-def test_render_briefing_email_text_renders_full_news_url_when_present():
+def test_render_briefing_email_text_hides_full_news_url_when_present():
     text = render_briefing_email_text(
         subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
         body="""Morning Market Brief (2026-03-12)
@@ -300,9 +310,9 @@ def test_render_briefing_email_text_renders_full_news_url_when_present():
 """,
     )
 
-    assert "출처 URL:" not in text
-    assert "[출처]" in text
-    assert "https://www.reuters.com/world/us/example" in text
+    assert "📎 데이터 출처" in text
+    assert "Reuters" in text
+    assert "https://www.reuters.com/world/us/example" not in text
 
 
 def test_render_briefing_email_keeps_layer_sections_when_item_parsing_fails():
@@ -333,13 +343,13 @@ def test_render_briefing_email_keeps_layer_sections_when_item_parsing_fails():
         body=body,
     )
 
-    assert "Layer 2 · 주요 뉴스" in html
+    assert "📰 주요 뉴스" in html
     assert "기사 형식이 완전하지 않아도 이 섹션은 그대로 보여야 합니다." in html
-    assert "Layer 3 · 종목 브리핑" in html
+    assert "📊 시장 흐름" in html
     assert "엔비디아 흐름을 점검했습니다." in html
-    assert "[LAYER 2 | 주요 뉴스]" in text
+    assert "📰 주요 뉴스" in text
     assert "기사 형식이 완전하지 않아도 이 섹션은 그대로 보여야 합니다." in text
-    assert "[LAYER 3 | 종목 브리핑]" in text
+    assert "📊 시장 흐름" in text
     assert "엔비디아 흐름을 점검했습니다." in text
 
 
@@ -490,7 +500,28 @@ def test_build_email_context_omits_none_interpretation_and_dedupes_source_urls()
     news_source_items = context["news_source_items"]
     assert [item.interpretation for item in news_items] == ["", ""]
     assert len(news_source_items) == 1
-    assert news_source_items[0].url.startswith("https://news.google.com/")
+    assert news_source_items[0].source_name == "Google News"
+    assert news_source_items[0].safe_url.startswith("https://news.google.com/")
+
+
+def test_build_email_context_excludes_ft_data_pages_from_news_sources():
+    body = """Morning Market Brief (2026-03-12)
+
+2. LAYER 2 | 주요 뉴스
+핵심 이슈
+- 엔비디아 실적 전망이 시장 기대를 웃돌았습니다 | AI 수요 기대를 키웠습니다.
+
+참고 출처
+- FT summary — https://markets.ft.com/data/equities/tearsheet/summary?s=NVD%3AFRA
+- Reuters — https://www.reuters.com/world/us/example
+"""
+
+    context = _build_email_context(
+        subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
+        body=body,
+    )
+
+    assert [item.source_name for item in context["news_source_items"]] == ["Reuters"]
 
 
 def test_split_reference_block_separates_reference_lines():

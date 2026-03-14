@@ -1,14 +1,17 @@
 Morning Market Brief
 {{ display_date or title }}
-{{ layer_one_text }}
+─────────────────────────────────────────
 
 {% if notice -%}
 [알림]
 {{ notice }}
 
 {% endif -%}
+📌 오늘의 판단
+{{ layer_one_text }}
+
 {% if news_items or news_fallback_text -%}
-[LAYER 2 | 주요 뉴스]
+📰 주요 뉴스
 {% if news_items -%}
 {% for item in news_items -%}
 - {{ item.headline }}
@@ -20,7 +23,7 @@ Morning Market Brief
 
 {% endif -%}
 {% if stock_rows or stock_fallback_text -%}
-[LAYER 3 | 종목 브리핑]
+📊 시장 흐름
 {% if stock_rows -%}
 {% for row in stock_rows -%}
 - {{ row.context_text }}
@@ -31,7 +34,7 @@ Morning Market Brief
 
 {% endif -%}
 {% if macro_rows -%}
-[거시 지표]
+🔢 거시 지표
 {% for label, value in macro_rows -%}
 - {{ label }}: {{ value|striptags }}
 {% endfor %}
@@ -44,12 +47,11 @@ Morning Market Brief
 {% endfor %}
 
 {% endif -%}
-[출처]
+📎 데이터 출처
 {% if news_source_items -%}
 뉴스
 {% for item in news_source_items -%}
-· {{ item.label }}
-{{ item.url }}
+· {{ item.headline }}   {{ item.source_name }}
 {% endfor %}
 
 {% endif -%}
@@ -59,6 +61,6 @@ Morning Market Brief
 {% endfor %}
 
 [링크]
-- 대표 링크: {{ primary_cta.url }}
-- 구독 해지: {{ unsubscribe_url }}
-- GitHub: {{ github_url }}
+- 대표 링크: {{ primary_cta.label }}
+- 구독 해지: HTML 메일 하단 링크
+- GitHub: froggy-0/news
