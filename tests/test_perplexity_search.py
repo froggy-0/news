@@ -311,6 +311,14 @@ def test_fetch_news_from_perplexity_records_usage_and_topic_audit(monkeypatch, t
     assert observer.perplexity_topic_audit["macro"]["candidate_urls"] == [
         "https://www.reuters.com/world/us/fed-keeps-options-open"
     ]
+    events = [event for event in observer.events if event["event"] == "perplexity_items_collected"]
+    assert len(events) == 1
+    assert events[0]["topic"] == "macro"
+    assert events[0]["count"] == 1
+    assert events[0]["items"][0]["title"] == "Fed keeps options open"
+    assert events[0]["items"][0]["url"] == "https://www.reuters.com/world/us/fed-keeps-options-open"
+    assert events[0]["items"][0]["domain"] == "reuters.com"
+    assert "collected_at" in events[0]["items"][0]
 
 
 def test_fetch_news_from_perplexity_leaves_token_usage_null_when_usage_missing(
@@ -363,3 +371,38 @@ def test_fetch_news_from_perplexity_leaves_token_usage_null_when_usage_missing(
     assert usage.output_tokens is None
     assert usage.cached_input_tokens is None
     assert usage.usage_parse_failures == 1
+
+
+def test_fetch_news_from_perplexity_records_empty_reason(monkeypatch, tmp_path):
+    observer = PipelineObserver(output_dir=tmp_path)
+    monkeypatch.setattr(
+        ps,
+        "TOPIC_SPECS",
+        (
+            ps.SearchTopic(
+                name="macro",
+                query="macro query",
+                retry_query="",
+                domain_filter=("reuters.com",),
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        ps,
+        "_build_client",
+        lambda api_key: _Client([_SDKResponse({"results": []})], []),
+    )
+
+    items = ps.fetch_news_from_perplexity(
+        max_items=5,
+        api_key="pplx-test-key",
+        observer=observer,
+    )
+
+    assert items == []
+    events = [event for event in observer.events if event["event"] == "perplexity_items_collected"]
+    assert len(events) == 1
+    assert events[0]["topic"] == "macro"
+    assert events[0]["count"] == 0
+    assert events[0]["items"] == []
+    assert events[0]["reason"] == "api_empty"

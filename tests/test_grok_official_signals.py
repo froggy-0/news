@@ -304,6 +304,13 @@ def test_fetch_official_x_signals_records_usage(monkeypatch, tmp_path):
     assert usage.input_tokens == 88
     assert usage.output_tokens == 16
     assert usage.cached_input_tokens == 11
+    events = [event for event in observer.events if event["event"] == "grok_signals_collected"]
+    assert len(events) == 1
+    assert events[0]["count"] == 1
+    assert events[0]["items"][0]["text"] == "AMD가 새 AI 서버 투자 계획을 공개했어요"
+    assert events[0]["items"][0]["url"] == "https://x.com/AMD/status/1"
+    assert events[0]["items"][0]["author"] == "AMD"
+    assert "collected_at" in events[0]["items"][0]
 
 
 def test_fetch_official_x_signals_leaves_usage_null_when_missing(monkeypatch, tmp_path):
@@ -405,3 +412,33 @@ def test_fetch_official_x_signals_retries_timeout_like_error(monkeypatch):
     assert len(calls) == 2
     assert items[0].title == "AMD가 새 AI 서버 투자 계획을 공개했어요"
     assert sleeps and round(sleeps[0], 2) == 1.5
+
+
+def test_fetch_official_x_signals_records_empty_reason(monkeypatch, tmp_path):
+    calls: list[dict] = []
+    prompts: list[object] = []
+    observer = PipelineObserver(output_dir=tmp_path)
+    responses = [_Response(content=json.dumps({"items": []}))]
+
+    monkeypatch.setattr(
+        gxs,
+        "grouped_verified_x_entities",
+        lambda: {"ai_bigtech_primary": VERIFIED_GROUPS["ai_bigtech_primary"]},
+    )
+    monkeypatch.setattr(gxs, "x_search", lambda **kwargs: {"name": "x_search", "kwargs": kwargs})
+    monkeypatch.setattr(gxs, "_build_client", lambda api_key: _Client(responses, calls, prompts))
+
+    items = gxs.fetch_official_x_signals(
+        api_key="grok-test-key",
+        model="grok-test-model",
+        lookback_hours=24,
+        max_items=2,
+        observer=observer,
+    )
+
+    assert items == []
+    events = [event for event in observer.events if event["event"] == "grok_signals_collected"]
+    assert len(events) == 1
+    assert events[0]["count"] == 0
+    assert events[0]["items"] == []
+    assert events[0]["reason"] == "api_empty"

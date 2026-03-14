@@ -12,6 +12,7 @@ from typing import Iterator
 from morning_brief.data.sources.domain_utils import normalize_domain
 
 PREFERRED_PROVIDER_ORDER = ("openai", "perplexity", "grok")
+COLLECTED_ITEM_LOG_LIMIT = 20
 
 
 @dataclass
@@ -150,6 +151,36 @@ class PipelineObserver:
         topic_audit["candidate_domains"] = list(
             dict.fromkeys(normalize_domain(url) for url in unique_urls if normalize_domain(url))
         )
+
+    def record_perplexity_items_collected(
+        self,
+        *,
+        topic: str,
+        items: list[dict[str, object]],
+        reason: str | None = None,
+    ) -> None:
+        payload = {
+            "topic": topic,
+            "count": len(items),
+            "items": items[:COLLECTED_ITEM_LOG_LIMIT],
+        }
+        if not items and reason:
+            payload["reason"] = reason
+        self._emit("perplexity_items_collected", **payload)
+
+    def record_grok_signals_collected(
+        self,
+        *,
+        items: list[dict[str, object]],
+        reason: str | None = None,
+    ) -> None:
+        payload = {
+            "count": len(items),
+            "items": items[:COLLECTED_ITEM_LOG_LIMIT],
+        }
+        if not items and reason:
+            payload["reason"] = reason
+        self._emit("grok_signals_collected", **payload)
 
     def record_perplexity_final_selection(self, packet: list[dict]) -> None:
         final_by_topic: dict[str, list[str]] = {}

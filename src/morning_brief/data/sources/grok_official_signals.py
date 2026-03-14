@@ -236,6 +236,32 @@ def _parse_response_items(payload_text: str) -> list[dict[str, Any]]:
     return [item for item in items if isinstance(item, dict)]
 
 
+def _collection_timestamp(item: NewsItem) -> str:
+    published_at = item.published_at
+    if published_at is not None:
+        if published_at.tzinfo is None:
+            published_at = published_at.replace(tzinfo=timezone.utc)
+        else:
+            published_at = published_at.astimezone(timezone.utc)
+        return published_at.isoformat()
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _loggable_grok_items(items: list[NewsItem]) -> list[dict[str, object]]:
+    payload: list[dict[str, object]] = []
+    for item in items:
+        author = item.source.strip().lstrip("@") if item.source else None
+        payload.append(
+            {
+                "text": item.title,
+                "url": item.url,
+                "author": author or None,
+                "collected_at": _collection_timestamp(item),
+            }
+        )
+    return payload
+
+
 def _search_group(
     *,
     api_key: str,
@@ -245,7 +271,7 @@ def _search_group(
     lookback_hours: int,
     max_items: int,
     observer: PipelineObserver | None = None,
-) -> list[NewsItem]:
+) -> tuple[list[NewsItem], str | None]:
     unavailable_reason = disabled_reason(GROK_PROVIDER)
     if unavailable_reason:
         record_skip(GROK_PROVIDER)
@@ -257,7 +283,7 @@ def _search_group(
         if entity.get("x_handle")
     ]
     if not handles:
-        return []
+        return [], "no_results"
 
     to_date = datetime.now(timezone.utc)
     from_date = to_date - timedelta(hours=lookback_hours)
@@ -364,7 +390,11 @@ def _search_group(
                 citations=citations,
             )
         )
-    return items
+    if items:
+        return items, None
+    if payload_items:
+        return [], "no_results"
+    return [], "api_empty"
 
 
 def fetch_official_x_signals(
@@ -376,26 +406,32 @@ def fetch_official_x_signals(
     observer: PipelineObserver | None = None,
 ) -> list[NewsItem]:
     if not api_key.strip():
+        if observer is not None:
+            observer.record_grok_signals_collected(items=[], reason="no_results")
         return []
 
     grouped = grouped_verified_x_entities()
     if not grouped:
+        if observer is not None:
+            observer.record_grok_signals_collected(items=[], reason="no_results")
         return []
 
     collected: list[NewsItem] = []
+    zero_result_reason: str | None = "no_results"
     for group, entities in grouped.items():
         try:
-            collected.extend(
-                _search_group(
-                    api_key=api_key,
-                    model=model,
-                    group=group,
-                    entities=entities,
-                    lookback_hours=lookback_hours,
-                    max_items=max_items,
-                    observer=observer,
-                )
+            group_items, group_reason = _search_group(
+                api_key=api_key,
+                model=model,
+                group=group,
+                entities=entities,
+                lookback_hours=lookback_hours,
+                max_items=max_items,
+                observer=observer,
             )
+            collected.extend(group_items)
+            if group_reason == "api_empty":
+                zero_result_reason = "api_empty"
         except HttpFetchError as exc:
             logger.warning("Grok에서 %s 그룹 공식 X를 확인하는 중 문제가 있었어요: %s", group, exc)
 
@@ -403,4 +439,10 @@ def fetch_official_x_signals(
         key=lambda item: item.published_at or datetime.min.replace(tzinfo=timezone.utc),
         reverse=True,
     )
-    return collected[:max_items]
+    final_items = collected[:max_items]
+    if observer is not None:
+        observer.record_grok_signals_collected(
+            items=_loggable_grok_items(final_items),
+            reason=zero_result_reason if not final_items else None,
+        )
+    return final_items

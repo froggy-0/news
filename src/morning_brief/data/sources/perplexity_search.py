@@ -445,6 +445,29 @@ def _parse_results(*, payload: dict[str, Any], topic: SearchTopic) -> list[NewsI
     return items
 
 
+def _collection_timestamp(item: NewsItem) -> str:
+    published_at = item.published_at
+    if published_at is not None:
+        if published_at.tzinfo is None:
+            published_at = published_at.replace(tzinfo=timezone.utc)
+        else:
+            published_at = published_at.astimezone(timezone.utc)
+        return published_at.isoformat()
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _loggable_perplexity_items(items: list[NewsItem]) -> list[dict[str, str]]:
+    return [
+        {
+            "title": item.title,
+            "url": item.url,
+            "domain": normalize_domain(item.url).removeprefix("www."),
+            "collected_at": _collection_timestamp(item),
+        }
+        for item in items
+    ]
+
+
 def _fetch_news_from_perplexity(
     *,
     max_items: int,
@@ -462,19 +485,21 @@ def _fetch_news_from_perplexity(
 
     for topic in TOPIC_SPECS:
         try:
+            total_result_count = 0
             payload, usage = _search_once(
                 client=client,
                 query=topic.query,
                 domain_filter=topic.domain_filter,
                 recency_filter=topic.recency_filter,
             )
+            first_results = payload.get("results", [])
+            if isinstance(first_results, list):
+                total_result_count += len(first_results)
             if observer is not None:
                 observer.record_provider_usage(
                     PERPLEXITY_PROVIDER,
                     requests=1,
-                    response_sources=len(payload.get("results", []))
-                    if isinstance(payload.get("results", []), list)
-                    else 0,
+                    response_sources=len(first_results) if isinstance(first_results, list) else 0,
                     input_tokens=usage["input_tokens"],
                     output_tokens=usage["output_tokens"],
                     cached_input_tokens=usage["cached_input_tokens"],
@@ -495,12 +520,15 @@ def _fetch_news_from_perplexity(
                     domain_filter=topic.domain_filter,
                     recency_filter=topic.recency_filter,
                 )
+                retry_results = retry_payload.get("results", [])
+                if isinstance(retry_results, list):
+                    total_result_count += len(retry_results)
                 if observer is not None:
                     observer.record_provider_usage(
                         PERPLEXITY_PROVIDER,
                         requests=1,
-                        response_sources=len(retry_payload.get("results", []))
-                        if isinstance(retry_payload.get("results", []), list)
+                        response_sources=len(retry_results)
+                        if isinstance(retry_results, list)
                         else 0,
                         input_tokens=retry_usage["input_tokens"],
                         output_tokens=retry_usage["output_tokens"],
@@ -522,6 +550,14 @@ def _fetch_news_from_perplexity(
                     topic.name,
                     [item.url for item in topic_items],
                 )
+                reason = None
+                if not topic_items:
+                    reason = "api_empty" if total_result_count == 0 else "no_results"
+                observer.record_perplexity_items_collected(
+                    topic=topic.name,
+                    items=_loggable_perplexity_items(topic_items),
+                    reason=reason,
+                )
 
             logger.info(
                 "Perplexity에서 %s 토픽 후보를 %s건 확인했어요.",
@@ -530,6 +566,12 @@ def _fetch_news_from_perplexity(
             )
             collected.extend(topic_items)
         except HttpFetchError as exc:
+            if observer is not None:
+                observer.record_perplexity_items_collected(
+                    topic=topic.name,
+                    items=[],
+                    reason="parse_error",
+                )
             logger.warning(
                 "Perplexity에서 %s 토픽을 확인하는 중 문제가 있었어요: %s", topic.name, exc
             )
