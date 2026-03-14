@@ -70,6 +70,7 @@ def test_prompt_cache_key_is_stable_and_sanitized(monkeypatch):
     assert key_one != key_three
     assert " " not in key_one
     assert "/" not in key_one
+    assert len(key_one) <= 64
 
 
 def test_prompt_cache_key_changes_with_model_override(monkeypatch):
@@ -85,6 +86,23 @@ def test_prompt_cache_key_changes_with_model_override(monkeypatch):
     )
 
     assert key_default != key_override
+    assert len(key_default) <= 64
+    assert len(key_override) <= 64
+
+
+def test_prompt_cache_key_respects_openai_length_limit_for_default_snapshot(monkeypatch):
+    monkeypatch.delenv("OPENAI_PROMPT_CACHE_KEY", raising=False)
+    monkeypatch.setenv("PROMPT_TEMPLATE_VERSION", "market_brief_v4")
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-5-mini-2025-08-07")
+    settings = load_settings()
+
+    key = build_prompt_cache_key(
+        settings=settings,
+        instructions="same-static-instructions",
+    )
+
+    assert len(key) <= 64
+    assert key.count(":") == 3
 
 
 def test_render_web_search_prompts_contains_search_context(monkeypatch):

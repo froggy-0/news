@@ -19,7 +19,10 @@ REWRITE_INPUT_TEMPLATE = "brief_rewrite_input.j2"
 WEB_SEARCH_INSTRUCTIONS_TEMPLATE = "web_search_instructions.j2"
 WEB_SEARCH_INPUT_TEMPLATE = "web_search_input.j2"
 DEFAULT_CACHE_KEY = "morning-market-brief"
-MAX_CACHE_KEY_LEN = 180
+MAX_CACHE_KEY_LEN = 64
+MAX_NAMESPACE_SEGMENT_LEN = 20
+MAX_TEMPLATE_SEGMENT_LEN = 10
+MAX_MODEL_SEGMENT_LEN = 18
 
 _INVALID_CACHE_KEY_CHARS = re.compile(r"[^a-zA-Z0-9:._-]+")
 
@@ -179,13 +182,37 @@ def build_prompt_cache_key(
     model_name: str | None = None,
 ) -> str:
     namespace = settings.openai_prompt_cache_key or DEFAULT_CACHE_KEY
-    normalized_namespace = _INVALID_CACHE_KEY_CHARS.sub("-", namespace).strip("-")
+    normalized_namespace = _sanitize_cache_segment(namespace)
     if not normalized_namespace:
         normalized_namespace = DEFAULT_CACHE_KEY
 
     static_digest = hashlib.sha256(instructions.encode("utf-8")).hexdigest()[:12]
     cache_model = (model_name or settings.openai_model).strip() or settings.openai_model
-    raw_key = (
-        f"{normalized_namespace}:{settings.prompt_template_version}:{cache_model}:{static_digest}"
+    namespace_segment = _fit_cache_segment(
+        normalized_namespace,
+        max_len=MAX_NAMESPACE_SEGMENT_LEN,
     )
+    template_segment = _fit_cache_segment(
+        settings.prompt_template_version,
+        max_len=MAX_TEMPLATE_SEGMENT_LEN,
+    )
+    model_segment = _fit_cache_segment(
+        cache_model,
+        max_len=MAX_MODEL_SEGMENT_LEN,
+    )
+    raw_key = f"{namespace_segment}:{template_segment}:{model_segment}:{static_digest}"
     return raw_key[:MAX_CACHE_KEY_LEN]
+
+
+def _sanitize_cache_segment(value: str) -> str:
+    return _INVALID_CACHE_KEY_CHARS.sub("-", value).strip("-")
+
+
+def _fit_cache_segment(value: str, *, max_len: int) -> str:
+    normalized = _sanitize_cache_segment(value) or "default"
+    if len(normalized) <= max_len:
+        return normalized
+
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:6]
+    prefix_len = max(max_len - len(digest) - 1, 1)
+    return f"{normalized[:prefix_len]}-{digest}"
