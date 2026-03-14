@@ -363,6 +363,48 @@ def test_build_email_context_scopes_stock_and_macro_rows_to_layer_three_only():
     assert [label for label, _value in macro_rows] == ["달러 인덱스", "미국 10년물 금리"]
 
 
+def test_render_briefing_email_html_does_not_repeat_stock_or_macro_values():
+    body = """Morning Market Brief (2026-03-12)
+
+1. LAYER 1 | 오늘 한줄 판단
+핵심 판단
+시장은 자산별로 엇갈렸습니다.
+
+2. LAYER 2 | 주요 뉴스
+핵심 이슈
+- 예시 뉴스 | 해석 문장 | https://www.reuters.com/world/us/example
+
+3. LAYER 3 | 종목 브리핑
+주요 지표
+- AVGO | -4.11% | 서버 투자 기대가 둔화됐습니다. | [출처: Stooq]
+- META | -3.83% | 광고 업종 전반이 약했습니다. | [출처: Stooq]
+
+거시 지표
+- 달러 인덱스는 100.49였습니다.
+- 미국 10년물 금리는 4.10%였습니다.
+"""
+
+    html = render_briefing_email_html(
+        subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
+        body=body,
+    )
+    text = render_briefing_email_text(
+        subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
+        body=body,
+    )
+
+    assert html.count("AVGO") == 1
+    assert html.count("META") == 1
+    assert html.count("달러 인덱스") == 1
+    assert html.count("미국 10년물 금리") == 1
+    assert "서버 투자 기대가 둔화됐습니다." in html
+    assert "광고 업종 전반이 약했습니다." in html
+    assert text.count("AVGO") == 1
+    assert text.count("META") == 1
+    assert text.count("달러 인덱스") == 1
+    assert text.count("미국 10년물 금리") == 1
+
+
 def test_split_reference_block_separates_reference_lines():
     body = SAMPLE_BRIEF + "\n\n참고 출처\n- Reuters — https://www.reuters.com/world/us/example"
 

@@ -377,6 +377,36 @@ def _row_tone(line: str, change_text: str) -> str:
     return "flat"
 
 
+def _strip_inline_source(text: str) -> str:
+    return re.sub(r"\s*\|\s*\[출처:[^\]]+\]\s*$", "", text).strip()
+
+
+def _build_stock_row(line: str, fallback_heading: str) -> _EmailBriefRow | None:
+    parts = [part.strip() for part in line.split("|")]
+    normalized_line = _strip_inline_source(line)
+    percent_match = PERCENT_RE.search(normalized_line)
+    if percent_match is None:
+        return None
+
+    if len(parts) >= 3:
+        name = parts[0] or fallback_heading
+        change_text = parts[1] or percent_match.group(0)
+        context_text = " | ".join(part for part in parts[2:] if part)
+        context_text = _strip_inline_source(context_text)
+    else:
+        change_text = percent_match.group(0)
+        name = _stock_name_from_line(normalized_line, fallback=fallback_heading)
+        context_text = normalized_line
+
+    return _EmailBriefRow(
+        name=name,
+        change_text=change_text,
+        context_text=context_text or normalized_line,
+        context_html=Markup(_render_body_line(context_text or normalized_line)),
+        tone=_row_tone(normalized_line, change_text),
+    )
+
+
 def _build_stock_rows(sections: list[_EmailSection], *, limit: int = 6) -> list[_EmailBriefRow]:
     layer_three_section = _find_layer_section(sections, contains_heading="LAYER 3")
     rows: list[_EmailBriefRow] = []
@@ -384,19 +414,10 @@ def _build_stock_rows(sections: list[_EmailSection], *, limit: int = 6) -> list[
         candidate_lines, _ = _split_layer_three_metric_lines(layer_three_section)
         fallback_heading = layer_three_section.heading
         for line in candidate_lines[:limit]:
-            percent_match = PERCENT_RE.search(line)
-            if percent_match is None:
+            row = _build_stock_row(line, fallback_heading)
+            if row is None:
                 continue
-            change_text = percent_match.group(0)
-            rows.append(
-                _EmailBriefRow(
-                    name=_stock_name_from_line(line, fallback=fallback_heading),
-                    change_text=change_text,
-                    context_text=line,
-                    context_html=Markup(_render_body_line(line)),
-                    tone=_row_tone(line, change_text),
-                )
-            )
+            rows.append(row)
             if len(rows) >= limit:
                 return rows
         return rows
@@ -407,22 +428,24 @@ def _build_stock_rows(sections: list[_EmailSection], *, limit: int = 6) -> list[
             *_first_metric_lines(section.groups["watch"][1], limit=limit),
         ]
         for line in candidate_lines:
-            percent_match = PERCENT_RE.search(line)
-            if percent_match is None:
+            row = _build_stock_row(line, section.heading)
+            if row is None:
                 continue
-            change_text = percent_match.group(0)
-            rows.append(
-                _EmailBriefRow(
-                    name=_stock_name_from_line(line, fallback=section.heading),
-                    change_text=change_text,
-                    context_text=line,
-                    context_html=Markup(_render_body_line(line)),
-                    tone=_row_tone(line, change_text),
-                )
-            )
+            rows.append(row)
             if len(rows) >= limit:
                 return rows
     return rows
+
+
+def _split_macro_line(line: str) -> tuple[str, str]:
+    normalized_line = _strip_inline_source(line)
+    if "는 " in normalized_line:
+        label, value = normalized_line.split("는 ", 1)
+    elif "은 " in normalized_line:
+        label, value = normalized_line.split("은 ", 1)
+    else:
+        return "거시 지표", normalized_line
+    return label.strip() or "거시 지표", value.strip() or normalized_line
 
 
 def _build_macro_rows(sections: list[_EmailSection]) -> list[tuple[str, Markup]]:
@@ -449,8 +472,8 @@ def _build_macro_rows(sections: list[_EmailSection]) -> list[tuple[str, Markup]]
                     break
     rows: list[tuple[str, Markup]] = []
     for line in candidate_lines[:4]:
-        label = line.split("는 ", 1)[0].split("은 ", 1)[0].strip() or "거시 지표"
-        rows.append((label, Markup(_render_body_line(line))))
+        label, value = _split_macro_line(line)
+        rows.append((label, Markup(_render_body_line(value))))
     return rows
 
 
