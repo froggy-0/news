@@ -82,6 +82,10 @@ JSON_CODE_BLOCK_RE = re.compile(
 RESPONSE_PREVIEW_LEN = 200
 
 
+def _render_reference_prompt(today: date) -> str:
+    return BTC_ETF_REFERENCE_PROMPT.replace("{today}", today.isoformat())
+
+
 def _normalize_page_text(text: str) -> str:
     cleaned = re.sub(r"(?is)<script.*?>.*?</script>", " ", text)
     cleaned = re.sub(r"(?is)<style.*?>.*?</style>", " ", cleaned)
@@ -608,7 +612,7 @@ def _request_reference_snapshots(
                     },
                     {
                         "role": "user",
-                        "content": BTC_ETF_REFERENCE_PROMPT.format(today=date.today().isoformat()),
+                        "content": _render_reference_prompt(date.today()),
                     },
                 ],
                 search_domain_filter=list(BTC_ETF_REFERENCE_DOMAINS),

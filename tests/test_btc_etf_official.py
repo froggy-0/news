@@ -104,6 +104,14 @@ def test_official_btc_etf_cache_roundtrip(tmp_path: Path):
     assert loaded["BITB"] == snapshots[0]
 
 
+def test_reference_prompt_renders_today_without_breaking_json_example():
+    rendered = official._render_reference_prompt(official.date(2026, 3, 14))
+
+    assert "2026-03-14" in rendered
+    assert '"snapshots": [' in rendered
+    assert "{today}" not in rendered
+
+
 def test_parse_reference_snapshot_response_keeps_only_valid_official_entries():
     payload = {
         "choices": [
