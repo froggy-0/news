@@ -92,6 +92,7 @@ def test_render_briefing_email_html_contains_layered_mobile_layout():
     assert "GitHub" in html
     assert "[데이터 품질 알림] 뉴스 수가 부족합니다." in html
     assert "거시 지표" in html
+    assert html.count("2026.03.12") == 1
 
 
 def test_split_section_groups_separates_summary_and_insight():
@@ -441,6 +442,30 @@ def test_build_email_context_formats_stock_rows_as_single_sentences():
         "AVGO는 전일 대비 4.11% 하락했습니다.",
         "비트코인은 전일 대비 0.16% 하락, 현재 71,282달러입니다.",
     ]
+
+
+def test_build_email_context_dedupes_repeated_stock_and_macro_rows():
+    body = """Morning Market Brief (2026-03-12)
+
+3. LAYER 3 | 종목 브리핑
+주요 지표
+- AVGO | -4.11% | 서버 투자 기대가 둔화됐습니다. | [출처: Stooq]
+- AVGO | -4.11% | 서버 투자 기대가 둔화됐습니다. | [출처: Stooq]
+
+거시 지표
+- 달러 인덱스는 100.49였습니다.
+- 달러 인덱스는 100.49였습니다.
+"""
+
+    context = _build_email_context(
+        subject="미국 기술주·비트코인 브리핑 (2026-03-12)",
+        body=body,
+    )
+
+    assert [row.context_text for row in context["stock_rows"]] == [
+        "AVGO는 전일 대비 4.11% 하락했습니다."
+    ]
+    assert [label for label, _value in context["macro_rows"]] == ["달러 인덱스"]
 
 
 def test_build_email_context_omits_none_interpretation_and_dedupes_source_urls():

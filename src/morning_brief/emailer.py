@@ -471,6 +471,7 @@ def _build_stock_row(line: str, fallback_heading: str) -> _EmailBriefRow | None:
 def _build_stock_rows(sections: list[_EmailSection], *, limit: int = 6) -> list[_EmailBriefRow]:
     layer_three_section = _find_layer_section(sections, contains_heading="LAYER 3")
     rows: list[_EmailBriefRow] = []
+    seen_contexts: set[str] = set()
     if layer_three_section is not None:
         candidate_lines, _ = _split_layer_three_metric_lines(layer_three_section)
         fallback_heading = layer_three_section.heading
@@ -478,6 +479,9 @@ def _build_stock_rows(sections: list[_EmailSection], *, limit: int = 6) -> list[
             row = _build_stock_row(line, fallback_heading)
             if row is None:
                 continue
+            if row.context_text in seen_contexts:
+                continue
+            seen_contexts.add(row.context_text)
             rows.append(row)
             if len(rows) >= limit:
                 return rows
@@ -492,6 +496,9 @@ def _build_stock_rows(sections: list[_EmailSection], *, limit: int = 6) -> list[
             row = _build_stock_row(line, section.heading)
             if row is None:
                 continue
+            if row.context_text in seen_contexts:
+                continue
+            seen_contexts.add(row.context_text)
             rows.append(row)
             if len(rows) >= limit:
                 return rows
@@ -532,8 +539,13 @@ def _build_macro_rows(sections: list[_EmailSection]) -> list[tuple[str, Markup]]
                 if len(candidate_lines) >= 4:
                     break
     rows: list[tuple[str, Markup]] = []
+    seen_rows: set[tuple[str, str]] = set()
     for line in candidate_lines[:4]:
         label, value = _split_macro_line(line)
+        key = (label, value)
+        if key in seen_rows:
+            continue
+        seen_rows.add(key)
         rows.append((label, Markup(_render_body_line(value))))
     return rows
 
@@ -638,7 +650,7 @@ def _build_email_context(subject: str, body: str, *, sender: str = "") -> dict[s
         "subject": subject,
         "title": title,
         "display_date": display_date,
-        "preheader": f"{display_date} | {layer_one_text}"[:140].strip(" |"),
+        "preheader": layer_one_text[:140].strip(),
         "notice": notice,
         "layer_one_text": layer_one_text,
         "layer_one_html": Markup(_render_body_line(layer_one_text)),
