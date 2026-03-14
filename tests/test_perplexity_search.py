@@ -25,8 +25,9 @@ class _Client:
 
 
 class _SDKResponse:
-    def __init__(self, payload):
+    def __init__(self, payload, *, usage=None):
         self._payload = payload
+        self.usage = usage
 
     def model_dump(self):
         return self._payload
@@ -241,7 +242,7 @@ def test_search_once_retries_timeout_with_provider_backoff(monkeypatch):
     )
     monkeypatch.setattr(provider_runtime.random, "random", lambda: 0.5)
 
-    payload = ps._search_once(
+    payload, usage = ps._search_once(
         client=client,
         query="macro query",
         domain_filter=("reuters.com",),
@@ -250,10 +251,71 @@ def test_search_once_retries_timeout_with_provider_backoff(monkeypatch):
 
     assert len(calls) == 2
     assert payload["results"][0]["title"] == "Fed keeps options open"
+    assert usage["input_tokens"] is None
     assert sleeps and round(sleeps[0], 2) == 1.5
 
 
 def test_fetch_news_from_perplexity_records_usage_and_topic_audit(monkeypatch, tmp_path):
+    observer = PipelineObserver(output_dir=tmp_path)
+    monkeypatch.setattr(
+        ps,
+        "TOPIC_SPECS",
+        (
+            ps.SearchTopic(
+                name="macro",
+                query="macro query",
+                retry_query="",
+                domain_filter=("reuters.com",),
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        ps,
+        "_build_client",
+        lambda api_key: _Client(
+            [
+                _SDKResponse(
+                    {
+                        "results": [
+                            {
+                                "title": "Fed keeps options open",
+                                "url": "https://www.reuters.com/world/us/fed-keeps-options-open",
+                                "snippet": "The Fed kept its options open.",
+                                "date": "2026-03-13T01:00:00Z",
+                            }
+                        ]
+                    },
+                    usage={
+                        "prompt_tokens": 123,
+                        "completion_tokens": 45,
+                        "input_tokens_details": {"cached_tokens": 7},
+                    },
+                )
+            ],
+            [],
+        ),
+    )
+
+    items = ps.fetch_news_from_perplexity(
+        max_items=5,
+        api_key="pplx-test-key",
+        observer=observer,
+    )
+
+    assert len(items) == 1
+    assert observer.provider_usage["perplexity"].requests == 1
+    assert observer.provider_usage["perplexity"].response_sources == 1
+    assert observer.provider_usage["perplexity"].input_tokens == 123
+    assert observer.provider_usage["perplexity"].output_tokens == 45
+    assert observer.provider_usage["perplexity"].cached_input_tokens == 7
+    assert observer.perplexity_topic_audit["macro"]["candidate_urls"] == [
+        "https://www.reuters.com/world/us/fed-keeps-options-open"
+    ]
+
+
+def test_fetch_news_from_perplexity_leaves_token_usage_null_when_usage_missing(
+    monkeypatch, tmp_path
+):
     observer = PipelineObserver(output_dir=tmp_path)
     monkeypatch.setattr(
         ps,
@@ -289,15 +351,15 @@ def test_fetch_news_from_perplexity_records_usage_and_topic_audit(monkeypatch, t
         ),
     )
 
-    items = ps.fetch_news_from_perplexity(
+    ps.fetch_news_from_perplexity(
         max_items=5,
         api_key="pplx-test-key",
         observer=observer,
     )
 
-    assert len(items) == 1
-    assert observer.provider_usage["perplexity"].requests == 1
-    assert observer.provider_usage["perplexity"].response_sources == 1
-    assert observer.perplexity_topic_audit["macro"]["candidate_urls"] == [
-        "https://www.reuters.com/world/us/fed-keeps-options-open"
-    ]
+    usage = observer.provider_usage["perplexity"]
+    assert usage.requests == 1
+    assert usage.input_tokens is None
+    assert usage.output_tokens is None
+    assert usage.cached_input_tokens is None
+    assert usage.usage_parse_failures == 1

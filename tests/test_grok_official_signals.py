@@ -5,12 +5,14 @@ from datetime import datetime, timezone
 
 from morning_brief.data.sources import grok_official_signals as gxs
 from morning_brief.data.sources import provider_runtime
+from morning_brief.observability import PipelineObserver
 
 
 class _Response:
-    def __init__(self, *, content: str, citations: list[object] | None = None):
+    def __init__(self, *, content: str, citations: list[object] | None = None, usage=None):
         self.content = content
         self.citations = citations or []
+        self.usage = usage
 
 
 class _Chat:
@@ -249,6 +251,107 @@ def test_fetch_official_x_signals_returns_empty_without_api_key(monkeypatch):
     )
 
     assert items == []
+
+
+def test_fetch_official_x_signals_records_usage(monkeypatch, tmp_path):
+    calls: list[dict] = []
+    prompts: list[object] = []
+    observer = PipelineObserver(output_dir=tmp_path)
+    responses = [
+        _Response(
+            content=json.dumps(
+                {
+                    "items": [
+                        {
+                            "entity_id": "amd",
+                            "headline": "AMD가 새 AI 서버 투자 계획을 공개했어요",
+                            "summary": "공식 계정이 데이터센터 투자 계획을 설명했어요.",
+                            "why_it_matters": "AI 투자 지출 기대를 다시 키울 수 있어요.",
+                            "posted_at": "2026-03-13T01:00:00Z",
+                            "source_handle": "AMD",
+                            "citations": ["https://x.com/AMD/status/1"],
+                        }
+                    ]
+                }
+            ),
+            usage={
+                "prompt_tokens": 88,
+                "completion_tokens": 16,
+                "prompt_tokens_details": {"cached_tokens": 11},
+            },
+        )
+    ]
+
+    monkeypatch.setattr(
+        gxs,
+        "grouped_verified_x_entities",
+        lambda: {"ai_bigtech_primary": VERIFIED_GROUPS["ai_bigtech_primary"]},
+    )
+    monkeypatch.setattr(gxs, "x_search", lambda **kwargs: {"name": "x_search", "kwargs": kwargs})
+    monkeypatch.setattr(gxs, "_build_client", lambda api_key: _Client(responses, calls, prompts))
+
+    items = gxs.fetch_official_x_signals(
+        api_key="grok-test-key",
+        model="grok-test-model",
+        lookback_hours=24,
+        max_items=2,
+        observer=observer,
+    )
+
+    assert len(items) == 1
+    usage = observer.provider_usage["grok"]
+    assert usage.requests == 1
+    assert usage.input_tokens == 88
+    assert usage.output_tokens == 16
+    assert usage.cached_input_tokens == 11
+
+
+def test_fetch_official_x_signals_leaves_usage_null_when_missing(monkeypatch, tmp_path):
+    calls: list[dict] = []
+    prompts: list[object] = []
+    observer = PipelineObserver(output_dir=tmp_path)
+    responses = [
+        _Response(
+            content=json.dumps(
+                {
+                    "items": [
+                        {
+                            "entity_id": "amd",
+                            "headline": "AMD가 새 AI 서버 투자 계획을 공개했어요",
+                            "summary": "공식 계정이 데이터센터 투자 계획을 설명했어요.",
+                            "why_it_matters": "AI 투자 지출 기대를 다시 키울 수 있어요.",
+                            "posted_at": "2026-03-13T01:00:00Z",
+                            "source_handle": "AMD",
+                            "citations": ["https://x.com/AMD/status/1"],
+                        }
+                    ]
+                }
+            )
+        )
+    ]
+
+    monkeypatch.setattr(
+        gxs,
+        "grouped_verified_x_entities",
+        lambda: {"ai_bigtech_primary": VERIFIED_GROUPS["ai_bigtech_primary"]},
+    )
+    monkeypatch.setattr(gxs, "x_search", lambda **kwargs: {"name": "x_search", "kwargs": kwargs})
+    monkeypatch.setattr(gxs, "_build_client", lambda api_key: _Client(responses, calls, prompts))
+
+    gxs.fetch_official_x_signals(
+        api_key="grok-test-key",
+        model="grok-test-model",
+        lookback_hours=24,
+        max_items=2,
+        observer=observer,
+    )
+
+    usage = observer.provider_usage["grok"]
+    assert usage.requests == 1
+    assert usage.input_tokens is None
+    assert usage.output_tokens is None
+    assert usage.cached_input_tokens is None
+    assert usage.usage_parse_failures == 1
 
 
 def test_fetch_official_x_signals_retries_timeout_like_error(monkeypatch):

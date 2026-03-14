@@ -137,3 +137,28 @@ def test_run_pipeline_writes_observability_and_perplexity_audit(monkeypatch, tmp
     assert audit_payload["topics"]["macro"]["final_urls"] == [
         "https://www.reuters.com/world/us/fed-keeps-options-open"
     ]
+
+
+def test_pipeline_observability_serializes_null_provider_token_usage(tmp_path):
+    from morning_brief.observability import PipelineObserver
+
+    observer = PipelineObserver(output_dir=tmp_path)
+    observer.record_provider_usage(
+        "perplexity",
+        requests=1,
+        response_sources=1,
+        input_tokens=None,
+        output_tokens=None,
+        cached_input_tokens=None,
+        usage_parse_failures=1,
+    )
+
+    summary = observer.write_outputs(status="ok", provider_stats={}, extra={})
+    usage = summary["provider_usage"]["perplexity"]
+
+    assert usage["requests"] == 1
+    assert usage["response_sources"] == 1
+    assert usage["input_tokens"] is None
+    assert usage["output_tokens"] is None
+    assert usage["cached_input_tokens"] is None
+    assert usage["usage_parse_failures"] == 1

@@ -219,6 +219,58 @@ def _build_client(api_key: str) -> Perplexity:
     )
 
 
+def _usage_field(container: object, *keys: str) -> object | None:
+    current = container
+    for key in keys:
+        if current is None:
+            return None
+        if isinstance(current, dict):
+            current = current.get(key)
+        else:
+            current = getattr(current, key, None)
+    return current
+
+
+def _usage_int(container: object, *keys: str) -> int | None:
+    value = _usage_field(container, *keys)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _first_usage_int(container: object, *paths: tuple[str, ...]) -> int | None:
+    for path in paths:
+        value = _usage_int(container, *path)
+        if value is not None:
+            return value
+    return None
+
+
+def _usage_snapshot(response: object, payload: dict[str, Any]) -> dict[str, int | None]:
+    usage = _usage_field(response, "usage")
+    if usage is None:
+        usage = payload.get("usage") if isinstance(payload, dict) else None
+
+    return {
+        "input_tokens": _usage_int(usage, "prompt_tokens"),
+        "output_tokens": _usage_int(usage, "completion_tokens"),
+        "cached_input_tokens": _first_usage_int(
+            usage,
+            ("input_tokens_details", "cached_tokens"),
+            ("prompt_tokens_details", "cached_tokens"),
+        ),
+        "reasoning_tokens": _first_usage_int(
+            usage,
+            ("output_tokens_details", "reasoning_tokens"),
+            ("completion_tokens_details", "reasoning_tokens"),
+            ("reasoning_tokens",),
+        ),
+    }
+
+
 def _format_status_error(exc: APIStatusError) -> str:
     status_code = getattr(exc, "status_code", "unknown")
     response = getattr(exc, "response", None)
@@ -303,7 +355,7 @@ def _search_once(
     query: str,
     domain_filter: tuple[str, ...],
     recency_filter: str,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], dict[str, int | None]]:
     unavailable_reason = disabled_reason(PERPLEXITY_PROVIDER)
     if unavailable_reason:
         record_skip(PERPLEXITY_PROVIDER)
@@ -311,7 +363,7 @@ def _search_once(
             f"Perplexity는 이번 실행에서 더 이상 쓰지 않을게요: {unavailable_reason}"
         )
 
-    def perform_search() -> dict[str, Any]:
+    def perform_search() -> tuple[dict[str, Any], dict[str, int | None]]:
         try:
             response = client.search.create(
                 query=query,
@@ -340,7 +392,7 @@ def _search_once(
                 provider=PERPLEXITY_PROVIDER,
             )
 
-        return payload
+        return payload, _usage_snapshot(response, payload)
 
     return execute_with_provider_retry(
         provider=PERPLEXITY_PROVIDER,
@@ -410,7 +462,7 @@ def _fetch_news_from_perplexity(
 
     for topic in TOPIC_SPECS:
         try:
-            payload = _search_once(
+            payload, usage = _search_once(
                 client=client,
                 query=topic.query,
                 domain_filter=topic.domain_filter,
@@ -423,10 +475,21 @@ def _fetch_news_from_perplexity(
                     response_sources=len(payload.get("results", []))
                     if isinstance(payload.get("results", []), list)
                     else 0,
+                    input_tokens=usage["input_tokens"],
+                    output_tokens=usage["output_tokens"],
+                    cached_input_tokens=usage["cached_input_tokens"],
+                    reasoning_tokens=usage["reasoning_tokens"],
+                    usage_parse_failures=1 if all(value is None for value in usage.values()) else 0,
                 )
+                if all(value is None for value in usage.values()):
+                    observer.log_event(
+                        "provider_usage_unparsed",
+                        provider=PERPLEXITY_PROVIDER,
+                        query=" ".join(topic.query.split())[:80],
+                    )
             topic_items = _parse_results(payload=payload, topic=topic)
             if len(topic_items) < TOPIC_RESULT_TARGET and topic.retry_query:
-                retry_payload = _search_once(
+                retry_payload, retry_usage = _search_once(
                     client=client,
                     query=topic.retry_query,
                     domain_filter=topic.domain_filter,
@@ -439,7 +502,20 @@ def _fetch_news_from_perplexity(
                         response_sources=len(retry_payload.get("results", []))
                         if isinstance(retry_payload.get("results", []), list)
                         else 0,
+                        input_tokens=retry_usage["input_tokens"],
+                        output_tokens=retry_usage["output_tokens"],
+                        cached_input_tokens=retry_usage["cached_input_tokens"],
+                        reasoning_tokens=retry_usage["reasoning_tokens"],
+                        usage_parse_failures=1
+                        if all(value is None for value in retry_usage.values())
+                        else 0,
                     )
+                    if all(value is None for value in retry_usage.values()):
+                        observer.log_event(
+                            "provider_usage_unparsed",
+                            provider=PERPLEXITY_PROVIDER,
+                            query=" ".join(topic.retry_query.split())[:80],
+                        )
                 topic_items.extend(_parse_results(payload=retry_payload, topic=topic))
             if observer is not None:
                 observer.record_perplexity_topic_results(

@@ -50,6 +50,55 @@ def _build_client(api_key: str) -> Client:
     return Client(api_key=api_key)
 
 
+def _usage_field(container: object, *keys: str) -> object | None:
+    current = container
+    for key in keys:
+        if current is None:
+            return None
+        if isinstance(current, dict):
+            current = current.get(key)
+        else:
+            current = getattr(current, key, None)
+    return current
+
+
+def _usage_int(container: object, *keys: str) -> int | None:
+    value = _usage_field(container, *keys)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _first_usage_int(container: object, *paths: tuple[str, ...]) -> int | None:
+    for path in paths:
+        value = _usage_int(container, *path)
+        if value is not None:
+            return value
+    return None
+
+
+def _usage_snapshot(response: object) -> dict[str, int | None]:
+    usage = _usage_field(response, "usage")
+    return {
+        "input_tokens": _usage_int(usage, "prompt_tokens"),
+        "output_tokens": _usage_int(usage, "completion_tokens"),
+        "cached_input_tokens": _first_usage_int(
+            usage,
+            ("prompt_tokens_details", "cached_tokens"),
+            ("input_tokens_details", "cached_tokens"),
+        ),
+        "reasoning_tokens": _first_usage_int(
+            usage,
+            ("completion_tokens_details", "reasoning_tokens"),
+            ("output_tokens_details", "reasoning_tokens"),
+            ("reasoning_tokens",),
+        ),
+    }
+
+
 def _normalize_datetime(value: object) -> datetime | None:
     raw = str(value or "").strip()
     if not raw:
@@ -206,7 +255,7 @@ def _search_group(
     to_date = datetime.now(timezone.utc)
     from_date = to_date - timedelta(hours=lookback_hours)
 
-    def perform_group_search() -> tuple[list[dict[str, Any]], list[str]]:
+    def perform_group_search() -> tuple[list[dict[str, Any]], list[str], dict[str, int | None]]:
         client = _build_client(api_key)
         try:
             chat = client.chat.create(
@@ -232,9 +281,9 @@ def _search_group(
 
         payload_items = _parse_response_items(_normalize_text(getattr(response, "content", "")))
         fallback_citations = _normalize_citations(getattr(response, "citations", []))
-        return payload_items, fallback_citations
+        return payload_items, fallback_citations, _usage_snapshot(response)
 
-    payload_items, fallback_citations = execute_with_provider_retry(
+    payload_items, fallback_citations, usage = execute_with_provider_retry(
         provider=GROK_PROVIDER,
         operation=perform_group_search,
         should_retry=lambda exc: isinstance(exc, HttpFetchError) and exc.retryable,
@@ -251,7 +300,21 @@ def _search_group(
         else None,
     )
     if observer is not None:
-        observer.record_provider_usage(GROK_PROVIDER, requests=1)
+        observer.record_provider_usage(
+            GROK_PROVIDER,
+            requests=1,
+            input_tokens=usage["input_tokens"],
+            output_tokens=usage["output_tokens"],
+            cached_input_tokens=usage["cached_input_tokens"],
+            reasoning_tokens=usage["reasoning_tokens"],
+            usage_parse_failures=1 if all(value is None for value in usage.values()) else 0,
+        )
+        if all(value is None for value in usage.values()):
+            observer.log_event(
+                "provider_usage_unparsed",
+                provider=GROK_PROVIDER,
+                group=group,
+            )
 
     can_apply_group_fallback = len(payload_items) == 1
     handle_map = {

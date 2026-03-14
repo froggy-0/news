@@ -16,10 +16,11 @@ from morning_brief.data.sources.domain_utils import normalize_domain
 class ProviderUsageTotals:
     requests: int = 0
     response_sources: int = 0
-    input_tokens: int = 0
-    output_tokens: int = 0
-    cached_input_tokens: int = 0
-    reasoning_tokens: int = 0
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    cached_input_tokens: int | None = None
+    reasoning_tokens: int | None = None
+    usage_parse_failures: int = 0
 
 
 class PipelineObserver:
@@ -56,12 +57,26 @@ class PipelineObserver:
             self.phase_durations_ms[name] = self.phase_durations_ms.get(name, 0) + duration_ms
             self._emit("phase_duration", phase=name, duration_ms=duration_ms)
 
-    def record_provider_usage(self, provider: str, **metrics: int) -> None:
+    def record_provider_usage(self, provider: str, **metrics: int | None) -> None:
         totals = self.provider_usage.setdefault(provider, ProviderUsageTotals())
         for key, value in metrics.items():
             if not hasattr(totals, key):
                 continue
-            setattr(totals, key, getattr(totals, key) + int(value))
+            current_value = getattr(totals, key)
+            if key in {"requests", "response_sources", "usage_parse_failures"}:
+                if value is None:
+                    continue
+                setattr(totals, key, int(current_value) + int(value))
+                continue
+
+            if value is None:
+                continue
+
+            normalized = int(value)
+            if current_value is None:
+                setattr(totals, key, normalized)
+            else:
+                setattr(totals, key, int(current_value) + normalized)
 
     def record_phase_duration(self, name: str, duration_ms: int) -> None:
         self.phase_durations_ms[name] = self.phase_durations_ms.get(name, 0) + int(duration_ms)
