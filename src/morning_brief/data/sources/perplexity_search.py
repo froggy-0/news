@@ -72,11 +72,25 @@ TOPIC_IMPACT_LINES = {
 
 FT_CONTENT_URL_PREFIX = "https://www.ft.com/content/"
 DISALLOWED_MARKET_DATA_DOMAINS = {"markets.ft.com"}
-DISALLOWED_MARKET_DATA_URL_PARTS = ("/data/", "/tearsheet/", "/summary?", "/summary/")
-DISALLOWED_MARKET_DATA_TITLE_PATTERNS = (
+EXCLUDE_URL_PATTERNS = (
+    "/data/equities/tearsheet/",
+    "/data/indices/tearsheet/",
+    "/data/",
+    "/summary?",
+    "/summary/",
+    "podcasts.apple.com",
+    "tv.apple.com",
+    "cn.wsj.com",
+    "jp.reuters.com",
+    "news.google.com/rss",
+)
+EXCLUDE_TITLE_PATTERNS = (
     re.compile(r"markets data\b.*ft\.com$", re.IGNORECASE),
     re.compile(r"\bsummary\s*-\s*ft\.com$", re.IGNORECASE),
+    re.compile(r"company announcements", re.IGNORECASE),
 )
+NON_ENGLISH_TITLE_PATTERN = re.compile("[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+MINIMUM_NEWS_TITLE_LENGTH = 10
 
 
 @dataclass(frozen=True)
@@ -94,12 +108,14 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
         query=(
             "Latest U.S. market-moving macro news article or report published within the last 24 "
             "hours about the Federal Reserve, Treasury yields, dollar, and VIX. Prefer reliable "
-            "reporting and official releases only. Exclude market data pages and summary pages."
+            "English-language reporting, news analysis, and official releases only. Exclude "
+            "market data pages and summary pages."
         ),
         retry_query=(
             "Latest Federal Reserve or U.S. Treasury or VIX news article or report published "
-            "within the last 24 hours affecting U.S. markets. Prefer reliable reporting and "
-            "official releases only. Exclude market data pages and summary pages."
+            "within the last 24 hours affecting U.S. markets. Prefer reliable English-language "
+            "reporting, news analysis, and official releases only. Exclude market data pages and "
+            "summary pages."
         ),
         domain_filter=(
             "reuters.com",
@@ -116,12 +132,13 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
         query=(
             "Latest U.S. stock market news article or report published within the last 24 hours "
             "on the S&P 500, Nasdaq, semiconductors, or market breadth. Prefer reliable "
-            "reporting and exchange coverage. Exclude market data pages and summary pages."
+            "English-language reporting, news analysis, and exchange coverage. Exclude market "
+            "data pages and summary pages."
         ),
         retry_query=(
             "Latest Nasdaq or S&P 500 or semiconductor sector news article or report published "
-            "within the last 24 hours moving the U.S. market. Prefer reliable reporting. Exclude "
-            "market data pages and summary pages."
+            "within the last 24 hours moving the U.S. market. Prefer reliable English-language "
+            "reporting and news analysis. Exclude market data pages and summary pages."
         ),
         domain_filter=(
             "reuters.com",
@@ -137,13 +154,14 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
         query=(
             "Latest AI and big tech market-moving news article or report published within the "
             "last 24 hours on Nvidia, Microsoft, Apple, Amazon, Google, Meta, AMD, TSMC, ASML, "
-            "or Broadcom. Prefer reliable reporting and company IR. Exclude market data pages "
-            "and summary pages."
+            "or Broadcom. Prefer reliable English-language reporting, news analysis, and company "
+            "IR. Exclude market data pages and summary pages."
         ),
         retry_query=(
             "Latest AI infrastructure, data center, semiconductor, or big tech capex news article "
-            "or report published within the last 24 hours. Prefer reliable reporting and company "
-            "IR. Exclude market data pages and summary pages."
+            "or report published within the last 24 hours. Prefer reliable English-language "
+            "reporting, news analysis, and company IR. Exclude market data pages and summary "
+            "pages."
         ),
         domain_filter=(
             "reuters.com",
@@ -168,13 +186,13 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
         query=(
             "Latest bitcoin market news article or report published within the last 24 hours on "
             "BTC ETF flows, regulation, institutional demand, or price-moving events. Prefer "
-            "reliable reporting, ETF issuers, and regulators. Exclude market data pages and "
-            "summary pages."
+            "reliable English-language reporting, news analysis, ETF issuers, and regulators. "
+            "Exclude market data pages and summary pages."
         ),
         retry_query=(
             "Latest spot bitcoin ETF flow or bitcoin regulation news article or report published "
-            "within the last 24 hours. Prefer reliable reporting and official sources. Exclude "
-            "market data pages and summary pages."
+            "within the last 24 hours. Prefer reliable English-language reporting, news analysis, "
+            "and official sources. Exclude market data pages and summary pages."
         ),
         domain_filter=(
             "reuters.com",
@@ -469,6 +487,7 @@ def _parse_results(*, payload: dict[str, Any], topic: SearchTopic) -> list[NewsI
             or not url
             or not _is_allowed_domain(url, topic.domain_filter)
             or _is_disallowed_market_data_result(title=title, url=url)
+            or _is_invalid_news_title(title)
         ):
             continue
 
@@ -496,11 +515,16 @@ def _is_disallowed_market_data_result(*, title: str, url: str) -> bool:
     domain = normalize_domain(normalized_url)
     if domain in DISALLOWED_MARKET_DATA_DOMAINS:
         return True
-    if any(part in normalized_url for part in DISALLOWED_MARKET_DATA_URL_PARTS):
+    if any(part in normalized_url for part in EXCLUDE_URL_PATTERNS):
         return True
-    return any(
-        pattern.search(normalized_title) for pattern in DISALLOWED_MARKET_DATA_TITLE_PATTERNS
-    )
+    return any(pattern.search(normalized_title) for pattern in EXCLUDE_TITLE_PATTERNS)
+
+
+def _is_invalid_news_title(title: str) -> bool:
+    normalized_title = " ".join(str(title or "").split()).strip()
+    if len(normalized_title) < MINIMUM_NEWS_TITLE_LENGTH:
+        return True
+    return bool(NON_ENGLISH_TITLE_PATTERN.search(normalized_title))
 
 
 def _collection_timestamp(item: NewsItem) -> str:
@@ -613,7 +637,7 @@ def _fetch_news_from_perplexity(
                 )
                 reason = None
                 if not topic_items:
-                    reason = "api_empty" if total_result_count == 0 else "no_results"
+                    reason = "api_empty" if total_result_count == 0 else "filtered_all"
                     if total_result_count > 0:
                         observer.log_event(
                             "perplexity_result_filter_empty",

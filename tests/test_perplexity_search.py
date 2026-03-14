@@ -441,6 +441,43 @@ def test_parse_results_filters_ft_market_data_pages():
     assert items == []
 
 
+def test_parse_results_filters_apple_and_non_english_results():
+    topic = ps.SearchTopic(
+        name="ai_bigtech",
+        query="ai query",
+        retry_query="",
+        domain_filter=("reuters.com", "apple.com"),
+    )
+
+    items = ps._parse_results(
+        payload={
+            "results": [
+                {
+                    "title": "Apple Podcasts episode on AI markets",
+                    "url": "https://podcasts.apple.com/us/podcast/some-show/id123",
+                    "snippet": "Podcast listing.",
+                    "date": "2026-03-13T01:00:00Z",
+                },
+                {
+                    "title": "中国市场对比特币ETF反应",
+                    "url": "https://cn.wsj.com/articles/bitcoin-etf",
+                    "snippet": "Non-English news.",
+                    "date": "2026-03-13T01:00:00Z",
+                },
+                {
+                    "title": "TV episode recap",
+                    "url": "https://tv.apple.com/us/show/some-program",
+                    "snippet": "Not a news article.",
+                    "date": "2026-03-13T01:00:00Z",
+                },
+            ]
+        },
+        topic=topic,
+    )
+
+    assert items == []
+
+
 def test_parse_results_accepts_ft_article_paths():
     topic = ps.SearchTopic(
         name="macro",
@@ -513,10 +550,35 @@ def test_fetch_news_from_perplexity_logs_filtered_empty_results(monkeypatch, tmp
     collected_events = [
         event for event in observer.events if event["event"] == "perplexity_items_collected"
     ]
-    assert collected_events[0]["reason"] == "no_results"
+    assert collected_events[0]["reason"] == "filtered_all"
     filter_events = [
         event for event in observer.events if event["event"] == "perplexity_result_filter_empty"
     ]
     assert len(filter_events) == 1
     assert filter_events[0]["topic"] == "us_equity"
     assert filter_events[0]["raw_result_count"] == 1
+
+
+def test_parse_results_filters_short_titles():
+    topic = ps.SearchTopic(
+        name="macro",
+        query="macro query",
+        retry_query="",
+        domain_filter=("reuters.com",),
+    )
+
+    items = ps._parse_results(
+        payload={
+            "results": [
+                {
+                    "title": "Fed move",
+                    "url": "https://www.reuters.com/world/us/fed-move",
+                    "snippet": "Too short.",
+                    "date": "2026-03-13T01:00:00Z",
+                }
+            ]
+        },
+        topic=topic,
+    )
+
+    assert items == []
