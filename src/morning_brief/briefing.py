@@ -294,13 +294,27 @@ def _news_reference(item: dict) -> str:
     return str(item.get("url", "")).strip() or "출처 없음"
 
 
+def _fallback_news_takeaway(item: dict) -> str:
+    topic = str(item.get("topic", "")).strip().lower()
+    if topic == "bitcoin":
+        return "국내 투자자에게는 비트코인과 관련주 반응을 함께 보는 편이 적절합니다."
+    if topic in {"ai_bigtech", "us_equity"}:
+        return "국내 투자자에게는 반도체와 대형 기술주 흐름을 같이 보는 편이 적절합니다."
+    if topic == "macro":
+        return "국내 투자자에게는 환율과 외국인 수급 변화까지 같이 확인할 필요가 있습니다."
+    return "국내 투자자에게는 같은 주제를 국내 관련주가 어떻게 반영하는지 확인할 필요가 있습니다."
+
+
 def _fallback_news_lines(news: list[dict]) -> list[str]:
     lines: list[str] = []
     for item in news[:5]:
+        title = str(item.get("title", "")).strip() or "주요 뉴스"
         why_it_matters = (
             str(item.get("why_it_matters", "")).strip() or "시장 해석에 바로 연결되는 기사입니다."
         )
-        lines.append(f"- {item['title']} | {why_it_matters} | {_news_reference(item)}")
+        lines.append(
+            f"- {title} | {why_it_matters} | {_fallback_news_takeaway(item)} | {_news_reference(item)}"
+        )
     return lines
 
 
@@ -569,12 +583,12 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
     body = f"""Morning Market Brief ({date_str})
 
 1. LAYER 1 | 오늘 한줄 판단
-핵심 판단
+한줄 결론
 오늘은 {judgement} 국면입니다.
 
 {judgement_reason}
 
-주요 지표
+핵심 수치
 {
         _bullet_lines(
             investor_lines
@@ -586,12 +600,12 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
         )
     }
 
-배경과 해석
+쉽게 보면
 금리와 달러, 지수 흐름이 한 방향으로 정렬되지 않아 미국 장 마감 신호를 함께 비교할 필요가 있습니다.
 
 {kospi_impact}
 
-주목할 변수
+오늘 체크할 포인트
 {
         _bullet_lines(
             [
@@ -602,19 +616,22 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
     }
 
 2. LAYER 2 | 주요 뉴스
+한줄 결론
+오늘 뉴스는 금리 경로, AI 투자 기대, 비트코인 ETF 수급처럼 시장이 민감하게 보는 주제에 집중됐습니다.
+
 핵심 이슈
 {
         chr(10).join(news_lines)
         if news_lines
-        else "- 오늘 반영할 주요 뉴스가 충분하지 않았습니다. | 시장 영향 해석을 보수적으로 유지합니다. | 출처 없음"
+        else "- 오늘 반영할 주요 뉴스가 충분하지 않았습니다. | 시장 영향 해석을 보수적으로 유지합니다. | 국내 투자자에게는 관련 섹터 반응을 더 확인할 필요가 있습니다. | 출처 없음"
     }
 
-배경과 해석
+왜 중요한지
 오늘 뉴스는 금리 경로, AI 투자 기대, 비트코인 ETF 수급처럼 시장이 민감하게 보는 주제에 집중됐습니다.
 
 뉴스와 가격 흐름이 다르게 움직인 구간은 기사 자체보다 시장 반응 속도를 함께 보는 편이 적절합니다.
 
-주목할 변수
+오늘 체크할 포인트
 {
         _bullet_lines(
             [
@@ -625,18 +642,21 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
     }
 
 3. LAYER 3 | 종목 브리핑
+한줄 결론
+오늘 종목 흐름은 AI와 반도체 기대가 유지된 구간과, 금리 부담이 먼저 반영된 구간이 함께 나타났습니다.
+
 주요 지표
 {_bullet_lines(stock_lines or ["주요 종목 등락률은 이번 집계에서 충분히 확인되지 않았습니다."])}
 
 거시 지표
 {_bullet_lines(macro_lines)}
 
-배경과 해석
+쉽게 보면
 종목별로는 같은 AI 테마 안에서도 차이가 보였고, 비트코인과 ETF 흐름도 가격과 완전히 같은 방향으로만 움직이지는 않았습니다.
 
 그래서 오늘은 숫자 자체보다 서로 다른 자산이 얼마나 비슷하거나 다르게 반응하는지 비교해서 보는 편이 적절합니다.
 
-주목할 변수
+오늘 체크할 포인트
 {
         _bullet_lines(
             [

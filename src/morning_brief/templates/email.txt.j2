@@ -7,15 +7,22 @@ Morning Market Brief
 {{ notice }}
 
 {% endif -%}
-📌 오늘의 판단
+오늘 핵심 요약
+{% if top_summary_lines -%}
+{% for line in top_summary_lines -%}
+- {{ line }}
+{% endfor %}
+{% else -%}
 {{ layer_one_text }}
+{% endif %}
 
 {% if news_items or news_fallback_text -%}
-📰 주요 뉴스
+📰 주요 뉴스와 시장 의미
 {% if news_items -%}
 {% for item in news_items -%}
 - {{ item.headline }}
-  {% if item.interpretation %}해석: {{ item.interpretation }}{% endif %}
+  {% if item.market_meaning %}시장 의미: {{ item.market_meaning }}{% endif %}
+  {% if item.korea_takeaway %}국내 투자자 관점: {{ item.korea_takeaway }}{% endif %}
 {% endfor %}
 {% else -%}
 {{ news_fallback_text }}

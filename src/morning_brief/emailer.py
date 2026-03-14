@@ -57,7 +57,8 @@ class _EmailSection:
 @dataclass(frozen=True)
 class _EmailNewsItem:
     headline: str
-    interpretation: str
+    market_meaning: str
+    korea_takeaway: str
     url: str
     safe_url: str | None
     source_name: str | None
@@ -282,26 +283,29 @@ def _display_percent_token(token: str) -> str:
     return token
 
 
-def _parse_news_metric_line(line: str) -> tuple[str, str, str | None]:
+def _parse_news_metric_line(line: str) -> tuple[str, str, str, str | None]:
     parts = [part.strip() for part in line.split("|")]
-    if len(parts) >= 3 and _safe_link(parts[-1] or ""):
-        headline = " | ".join(parts[:-2]).strip()
-        interpretation = _sanitize_optional_text(parts[-2].strip())
-        source_url = parts[-1].strip()
-        return headline or line.strip(), interpretation, source_url or None
-    if len(parts) == 2:
+    source_url = None
+    content_parts = parts
+    if len(parts) >= 2 and _safe_link(parts[-1] or ""):
+        source_url = parts[-1].strip() or None
+        content_parts = parts[:-1]
+
+    if len(content_parts) >= 3:
         return (
-            parts[0].strip() or line.strip(),
-            _sanitize_optional_text(parts[1].strip()),
-            None,
+            content_parts[0].strip() or line.strip(),
+            _sanitize_optional_text(content_parts[1].strip()),
+            _sanitize_optional_text(" | ".join(content_parts[2:])),
+            source_url,
         )
-    if len(parts) >= 3:
+    if len(content_parts) == 2:
         return (
-            parts[0].strip() or line.strip(),
-            _sanitize_optional_text(" | ".join(parts[1:])),
-            None,
+            content_parts[0].strip() or line.strip(),
+            _sanitize_optional_text(content_parts[1].strip()),
+            "",
+            source_url,
         )
-    return line.strip(), "", None
+    return line.strip(), "", "", source_url
 
 
 def _extract_layer_one_text(sections: list[_EmailSection], notice: str, title: str) -> str:
@@ -385,24 +389,27 @@ def _build_news_items(
         None,
     )
     if important_news is not None:
-        interpretations = [
+        section_clues = [
             _first_sentence(important_news.groups["conclusion"][1]),
             _first_sentence(important_news.groups["insight"][1]),
-            _first_sentence(important_news.groups["watch"][1]),
         ]
-        fallback_interpretation = next((item for item in interpretations if item), "")
+        fallback_market_meaning = next((item for item in section_clues if item), "")
+        fallback_korea_takeaway = _first_sentence(important_news.groups["watch"][1])
         for index, line in enumerate(
             _first_metric_lines(important_news.groups["metrics"][1], limit=limit)
         ):
-            headline, interpretation, source_url = _parse_news_metric_line(line)
+            headline, market_meaning, korea_takeaway, source_url = _parse_news_metric_line(line)
             safe_url = _safe_link(source_url or "")
             if safe_url is None and index < len(safe_reference_urls):
                 safe_url = safe_reference_urls[index]
             items.append(
                 _EmailNewsItem(
                     headline=headline,
-                    interpretation=_sanitize_optional_text(
-                        interpretation or fallback_interpretation
+                    market_meaning=_sanitize_optional_text(
+                        market_meaning or fallback_market_meaning
+                    ),
+                    korea_takeaway=_sanitize_optional_text(
+                        korea_takeaway or fallback_korea_takeaway
                     ),
                     url=safe_url or "",
                     safe_url=safe_url,
@@ -415,15 +422,17 @@ def _build_news_items(
 
     for index, section in enumerate(sections[:limit]):
         safe_url = safe_reference_urls[index] if index < len(safe_reference_urls) else None
-        interpretation = _first_sentence(section.groups["conclusion"][1]) or _first_sentence(
+        market_meaning = _first_sentence(section.groups["conclusion"][1]) or _first_sentence(
             section.groups["insight"][1]
         )
+        korea_takeaway = _first_sentence(section.groups["watch"][1])
         items.append(
             _EmailNewsItem(
                 headline=section.heading,
-                interpretation=_sanitize_optional_text(
-                    interpretation or _first_non_empty_paragraph(section.content)
+                market_meaning=_sanitize_optional_text(
+                    market_meaning or _first_non_empty_paragraph(section.content)
                 ),
+                korea_takeaway=_sanitize_optional_text(korea_takeaway),
                 url=safe_url or "",
                 safe_url=safe_url,
                 source_name=_source_name(safe_url),
@@ -709,6 +718,7 @@ def _build_email_context(subject: str, body: str, *, sender: str = "") -> dict[s
     ) or _find_layer_section(parsed_sections, contains_heading="LAYER 2")
     layer_three_section = _find_layer_section(parsed_sections, contains_heading="LAYER 3")
     display_date = _format_display_date(title=title, subject=subject)
+    top_summary_lines = _build_top_summary_lines(parsed_sections)
     layer_one_text = _extract_layer_one_text(parsed_sections, notice, title)
     reference_items = _build_reference_items(references)
     news_items = _build_news_items(parsed_sections, references)
@@ -720,8 +730,9 @@ def _build_email_context(subject: str, body: str, *, sender: str = "") -> dict[s
         "subject": subject,
         "title": title,
         "display_date": display_date,
-        "preheader": layer_one_text[:140].strip(),
+        "preheader": " / ".join(top_summary_lines[:2]).strip()[:140] or layer_one_text[:140].strip(),
         "notice": notice,
+        "top_summary_lines": top_summary_lines,
         "layer_one_text": layer_one_text,
         "layer_one_html": Markup(_render_body_line(layer_one_text)),
         "news_items": news_items,

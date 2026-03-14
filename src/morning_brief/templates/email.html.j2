@@ -104,11 +104,14 @@
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" style="width:100%;background:#ffffff;border:1px solid #e2e8f0;border-radius:24px;box-shadow:0 12px 30px rgba(15,23,42,0.06);">
                   <tr>
                     <td class="card-pad" style="padding:22px;">
-                      <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#1e40af;font-size:13px;line-height:1.4;font-weight:600;">📌 오늘의 판단</div>
-                      <div class="layer-one text-strong" style="padding-top:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#0f172a;font-size:28px;line-height:1.45;font-weight:800;letter-spacing:-0.03em;font-variant-numeric:tabular-nums;">{{ layer_one_html }}</div>
-                      <div style="padding-top:18px;">
-                        <a href="{{ primary_cta.url }}" style="display:inline-block;background:#1e40af;color:#ffffff;text-decoration:none;border-radius:999px;padding:12px 18px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:14px;line-height:1;font-weight:700;">{{ primary_cta.label }}</a>
-                      </div>
+                      <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#1e40af;font-size:13px;line-height:1.4;font-weight:600;">오늘 핵심 요약</div>
+                      {% if top_summary_lines %}
+                      {% for line in top_summary_lines %}
+                      <div class="{% if loop.first %}layer-one {% endif %}text-strong" style="padding-top:{% if loop.first %}12{% else %}14{% endif %}px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#0f172a;font-size:{% if loop.first %}26{% else %}17{% endif %}px;line-height:1.55;font-weight:{% if loop.first %}800{% else %}700{% endif %};letter-spacing:{% if loop.first %}-0.03em{% else %}-0.01em{% endif %};font-variant-numeric:tabular-nums;">{{ line }}</div>
+                      {% endfor %}
+                      {% else %}
+                      <div class="layer-one text-strong" style="padding-top:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#0f172a;font-size:26px;line-height:1.45;font-weight:800;letter-spacing:-0.03em;font-variant-numeric:tabular-nums;">{{ layer_one_html }}</div>
+                      {% endif %}
                     </td>
                   </tr>
                 </table>
@@ -121,13 +124,18 @@
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" style="width:100%;background:#ffffff;border:1px solid #e2e8f0;border-radius:24px;box-shadow:0 12px 30px rgba(15,23,42,0.06);">
                   <tr>
                     <td class="card-pad" style="padding:22px;">
-                      <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#1e40af;font-size:13px;line-height:1.4;font-weight:600;">📰 주요 뉴스</div>
+                      <div class="text-subtle" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#1e40af;font-size:13px;line-height:1.4;font-weight:600;">📰 주요 뉴스와 시장 의미</div>
                       {% if news_items %}
                       {% for item in news_items %}
                       <div style="padding:16px 0 0 0;{% if not loop.first %}border-top:1px solid #e2e8f0;margin-top:16px;{% endif %}">
                         <div class="text-strong" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#0f172a;font-size:18px;line-height:1.5;font-weight:800;">{{ item.headline }}</div>
-                        {% if item.interpretation %}
-                        <div class="text-body" style="padding-top:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:15px;line-height:1.6;">{{ item.interpretation }}</div>
+                        {% if item.market_meaning %}
+                        <div class="text-subtle" style="padding-top:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#475569;font-size:12px;line-height:1.4;font-weight:700;">시장 의미</div>
+                        <div class="text-body" style="padding-top:6px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:15px;line-height:1.6;">{{ item.market_meaning }}</div>
+                        {% endif %}
+                        {% if item.korea_takeaway %}
+                        <div class="text-subtle" style="padding-top:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#475569;font-size:12px;line-height:1.4;font-weight:700;">국내 투자자 관점</div>
+                        <div class="text-body" style="padding-top:6px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;font-size:15px;line-height:1.6;">{{ item.korea_takeaway }}</div>
                         {% endif %}
                       </div>
                       {% endfor %}

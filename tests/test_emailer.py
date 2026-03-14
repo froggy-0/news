@@ -15,43 +15,43 @@ SAMPLE_BRIEF = """Morning Market Brief (2026-03-12)
 [데이터 품질 알림] 뉴스 수가 부족합니다.
 
 1. 거시 환경
-핵심 판단
+한줄 결론
 - 금리와 달러 흐름이 기술주 심리에 부담으로 작용했습니다.
 
-주요 지표
+핵심 수치
 - 미국 10년물 금리는 4.20%였습니다.
 
-배경과 해석
+쉽게 보면
 금리 흐름은 기술주 주가 부담에 영향을 주고 있습니다. 달러 방향도 함께 볼 필요가 있습니다.
 
-주목할 변수
+오늘 체크할 포인트
 - 장기금리가 더 오르는지 함께 볼 필요가 있습니다.
 
 2. 미국 증시 흐름
-핵심 판단
+한줄 결론
 - 반도체가 지수를 조금 더 잘 버텼습니다.
 
-주요 지표
+핵심 수치
 - 나스닥이 1.2% 상승했습니다.
 
-배경과 해석
+쉽게 보면
 반도체가 상대적으로 견조했습니다. 시장 폭이 넓어지는지는 더 볼 필요가 있습니다.
 
-주목할 변수
+오늘 체크할 포인트
 - 대형 기술주로만 쏠리는지 확인이 필요합니다.
 
 5. 중요한 뉴스
-핵심 판단
+한줄 결론
 - AI 투자 기대와 ETF 자금 흐름이 함께 읽혔습니다.
 
 핵심 이슈
-- 엔비디아가 신규 AI 투자 계획을 공개했습니다.
-- 비트코인 ETF 자금 유입이 재개됐습니다.
+- 엔비디아가 신규 AI 투자 계획을 공개했습니다 | AI 투자 기대를 다시 키웠습니다. | 국내 투자자에게는 반도체 대표주 반응을 같이 볼 필요가 있습니다.
+- 비트코인 ETF 자금 유입이 재개됐습니다 | ETF 수급이 시장 심리를 받쳤습니다. | 국내 투자자에게는 비트코인과 관련주 흐름을 함께 볼 필요가 있습니다.
 
-배경과 해석
+왜 중요한지
 AI 투자 기대와 ETF 수급 개선이 함께 읽혔습니다.
 
-주목할 변수
+오늘 체크할 포인트
 - 관련 기대가 오늘도 이어지는지 살펴볼 필요가 있습니다.
 """
 
@@ -79,15 +79,15 @@ def test_render_briefing_email_html_contains_layered_mobile_layout():
     )
 
     assert "Morning Market Brief" in html
-    assert "📌 오늘의 판단" in html
-    assert "📰 주요 뉴스" in html
+    assert "오늘 핵심 요약" in html
+    assert "📰 주요 뉴스와 시장 의미" in html
     assert "2026년 3월 12일" in html
     assert "오전 8시 브리핑" in html
     assert "prefers-color-scheme: dark" in html
     assert "-apple-system" in html
     assert "display:none;max-height:0" in html
-    assert "대표 출처 열기" not in html
-    assert "GitHub에서 보기" in html
+    assert "AI 투자 기대와 ETF 자금 흐름이 함께 읽혔습니다." in html
+    assert "국내 투자자 관점" in html
     assert "구독 해지" in html
     assert "GitHub" in html
     assert "[데이터 품질 알림] 뉴스 수가 부족합니다." in html
@@ -289,8 +289,10 @@ def test_render_briefing_email_text_builds_plain_text_fallback():
         sender="sender@example.com",
     )
 
-    assert "📰 주요 뉴스" in text
+    assert "오늘 핵심 요약" in text
+    assert "📰 주요 뉴스와 시장 의미" in text
     assert "📊 시장 흐름" in text
+    assert "국내 투자자 관점:" in text
     assert "구독 해지: HTML 메일 하단 링크" in text
     assert "GitHub: froggy-0/news" in text
     assert "https://" not in text
@@ -343,11 +345,11 @@ def test_render_briefing_email_keeps_layer_sections_when_item_parsing_fails():
         body=body,
     )
 
-    assert "📰 주요 뉴스" in html
+    assert "📰 주요 뉴스와 시장 의미" in html
     assert "기사 형식이 완전하지 않아도 이 섹션은 그대로 보여야 합니다." in html
     assert "📊 시장 흐름" in html
     assert "엔비디아 흐름을 점검했습니다." in html
-    assert "📰 주요 뉴스" in text
+    assert "📰 주요 뉴스와 시장 의미" in text
     assert "기사 형식이 완전하지 않아도 이 섹션은 그대로 보여야 합니다." in text
     assert "📊 시장 흐름" in text
     assert "엔비디아 흐름을 점검했습니다." in text
@@ -384,7 +386,6 @@ def test_build_email_context_scopes_stock_and_macro_rows_to_layer_three_only():
     macro_rows = context["macro_rows"]
     assert [row.name for row in stock_rows] == ["NVDA", "AMD"]
     assert len(macro_rows) == 2
-    assert "S&amp;P500" not in context["layer_one_html"]
     assert [label for label, _value in macro_rows] == ["달러 인덱스", "미국 10년물 금리"]
 
 
@@ -498,7 +499,8 @@ def test_build_email_context_omits_none_interpretation_and_dedupes_source_urls()
 
     news_items = context["news_items"]
     news_source_items = context["news_source_items"]
-    assert [item.interpretation for item in news_items] == ["", ""]
+    assert [item.market_meaning for item in news_items] == ["", ""]
+    assert [item.korea_takeaway for item in news_items] == ["", ""]
     assert len(news_source_items) == 1
     assert news_source_items[0].source_name == "Google News"
     assert news_source_items[0].safe_url.startswith("https://news.google.com/")
