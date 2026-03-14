@@ -730,7 +730,8 @@ def _build_email_context(subject: str, body: str, *, sender: str = "") -> dict[s
         "subject": subject,
         "title": title,
         "display_date": display_date,
-        "preheader": " / ".join(top_summary_lines[:2]).strip()[:140] or layer_one_text[:140].strip(),
+        "preheader": " / ".join(top_summary_lines[:2]).strip()[:140]
+        or layer_one_text[:140].strip(),
         "notice": notice,
         "top_summary_lines": top_summary_lines,
         "layer_one_text": layer_one_text,

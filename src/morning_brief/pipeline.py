@@ -75,7 +75,8 @@ def run_pipeline(settings: Settings) -> str:
 
         briefing = generate_briefing(packet=packet, settings=settings, observer=observer)
         brief_fallback_used = any(
-            str(event.get("event", "")).strip() == "brief_fallback_used" for event in observer.events
+            str(event.get("event", "")).strip() == "brief_fallback_used"
+            for event in observer.events
         )
         if brief_fallback_used and status == "ok":
             status = "brief_fallback"
