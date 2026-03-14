@@ -79,6 +79,7 @@ JSON_CODE_BLOCK_RE = re.compile(
     r"```(?:json)?\s*(?P<payload>\{.*?\})\s*```",
     flags=re.DOTALL | re.IGNORECASE,
 )
+RESPONSE_PREVIEW_LEN = 200
 
 
 def _normalize_page_text(text: str) -> str:
@@ -390,7 +391,7 @@ def _extract_choice_message_text(choices: object) -> str:
 
 
 def _decode_reference_snapshot_json(text: str) -> dict[str, Any]:
-    stripped = text.strip()
+    stripped = text.strip().lstrip("\ufeff")
     candidates: list[str] = []
 
     if not stripped:
@@ -413,7 +414,9 @@ def _decode_reference_snapshot_json(text: str) -> dict[str, Any]:
         candidates.append(stripped[first_brace : last_brace + 1].strip())
 
     seen: set[str] = set()
-    for candidate in candidates:
+    pending_candidates = list(candidates)
+    while pending_candidates:
+        candidate = pending_candidates.pop(0)
         normalized_candidate = candidate.strip()
         if not normalized_candidate or normalized_candidate in seen:
             continue
@@ -422,13 +425,31 @@ def _decode_reference_snapshot_json(text: str) -> dict[str, Any]:
             decoded = json.loads(normalized_candidate)
         except json.JSONDecodeError:
             continue
+        if isinstance(decoded, str):
+            nested = decoded.strip()
+            if nested and nested not in seen:
+                pending_candidates.append(nested)
+                snapshot_member_index = nested.find('"snapshots"')
+                if snapshot_member_index != -1:
+                    member_payload = nested[snapshot_member_index:].strip().strip(",")
+                    pending_candidates.append(f"{{{member_payload}}}")
+            continue
         if isinstance(decoded, dict) and (
             "snapshots" in decoded
             or {"ticker", "source_url", "shares_outstanding", "total_btc"} <= decoded.keys()
         ):
             return decoded
 
-    raise HttpFetchError("Perplexity ETF 참조 JSON을 읽지 못했어요.")
+    raise HttpFetchError(
+        f"Perplexity ETF 참조 JSON을 읽지 못했어요. preview={_response_preview(stripped)}"
+    )
+
+
+def _response_preview(text: str) -> str:
+    preview = " ".join(str(text or "").split())
+    if len(preview) <= RESPONSE_PREVIEW_LEN:
+        return preview
+    return f"{preview[:RESPONSE_PREVIEW_LEN]}..."
 
 
 def _parse_numeric(value: object, *, integer: bool = False) -> int | float:
