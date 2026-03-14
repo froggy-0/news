@@ -392,29 +392,11 @@ def _extract_choice_message_text(choices: object) -> str:
 
 def _decode_reference_snapshot_json(text: str) -> dict[str, Any]:
     stripped = text.strip().lstrip("\ufeff")
-    candidates: list[str] = []
-
     if not stripped:
         raise HttpFetchError("Perplexity ETF 참조 응답에서 JSON 본문을 찾지 못했어요.")
 
-    code_block_match = JSON_CODE_BLOCK_RE.search(stripped)
-    if code_block_match:
-        candidates.append(code_block_match.group("payload").strip())
-
-    candidates.append(stripped)
-
-    snapshot_member_index = stripped.find('"snapshots"')
-    if snapshot_member_index != -1:
-        member_payload = stripped[snapshot_member_index:].strip().strip(",")
-        candidates.append(f"{{{member_payload}}}")
-
-    first_brace = stripped.find("{")
-    last_brace = stripped.rfind("}")
-    if first_brace != -1 and last_brace != -1 and first_brace < last_brace:
-        candidates.append(stripped[first_brace : last_brace + 1].strip())
-
     seen: set[str] = set()
-    pending_candidates = list(candidates)
+    pending_candidates = _json_candidate_strings(stripped)
     while pending_candidates:
         candidate = pending_candidates.pop(0)
         normalized_candidate = candidate.strip()
@@ -426,22 +408,62 @@ def _decode_reference_snapshot_json(text: str) -> dict[str, Any]:
         except json.JSONDecodeError:
             continue
         if isinstance(decoded, str):
-            nested = decoded.strip()
-            if nested and nested not in seen:
-                pending_candidates.append(nested)
-                snapshot_member_index = nested.find('"snapshots"')
-                if snapshot_member_index != -1:
-                    member_payload = nested[snapshot_member_index:].strip().strip(",")
-                    pending_candidates.append(f"{{{member_payload}}}")
+            _append_nested_json_candidates(decoded, pending_candidates, seen)
             continue
-        if isinstance(decoded, dict) and (
-            "snapshots" in decoded
-            or {"ticker", "source_url", "shares_outstanding", "total_btc"} <= decoded.keys()
-        ):
+        if _is_snapshot_payload(decoded):
             return decoded
 
     raise HttpFetchError(
         f"Perplexity ETF 참조 JSON을 읽지 못했어요. preview={_response_preview(stripped)}"
+    )
+
+
+def _json_candidate_strings(text: str) -> list[str]:
+    candidates: list[str] = []
+    code_block_match = JSON_CODE_BLOCK_RE.search(text)
+    if code_block_match:
+        candidates.append(code_block_match.group("payload").strip())
+
+    candidates.append(text)
+
+    snapshot_member_candidate = _snapshot_member_candidate(text)
+    if snapshot_member_candidate:
+        candidates.append(snapshot_member_candidate)
+
+    first_brace = text.find("{")
+    last_brace = text.rfind("}")
+    if first_brace != -1 and last_brace != -1 and first_brace < last_brace:
+        candidates.append(text[first_brace : last_brace + 1].strip())
+
+    return candidates
+
+
+def _snapshot_member_candidate(text: str) -> str | None:
+    snapshot_member_index = text.find('"snapshots"')
+    if snapshot_member_index == -1:
+        return None
+    member_payload = text[snapshot_member_index:].strip().strip(",")
+    return f"{{{member_payload}}}"
+
+
+def _append_nested_json_candidates(
+    decoded: str,
+    pending_candidates: list[str],
+    seen: set[str],
+) -> None:
+    nested = decoded.strip()
+    if not nested or nested in seen:
+        return
+    pending_candidates.append(nested)
+    snapshot_member_candidate = _snapshot_member_candidate(nested)
+    if snapshot_member_candidate:
+        pending_candidates.append(snapshot_member_candidate)
+
+
+def _is_snapshot_payload(decoded: object) -> bool:
+    return isinstance(decoded, dict) and (
+        "snapshots" in decoded
+        or {"ticker", "source_url", "shares_outstanding", "total_btc"} <= decoded.keys()
     )
 
 

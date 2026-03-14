@@ -278,48 +278,26 @@ def _search_group(
         record_skip(GROK_PROVIDER)
         raise HttpFetchError(f"Grok은 이번 실행에서 더 이상 쓰지 않을게요: {unavailable_reason}")
 
-    handles = [
-        str(entity.get("x_handle", "")).strip().lstrip("@")
-        for entity in entities
-        if entity.get("x_handle")
-    ]
+    handles = _group_handles(entities)
     if not handles:
         return [], "no_results"
 
     to_date = datetime.now(timezone.utc)
     from_date = to_date - timedelta(hours=lookback_hours)
 
-    def perform_group_search() -> tuple[list[dict[str, Any]], list[str], dict[str, int | None]]:
-        client = _build_client(api_key)
-        try:
-            chat = client.chat.create(
-                model=model,
-                tools=[x_search(allowed_x_handles=handles, from_date=from_date, to_date=to_date)],
-                tool_choice="required",
-                response_format=XAI_RESPONSE_MODEL,
-                include=["inline_citations"],
-            )
-            chat.append(
-                user(
-                    _build_prompt(
-                        group=group,
-                        lookback_hours=lookback_hours,
-                        max_items=max_items,
-                        entities=entities,
-                    )
-                )
-            )
-            response = chat.sample()
-        except Exception as exc:
-            raise _to_http_fetch_error(exc) from exc
-
-        payload_items = _parse_response_items(_normalize_text(getattr(response, "content", "")))
-        fallback_citations = _normalize_citations(getattr(response, "citations", []))
-        return payload_items, fallback_citations, _usage_snapshot(response)
-
     payload_items, fallback_citations, usage = execute_with_provider_retry(
         provider=GROK_PROVIDER,
-        operation=perform_group_search,
+        operation=lambda: _perform_group_search(
+            api_key=api_key,
+            model=model,
+            group=group,
+            entities=entities,
+            handles=handles,
+            from_date=from_date,
+            to_date=to_date,
+            lookback_hours=lookback_hours,
+            max_items=max_items,
+        ),
         should_retry=lambda exc: isinstance(exc, HttpFetchError) and exc.retryable,
         on_retry=lambda exc, attempt, max_attempts, delay: logger.warning(
             "Grok X Search를 다시 시도하는 중이에요 (%s/%s). group=%s | %s | sleep=%.2fs",
@@ -333,22 +311,7 @@ def _search_group(
         if isinstance(exc, HttpFetchError)
         else None,
     )
-    if observer is not None:
-        observer.record_provider_usage(
-            GROK_PROVIDER,
-            requests=1,
-            input_tokens=usage["input_tokens"],
-            output_tokens=usage["output_tokens"],
-            cached_input_tokens=usage["cached_input_tokens"],
-            reasoning_tokens=usage["reasoning_tokens"],
-            usage_parse_failures=1 if all(value is None for value in usage.values()) else 0,
-        )
-        if all(value is None for value in usage.values()):
-            observer.log_event(
-                "provider_usage_unparsed",
-                provider=GROK_PROVIDER,
-                group=group,
-            )
+    _record_grok_usage(observer=observer, group=group, usage=usage)
 
     can_apply_group_fallback = len(payload_items) == 1
     handle_map = {
@@ -358,44 +321,155 @@ def _search_group(
     }
 
     topic = GROUP_TOPIC_MAP.get(group, "us_equity")
-    items: list[NewsItem] = []
-    for item in payload_items[:max_items]:
-        source_handle = str(item.get("source_handle", "")).strip().lstrip("@")
-        entity = handle_map.get(source_handle.lower())
-        if entity is None:
-            continue
-
-        citations = _normalize_citations(item.get("citations", []))
-        if not citations and can_apply_group_fallback:
-            citations = fallback_citations
-        title = _normalize_text(item.get("headline"))
-        summary = _normalize_text(item.get("summary"))
-        why_it_matters = _normalize_text(item.get("why_it_matters")) or GROUP_IMPACT_LINES.get(
-            topic, "공식 시그널이라 직접적인 확인 근거가 돼요."
-        )
-        if not title or not summary:
-            continue
-
-        items.append(
-            NewsItem(
-                title=title,
-                url=citations[0] if citations else _fallback_x_url(source_handle),
-                source=f"@{source_handle}"
-                if source_handle
-                else str(entity.get("entity_name", "Official X")).strip(),
-                published_at=_normalize_datetime(item.get("posted_at")),
-                topic=topic,
-                provider="grok_official_x",
-                summary=summary,
-                why_it_matters=why_it_matters,
-                citations=citations,
-            )
-        )
+    items = _build_group_items(
+        payload_items=payload_items,
+        max_items=max_items,
+        handle_map=handle_map,
+        fallback_citations=fallback_citations,
+        can_apply_group_fallback=can_apply_group_fallback,
+        topic=topic,
+    )
     if items:
         return items, None
     if payload_items:
         return [], "no_results"
     return [], "api_empty"
+
+
+def _group_handles(entities: list[dict[str, Any]]) -> list[str]:
+    return [
+        str(entity.get("x_handle", "")).strip().lstrip("@")
+        for entity in entities
+        if entity.get("x_handle")
+    ]
+
+
+def _perform_group_search(
+    *,
+    api_key: str,
+    model: str,
+    group: str,
+    entities: list[dict[str, Any]],
+    handles: list[str],
+    from_date: datetime,
+    to_date: datetime,
+    lookback_hours: int,
+    max_items: int,
+) -> tuple[list[dict[str, Any]], list[str], dict[str, int | None]]:
+    client = _build_client(api_key)
+    try:
+        chat = client.chat.create(
+            model=model,
+            tools=[x_search(allowed_x_handles=handles, from_date=from_date, to_date=to_date)],
+            tool_choice="required",
+            response_format=XAI_RESPONSE_MODEL,
+            include=["inline_citations"],
+        )
+        chat.append(
+            user(
+                _build_prompt(
+                    group=group,
+                    lookback_hours=lookback_hours,
+                    max_items=max_items,
+                    entities=entities,
+                )
+            )
+        )
+        response = chat.sample()
+    except Exception as exc:
+        raise _to_http_fetch_error(exc) from exc
+
+    payload_items = _parse_response_items(_normalize_text(getattr(response, "content", "")))
+    fallback_citations = _normalize_citations(getattr(response, "citations", []))
+    return payload_items, fallback_citations, _usage_snapshot(response)
+
+
+def _record_grok_usage(
+    *,
+    observer: PipelineObserver | None,
+    group: str,
+    usage: dict[str, int | None],
+) -> None:
+    if observer is None:
+        return
+    usage_parse_failures = 1 if all(value is None for value in usage.values()) else 0
+    observer.record_provider_usage(
+        GROK_PROVIDER,
+        requests=1,
+        input_tokens=usage["input_tokens"],
+        output_tokens=usage["output_tokens"],
+        cached_input_tokens=usage["cached_input_tokens"],
+        reasoning_tokens=usage["reasoning_tokens"],
+        usage_parse_failures=usage_parse_failures,
+    )
+    if usage_parse_failures:
+        observer.log_event(
+            "provider_usage_unparsed",
+            provider=GROK_PROVIDER,
+            group=group,
+        )
+
+
+def _build_group_items(
+    *,
+    payload_items: list[dict[str, Any]],
+    max_items: int,
+    handle_map: dict[str, dict[str, Any]],
+    fallback_citations: list[str],
+    can_apply_group_fallback: bool,
+    topic: str,
+) -> list[NewsItem]:
+    items: list[NewsItem] = []
+    for item in payload_items[:max_items]:
+        news_item = _group_news_item(
+            item=item,
+            handle_map=handle_map,
+            fallback_citations=fallback_citations,
+            can_apply_group_fallback=can_apply_group_fallback,
+            topic=topic,
+        )
+        if news_item is not None:
+            items.append(news_item)
+    return items
+
+
+def _group_news_item(
+    *,
+    item: dict[str, Any],
+    handle_map: dict[str, dict[str, Any]],
+    fallback_citations: list[str],
+    can_apply_group_fallback: bool,
+    topic: str,
+) -> NewsItem | None:
+    source_handle = str(item.get("source_handle", "")).strip().lstrip("@")
+    entity = handle_map.get(source_handle.lower())
+    if entity is None:
+        return None
+
+    citations = _normalize_citations(item.get("citations", []))
+    if not citations and can_apply_group_fallback:
+        citations = fallback_citations
+    title = _normalize_text(item.get("headline"))
+    summary = _normalize_text(item.get("summary"))
+    why_it_matters = _normalize_text(item.get("why_it_matters")) or GROUP_IMPACT_LINES.get(
+        topic, "공식 시그널이라 직접적인 확인 근거가 돼요."
+    )
+    if not title or not summary:
+        return None
+
+    return NewsItem(
+        title=title,
+        url=citations[0] if citations else _fallback_x_url(source_handle),
+        source=f"@{source_handle}"
+        if source_handle
+        else str(entity.get("entity_name", "Official X")).strip(),
+        published_at=_normalize_datetime(item.get("posted_at")),
+        topic=topic,
+        provider="grok_official_x",
+        summary=summary,
+        why_it_matters=why_it_matters,
+        citations=citations,
+    )
 
 
 def fetch_official_x_signals(

@@ -574,69 +574,11 @@ def _fetch_news_from_perplexity(
 
     for topic in TOPIC_SPECS:
         try:
-            total_result_count = 0
-            payload, usage, usage_present = _search_once(
+            topic_items, total_result_count = _search_topic_items(
                 client=client,
-                query=topic.query,
-                domain_filter=topic.domain_filter,
-                recency_filter=topic.recency_filter,
+                topic=topic,
+                observer=observer,
             )
-            first_results = payload.get("results", [])
-            if isinstance(first_results, list):
-                total_result_count += len(first_results)
-            if observer is not None:
-                observer.record_provider_usage(
-                    PERPLEXITY_PROVIDER,
-                    requests=1,
-                    response_sources=len(first_results) if isinstance(first_results, list) else 0,
-                    input_tokens=usage["input_tokens"],
-                    output_tokens=usage["output_tokens"],
-                    cached_input_tokens=usage["cached_input_tokens"],
-                    reasoning_tokens=usage["reasoning_tokens"],
-                    usage_parse_failures=1
-                    if usage_present and all(value is None for value in usage.values())
-                    else 0,
-                )
-                if usage_present and all(value is None for value in usage.values()):
-                    observer.log_event(
-                        "provider_usage_unparsed",
-                        provider=PERPLEXITY_PROVIDER,
-                        query=" ".join(topic.query.split())[:80],
-                    )
-            topic_items = _parse_results(payload=payload, topic=topic)
-            if len(topic_items) < TOPIC_RESULT_TARGET and topic.retry_query:
-                retry_payload, retry_usage, retry_usage_present = _search_once(
-                    client=client,
-                    query=topic.retry_query,
-                    domain_filter=topic.domain_filter,
-                    recency_filter=topic.recency_filter,
-                )
-                retry_results = retry_payload.get("results", [])
-                if isinstance(retry_results, list):
-                    total_result_count += len(retry_results)
-                if observer is not None:
-                    observer.record_provider_usage(
-                        PERPLEXITY_PROVIDER,
-                        requests=1,
-                        response_sources=len(retry_results)
-                        if isinstance(retry_results, list)
-                        else 0,
-                        input_tokens=retry_usage["input_tokens"],
-                        output_tokens=retry_usage["output_tokens"],
-                        cached_input_tokens=retry_usage["cached_input_tokens"],
-                        reasoning_tokens=retry_usage["reasoning_tokens"],
-                        usage_parse_failures=1
-                        if retry_usage_present
-                        and all(value is None for value in retry_usage.values())
-                        else 0,
-                    )
-                    if retry_usage_present and all(value is None for value in retry_usage.values()):
-                        observer.log_event(
-                            "provider_usage_unparsed",
-                            provider=PERPLEXITY_PROVIDER,
-                            query=" ".join(topic.retry_query.split())[:80],
-                        )
-                topic_items.extend(_parse_results(payload=retry_payload, topic=topic))
             if observer is not None:
                 observer.record_perplexity_topic_results(
                     topic.name,
@@ -676,6 +618,81 @@ def _fetch_news_from_perplexity(
             )
 
     return collected
+
+
+def _search_topic_items(
+    *,
+    client: Perplexity,
+    topic: SearchTopic,
+    observer: PipelineObserver | None,
+) -> tuple[list[NewsItem], int]:
+    payload, usage, usage_present = _search_once(
+        client=client,
+        query=topic.query,
+        domain_filter=topic.domain_filter,
+        recency_filter=topic.recency_filter,
+    )
+    first_results = payload.get("results", [])
+    total_result_count = len(first_results) if isinstance(first_results, list) else 0
+    _record_perplexity_usage(
+        observer=observer,
+        query=topic.query,
+        usage=usage,
+        usage_present=usage_present,
+        result_count=total_result_count,
+    )
+    topic_items = _parse_results(payload=payload, topic=topic)
+    if len(topic_items) >= TOPIC_RESULT_TARGET or not topic.retry_query:
+        return topic_items, total_result_count
+
+    retry_payload, retry_usage, retry_usage_present = _search_once(
+        client=client,
+        query=topic.retry_query,
+        domain_filter=topic.domain_filter,
+        recency_filter=topic.recency_filter,
+    )
+    retry_results = retry_payload.get("results", [])
+    retry_result_count = len(retry_results) if isinstance(retry_results, list) else 0
+    _record_perplexity_usage(
+        observer=observer,
+        query=topic.retry_query,
+        usage=retry_usage,
+        usage_present=retry_usage_present,
+        result_count=retry_result_count,
+    )
+    topic_items.extend(_parse_results(payload=retry_payload, topic=topic))
+    return topic_items, total_result_count + retry_result_count
+
+
+def _record_perplexity_usage(
+    *,
+    observer: PipelineObserver | None,
+    query: str,
+    usage: dict[str, int | None],
+    usage_present: bool,
+    result_count: int,
+) -> None:
+    if observer is None:
+        return
+    usage_parse_failures = (
+        1 if usage_present and all(value is None for value in usage.values()) else 0
+    )
+    observer.record_provider_usage(
+        PERPLEXITY_PROVIDER,
+        requests=1,
+        response_sources=result_count,
+        input_tokens=usage["input_tokens"],
+        output_tokens=usage["output_tokens"],
+        cached_input_tokens=usage["cached_input_tokens"],
+        reasoning_tokens=usage["reasoning_tokens"],
+        usage_parse_failures=usage_parse_failures,
+    )
+    if usage_parse_failures:
+        observer.log_event(
+            "provider_usage_unparsed",
+            provider=PERPLEXITY_PROVIDER,
+            query=" ".join(query.split())[:80],
+        )
 
 
 def fetch_news_from_perplexity(

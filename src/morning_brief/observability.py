@@ -13,7 +13,7 @@ from morning_brief.data.sources.domain_utils import normalize_domain
 
 PREFERRED_PROVIDER_ORDER = ("openai", "perplexity", "grok")
 COLLECTED_ITEM_LOG_LIMIT = 20
-LLM_PRICING_USD_PER_1M = {
+LLM_PRICING_USD_PER_1M: dict[str, dict[str, float | None]] = {
     "openai": {
         "input": 0.150,
         "output": 0.600,
@@ -94,9 +94,10 @@ def _provider_cost_usd(
 
 def _total_cost_usd(usage_summary: dict[str, dict[str, int | float | None]]) -> float | None:
     costs = [
-        float(metrics["cost_usd"])
+        float(cost_value)
         for metrics in usage_summary.values()
-        if metrics.get("cost_usd") is not None
+        for cost_value in [metrics.get("cost_usd")]
+        if isinstance(cost_value, (int, float))
     ]
     if not costs:
         return None
@@ -356,7 +357,7 @@ class PipelineObserver:
 
         usage_summary = self.provider_usage_summary_payload()
         usage_summary_line = self.provider_usage_summary_line()
-        summary = {
+        summary: dict[str, object] = {
             "run_id": self.run_id,
             "status": status,
             "started_at_utc": self.run_started_at.isoformat(),

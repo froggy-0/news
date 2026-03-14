@@ -128,6 +128,20 @@ def _append_reference_block(text: str, packet: dict) -> str:
 
     lines = ["참고 출처"]
     seen: set[str] = set()
+    _append_news_reference_lines(lines, seen, news_items)
+    _append_web_reference_lines(lines, seen, web_references)
+
+    if len(lines) == 1:
+        return text
+
+    return f"{text.rstrip()}\n\n" + "\n".join(lines)
+
+
+def _append_news_reference_lines(
+    lines: list[str],
+    seen: set[str],
+    news_items: list[dict],
+) -> None:
     for item in news_items[:5]:
         if not isinstance(item, dict):
             continue
@@ -138,6 +152,12 @@ def _append_reference_block(text: str, packet: dict) -> str:
         title = str(item.get("title", "")).strip() or "출처"
         lines.append(f"- {title} — {url}")
 
+
+def _append_web_reference_lines(
+    lines: list[str],
+    seen: set[str],
+    web_references: list[dict],
+) -> None:
     for item in web_references[:5]:
         if not isinstance(item, dict):
             continue
@@ -147,11 +167,6 @@ def _append_reference_block(text: str, packet: dict) -> str:
             continue
         seen.add(url)
         lines.append(f"- {title} — {url}")
-
-    if len(lines) == 1:
-        return text
-
-    return f"{text.rstrip()}\n\n" + "\n".join(lines)
 
 
 def _append_footer_note_block(text: str, packet: dict) -> str:

@@ -210,47 +210,57 @@ def _source_name(url: str | None) -> str | None:
         return None
 
     parsed = urlparse(safe_url)
-    hostname = parsed.netloc.lower()
+    hostname = _normalized_hostname(parsed.netloc)
     if not hostname:
         return None
 
+    mapped_name = _mapped_source_name(hostname, parsed.path)
+    if mapped_name == "":
+        return None
+    if mapped_name is not None:
+        return mapped_name
+    return _fallback_source_name(hostname)
+
+
+def _normalized_hostname(netloc: str) -> str:
+    hostname = netloc.lower()
     if hostname.startswith("www."):
         hostname = hostname[4:]
-
     if hostname.endswith("twitter.com"):
-        hostname = "x.com"
+        return "x.com"
+    return hostname
 
+
+def _mapped_source_name(hostname: str, path: str) -> str | None:
     if hostname == "x.com":
-        path_parts = [part for part in parsed.path.split("/") if part]
-        if path_parts:
-            return f"X (@{path_parts[0]})"
-        return "X"
-
+        path_parts = [part for part in path.split("/") if part]
+        return f"X (@{path_parts[0]})" if path_parts else "X"
     if hostname == "news.google.com":
         return "Google News"
     if hostname == "markets.ft.com":
-        if "/data/" in parsed.path:
-            return None
-        return "Financial Times"
-    if hostname.endswith("ft.com"):
-        return "Financial Times"
-    if hostname.endswith("reuters.com"):
-        return "Reuters"
-    if hostname.endswith("wsj.com"):
-        return "The Wall Street Journal"
-    if hostname.endswith("bloomberg.com"):
-        return "Bloomberg"
-    if hostname.endswith("cnbc.com"):
-        return "CNBC"
-    if hostname.endswith("bitcoin.com"):
-        return "Bitcoin.com News"
-    if hostname.endswith("finance.yahoo.com") or hostname.endswith("yahoo.com"):
-        return "Yahoo Finance"
+        return "" if "/data/" in path else "Financial Times"
 
+    hostname_mappings = (
+        ("ft.com", "Financial Times"),
+        ("reuters.com", "Reuters"),
+        ("wsj.com", "The Wall Street Journal"),
+        ("bloomberg.com", "Bloomberg"),
+        ("cnbc.com", "CNBC"),
+        ("bitcoin.com", "Bitcoin.com News"),
+        ("finance.yahoo.com", "Yahoo Finance"),
+        ("yahoo.com", "Yahoo Finance"),
+    )
+    for suffix, label in hostname_mappings:
+        if hostname.endswith(suffix):
+            return label
+    return None
+
+
+def _fallback_source_name(hostname: str) -> str | None:
     root = hostname.split(".")
     if len(root) >= 2:
         return root[-2].replace("-", " ").title()
-    return hostname
+    return hostname or None
 
 
 def _sanitize_optional_text(value: str) -> str:
@@ -510,17 +520,13 @@ def _build_stock_rows(sections: list[_EmailSection], *, limit: int = 6) -> list[
     seen_contexts: set[str] = set()
     if layer_three_section is not None:
         candidate_lines, _ = _split_layer_three_metric_lines(layer_three_section)
-        fallback_heading = layer_three_section.heading
-        for line in candidate_lines[:limit]:
-            row = _build_stock_row(line, fallback_heading)
-            if row is None:
-                continue
-            if row.context_text in seen_contexts:
-                continue
-            seen_contexts.add(row.context_text)
-            rows.append(row)
-            if len(rows) >= limit:
-                return rows
+        _append_stock_rows(
+            rows=rows,
+            seen_contexts=seen_contexts,
+            candidate_lines=candidate_lines[:limit],
+            fallback_heading=layer_three_section.heading,
+            limit=limit,
+        )
         return rows
 
     for section in sections:
@@ -528,17 +534,34 @@ def _build_stock_rows(sections: list[_EmailSection], *, limit: int = 6) -> list[
             *_first_metric_lines(section.groups["metrics"][1], limit=limit),
             *_first_metric_lines(section.groups["watch"][1], limit=limit),
         ]
-        for line in candidate_lines:
-            row = _build_stock_row(line, section.heading)
-            if row is None:
-                continue
-            if row.context_text in seen_contexts:
-                continue
-            seen_contexts.add(row.context_text)
-            rows.append(row)
-            if len(rows) >= limit:
-                return rows
+        _append_stock_rows(
+            rows=rows,
+            seen_contexts=seen_contexts,
+            candidate_lines=candidate_lines,
+            fallback_heading=section.heading,
+            limit=limit,
+        )
+        if len(rows) >= limit:
+            return rows
     return rows
+
+
+def _append_stock_rows(
+    *,
+    rows: list[_EmailBriefRow],
+    seen_contexts: set[str],
+    candidate_lines: list[str],
+    fallback_heading: str,
+    limit: int,
+) -> None:
+    for line in candidate_lines:
+        row = _build_stock_row(line, fallback_heading)
+        if row is None or row.context_text in seen_contexts:
+            continue
+        seen_contexts.add(row.context_text)
+        rows.append(row)
+        if len(rows) >= limit:
+            return
 
 
 def _split_macro_line(line: str) -> tuple[str, str]:
@@ -624,8 +647,8 @@ def _build_news_source_items(
             )
         )
 
-    for item in reference_items:
-        safe_url = item.get("safe_url")
+    for reference_item in reference_items:
+        safe_url = reference_item.get("safe_url")
         if not isinstance(safe_url, str) or not safe_url:
             continue
         source_name = _source_name(safe_url)
@@ -634,7 +657,7 @@ def _build_news_source_items(
         seen_source_names.add(source_name)
         items.append(
             _EmailSourceItem(
-                headline=str(item.get("label") or source_name),
+                headline=str(reference_item.get("label") or source_name),
                 source_name=source_name,
                 safe_url=safe_url,
             )
