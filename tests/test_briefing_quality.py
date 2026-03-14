@@ -354,6 +354,48 @@ def test_generate_briefing_respects_validator_no_rewrite_guidance(monkeypatch):
     assert len(calls) == 2
 
 
+def test_generate_briefing_keeps_draft_when_validator_json_is_invalid(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    settings = load_settings()
+    packet = {
+        "macro": [],
+        "us_indices": [],
+        "tech_stocks": [],
+        "bitcoin": {"spot": {}, "etf_points": [], "etf_total_volume": 0},
+        "news": [],
+        "data_quality": {"status": "ok", "warnings": []},
+    }
+    draft_text = (
+        "Morning Market Brief (2026-03-14)\n\n"
+        "1. LAYER 1 | 오늘 한줄 판단\n"
+        "핵심 판단\n"
+        "미국 시장은 혼조 흐름을 보였어요.\n\n"
+        "2. LAYER 2 | 주요 뉴스\n"
+        "- 주요 뉴스 없음 | 추가 해석 없음 | 출처 없음\n\n"
+        "3. LAYER 3 | 종목 브리핑\n"
+        "- 주요 종목 데이터 없음 | 0.00% | 출처 없음"
+    )
+    malformed_review = '{"pass": false, "rewrite_needed": true, "issues": ["문장 길이를 줄여 주세요'
+
+    calls: list[dict] = []
+    responses = [
+        SimpleNamespace(output_text=draft_text, usage=None),
+        SimpleNamespace(output_text=malformed_review, usage=None),
+    ]
+
+    def _create(**kwargs):
+        calls.append(kwargs)
+        return responses.pop(0)
+
+    fake_client = SimpleNamespace(responses=SimpleNamespace(create=_create))
+    monkeypatch.setattr("morning_brief.briefing.OpenAI", lambda **_: fake_client)
+
+    briefing = generate_briefing(packet=packet, settings=settings)
+
+    assert briefing == draft_text
+    assert len(calls) == 2
+
+
 def test_generate_briefing_skips_validator_when_disabled(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("OPENAI_BRIEF_VALIDATION_ENABLED", "false")

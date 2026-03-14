@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from json import JSONDecodeError
 
 from openai import OpenAI
 
@@ -19,6 +20,7 @@ from morning_brief.prompting import (
 logger = logging.getLogger(__name__)
 
 VALIDATOR_MAX_OUTPUT_TOKENS = 700
+REVIEW_PARSE_PREVIEW_LEN = 240
 
 BRIEF_REVIEW_SCHEMA = {
     "type": "object",
@@ -71,6 +73,45 @@ def _normalize_review_payload(payload: object) -> dict:
     }
 
 
+def _review_parse_preview(text: str) -> str:
+    preview = " ".join(text.split())
+    if len(preview) <= REVIEW_PARSE_PREVIEW_LEN:
+        return preview
+    return f"{preview[:REVIEW_PARSE_PREVIEW_LEN]}..."
+
+
+def _parse_review_payload_text(
+    *,
+    response_text: str,
+    observer: PipelineObserver | None = None,
+) -> dict | None:
+    normalized_text = response_text.strip()
+    if not normalized_text:
+        logger.warning("브리핑 검수 응답이 비어 있어 이번 검수는 건너뛸게요.")
+        if observer is not None:
+            observer.log_event("brief_review_skipped", reason="empty_response")
+        return None
+
+    try:
+        payload = json.loads(normalized_text)
+    except JSONDecodeError as exc:
+        logger.warning(
+            "브리핑 검수 JSON을 읽지 못해 이번 검수는 건너뛸게요: %s | preview=%s",
+            exc,
+            _review_parse_preview(normalized_text),
+        )
+        if observer is not None:
+            observer.log_event(
+                "brief_review_skipped",
+                reason="invalid_json",
+                error=str(exc),
+                preview=_review_parse_preview(normalized_text),
+            )
+        return None
+
+    return _normalize_review_payload(payload)
+
+
 def _review_briefing(
     *,
     draft_text: str,
@@ -112,8 +153,6 @@ def _review_briefing(
         )
     except Exception as exc:
         raise BriefGenerationError(f"브리핑 검수 OpenAI 호출에 실패했어요: {exc}") from exc
-    payload = json.loads((response.output_text or "").strip() or "{}")
-    review = _normalize_review_payload(payload)
     cached_tokens = cached_input_tokens(response)
     if cached_tokens is not None:
         logger.info(
@@ -127,7 +166,10 @@ def _review_briefing(
             "review",
             int(round((time.perf_counter() - started_at) * 1000)),
         )
-    return review
+    return _parse_review_payload_text(
+        response_text=response.output_text or "",
+        observer=observer,
+    )
 
 
 def _rewrite_briefing(
