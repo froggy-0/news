@@ -170,6 +170,92 @@ def test_run_pipeline_marks_brief_fallback_status_when_safe_brief_is_used(monkey
     assert payload["summary"]["brief_fallback_used"] is True
 
 
+def test_run_pipeline_uses_openai_backfill_only_when_quality_is_degraded(monkeypatch, tmp_path):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_WEB_SEARCH_ENABLED", "true")
+    monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
+    settings = load_settings()
+    backfill_called = {"called": False}
+
+    initial_news = [
+        {
+            "title": "Weak source item",
+            "url": "https://example.com/weak-item",
+            "source": "Example",
+            "published_at": "2026-03-14T01:00:00+00:00",
+            "domain": "example.com",
+            "source_tier": "tier_3",
+            "preferred_source": False,
+            "age_hours": 4.0,
+        },
+        {
+            "title": "Weak source item 2",
+            "url": "https://example.com/weak-item-2",
+            "source": "Example",
+            "published_at": "2026-03-14T02:00:00+00:00",
+            "domain": "example.com",
+            "source_tier": "tier_3",
+            "preferred_source": False,
+            "age_hours": 3.0,
+        },
+        {
+            "title": "Weak source item 3",
+            "url": "https://example.net/weak-item-3",
+            "source": "Example",
+            "published_at": "2026-03-14T03:00:00+00:00",
+            "domain": "example.net",
+            "source_tier": "tier_3",
+            "preferred_source": False,
+            "age_hours": 2.0,
+        },
+    ]
+    merged_news = initial_news + [
+        {
+            "title": "Fed keeps options open",
+            "url": "https://www.reuters.com/world/us/fed-keeps-options-open",
+            "source": "Reuters",
+            "published_at": "2026-03-14T04:00:00+00:00",
+            "domain": "reuters.com",
+            "source_tier": "tier_1",
+            "preferred_source": True,
+            "age_hours": 1.0,
+        }
+    ]
+
+    monkeypatch.setattr("morning_brief.pipeline.build_market_packet", lambda **_: _market_packet())
+    monkeypatch.setattr("morning_brief.pipeline.build_news_packet", lambda **_: initial_news)
+    monkeypatch.setattr(
+        "morning_brief.pipeline.backfill_news_with_web_search",
+        lambda **_: backfill_called.__setitem__("called", True)
+        or (
+            merged_news,
+            [
+                {
+                    "title": "Reuters",
+                    "url": "https://www.reuters.com/world/us/fed-keeps-options-open",
+                }
+            ],
+        ),
+    )
+    monkeypatch.setattr(
+        "morning_brief.pipeline.generate_briefing",
+        lambda packet, **_: (
+            "Morning Market Brief (2026-03-14)\n\n참고 출처\n- https://www.reuters.com/world/us/fed-keeps-options-open"
+            if packet.get("web_search_references")
+            else "Morning Market Brief (2026-03-14)"
+        ),
+    )
+    monkeypatch.setattr(
+        "morning_brief.pipeline.GmailSender",
+        lambda _settings: SimpleNamespace(send=lambda **_: None),
+    )
+
+    briefing = run_pipeline(settings=settings)
+
+    assert backfill_called["called"] is True
+    assert "Reuters" in briefing or "reuters.com" in briefing
+
+
 def test_pipeline_observability_serializes_null_provider_token_usage(tmp_path):
     from morning_brief.observability import PipelineObserver
 

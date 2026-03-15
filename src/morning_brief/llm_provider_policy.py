@@ -50,12 +50,15 @@ PROVIDER_ROLE_POLICIES = {
     OPENAI_PROVIDER: ProviderRolePolicy(
         provider=OPENAI_PROVIDER,
         primary_role="브리핑 생성 + 검수",
-        allowed_capabilities=(CAPABILITY_BRIEF_GENERATION, CAPABILITY_BRIEF_REVIEW),
+        allowed_capabilities=(
+            CAPABILITY_BRIEF_GENERATION,
+            CAPABILITY_BRIEF_REVIEW,
+            CAPABILITY_WEB_BACKFILL,
+        ),
         forbidden_capabilities=(
             CAPABILITY_NEWS_COLLECTION,
             CAPABILITY_X_SIGNAL,
             CAPABILITY_BTC_ETF_REFERENCE,
-            CAPABILITY_WEB_BACKFILL,
         ),
     ),
 }

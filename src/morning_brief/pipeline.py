@@ -18,6 +18,10 @@ from morning_brief.emailer import GmailSender
 from morning_brief.llm_errors import BriefGenerationError
 from morning_brief.llm_provider_policy import provider_role_snapshot
 from morning_brief.observability import PipelineObserver
+from morning_brief.research_backfill import (
+    _needs_web_search_backfill,
+    backfill_news_with_web_search,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +64,26 @@ def run_pipeline(settings: Settings) -> str:
         }
         quality = _assess_data_quality(packet=packet, news_packet=news_packet)
         with observer.phase("backfill"):
-            observer.log_event(
-                "backfill_skipped",
-                reason="OpenAI는 브리핑 생성/검수 전용이라 수집 백필을 수행하지 않아요.",
-            )
+            if not settings.openai_web_search_enabled:
+                observer.log_event(
+                    "backfill_skipped",
+                    reason="OpenAI web_search 백필 설정이 꺼져 있어 현재 뉴스 묶음을 유지할게요.",
+                )
+            elif not _needs_web_search_backfill(quality):
+                observer.log_event(
+                    "backfill_skipped",
+                    reason="현재 뉴스 품질이 백필 기준을 넘겨 OpenAI web_search는 건너뛸게요.",
+                )
+            else:
+                merged_news, references = backfill_news_with_web_search(
+                    packet=packet,
+                    quality=quality,
+                    settings=settings,
+                )
+                news_packet = merged_news
+                packet["news"] = merged_news
+                packet["web_search_references"] = references
+                quality = _assess_data_quality(packet=packet, news_packet=news_packet)
 
         packet["data_quality"] = quality
         if quality["status"] != "ok":

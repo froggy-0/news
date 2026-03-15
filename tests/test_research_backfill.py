@@ -49,9 +49,9 @@ def test_extract_web_citations_reads_url_annotations():
     assert citations == [{"title": "Reuters", "url": "https://www.reuters.com/markets/example"}]
 
 
-def test_backfill_news_with_web_search_is_disabled(monkeypatch):
+def test_backfill_news_with_web_search_is_disabled_when_setting_is_off(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setenv("OPENAI_WEB_SEARCH_ENABLED", "true")
+    monkeypatch.setenv("OPENAI_WEB_SEARCH_ENABLED", "false")
     settings = load_settings()
     packet = {
         "news": [
