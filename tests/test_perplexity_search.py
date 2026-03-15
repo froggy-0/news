@@ -235,6 +235,80 @@ def test_fetch_news_from_perplexity_uses_broad_retry_after_date_retry(monkeypatc
     assert [event["stage"] for event in widen_events] == ["date_range_retry", "broad_retry"]
 
 
+def test_fetch_news_from_perplexity_uses_open_domain_retry_when_domain_retries_stay_empty(
+    monkeypatch, tmp_path
+):
+    calls = []
+    observer = PipelineObserver(output_dir=tmp_path)
+    monkeypatch.setattr(ps, "_utc_now", lambda: datetime(2026, 3, 15, 9, 0, tzinfo=timezone.utc))
+    monkeypatch.setattr(
+        ps,
+        "TOPIC_SPECS",
+        (
+            ps.SearchTopic(
+                name="us_equity",
+                query="equity query",
+                retry_query="equity retry",
+                domain_filter=("reuters.com", "cnbc.com"),
+                retry_domain_filter=("reuters.com", "cnbc.com", "marketwatch.com"),
+                retry_recency_filter="week",
+                allow_open_domain_retry=True,
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        ps,
+        "_build_client",
+        lambda api_key: _Client(
+            [
+                _SDKResponse({"results": []}),
+                _SDKResponse({"results": []}),
+                _SDKResponse({"results": []}),
+                _SDKResponse(
+                    {
+                        "results": [
+                            {
+                                "title": "Stocks wobble as chip names lead late rebound",
+                                "url": "https://www.reuters.com/world/us/stocks-wobble-chip-names-lead-late-rebound/",
+                                "snippet": "Reuters equity story",
+                                "date": "2026-03-14T03:00:00Z",
+                            },
+                            {
+                                "title": "Random blog",
+                                "url": "https://example.com/random-blog",
+                                "snippet": "ignore",
+                                "date": "2026-03-14T04:00:00Z",
+                            },
+                        ]
+                    }
+                ),
+            ],
+            calls,
+        ),
+    )
+
+    items = ps.fetch_news_from_perplexity(
+        max_items=5,
+        api_key="pplx-test-key",
+        observer=observer,
+    )
+
+    assert len(calls) == 4
+    assert calls[2]["search_domain_filter"] == ["reuters.com", "cnbc.com", "marketwatch.com"]
+    assert "search_domain_filter" not in calls[3]
+    assert calls[3]["search_recency_filter"] == "week"
+    assert len(items) == 1
+    assert items[0].source == "Reuters"
+    widen_events = [
+        event for event in observer.events if event["event"] == "perplexity_search_widened"
+    ]
+    assert [event["stage"] for event in widen_events] == [
+        "date_range_retry",
+        "broad_retry",
+        "open_domain_retry",
+    ]
+
+
 def test_fetch_news_from_perplexity_filters_unallowed_domain(monkeypatch):
     monkeypatch.setattr(
         ps,

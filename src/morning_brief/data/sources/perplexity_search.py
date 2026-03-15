@@ -149,6 +149,7 @@ class SearchTopic:
     retry_range_days: int | None = INTERMEDIATE_LOOKBACK_DAYS
     retry_domain_filter: tuple[str, ...] | None = None
     retry_recency_filter: str | None = None
+    allow_open_domain_retry: bool = False
 
 
 TOPIC_SPECS: tuple[SearchTopic, ...] = (
@@ -185,6 +186,7 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             "marketwatch.com",
         ),
         retry_recency_filter="week",
+        allow_open_domain_retry=True,
     ),
     SearchTopic(
         name="us_equity",
@@ -220,6 +222,7 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             "marketwatch.com",
         ),
         retry_recency_filter="week",
+        allow_open_domain_retry=True,
     ),
     SearchTopic(
         name="ai_bigtech",
@@ -520,7 +523,7 @@ def _search_once(
     *,
     client: Perplexity,
     query: str,
-    domain_filter: tuple[str, ...],
+    domain_filter: tuple[str, ...] | None,
     recency_filter: str | None,
     search_after_date_filter: str | None = None,
     search_before_date_filter: str | None = None,
@@ -537,10 +540,11 @@ def _search_once(
             request_kwargs: dict[str, object] = {
                 "query": query,
                 "max_results": SEARCH_MAX_RESULTS,
-                "search_domain_filter": list(domain_filter),
                 "search_language_filter": ["en"],
                 "country": "US",
             }
+            if domain_filter:
+                request_kwargs["search_domain_filter"] = list(domain_filter)
             if recency_filter:
                 request_kwargs["search_recency_filter"] = recency_filter
             if search_after_date_filter:
@@ -928,7 +932,43 @@ def _search_topic_items(
             allowed_domains=topic.retry_domain_filter or topic.domain_filter,
         )
     )
-    return topic_items, total_result_count + broad_result_count, raw_items
+    total_result_count += broad_result_count
+    if len(topic_items) >= TOPIC_RESULT_TARGET or not topic.allow_open_domain_retry:
+        return topic_items, total_result_count, raw_items
+
+    if observer is not None:
+        observer.log_event(
+            "perplexity_search_widened",
+            topic=topic.name,
+            stage="open_domain_retry",
+            recency_filter=topic.retry_recency_filter or topic.recency_filter,
+            reason="api_empty_after_domain_retries",
+        )
+    open_payload, open_usage, open_usage_present = _search_once(
+        client=client,
+        query=topic.retry_query,
+        domain_filter=None,
+        recency_filter=topic.retry_recency_filter or topic.recency_filter,
+    )
+    open_results = open_payload.get("results", [])
+    open_result_count = len(open_results) if isinstance(open_results, list) else 0
+    raw_items.extend(_loggable_raw_results(open_results))
+    _record_perplexity_usage(
+        observer=observer,
+        query=topic.retry_query,
+        usage=open_usage,
+        usage_present=open_usage_present,
+        result_count=open_result_count,
+    )
+    topic_items = _dedupe_topic_items(
+        topic_items
+        + _parse_results(
+            payload=open_payload,
+            topic=topic,
+            allowed_domains=topic.retry_domain_filter or topic.domain_filter,
+        )
+    )
+    return topic_items, total_result_count + open_result_count, raw_items
 
 
 def _dedupe_topic_items(items: list[NewsItem]) -> list[NewsItem]:
