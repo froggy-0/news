@@ -11,6 +11,10 @@
 {{ news_focus_json }}
 </news_focus_json>
 
+Sonar 토픽 요약과 X 시장 시그널은 news_focus_json 안에 포함되어 있다.
+- `topic_summaries`: 토픽별 구조화된 요약 (summary, why_it_matters, citations)
+- `x_market_signals`: 실시간 X 키워드 시그널 (headline, summary, sentiment, source_handle)
+
 작성 지침:
 - 거시, 지수, 빅테크/반도체, 비트코인, 뉴스를 모두 반영하되 3개 레이어 구조로 압축한다.
 - market_data_json 안 각 지표에 `validation_status`, `resolved_value`, `is_previous_value`가 있으면 그 메타데이터를 우선 따른다.

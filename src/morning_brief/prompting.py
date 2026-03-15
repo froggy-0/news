@@ -91,7 +91,13 @@ def _build_news_focus(packet: dict) -> dict:
         if item["official_source"] or item["provider"] == "grok_official_x":
             official_signals.append(item)
 
-    return {"top_items": top_items, "topics": topics, "official_signals": official_signals}
+    return {
+        "top_items": top_items,
+        "topics": topics,
+        "official_signals": official_signals,
+        "topic_summaries": packet.get("topic_summaries", []),
+        "x_market_signals": packet.get("x_market_signals", []),
+    }
 
 
 def render_brief_prompts(packet: dict, settings: Settings) -> tuple[str, str]:
