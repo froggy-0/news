@@ -53,10 +53,11 @@ def _metric_lines(section_content: str) -> list[str]:
 
 
 def _layer_three_lines(section_content: str) -> tuple[list[str], list[str]]:
+    groups = split_section_groups(section_content)
     stock_lines: list[str] = []
     macro_lines: list[str] = []
     in_macro = False
-    for raw_line in split_section_groups(section_content)["metrics"][1].splitlines():
+    for raw_line in groups["metrics"][1].splitlines():
         stripped = raw_line.strip()
         if not stripped:
             continue
@@ -70,6 +71,12 @@ def _layer_three_lines(section_content: str) -> tuple[list[str], list[str]]:
             macro_lines.append(line)
         else:
             stock_lines.append(line)
+    # macro 그룹이 별도로 분리된 경우 (brief_formatting의 macro 그룹 지원)
+    if not macro_lines and "macro" in groups:
+        for raw_line in groups["macro"][1].splitlines():
+            stripped = raw_line.strip()
+            if stripped.startswith("- "):
+                macro_lines.append(stripped[2:].strip())
     return stock_lines, macro_lines
 
 
