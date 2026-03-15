@@ -285,6 +285,8 @@ def _display_percent_token(token: str) -> str:
 
 def _parse_news_metric_line(line: str) -> tuple[str, str, str, str | None]:
     parts = [part.strip() for part in line.split("|")]
+    if len(parts) < 2:
+        parts = [part.strip() for part in re.split(r"\s*[—–]\s*", line)]
     source_url = None
     content_parts = parts
     if len(parts) >= 2 and _safe_link(parts[-1] or ""):
@@ -361,6 +363,14 @@ def _split_layer_three_metric_lines(section: _EmailSection | None) -> tuple[list
             macro_lines.append(line)
         else:
             stock_lines.append(line)
+
+    # macro 그룹이 별도로 분리된 경우 (brief_formatting에서 거시 지표 소제목 인식)
+    if not macro_lines and "macro" in section.groups:
+        for raw_line in section.groups["macro"][1].splitlines():
+            stripped = raw_line.strip()
+            if stripped.startswith("- "):
+                macro_lines.append(stripped[2:].strip())
+
     return stock_lines, macro_lines
 
 
@@ -448,7 +458,7 @@ def _stock_name_from_line(line: str, fallback: str) -> str:
     prefix = line[: percent_match.start()].strip(" -:|")
     if not prefix:
         return fallback
-    cleaned = re.split(r"(은|는|이|가)\s*$", prefix)[0].strip()
+    cleaned = re.split(r"(?:\([^)]*\))?\s*(은|는|이|가)\s", prefix)[0].strip()
     return cleaned or fallback
 
 
@@ -575,13 +585,11 @@ def _append_stock_rows(
 
 def _split_macro_line(line: str) -> tuple[str, str]:
     normalized_line = _strip_inline_source(line)
-    if "는 " in normalized_line:
-        label, value = normalized_line.split("는 ", 1)
-    elif "은 " in normalized_line:
-        label, value = normalized_line.split("은 ", 1)
-    else:
-        return "거시 지표", normalized_line
-    return label.strip() or "거시 지표", value.strip() or normalized_line
+    for particle in ("는 ", "은 ", "가 ", "이 "):
+        if particle in normalized_line:
+            label, value = normalized_line.split(particle, 1)
+            return label.strip() or "거시 지표", value.strip() or normalized_line
+    return "거시 지표", normalized_line
 
 
 def _build_macro_rows(sections: list[_EmailSection]) -> list[tuple[str, Markup]]:
@@ -712,6 +720,7 @@ def _build_email_context(subject: str, body: str, *, sender: str = "") -> dict[s
     main_body, footer_notes = _split_footer_note_block(body_without_references)
     title, notice, sections = _extract_brief_structure(main_body)
     parsed_sections = _build_email_sections(sections)
+    layer_one_section = _find_layer_section(parsed_sections, contains_heading="LAYER 1")
     layer_two_section = _find_layer_section(
         parsed_sections,
         exact_heading="중요한 뉴스",
@@ -726,19 +735,70 @@ def _build_email_context(subject: str, body: str, *, sender: str = "") -> dict[s
     macro_rows = _build_macro_rows(parsed_sections)
     news_source_items = _build_news_source_items(news_items, reference_items)
 
+    # B-2: 신규 컨텍스트 변수
+    key_metrics: list[str] = []
+    kospi_impact = ""
+    news_context = ""
+    watch_items: list[str] = []
+    summary_labels = ["시장 판단", "뉴스", "종목"]
+
+    if layer_one_section is not None:
+        key_metrics = _first_metric_lines(layer_one_section.groups["metrics"][1], limit=3)
+        for line in layer_one_section.groups["insight"][1].splitlines():
+            if "코스피" in line:
+                kospi_impact = line.strip().lstrip("- ").strip()
+                break
+
+    if layer_two_section is not None:
+        news_context = _first_sentence(layer_two_section.groups["insight"][1])
+
+    for section in parsed_sections:
+        for line in section.groups["watch"][1].splitlines():
+            stripped = line.strip()
+            if stripped.startswith("- "):
+                stripped = stripped[2:].strip()
+            if stripped and stripped not in watch_items:
+                watch_items.append(stripped)
+            if len(watch_items) >= 5:
+                break
+        if len(watch_items) >= 5:
+            break
+
+    # B-3: 상승/하락 분리
+    stock_up_rows = [r for r in stock_rows if r.tone == "up"]
+    stock_down_rows = [r for r in stock_rows if r.tone != "up"]
+
+    # B-6: preheader 최적화
+    if key_metrics:
+        preheader = " · ".join(m.lstrip("- ") for m in key_metrics[:3])[:140]
+    else:
+        preheader = " / ".join(top_summary_lines[:2]).strip()[:140] or layer_one_text[:140].strip()
+
+    # B-7: fallback 개선
+    news_fallback = ""
+    if not news_items:
+        raw = _fallback_section_text(layer_two_section)
+        news_fallback = raw or "주말/휴일로 주요 뉴스 업데이트가 없습니다."
+
     return {
         "subject": subject,
         "title": title,
         "display_date": display_date,
-        "preheader": " / ".join(top_summary_lines[:2]).strip()[:140]
-        or layer_one_text[:140].strip(),
+        "preheader": preheader,
         "notice": notice,
         "top_summary_lines": top_summary_lines,
+        "summary_labels": summary_labels,
+        "key_metrics": key_metrics,
+        "kospi_impact": kospi_impact,
+        "news_context": news_context,
+        "watch_items": watch_items,
         "layer_one_text": layer_one_text,
         "layer_one_html": Markup(_render_body_line(layer_one_text)),
         "news_items": news_items,
-        "news_fallback_text": "" if news_items else _fallback_section_text(layer_two_section),
+        "news_fallback_text": news_fallback,
         "stock_rows": stock_rows,
+        "stock_up_rows": stock_up_rows,
+        "stock_down_rows": stock_down_rows,
         "stock_fallback_text": "" if stock_rows else _fallback_section_text(layer_three_section),
         "macro_rows": macro_rows,
         "footer_notes": footer_notes,
@@ -860,6 +920,8 @@ def build_briefing_message(
         msg["bcc"] = ", ".join(recipients)
     msg["from"] = sender
     msg["subject"] = subject
+    msg["List-Unsubscribe"] = f"<{_unsubscribe_url(sender)}>"
+    msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
     msg.attach(MIMEText(text_body, _subtype="plain", _charset="utf-8"))
     msg.attach(MIMEText(html_body, _subtype="html", _charset="utf-8"))
     return msg

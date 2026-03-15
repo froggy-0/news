@@ -27,12 +27,16 @@ WATCH_LABELS = {
     "지금 주의해서 볼 점",
     "체크 포인트",
 }
-ALL_SUBSECTION_LABELS = CONCLUSION_LABELS | METRIC_LABELS | INSIGHT_LABELS | WATCH_LABELS
+MACRO_LABELS = {"거시 지표", "거시 환경"}
+ALL_SUBSECTION_LABELS = (
+    CONCLUSION_LABELS | METRIC_LABELS | INSIGHT_LABELS | WATCH_LABELS | MACRO_LABELS
+)
 SECTION_KIND_BY_LABEL = {
     **{label: "conclusion" for label in CONCLUSION_LABELS},
     **{label: "metrics" for label in METRIC_LABELS},
     **{label: "insight" for label in INSIGHT_LABELS},
     **{label: "watch" for label in WATCH_LABELS},
+    **{label: "macro" for label in MACRO_LABELS},
 }
 
 
@@ -140,6 +144,7 @@ def split_section_groups(content: str) -> dict[str, tuple[str, str]]:
         "metrics": {"label": "주요 지표", "lines": []},
         "insight": {"label": "배경과 해석", "lines": []},
         "watch": {"label": "주목할 변수", "lines": []},
+        "macro": {"label": "거시 지표", "lines": []},
     }
     explicit_labels_found = _collect_section_groups(
         normalized,
