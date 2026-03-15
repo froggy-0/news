@@ -236,6 +236,7 @@ class PipelineObserver:
         topic: str,
         items: list[dict[str, object]],
         reason: str | None = None,
+        raw_items: list[dict[str, object]] | None = None,
     ) -> None:
         payload = {
             "topic": topic,
@@ -244,6 +245,8 @@ class PipelineObserver:
         }
         if not items and reason:
             payload["reason"] = reason
+        if raw_items:
+            payload["raw_items"] = raw_items[:COLLECTED_ITEM_LOG_LIMIT]
         self._emit("perplexity_items_collected", **payload)
 
     def record_grok_signals_collected(

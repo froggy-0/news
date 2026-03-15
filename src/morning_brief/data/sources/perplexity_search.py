@@ -25,7 +25,7 @@ from morning_brief.data.sources.provider_runtime import (
     record_skip,
 )
 from morning_brief.models import NewsItem
-from morning_brief.observability import PipelineObserver
+from morning_brief.observability import COLLECTED_ITEM_LOG_LIMIT, PipelineObserver
 
 logger = logging.getLogger(__name__)
 PERPLEXITY_PROVIDER = "perplexity"
@@ -71,7 +71,7 @@ TOPIC_IMPACT_LINES = {
 }
 
 FT_CONTENT_URL_PREFIX = "https://www.ft.com/content/"
-DISALLOWED_MARKET_DATA_DOMAINS = {"markets.ft.com"}
+DISALLOWED_MARKET_DATA_DOMAINS = {"markets.ft.com", "data.coindesk.com"}
 EXCLUDE_URL_PATTERNS = (
     "/data/equities/tearsheet/",
     "/data/indices/tearsheet/",
@@ -87,6 +87,11 @@ EXCLUDE_URL_PATTERNS = (
     "://status.",
     "statuspage",
 )
+DISALLOWED_EXACT_URLS = {
+    "https://www.sec.gov/newsroom",
+    "https://www.sec.gov/newsroom/whats-new",
+    "https://www.sec.gov/newsroom/press-releases",
+}
 EXCLUDE_TITLE_PATTERNS = (
     re.compile(r"markets data\b.*ft\.com$", re.IGNORECASE),
     re.compile(r"\bsummary\s*-\s*ft\.com$", re.IGNORECASE),
@@ -95,6 +100,9 @@ EXCLUDE_TITLE_PATTERNS = (
     re.compile(r"\bstatus page\b", re.IGNORECASE),
     re.compile(r"\bsystem status\b", re.IGNORECASE),
     re.compile(r"\buptime\b", re.IGNORECASE),
+    re.compile(r"^what's new - sec\.gov$", re.IGNORECASE),
+    re.compile(r"^newsroom - sec\.gov$", re.IGNORECASE),
+    re.compile(r"^press releases - sec\.gov$", re.IGNORECASE),
 )
 NON_ENGLISH_TITLE_PATTERN = re.compile("[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 DATE_ONLY_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -580,6 +588,8 @@ def _is_disallowed_market_data_result(*, title: str, url: str) -> bool:
     domain = normalize_domain(normalized_url)
     if domain in DISALLOWED_MARKET_DATA_DOMAINS:
         return True
+    if normalized_url.rstrip("/") in DISALLOWED_EXACT_URLS:
+        return True
     if any(part in normalized_url for part in EXCLUDE_URL_PATTERNS):
         return True
     return any(pattern.search(normalized_title) for pattern in EXCLUDE_TITLE_PATTERNS)
@@ -615,6 +625,28 @@ def _loggable_perplexity_items(items: list[NewsItem]) -> list[dict[str, str]]:
     ]
 
 
+def _loggable_raw_results(results: object) -> list[dict[str, str]]:
+    if not isinstance(results, list):
+        return []
+
+    raw_items: list[dict[str, str]] = []
+    for raw in results[:COLLECTED_ITEM_LOG_LIMIT]:
+        if not isinstance(raw, dict):
+            continue
+        title = str(raw.get("title", "")).strip()
+        url = str(raw.get("url", "")).strip()
+        if not title and not url:
+            continue
+        raw_items.append(
+            {
+                "title": title,
+                "url": url,
+                "domain": normalize_domain(url).removeprefix("www."),
+            }
+        )
+    return raw_items
+
+
 def _fetch_news_from_perplexity(
     *,
     max_items: int,
@@ -632,7 +664,7 @@ def _fetch_news_from_perplexity(
 
     for topic in TOPIC_SPECS:
         try:
-            topic_items, total_result_count = _search_topic_items(
+            topic_items, total_result_count, raw_items = _search_topic_items(
                 client=client,
                 topic=topic,
                 observer=observer,
@@ -656,6 +688,7 @@ def _fetch_news_from_perplexity(
                     topic=topic.name,
                     items=_loggable_perplexity_items(topic_items),
                     reason=reason,
+                    raw_items=raw_items if not topic_items else None,
                 )
 
             logger.info(
@@ -683,7 +716,7 @@ def _search_topic_items(
     client: Perplexity,
     topic: SearchTopic,
     observer: PipelineObserver | None,
-) -> tuple[list[NewsItem], int]:
+) -> tuple[list[NewsItem], int, list[dict[str, str]]]:
     payload, usage, usage_present = _search_once(
         client=client,
         query=topic.query,
@@ -692,6 +725,7 @@ def _search_topic_items(
     )
     first_results = payload.get("results", [])
     total_result_count = len(first_results) if isinstance(first_results, list) else 0
+    raw_items = _loggable_raw_results(first_results)
     _record_perplexity_usage(
         observer=observer,
         query=topic.query,
@@ -701,7 +735,7 @@ def _search_topic_items(
     )
     topic_items = _parse_results(payload=payload, topic=topic)
     if len(topic_items) >= TOPIC_RESULT_TARGET or not topic.retry_query:
-        return topic_items, total_result_count
+        return topic_items, total_result_count, raw_items
 
     retry_payload, retry_usage, retry_usage_present = _search_once(
         client=client,
@@ -711,6 +745,7 @@ def _search_topic_items(
     )
     retry_results = retry_payload.get("results", [])
     retry_result_count = len(retry_results) if isinstance(retry_results, list) else 0
+    raw_items.extend(_loggable_raw_results(retry_results))
     _record_perplexity_usage(
         observer=observer,
         query=topic.retry_query,
@@ -719,7 +754,7 @@ def _search_topic_items(
         result_count=retry_result_count,
     )
     topic_items.extend(_parse_results(payload=retry_payload, topic=topic))
-    return topic_items, total_result_count + retry_result_count
+    return topic_items, total_result_count + retry_result_count, raw_items
 
 
 def _record_perplexity_usage(

@@ -343,6 +343,110 @@ def test_fetch_news_from_perplexity_filters_statuspage_urls(monkeypatch):
     assert items[0].url == "https://www.federalreserve.gov/newsevents/speech/example.htm"
 
 
+def test_fetch_news_from_perplexity_filters_sec_listing_pages_and_coindesk_data(monkeypatch):
+    monkeypatch.setattr(
+        ps,
+        "TOPIC_SPECS",
+        (
+            ps.SearchTopic(
+                name="bitcoin",
+                query="bitcoin query",
+                retry_query="",
+                domain_filter=("coindesk.com", "sec.gov"),
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        ps,
+        "_build_client",
+        lambda api_key: _Client(
+            [
+                _SDKResponse(
+                    {
+                        "results": [
+                            {
+                                "title": "CoinDesk Data: Institutional Grade Digital Asset Data Solutions",
+                                "url": "https://data.coindesk.com",
+                                "snippet": "ignore",
+                                "date": "2026-03-13",
+                            },
+                            {
+                                "title": "What's New - SEC.gov",
+                                "url": "https://www.sec.gov/newsroom/whats-new",
+                                "snippet": "ignore",
+                                "date": "2026-03-13",
+                            },
+                            {
+                                "title": "SEC approves new filing update for spot bitcoin ETFs",
+                                "url": "https://www.sec.gov/newsroom/press-releases/2026-42",
+                                "snippet": "SEC press release",
+                                "date": "2026-03-13",
+                            },
+                        ]
+                    }
+                )
+            ],
+            [],
+        ),
+    )
+
+    items = ps.fetch_news_from_perplexity(max_items=5, api_key="pplx-test-key")
+
+    assert len(items) == 1
+    assert items[0].url == "https://www.sec.gov/newsroom/press-releases/2026-42"
+
+
+def test_fetch_news_from_perplexity_records_raw_candidates_when_everything_is_filtered(
+    monkeypatch, tmp_path
+):
+    observer = PipelineObserver(output_dir=tmp_path)
+    monkeypatch.setattr(
+        ps,
+        "TOPIC_SPECS",
+        (
+            ps.SearchTopic(
+                name="macro",
+                query="macro query",
+                retry_query="",
+                domain_filter=("reuters.com",),
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        ps,
+        "_build_client",
+        lambda api_key: _Client(
+            [
+                _SDKResponse(
+                    {
+                        "results": [
+                            {
+                                "title": "Reuters Service Status",
+                                "url": "https://status.reuters.com",
+                                "snippet": "ignore",
+                                "date": "2026-03-13",
+                            }
+                        ]
+                    }
+                )
+            ],
+            [],
+        ),
+    )
+
+    items = ps.fetch_news_from_perplexity(
+        max_items=5,
+        api_key="pplx-test-key",
+        observer=observer,
+    )
+
+    assert items == []
+    events = [event for event in observer.events if event["event"] == "perplexity_items_collected"]
+    assert len(events) == 1
+    assert events[0]["reason"] == "filtered_all"
+    assert events[0]["raw_items"][0]["url"] == "https://status.reuters.com"
+
+
 def test_search_once_exposes_status_details(monkeypatch):
     client = _Client([_StatusError(401, "invalid api key")], [])
 
