@@ -75,7 +75,11 @@ TOPIC_IMPACT_LINES = {
 
 FT_CONTENT_URL_PREFIX = "https://www.ft.com/content/"
 DISALLOWED_MARKET_DATA_DOMAINS = {"markets.ft.com", "data.coindesk.com"}
-DISALLOWED_SPONSORED_DOMAINS = {"sponsored.bloomberg.com"}
+DISALLOWED_SPONSORED_DOMAINS = {
+    "sponsored.bloomberg.com",
+    "data.coindesk.com",
+    "downloads.coindesk.com",
+}
 EXCLUDE_URL_PATTERNS = (
     "/data/equities/tearsheet/",
     "/data/indices/tearsheet/",
@@ -158,14 +162,26 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
     SearchTopic(
         name="macro",
         query=(
-            "latest Federal Reserve Treasury yields market article",
-            "latest inflation jobs dollar volatility market article",
-            "latest Treasury yields rate cut risk sentiment article",
+            "Latest Federal Reserve policy or Treasury yields article published in English. "
+            "Prefer Reuters, Bloomberg, WSJ, FT, or CNBC reporting. "
+            "Exclude non-English pages, data pages, and quote pages.",
+            "Latest US inflation, jobs report, dollar index, or VIX volatility article published in English. "
+            "Prefer reliable financial news analysis. "
+            "Exclude non-English pages, market data tables, and summary pages.",
+            "Latest Treasury yields, rate cut expectations, or risk sentiment article published in English. "
+            "Prefer reliable English-language financial reporting. "
+            "Exclude non-English pages, data pages, and archive pages.",
         ),
         retry_query=(
-            "Federal Reserve policy Treasury yields market article",
-            "inflation jobs dollar volatility market article",
-            "Treasury yields rate cut risk sentiment market article",
+            "Federal Reserve policy, Treasury yields, or interest rate outlook article or analysis "
+            "published within the last week in English. Prefer reliable financial news reporting. "
+            "Exclude non-English pages, data pages, quote pages, and summary pages.",
+            "US inflation, employment data, dollar, or market volatility article or analysis "
+            "published within the last week in English. Prefer reliable financial reporting. "
+            "Exclude non-English pages, data pages, and archive pages.",
+            "Treasury yields, rate cut expectations, or risk sentiment weekly review "
+            "published within the last week in English. Prefer reliable financial reporting. "
+            "Exclude non-English pages, data pages, and summary pages.",
         ),
         domain_filter=(
             "reuters.com",
@@ -189,14 +205,26 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
     SearchTopic(
         name="us_equity",
         query=(
-            "latest S&P 500 Nasdaq Wall Street market article",
-            "latest semiconductor stocks sector rotation market article",
-            "latest Dow Jones futures market breadth article",
+            "Latest S&P 500, Nasdaq, or Wall Street market article published in English. "
+            "Prefer Reuters, Bloomberg, WSJ, or CNBC reporting. "
+            "Exclude non-English pages, stock quote pages, and data tables.",
+            "Latest semiconductor stocks, sector rotation, or tech earnings article published in English. "
+            "Prefer reliable English-language financial news analysis. "
+            "Exclude non-English pages, quote pages, and summary pages.",
+            "Latest Dow Jones, futures, or market breadth article published in English. "
+            "Prefer reliable English-language financial reporting. "
+            "Exclude non-English pages, data pages, and archive pages.",
         ),
         retry_query=(
-            "Wall Street Nasdaq S&P 500 market sentiment article",
-            "semiconductor stocks sector rotation market breadth article",
-            "Dow Jones futures risk sentiment stock market article",
+            "S&P 500, Nasdaq, or Wall Street market sentiment article or weekly review "
+            "published within the last week in English. Prefer reliable financial reporting. "
+            "Exclude non-English pages, stock quote pages, and data tables.",
+            "Semiconductor stocks, sector rotation, or tech earnings article "
+            "published within the last week in English. Prefer reliable financial reporting. "
+            "Exclude non-English pages, quote pages, and summary pages.",
+            "Dow Jones, futures, or risk sentiment article or weekly review "
+            "published within the last week in English. Prefer reliable financial reporting. "
+            "Exclude non-English pages, data pages, and archive pages.",
         ),
         domain_filter=(
             "reuters.com",
@@ -370,6 +398,11 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _is_weekend() -> bool:
+    """토요일(5) 또는 일요일(6)이면 True."""
+    return _utc_now().weekday() >= 5
+
+
 def _usage_field(container: object, *keys: str) -> object | None:
     current = container
     for key in keys:
@@ -469,9 +502,7 @@ def _search_domain_filter_values(domain_filter: tuple[str, ...]) -> list[str]:
         if body.startswith(".") and "://" not in body and "/" not in body:
             normalized = body
         else:
-            parsed = urlparse(body if "://" in body else f"https://{body}")
-            if parsed.path not in {"", "/"}:
-                continue
+            # 경로 포함 URL은 도메인 부분만 추출해서 API에 전달
             normalized = normalize_domain(body).removeprefix("www.")
         if not normalized:
             continue
@@ -924,11 +955,14 @@ def _search_topic_items(
     topic: SearchTopic,
     observer: PipelineObserver | None,
 ) -> tuple[list[NewsItem], int, list[dict[str, str]]]:
+    effective_recency = (
+        "week" if _is_weekend() and topic.recency_filter == "day" else topic.recency_filter
+    )
     payload, usage, usage_present = _search_once(
         client=client,
         query=topic.query,
         domain_filter=topic.domain_filter,
-        recency_filter=topic.recency_filter,
+        recency_filter=effective_recency,
     )
     first_results = _flatten_results(payload)
     total_result_count = len(first_results)
@@ -977,21 +1011,16 @@ def _search_topic_items(
             usage_present=updated_usage_present,
             result_count=updated_result_count,
         )
-        topic_items = _dedupe_topic_items(
-            topic_items
-            + _parse_results(
+        new_items = _filter_items_to_date_window(
+            _parse_results(
                 payload=updated_payload,
                 topic=topic,
                 allowed_domains=topic.domain_filter,
-            )
+            ),
+            after_filter=last_updated_after_filter,
+            before_filter=last_updated_before_filter,
         )
-        topic_items = _dedupe_topic_items(
-            _filter_items_to_date_window(
-                topic_items,
-                after_filter=last_updated_after_filter,
-                before_filter=last_updated_before_filter,
-            )
-        )
+        topic_items = _dedupe_topic_items(topic_items + new_items)
         total_result_count += updated_result_count
         if len(topic_items) >= TOPIC_RESULT_TARGET:
             return topic_items, total_result_count, raw_items
@@ -1027,19 +1056,12 @@ def _search_topic_items(
             usage_present=retry_usage_present,
             result_count=retry_result_count,
         )
-        topic_items = _dedupe_topic_items(
-            topic_items
-            + _parse_results(
-                payload=retry_payload, topic=topic, allowed_domains=topic.domain_filter
-            )
+        new_range_items = _filter_items_to_date_window(
+            _parse_results(payload=retry_payload, topic=topic, allowed_domains=topic.domain_filter),
+            after_filter=search_after_date_filter,
+            before_filter=search_before_date_filter,
         )
-        topic_items = _dedupe_topic_items(
-            _filter_items_to_date_window(
-                topic_items,
-                after_filter=search_after_date_filter,
-                before_filter=search_before_date_filter,
-            )
-        )
+        topic_items = _dedupe_topic_items(topic_items + new_range_items)
         total_result_count += retry_result_count
         if len(topic_items) >= TOPIC_RESULT_TARGET:
             return topic_items, total_result_count, raw_items

@@ -158,7 +158,8 @@ def test_fetch_news_from_perplexity_retries_with_topic_retry_query(monkeypatch):
     assert [call["query"] for call in calls] == ["bitcoin query", "bitcoin retry"]
     assert calls[0]["search_domain_filter"] == ["coindesk.com"]
     assert calls[0]["search_language_filter"] == ["en"]
-    assert calls[0]["search_recency_filter"] == "day"
+    # 2026-03-15는 일요일이므로 주말 recency가 "week"으로 적용됨
+    assert calls[0]["search_recency_filter"] == "week"
     assert calls[1]["search_domain_filter"] == ["coindesk.com"]
     assert calls[1]["search_language_filter"] == ["en"]
     assert "search_recency_filter" not in calls[1]
@@ -219,7 +220,8 @@ def test_fetch_news_from_perplexity_uses_broad_retry_after_date_retry(monkeypatc
     )
 
     assert [call["query"] for call in calls] == ["bitcoin query", "bitcoin retry", "bitcoin retry"]
-    assert calls[0]["search_recency_filter"] == "day"
+    # 2026-03-15는 일요일이므로 주말 recency가 "week"으로 적용됨
+    assert calls[0]["search_recency_filter"] == "week"
     assert calls[0]["search_language_filter"] == ["en"]
     assert calls[1]["search_after_date_filter"] == "03/13/2026"
     assert calls[1]["search_before_date_filter"] == "03/15/2026"
@@ -268,7 +270,13 @@ def test_search_once_normalizes_domain_filters_for_api_request():
         recency_filter="day",
     )
 
-    assert calls[0]["search_domain_filter"] == ["investor.nvidia.com", "reuters.com"]
+    assert calls[0]["search_domain_filter"] == [
+        "ft.com",
+        "news.microsoft.com",
+        "apple.com",
+        "investor.nvidia.com",
+        "reuters.com",
+    ]
 
 
 def test_fetch_news_from_perplexity_supports_multi_query_results(monkeypatch):
@@ -378,8 +386,9 @@ def test_fetch_news_from_perplexity_uses_last_updated_retry_before_date_retry(
     )
 
     assert len(calls) == 2
-    assert calls[0]["search_recency_filter"] == "day"
-    assert calls[1]["search_domain_filter"] == ["reuters.com"]
+    # 2026-03-15는 일요일이므로 주말 recency가 "week"으로 적용됨
+    assert calls[0]["search_recency_filter"] == "week"
+    assert calls[1]["search_domain_filter"] == ["reuters.com", "ft.com"]
     assert calls[1]["last_updated_after_filter"] == "03/13/2026"
     assert calls[1]["last_updated_before_filter"] == "03/15/2026"
     assert "search_recency_filter" not in calls[1]

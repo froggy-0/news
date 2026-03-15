@@ -694,7 +694,9 @@ def _request_reference_snapshots(
                 search_domain_filter=list(BTC_ETF_REFERENCE_DOMAINS),
                 search_recency_filter="month",
                 search_mode="web",
-                country="US",
+                web_search_options={
+                    "user_location": {"country": "US"},
+                },
                 temperature=0.0,
                 max_tokens=900,
                 response_format={
