@@ -664,6 +664,51 @@ def test_parse_results_filters_sec_newsroom_listings_for_bitcoin():
     assert items[0].url == "https://www.sec.gov/newsroom/press-releases/2026-42"
 
 
+def test_parse_results_filters_sec_taxonomy_notice_and_meta_news_root():
+    bitcoin_topic = ps.SearchTopic(
+        name="bitcoin",
+        query="bitcoin query",
+        retry_query="",
+        domain_filter=("sec.gov",),
+    )
+    ai_topic = ps.SearchTopic(
+        name="ai_bigtech",
+        query="ai query",
+        retry_query="",
+        domain_filter=("about.fb.com",),
+    )
+
+    bitcoin_items = ps._parse_results(
+        payload={
+            "results": [
+                {
+                    "title": "Notice | U.S. Securities and Exchange Commission - SEC.gov",
+                    "url": "https://www.sec.gov/taxonomy/term/193086",
+                    "snippet": "Taxonomy notice page.",
+                    "date": "2026-03-13",
+                }
+            ]
+        },
+        topic=bitcoin_topic,
+    )
+    ai_items = ps._parse_results(
+        payload={
+            "results": [
+                {
+                    "title": "Meta Newsroom",
+                    "url": "https://about.fb.com/news/",
+                    "snippet": "News landing page.",
+                    "date": "2026-03-13",
+                }
+            ]
+        },
+        topic=ai_topic,
+    )
+
+    assert bitcoin_items == []
+    assert ai_items == []
+
+
 def test_fetch_news_from_perplexity_records_raw_candidates_when_everything_is_filtered(
     monkeypatch, tmp_path
 ):

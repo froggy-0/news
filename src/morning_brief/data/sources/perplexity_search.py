@@ -42,6 +42,7 @@ SOURCE_LABELS = {
     "wsj.com": "WSJ",
     "ft.com": "Financial Times",
     "cnbc.com": "CNBC",
+    "marketwatch.com": "MarketWatch",
     "coindesk.com": "CoinDesk",
     "federalreserve.gov": "Federal Reserve",
     "home.treasury.gov": "U.S. Treasury",
@@ -86,6 +87,7 @@ EXCLUDE_URL_PATTERNS = (
     "tv.apple.com",
     "cn.wsj.com",
     "jp.reuters.com",
+    "/taxonomy/term/",
     "news.google.com/rss",
     "://status.",
     "statuspage",
@@ -173,9 +175,7 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             "wsj.com",
             FT_CONTENT_URL_PREFIX,
             "cnbc.com",
-            "https://www.federalreserve.gov/newsevents/pressreleases/",
-            "https://www.federalreserve.gov/newsevents/speech/",
-            "https://home.treasury.gov/news/press-releases",
+            "marketwatch.com",
         ),
         retry_recency_filter="week",
     ),
@@ -208,6 +208,7 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             FT_CONTENT_URL_PREFIX,
             "cnbc.com",
             "nasdaq.com",
+            "marketwatch.com",
         ),
         retry_recency_filter="week",
     ),
@@ -272,7 +273,6 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             FT_CONTENT_URL_PREFIX,
             "cnbc.com",
             "coindesk.com",
-            "sec.gov",
         ),
         retry_domain_filter=(
             "reuters.com",
@@ -674,11 +674,16 @@ def _is_topic_landing_page(*, topic: str, url: str, title: str) -> bool:
     if topic == "ai_bigtech" and domain_matches(domain, "news.broadcom.com"):
         if path in BROADCOM_INDEX_PATHS or path.startswith("/category/"):
             return True
+    if topic == "ai_bigtech" and domain_matches(domain, "about.fb.com"):
+        if path in {"/news", "/news/"}:
+            return True
     if topic == "ai_bigtech" and domain_matches(domain, "reuters.com"):
         if path in {"/business/tech-ai", "/business/tech-ai/"}:
             return True
 
     if topic == "bitcoin":
+        if domain_matches(domain, "sec.gov") and path.startswith("/taxonomy/"):
+            return True
         if domain_matches(domain, "ishares.com") and path.startswith("/us/products/"):
             return True
         if domain_matches(domain, "bitbetf.com") and path.startswith("/fund/"):
