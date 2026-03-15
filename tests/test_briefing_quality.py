@@ -4,8 +4,8 @@ import json
 from types import SimpleNamespace
 
 from morning_brief.briefing import (
-    _brief_structure_issues,
     _append_reference_block,
+    _brief_structure_issues,
     _fallback_brief,
     _improve_readability_spacing,
     _inject_quality_notice,
