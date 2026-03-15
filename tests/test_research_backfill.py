@@ -333,3 +333,25 @@ def test_extract_web_citations_reads_web_search_call_sources():
     citations = _extract_web_citations(response)
 
     assert citations == [{"title": "Reuters", "url": "https://www.reuters.com/markets/example"}]
+
+
+def test_fallback_items_from_citations_filters_author_and_pdf_pages():
+    items = rb._fallback_items_from_citations(
+        [
+            {
+                "title": "https://bloomberg.com/authors/ARwOaGbWfC8/dana-morgan",
+                "url": "https://bloomberg.com/authors/ARwOaGbWfC8/dana-morgan",
+            },
+            {
+                "title": "CDI Index Reconstitution PDF",
+                "url": "https://downloads.coindesk.com/cd3/CDI/IA/example.pdf",
+            },
+            {
+                "title": "Fed officials keep rate path open",
+                "url": "https://www.reuters.com/world/us/fed-officials-keep-rate-path-open/",
+            },
+        ]
+    )
+
+    assert len(items) == 1
+    assert items[0].url == "https://www.reuters.com/world/us/fed-officials-keep-rate-path-open/"

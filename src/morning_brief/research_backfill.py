@@ -64,6 +64,13 @@ WEB_SEARCH_OUTPUT_SCHEMA = {
     },
     "required": ["items"],
 }
+BACKFILL_SOURCE_EXCLUDE_PATTERNS = (
+    "/authors/",
+    "downloads.coindesk.com",
+    ".pdf",
+    "cn.wsj.com",
+    "jp.reuters.com",
+)
 
 
 def _needs_web_search_backfill(quality: dict) -> bool:
@@ -226,7 +233,15 @@ def _fallback_items_from_citations(citations: list[dict[str, str]]) -> list[News
     for citation in citations:
         title = str(citation.get("title", "")).strip()
         url = str(citation.get("url", "")).strip()
-        if not title or not url or url in seen_urls:
+        normalized_url = url.lower()
+        if (
+            not title
+            or not url
+            or url in seen_urls
+            or title.startswith("http://")
+            or title.startswith("https://")
+            or any(pattern in normalized_url for pattern in BACKFILL_SOURCE_EXCLUDE_PATTERNS)
+        ):
             continue
         seen_urls.add(url)
         source_domain = normalize_domain(url).removeprefix("www.")
