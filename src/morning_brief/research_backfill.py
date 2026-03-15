@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 
 ALLOWED_NEWS_DOMAINS = [
     "reuters.com",
-    "bloomberg.com",
     "wsj.com",
     "ft.com",
     "cnbc.com",
@@ -72,6 +71,9 @@ BACKFILL_SOURCE_EXCLUDE_PATTERNS = (
     "/opinion/",
     "/latest/",
     "partners.wsj.com",
+    "lei.bloomberg.com",
+    "professional.content.cirrus.bloomberg.com",
+    "professional.bloomberg.com",
     "downloads.coindesk.com",
     "data.coindesk.com",
     ".pdf",
