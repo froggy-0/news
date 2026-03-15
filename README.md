@@ -63,7 +63,7 @@ cp .env.example .env
 - `OPENAI_BRIEF_VALIDATION_MODEL` (기본 `gpt-5-mini-2025-08-07`)
 - `OPENAI_BRIEF_MAX_REWRITES` (기본 `1`, 검수 실패 시 자동 재작성 횟수)
 - `OPENAI_REASONING_EFFORT` (기본 `low`)
-- `OPENAI_MAX_OUTPUT_TOKENS` (기본 `1700`)
+- `OPENAI_MAX_OUTPUT_TOKENS` (기본 `2300`)
 - `OPENAI_PROMPT_CACHE_KEY` (고정 프롬프트 캐시 네임스페이스)
 - `PROMPT_TEMPLATE_DIR` (기본 `src/morning_brief/prompts`)
 - `PROMPT_TEMPLATE_VERSION` (프롬프트 변경 시 버전 증가 권장)
@@ -83,7 +83,7 @@ cp .env.example .env
 - `GMAIL_OAUTH_INTERACTIVE` (로컬 OAuth 로그인 필요 시 `true`)
 
 참고:
-- `OPENAI_WEB_SEARCH_*` 환경변수는 하위 호환용으로만 남아 있고 현재 파이프라인에서는 사용하지 않습니다.
+- `OPENAI_WEB_SEARCH_*` 환경변수는 뉴스 품질 미달 시 OpenAI web_search 백필에 사용됩니다.
 
 ## 3) Gmail API 준비 (최초 1회)
 1. Google Cloud Console에서 Gmail API 활성화
@@ -197,7 +197,7 @@ make validate-pre-commit
 - `OPENAI_BRIEF_VALIDATION_MODEL` (기본 `gpt-5-mini-2025-08-07`)
 - `OPENAI_BRIEF_MAX_REWRITES` (기본 `1`)
 - `OPENAI_REASONING_EFFORT` (기본 `low`)
-- `OPENAI_MAX_OUTPUT_TOKENS` (기본 `1700`)
+- `OPENAI_MAX_OUTPUT_TOKENS` (기본 `2300`)
 - `OPENAI_PROMPT_CACHE_KEY` (기본 `morning-market-brief`)
 - `PROMPT_TEMPLATE_VERSION` (기본 `market_brief_v4`)
 - `RESEARCH_PROVIDER` (기본 `perplexity`)
