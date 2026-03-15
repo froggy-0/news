@@ -586,9 +586,11 @@ def _append_stock_rows(
 def _split_macro_line(line: str) -> tuple[str, str]:
     normalized_line = _strip_inline_source(line)
     for particle in ("는 ", "은 ", "가 ", "이 "):
-        if particle in normalized_line:
-            label, value = normalized_line.split(particle, 1)
-            return label.strip() or "거시 지표", value.strip() or normalized_line
+        idx = normalized_line.find(particle)
+        if idx >= 0 and idx > 0:
+            label = normalized_line[:idx].strip()
+            value = normalized_line[idx + len(particle) :].strip()
+            return label or "거시 지표", value or normalized_line
     return "거시 지표", normalized_line
 
 
