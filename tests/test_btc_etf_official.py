@@ -429,6 +429,7 @@ def test_request_reference_snapshots_records_parse_empty_preview(monkeypatch, tm
             self.chat = FakeChat()
 
     monkeypatch.setattr(official, "_build_client", lambda api_key: FakeClient())
+    monkeypatch.setattr(official, "_fetch_direct_reference_snapshots", lambda observer=None: [])
 
     snapshots = official.fetch_official_btc_etf_snapshots(
         api_key="pplx-test-key",
