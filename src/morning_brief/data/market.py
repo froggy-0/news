@@ -37,6 +37,7 @@ FEAR_GREED_TIMEOUT = 10
 YAHOO_FINANCE_HOST = "query2.finance.yahoo.com"
 BTC_ETF_OFFICIAL_CACHE_RELATIVE_PATH = Path("btc_etf/official_snapshots.json")
 MARKET_POINT_CACHE_RELATIVE_PATH = Path("market/last_success_points.json")
+BTC_ETF_CACHE_MAX_AGE_HOURS = 48
 MACRO_FALLBACK_TARGETS = [
     ("us10y", "^TNX", 0.1),
     ("us3m", "^IRX", 1.0),
@@ -77,6 +78,11 @@ except Exception:
     pass
 
 _provider_warned: set[str] = set()
+
+
+def reset_market_warned_state() -> None:
+    """스케줄러 모드에서 매 실행마다 경고를 다시 표시하도록 상태를 초기화합니다."""
+    _provider_warned.clear()
 
 
 def _warn_once(key: str, message: str, *args) -> None:
@@ -759,15 +765,41 @@ def _fetch_official_btc_etf_data(
 
     if not snapshots:
         if previous_snapshots:
+            cache_age_hours: float | None = None
+            if cache_file.exists():
+                cache_mtime = datetime.fromtimestamp(cache_file.stat().st_mtime, tz=timezone.utc)
+                cache_age_hours = (
+                    datetime.now(tz=timezone.utc) - cache_mtime
+                ).total_seconds() / 3600
+            if cache_age_hours is not None and cache_age_hours > BTC_ETF_CACHE_MAX_AGE_HOURS:
+                logger.warning(
+                    "BTC ETF 캐시가 %.1f시간 지나 TTL(%d시간)을 초과했어요. stale 캐시를 버릴게요.",
+                    cache_age_hours,
+                    BTC_ETF_CACHE_MAX_AGE_HOURS,
+                )
+                if observer is not None:
+                    observer.log_event(
+                        "btc_etf_cache_expired",
+                        cache_age_hours=round(cache_age_hours, 1),
+                        ttl_hours=BTC_ETF_CACHE_MAX_AGE_HOURS,
+                        reason=empty_reason,
+                    )
+                save_official_btc_etf_cache_state(
+                    cache_file.parent,
+                    snapshot_count=0,
+                    reason=f"{empty_reason}:cache_expired",
+                )
+                return [], None, None, None, None, []
             save_official_btc_etf_cache_state(
                 cache_file.parent,
                 snapshot_count=len(previous_snapshots),
                 reason=f"{empty_reason}:stale_cache",
             )
             logger.info(
-                "BTC ETF 공식 스냅샷을 새로 가져오지 못해 직전 공식 스냅샷 %s건을 이어서 쓸게요. reason=%s",
+                "BTC ETF 공식 스냅샷을 새로 가져오지 못해 직전 공식 스냅샷 %s건을 이어서 쓸게요. reason=%s age=%.1fh",
                 len(previous_snapshots),
                 empty_reason,
+                cache_age_hours if cache_age_hours is not None else -1,
             )
             if observer is not None:
                 observer.log_event(
@@ -775,6 +807,9 @@ def _fetch_official_btc_etf_data(
                     cache_dir=str(cache_file.parent),
                     previous_snapshot_count=len(previous_snapshots),
                     reason=empty_reason,
+                    cache_age_hours=round(cache_age_hours, 1)
+                    if cache_age_hours is not None
+                    else None,
                 )
             return (
                 previous_snapshots,

@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from morning_brief.briefing import generate_briefing
 from morning_brief.config import Settings
 from morning_brief.data.data_quality import assess_data_quality
-from morning_brief.data.market import build_market_packet
+from morning_brief.data.market import build_market_packet, reset_market_warned_state
 from morning_brief.data.news import build_news_packet
 from morning_brief.data.sources.provider_runtime import (
     provider_stats_snapshot,
@@ -30,6 +30,7 @@ _assess_data_quality = assess_data_quality
 
 def run_pipeline(settings: Settings) -> str:
     reset_provider_runtime_state()
+    reset_market_warned_state()
     settings.output_dir.mkdir(parents=True, exist_ok=True)
     observer = PipelineObserver(output_dir=settings.output_dir)
     observer.record_cache_status_from_env()
@@ -87,7 +88,13 @@ def run_pipeline(settings: Settings) -> str:
                 quality = _assess_data_quality(packet=packet, news_packet=news_packet)
 
         packet["data_quality"] = quality
-        if quality["status"] != "ok":
+        if quality["status"] == "critical":
+            status = "degraded"
+            logger.warning(
+                "데이터 품질이 critical이어서 실행 상태를 degraded로 남길게요. 확인할 점은 %s",
+                "; ".join(quality["warnings"]),
+            )
+        elif quality["status"] != "ok":
             logger.warning(
                 "데이터 품질 상태는 %s예요. 확인할 점은 %s",
                 quality["status"],
@@ -112,8 +119,23 @@ def run_pipeline(settings: Settings) -> str:
         logger.info("브리핑을 저장했어요: %s", output_path)
 
         subject = f"미국 기술주·비트코인 시장 브리핑 ({now.strftime('%Y-%m-%d')})"
-        with observer.phase("email"):
-            GmailSender(settings).send(subject=subject, body=briefing)
+        if quality["status"] == "critical":
+            subject = f"[데이터 부족] {subject}"
+
+        brief_review_failed = any(
+            str(event.get("event", "")).strip() == "brief_review_failed"
+            for event in observer.events
+        )
+        if quality["status"] == "critical" and brief_review_failed:
+            status = "skipped"
+            observer.log_event(
+                "email_skipped",
+                reason="데이터 품질 critical + 검수 미통과 조합으로 발송을 건너뛸게요.",
+            )
+            logger.warning("데이터 품질 critical + 검수 미통과로 이메일 발송을 건너뛸게요.")
+        else:
+            with observer.phase("email"):
+                GmailSender(settings).send(subject=subject, body=briefing)
     except BriefGenerationError as exc:
         status = "openai_failed"
         failure_message = str(exc)

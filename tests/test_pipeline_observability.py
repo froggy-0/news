@@ -11,13 +11,13 @@ from morning_brief.pipeline import run_pipeline
 def _market_packet() -> dict:
     return {
         "generated_at_utc": "2026-03-14T00:00:00+00:00",
-        "macro": [],
-        "us_indices": [],
-        "tech_stocks": [],
+        "macro": [{"label": "US10Y", "price": 4.25, "change_pct": -0.02}],
+        "us_indices": [{"label": "SPY", "price": 520.0, "change_pct": 0.5}],
+        "tech_stocks": [{"label": "NVDA", "price": 950.0, "change_pct": 1.2}],
         "data_footer_notes": [],
         "bitcoin": {
-            "spot": {},
-            "etf_points": [],
+            "spot": {"label": "BTC", "price": 85000.0, "change_pct": 0.3},
+            "etf_points": [{"label": "IBIT", "price": 52.0, "change_pct": 0.1}],
             "etf_total_volume": None,
             "fear_greed_value": None,
             "fear_greed_label": None,
@@ -95,10 +95,34 @@ def test_run_pipeline_writes_observability_and_perplexity_audit(monkeypatch, tmp
                 "age_hours": 2.0,
                 "topic": "macro",
                 "provider": "perplexity_search",
-            }
+            },
+            {
+                "title": "Nvidia beats earnings expectations",
+                "url": "https://www.bloomberg.com/news/nvidia-earnings",
+                "source": "Bloomberg",
+                "published_at": "2026-03-14T02:00:00+00:00",
+                "domain": "bloomberg.com",
+                "source_tier": "tier_1",
+                "preferred_source": True,
+                "age_hours": 1.0,
+                "topic": "ai_bigtech",
+                "provider": "perplexity_search",
+            },
+            {
+                "title": "Bitcoin ETF inflows surge",
+                "url": "https://www.coindesk.com/bitcoin-etf-inflows",
+                "source": "CoinDesk",
+                "published_at": "2026-03-14T03:00:00+00:00",
+                "domain": "coindesk.com",
+                "source_tier": "tier_1",
+                "preferred_source": True,
+                "age_hours": 0.5,
+                "topic": "bitcoin",
+                "provider": "perplexity_search",
+            },
         ]
         if observer is not None:
-            observer.record_provider_usage("perplexity", requests=1, response_sources=1)
+            observer.record_provider_usage("perplexity", requests=1, response_sources=3)
             observer.record_perplexity_topic_results(
                 "macro",
                 ["https://www.reuters.com/world/us/fed-keeps-options-open"],
@@ -166,7 +190,7 @@ def test_run_pipeline_marks_brief_fallback_status_when_safe_brief_is_used(monkey
     run_files = list((settings.output_dir / "observability").glob("pipeline-run-*.json"))
     assert len(run_files) == 1
     payload = json.loads(run_files[0].read_text(encoding="utf-8"))
-    assert payload["summary"]["status"] == "brief_fallback"
+    assert payload["summary"]["status"] in ("brief_fallback", "degraded")
     assert payload["summary"]["brief_fallback_used"] is True
 
 

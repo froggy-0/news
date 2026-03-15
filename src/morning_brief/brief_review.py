@@ -354,8 +354,10 @@ def validate_and_rewrite_briefing(
     logger.warning("브리핑 최종 검수에서 보완점을 찾았어요: %s", issues)
 
     if _should_skip_rewrite(review, settings):
+        if observer is not None:
+            observer.log_event("brief_review_failed", issues=review["issues"][:3])
         return draft_text
-    return _run_rewrite_loop(
+    result = _run_rewrite_loop(
         draft_text=draft_text,
         initial_review=review,
         packet=packet,
@@ -363,3 +365,6 @@ def validate_and_rewrite_briefing(
         client=client,
         observer=observer,
     )
+    if observer is not None and not review.get("pass", False):
+        observer.log_event("brief_review_failed", issues=review["issues"][:3])
+    return result
