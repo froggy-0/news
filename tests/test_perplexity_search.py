@@ -110,6 +110,8 @@ def test_fetch_news_from_perplexity_retries_with_topic_retry_query(monkeypatch):
                 query="bitcoin query",
                 retry_query="bitcoin retry",
                 domain_filter=("coindesk.com",),
+                retry_domain_filter=("coindesk.com", "sec.gov"),
+                retry_recency_filter="week",
             ),
         ),
     )
@@ -150,6 +152,10 @@ def test_fetch_news_from_perplexity_retries_with_topic_retry_query(monkeypatch):
     items = ps.fetch_news_from_perplexity(max_items=5, api_key="pplx-test-key")
 
     assert [call["query"] for call in calls] == ["bitcoin query", "bitcoin retry"]
+    assert calls[0]["search_domain_filter"] == ["coindesk.com"]
+    assert calls[0]["search_recency_filter"] == "day"
+    assert calls[1]["search_domain_filter"] == ["coindesk.com", "sec.gov"]
+    assert calls[1]["search_recency_filter"] == "week"
     assert len(items) == 2
     assert items[0].topic == "bitcoin"
     assert items[1].why_it_matters
@@ -240,6 +246,53 @@ def test_fetch_news_from_perplexity_filters_non_newsroom_apple_urls(monkeypatch)
 
     assert len(items) == 1
     assert items[0].url.startswith("https://www.apple.com/newsroom/")
+
+
+def test_fetch_news_from_perplexity_filters_service_status_pages(monkeypatch):
+    monkeypatch.setattr(
+        ps,
+        "TOPIC_SPECS",
+        (
+            ps.SearchTopic(
+                name="ai_bigtech",
+                query="ai query",
+                retry_query="",
+                domain_filter=("broadcom.com",),
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        ps,
+        "_build_client",
+        lambda api_key: _Client(
+            [
+                _SDKResponse(
+                    {
+                        "results": [
+                            {
+                                "title": "Broadcom Service Status",
+                                "url": "https://status.broadcom.com",
+                                "snippet": "ignore",
+                                "date": "2026-03-14T00:00:00Z",
+                            },
+                            {
+                                "title": "Broadcom outlines new networking roadmap",
+                                "url": "https://www.broadcom.com/company/news/product-releases/example",
+                                "snippet": "Broadcom shared an update.",
+                                "date": "2026-03-14T01:00:00Z",
+                            },
+                        ]
+                    }
+                )
+            ],
+            [],
+        ),
+    )
+
+    items = ps.fetch_news_from_perplexity(max_items=5, api_key="pplx-test-key")
+
+    assert len(items) == 1
+    assert items[0].url == "https://www.broadcom.com/company/news/product-releases/example"
 
 
 def test_search_once_exposes_status_details(monkeypatch):

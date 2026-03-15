@@ -31,9 +31,9 @@ logger = logging.getLogger(__name__)
 PERPLEXITY_PROVIDER = "perplexity"
 
 SEARCH_TIMEOUT_SECONDS = 25
-SEARCH_MAX_RESULTS = 5
+SEARCH_MAX_RESULTS = 8
 TOPIC_RESULT_TARGET = 2
-TOPIC_RESULT_LIMIT = 5
+TOPIC_RESULT_LIMIT = 8
 
 SOURCE_LABELS = {
     "reuters.com": "Reuters",
@@ -84,11 +84,13 @@ EXCLUDE_URL_PATTERNS = (
     "cn.wsj.com",
     "jp.reuters.com",
     "news.google.com/rss",
+    "://status.",
 )
 EXCLUDE_TITLE_PATTERNS = (
     re.compile(r"markets data\b.*ft\.com$", re.IGNORECASE),
     re.compile(r"\bsummary\s*-\s*ft\.com$", re.IGNORECASE),
     re.compile(r"company announcements", re.IGNORECASE),
+    re.compile(r"\bservice status\b", re.IGNORECASE),
 )
 NON_ENGLISH_TITLE_PATTERN = re.compile("[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 MINIMUM_NEWS_TITLE_LENGTH = 10
@@ -101,24 +103,33 @@ class SearchTopic:
     retry_query: str
     domain_filter: tuple[str, ...]
     recency_filter: str = "day"
+    retry_domain_filter: tuple[str, ...] | None = None
+    retry_recency_filter: str | None = None
 
 
 TOPIC_SPECS: tuple[SearchTopic, ...] = (
     SearchTopic(
         name="macro",
         query=(
-            "Latest U.S. market-moving macro news article or report published within the last 24 "
-            "hours about the Federal Reserve, Treasury yields, dollar, and VIX. Prefer reliable "
-            "English-language reporting, news analysis, and official releases only. Exclude "
-            "market data pages and summary pages."
+            "Latest U.S. macro or policy news article published within the last 24 hours about "
+            "the Federal Reserve, Treasury yields, the dollar, inflation, or volatility. Prefer "
+            "reliable English-language reporting, news analysis, and official releases. Exclude "
+            "market data pages, live blogs, and summary pages."
         ),
         retry_query=(
-            "Latest Federal Reserve or U.S. Treasury or VIX news article or report published "
-            "within the last 24 hours affecting U.S. markets. Prefer reliable English-language "
-            "reporting, news analysis, and official releases only. Exclude market data pages and "
-            "summary pages."
+            "Latest Federal Reserve, Treasury yields, inflation, or dollar news article or "
+            "official release published within the last week that is still moving U.S. markets. "
+            "Prefer reliable English-language reporting and official releases. Exclude market "
+            "data pages and summary pages."
         ),
         domain_filter=(
+            "reuters.com",
+            "bloomberg.com",
+            "wsj.com",
+            FT_CONTENT_URL_PREFIX,
+            "cnbc.com",
+        ),
+        retry_domain_filter=(
             "reuters.com",
             "bloomberg.com",
             "wsj.com",
@@ -127,19 +138,21 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             "federalreserve.gov",
             "home.treasury.gov",
         ),
+        retry_recency_filter="week",
     ),
     SearchTopic(
         name="us_equity",
         query=(
-            "Latest U.S. stock market news article or report published within the last 24 hours "
-            "on the S&P 500, Nasdaq, semiconductors, or market breadth. Prefer reliable "
-            "English-language reporting, news analysis, and exchange coverage. Exclude market "
-            "data pages and summary pages."
+            "Latest U.S. stock market article published within the last 24 hours about the S&P "
+            "500, Nasdaq, semiconductors, market breadth, or sector rotation. Prefer reliable "
+            "English-language reporting and news analysis. Exclude market data pages and summary "
+            "pages."
         ),
         retry_query=(
-            "Latest Nasdaq or S&P 500 or semiconductor sector news article or report published "
-            "within the last 24 hours moving the U.S. market. Prefer reliable English-language "
-            "reporting and news analysis. Exclude market data pages and summary pages."
+            "Latest Nasdaq, S&P 500, semiconductor, or market breadth article published within "
+            "the last week that is still shaping U.S. equity sentiment. Prefer reliable "
+            "English-language reporting, exchange coverage, and news analysis. Exclude market "
+            "data pages and summary pages."
         ),
         domain_filter=(
             "reuters.com",
@@ -147,24 +160,39 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             "wsj.com",
             FT_CONTENT_URL_PREFIX,
             "cnbc.com",
+        ),
+        retry_domain_filter=(
+            "reuters.com",
+            "bloomberg.com",
+            "wsj.com",
+            FT_CONTENT_URL_PREFIX,
+            "cnbc.com",
             "nasdaq.com",
         ),
+        retry_recency_filter="week",
     ),
     SearchTopic(
         name="ai_bigtech",
         query=(
-            "Latest AI and big tech market-moving news article or report published within the "
-            "last 24 hours on Nvidia, Microsoft, Apple, Amazon, Google, Meta, AMD, TSMC, ASML, "
-            "or Broadcom. Prefer reliable English-language reporting, news analysis, and company "
-            "IR. Exclude market data pages and summary pages."
+            "Latest AI and big tech market-moving article published within the last 24 hours on "
+            "Nvidia, Microsoft, Apple, Amazon, Google, Meta, AMD, TSMC, ASML, or Broadcom. "
+            "Prefer reliable English-language reporting and news analysis. Exclude market data "
+            "pages, app listings, podcast pages, and summary pages."
         ),
         retry_query=(
-            "Latest AI infrastructure, data center, semiconductor, or big tech capex news article "
-            "or report published within the last 24 hours. Prefer reliable English-language "
-            "reporting, news analysis, and company IR. Exclude market data pages and summary "
-            "pages."
+            "Latest AI infrastructure, data center, semiconductor, or big tech capex article or "
+            "company newsroom release published within the last week. Prefer reliable "
+            "English-language reporting, news analysis, and company IR/newsroom. Exclude market "
+            "data pages and summary pages."
         ),
         domain_filter=(
+            "reuters.com",
+            "bloomberg.com",
+            "wsj.com",
+            FT_CONTENT_URL_PREFIX,
+            "cnbc.com",
+        ),
+        retry_domain_filter=(
             "reuters.com",
             "bloomberg.com",
             "wsj.com",
@@ -181,21 +209,32 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             "asml.com",
             "broadcom.com",
         ),
+        retry_recency_filter="week",
     ),
     SearchTopic(
         name="bitcoin",
         query=(
-            "Latest bitcoin market news article or report published within the last 24 hours on "
-            "BTC ETF flows, regulation, institutional demand, or price-moving events. Prefer "
-            "reliable English-language reporting, news analysis, ETF issuers, and regulators. "
-            "Exclude market data pages and summary pages."
+            "Latest bitcoin market article published within the last 24 hours on BTC ETF flows, "
+            "regulation, institutional demand, or price-moving events. Prefer reliable "
+            "English-language reporting and news analysis. Exclude market data pages and summary "
+            "pages."
         ),
         retry_query=(
-            "Latest spot bitcoin ETF flow or bitcoin regulation news article or report published "
-            "within the last 24 hours. Prefer reliable English-language reporting, news analysis, "
-            "and official sources. Exclude market data pages and summary pages."
+            "Latest spot bitcoin ETF flow, issuer update, or bitcoin regulation article or "
+            "official release published within the last week. Prefer reliable English-language "
+            "reporting, ETF issuers, regulators, and news analysis. Exclude market data pages "
+            "and summary pages."
         ),
         domain_filter=(
+            "reuters.com",
+            "bloomberg.com",
+            "wsj.com",
+            FT_CONTENT_URL_PREFIX,
+            "cnbc.com",
+            "coindesk.com",
+            "sec.gov",
+        ),
+        retry_domain_filter=(
             "reuters.com",
             "bloomberg.com",
             "wsj.com",
@@ -207,6 +246,7 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             "bitbetf.com",
             "etfs.grayscale.com",
         ),
+        retry_recency_filter="week",
     ),
 )
 
@@ -654,8 +694,8 @@ def _search_topic_items(
     retry_payload, retry_usage, retry_usage_present = _search_once(
         client=client,
         query=topic.retry_query,
-        domain_filter=topic.domain_filter,
-        recency_filter=topic.recency_filter,
+        domain_filter=topic.retry_domain_filter or topic.domain_filter,
+        recency_filter=topic.retry_recency_filter or topic.recency_filter,
     )
     retry_results = retry_payload.get("results", [])
     retry_result_count = len(retry_results) if isinstance(retry_results, list) else 0

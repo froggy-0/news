@@ -65,6 +65,38 @@ def test_domain_score_rejects_substring_spoof():
     assert news._domain_score("https://news.reuters.com.evil.tld/path") == 0.0
 
 
+def test_preferred_domain_accepts_regulatory_and_official_ir_sources():
+    assert news._is_preferred_domain("https://www.federalreserve.gov/newsevents/pressreleases.htm")
+    assert news._is_preferred_domain("https://www.sec.gov/news/press-release/example")
+    assert news._is_preferred_domain(
+        "https://investor.nvidia.com/news/press-release-details/2026/example/default.aspx"
+    )
+
+
+def test_source_tier_promotes_regulatory_domains_to_tier_1():
+    packet = news._news_items_to_packet(
+        [
+            NewsItem(
+                title="Fed release",
+                url="https://www.federalreserve.gov/newsevents/pressreleases/example.htm",
+                source="Federal Reserve",
+                published_at=datetime.now(timezone.utc),
+            ),
+            NewsItem(
+                title="NVIDIA IR release",
+                url="https://investor.nvidia.com/news/press-release-details/2026/example/default.aspx",
+                source="NVIDIA IR",
+                published_at=datetime.now(timezone.utc),
+            ),
+        ]
+    )
+
+    assert packet[0]["source_tier"] == "tier_1"
+    assert packet[0]["preferred_source"] is True
+    assert packet[1]["source_tier"] == "tier_2"
+    assert packet[1]["preferred_source"] is True
+
+
 def test_dedup_and_rank_limits_single_domain_concentration():
     now = datetime.now(timezone.utc)
     items = [
