@@ -369,6 +369,53 @@ def test_fetch_news_from_perplexity_filters_service_status_pages(monkeypatch):
     assert items[0].url == "https://www.broadcom.com/company/news/product-releases/example"
 
 
+def test_fetch_news_from_perplexity_filters_paid_partner_pages(monkeypatch):
+    monkeypatch.setattr(
+        ps,
+        "TOPIC_SPECS",
+        (
+            ps.SearchTopic(
+                name="ai_bigtech",
+                query="ai query",
+                retry_query="",
+                domain_filter=("wsj.com", "reuters.com"),
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        ps,
+        "_build_client",
+        lambda api_key: _Client(
+            [
+                _SDKResponse(
+                    {
+                        "results": [
+                            {
+                                "title": "AI to impact: Building the AI-Native Enterprise - Paid Program - WSJ",
+                                "url": "https://partners.wsj.com/ntt-data/ai-to-impact/building-the-ai-native-enterprise/",
+                                "snippet": "ignore",
+                                "date": "2026-03-14T00:00:00Z",
+                            },
+                            {
+                                "title": "Nvidia suppliers track another AI spending boost",
+                                "url": "https://www.reuters.com/world/us/nvidia-suppliers-track-another-ai-spending-boost/",
+                                "snippet": "Reuters story",
+                                "date": "2026-03-14T01:00:00Z",
+                            },
+                        ]
+                    }
+                )
+            ],
+            [],
+        ),
+    )
+
+    items = ps.fetch_news_from_perplexity(max_items=5, api_key="pplx-test-key")
+
+    assert len(items) == 1
+    assert items[0].source == "Reuters"
+
+
 def test_fetch_news_from_perplexity_filters_statuspage_urls(monkeypatch):
     monkeypatch.setattr(
         ps,
@@ -446,6 +493,18 @@ def test_fetch_news_from_perplexity_filters_sec_listing_pages_and_coindesk_data(
                             {
                                 "title": "What's New - SEC.gov",
                                 "url": "https://www.sec.gov/newsroom/whats-new",
+                                "snippet": "ignore",
+                                "date": "2026-03-13",
+                            },
+                            {
+                                "title": "Home",
+                                "url": "https://www.sec.gov",
+                                "snippet": "ignore",
+                                "date": "2026-03-13",
+                            },
+                            {
+                                "title": "EDGAR Filing Documents for 0001213900-26-025216 - SEC.gov",
+                                "url": "https://www.sec.gov/Archives/edgar/data/1396092/000121390026025216/0001213900-26-025216-index.htm",
                                 "snippet": "ignore",
                                 "date": "2026-03-13",
                             },

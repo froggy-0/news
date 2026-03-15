@@ -86,6 +86,7 @@ EXCLUDE_URL_PATTERNS = (
     "podcasts.apple.com",
     "tv.apple.com",
     "cn.wsj.com",
+    "partners.wsj.com",
     "jp.reuters.com",
     "/taxonomy/term/",
     "news.google.com/rss",
@@ -108,6 +109,10 @@ EXCLUDE_TITLE_PATTERNS = (
     re.compile(r"^what's new - sec\.gov$", re.IGNORECASE),
     re.compile(r"^newsroom - sec\.gov$", re.IGNORECASE),
     re.compile(r"^press releases - sec\.gov$", re.IGNORECASE),
+    re.compile(r"\bpaid program\b", re.IGNORECASE),
+    re.compile(r"^home$", re.IGNORECASE),
+    re.compile(r"^investment company act notices and orders$", re.IGNORECASE),
+    re.compile(r"^edgar filing documents\b", re.IGNORECASE),
 )
 NON_ENGLISH_TITLE_PATTERN = re.compile("[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 DATE_ONLY_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -152,9 +157,10 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
         query=(
             "Latest U.S. macro or policy news article published within the last 24 hours about "
             "the Federal Reserve, Treasury yields, inflation, jobs, the dollar, or volatility. "
-            "Prefer reliable English-language reporting, news analysis, and official policy "
-            "releases that are directly about a new development. Exclude market data pages, live "
-            "blogs, summary pages, release index pages, and homepages."
+            "Prefer reliable English-language reporting, market analysis, and official policy "
+            "releases that are directly about a new development moving rates, the dollar, or risk "
+            "sentiment. Exclude market data pages, live blogs, summary pages, release index "
+            "pages, and homepages."
         ),
         retry_query=(
             "Latest Federal Reserve, Treasury yields, inflation, jobs, or dollar news article "
@@ -168,6 +174,7 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             "wsj.com",
             FT_CONTENT_URL_PREFIX,
             "cnbc.com",
+            "marketwatch.com",
         ),
         retry_domain_filter=(
             "reuters.com",
@@ -183,16 +190,16 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
         name="us_equity",
         query=(
             "Latest U.S. stock market article published within the last 24 hours about the S&P "
-            "500, Nasdaq, futures, semiconductors, market breadth, or sector rotation. Prefer "
-            "reliable English-language reporting and news analysis focused on that session's "
-            "rally, selloff, rotation, or risk sentiment. Exclude market data pages and summary "
-            "pages."
+            "500, Nasdaq, Wall Street, Dow Jones, futures, semiconductors, market breadth, or "
+            "sector rotation. Prefer reliable English-language reporting and news analysis "
+            "focused on that session's rally, selloff, rotation, or risk sentiment. Exclude "
+            "market data pages and summary pages."
         ),
         retry_query=(
-            "Latest Nasdaq, S&P 500, futures, semiconductor, market breadth, or sector rotation "
-            "article published within the last week that is still shaping U.S. equity sentiment. "
-            "Prefer reliable English-language reporting, exchange coverage, and news analysis. "
-            "Exclude market data pages and summary pages."
+            "Latest Wall Street, Nasdaq, S&P 500, Dow Jones, futures, semiconductor, market "
+            "breadth, or sector rotation article published within the last week that is still "
+            "shaping U.S. equity sentiment. Prefer reliable English-language reporting, exchange "
+            "coverage, and news analysis. Exclude market data pages and summary pages."
         ),
         domain_filter=(
             "reuters.com",
@@ -200,6 +207,8 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             "wsj.com",
             FT_CONTENT_URL_PREFIX,
             "cnbc.com",
+            "marketwatch.com",
+            "nasdaq.com",
         ),
         retry_domain_filter=(
             "reuters.com",
@@ -685,6 +694,8 @@ def _is_topic_landing_page(*, topic: str, url: str, title: str) -> bool:
     if topic == "bitcoin":
         if domain_matches(domain, "sec.gov") and path.startswith("/taxonomy/"):
             return True
+        if domain_matches(domain, "sec.gov") and path.startswith("/archives/edgar/data/"):
+            return True
         if domain_matches(domain, "ishares.com") and path.startswith("/us/products/"):
             return True
         if domain_matches(domain, "bitbetf.com") and path.startswith("/fund/"):
@@ -692,6 +703,7 @@ def _is_topic_landing_page(*, topic: str, url: str, title: str) -> bool:
         if domain_matches(domain, "etfs.grayscale.com") and path.count("/") <= 1:
             return True
         if domain_matches(domain, "sec.gov") and path in {
+            "/",
             "/newsroom",
             "/newsroom/whats-new",
             "/newsroom/press-releases",
