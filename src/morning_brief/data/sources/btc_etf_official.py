@@ -18,7 +18,7 @@ from perplexity import (
 )
 
 from morning_brief.data.sources.domain_utils import domain_matches, normalize_domain
-from morning_brief.data.sources.http_client import HttpFetchError
+from morning_brief.data.sources.http_client import HttpFetchError, get_text_with_retry
 from morning_brief.data.sources.provider_runtime import (
     disabled_reason,
     execute_with_provider_retry,
@@ -37,6 +37,7 @@ BITB_URL = "https://bitbetf.com/"
 GBTC_URL = "https://etfs.grayscale.com/gbtc"
 IBIT_CREATION_BASKET_SHARES = 40_000
 PERPLEXITY_PROVIDER = "perplexity"
+OFFICIAL_BTC_ETF_PROVIDER = "official_btc_etf"
 BTC_ETF_REFERENCE_MODEL = "sonar"
 BTC_ETF_REFERENCE_DOMAINS = (
     "ishares.com",
@@ -312,6 +313,40 @@ def parse_gbtc_snapshot(text: str) -> BitcoinEtfIssuerSnapshot:
         total_btc=round(total_btc, 8),
         bitcoin_per_share=round(bitcoin_per_share, 10),
     )
+
+
+def _fetch_direct_reference_snapshots(
+    *,
+    observer: PipelineObserver | None = None,
+) -> list[BitcoinEtfIssuerSnapshot]:
+    snapshots: list[BitcoinEtfIssuerSnapshot] = []
+    failures: list[dict[str, str]] = []
+    targets = (
+        ("IBIT", IBIT_URL, parse_ibit_snapshot),
+        ("BITB", BITB_URL, parse_bitb_snapshot),
+        ("GBTC", GBTC_URL, parse_gbtc_snapshot),
+    )
+
+    for ticker, url, parser in targets:
+        try:
+            text = get_text_with_retry(
+                url,
+                provider=OFFICIAL_BTC_ETF_PROVIDER,
+                headers={"Accept": "text/html,application/xhtml+xml"},
+            )
+            snapshots.append(parser(text))
+        except Exception as exc:
+            logger.warning("공식 발행사 페이지에서 %s 스냅샷을 바로 읽지 못했어요: %s", ticker, exc)
+            failures.append({"ticker": ticker, "detail": str(exc)})
+
+    snapshots.sort(key=lambda item: item.ticker)
+    if observer is not None:
+        observer.log_event(
+            "btc_etf_reference_direct_fetch",
+            snapshot_count=len(snapshots),
+            failures=failures[:3],
+        )
+    return snapshots
 
 
 def _build_client(api_key: str) -> Perplexity:
@@ -722,7 +757,15 @@ def fetch_official_btc_etf_snapshots(
     api_key: str = "",
     observer: PipelineObserver | None = None,
 ) -> list[BitcoinEtfIssuerSnapshot]:
-    return _request_reference_snapshots(api_key, observer=observer)
+    snapshots = _request_reference_snapshots(api_key, observer=observer)
+    if snapshots:
+        return snapshots
+
+    logger.info("Perplexity ETF 참조 스냅샷이 비어 공식 발행사 페이지를 직접 다시 볼게요.")
+    direct_snapshots = _fetch_direct_reference_snapshots(observer=observer)
+    if direct_snapshots:
+        return direct_snapshots
+    return snapshots
 
 
 def load_official_btc_etf_cache(cache_file: Path) -> dict[str, BitcoinEtfIssuerSnapshot]:

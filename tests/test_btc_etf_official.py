@@ -321,6 +321,28 @@ def test_fetch_official_btc_etf_snapshots_uses_perplexity_request(monkeypatch):
     assert captured["api_key"] == "pplx-test-key"
 
 
+def test_fetch_official_btc_etf_snapshots_falls_back_to_direct_official_pages(monkeypatch):
+    monkeypatch.setattr(official, "_request_reference_snapshots", lambda api_key, observer=None: [])
+
+    page_payloads = {
+        official.IBIT_URL: IBIT_SAMPLE,
+        official.BITB_URL: BITB_CURRENT_SAMPLE,
+        official.GBTC_URL: GBTC_SAMPLE,
+    }
+
+    def fake_get_text(url: str, **kwargs):
+        return page_payloads[url]
+
+    monkeypatch.setattr(official, "get_text_with_retry", fake_get_text)
+
+    snapshots = official.fetch_official_btc_etf_snapshots(api_key="pplx-test-key")
+
+    assert [snapshot.ticker for snapshot in snapshots] == ["BITB", "GBTC", "IBIT"]
+    assert snapshots[0].source_url == official.BITB_URL
+    assert snapshots[1].source_url == official.GBTC_URL
+    assert snapshots[2].source_url == official.IBIT_URL
+
+
 def test_request_reference_snapshots_uses_json_schema_response_format(monkeypatch):
     captured: dict[str, object] = {}
 
