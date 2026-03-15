@@ -232,6 +232,87 @@ def test_backfill_news_with_web_search_records_empty_result(monkeypatch, tmp_pat
     assert events[0]["output_preview"] == '{"items":[]}'
 
 
+def test_backfill_news_with_web_search_uses_source_only_fallback(monkeypatch, tmp_path):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_WEB_SEARCH_ENABLED", "true")
+    settings = load_settings()
+    observer = PipelineObserver(output_dir=tmp_path)
+    packet = {
+        "news": [
+            {
+                "title": "Old item",
+                "url": "https://example.com/old",
+                "source": "Blog",
+                "published_at": "2026-03-13T00:00:00+00:00",
+                "domain": "example.com",
+                "source_tier": "tier_3",
+                "preferred_source": False,
+                "age_hours": 20.0,
+            }
+        ],
+        "macro": [],
+        "us_indices": [],
+        "tech_stocks": [],
+        "bitcoin": {
+            "spot": {},
+            "official_etf_total_btc": None,
+            "official_etf_daily_flow_btc": None,
+        },
+    }
+    quality = {
+        "status": "degraded",
+        "news_count": 1,
+        "preferred_news_count": 0,
+        "tier_1_news_count": 0,
+        "unique_news_domains": 1,
+        "fresh_news_count": 0,
+    }
+    response = SimpleNamespace(
+        output_text="",
+        output=[
+            SimpleNamespace(
+                type="web_search_call",
+                action=SimpleNamespace(
+                    sources=[
+                        SimpleNamespace(
+                            title="Fed officials keep rate path open",
+                            url="https://www.reuters.com/world/us/fed-officials-keep-rate-path-open/",
+                        )
+                    ]
+                ),
+            )
+        ],
+    )
+
+    monkeypatch.setattr(rb, "OpenAI", lambda api_key: _FakeOpenAIClient(response))
+    monkeypatch.setattr(
+        rb,
+        "render_web_search_prompts",
+        lambda **kwargs: ("instructions", "user prompt"),
+    )
+    monkeypatch.setattr(rb, "build_prompt_cache_key", lambda **kwargs: "cache-key")
+
+    merged_news, references = backfill_news_with_web_search(
+        packet=packet,
+        quality=quality,
+        settings=settings,
+        observer=observer,
+    )
+
+    assert len(merged_news) == 2
+    assert references == [
+        {
+            "title": "Fed officials keep rate path open",
+            "url": "https://www.reuters.com/world/us/fed-officials-keep-rate-path-open/",
+        }
+    ]
+    events = [event for event in observer.events if event["event"] == "web_backfill_result"]
+    assert len(events) == 1
+    assert events[0]["reason"] == "source_only_fallback"
+    assert events[0]["extra_item_count"] == 1
+    assert events[0]["items"][0]["domain"] == "reuters.com"
+
+
 def test_extract_web_citations_reads_web_search_call_sources():
     response = SimpleNamespace(
         output=[

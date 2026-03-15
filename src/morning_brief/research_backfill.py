@@ -219,6 +219,31 @@ def _loggable_backfill_items(items: list[NewsItem]) -> list[dict[str, str]]:
     ]
 
 
+def _fallback_items_from_citations(citations: list[dict[str, str]]) -> list[NewsItem]:
+    items: list[NewsItem] = []
+    seen_urls: set[str] = set()
+
+    for citation in citations:
+        title = str(citation.get("title", "")).strip()
+        url = str(citation.get("url", "")).strip()
+        if not title or not url or url in seen_urls:
+            continue
+        seen_urls.add(url)
+        source_domain = normalize_domain(url).removeprefix("www.")
+        items.append(
+            NewsItem(
+                title=title,
+                url=url,
+                source=source_domain or "Unknown",
+                published_at=None,
+                provider="openai_web_search",
+                citations=[url],
+            )
+        )
+
+    return items
+
+
 def backfill_news_with_web_search(
     *,
     packet: dict,
@@ -287,6 +312,31 @@ def backfill_news_with_web_search(
         extra_items = _parse_web_news_items(payload)
         citations = _extract_web_citations(response)
         if not extra_items:
+            citation_fallback_items = _fallback_items_from_citations(citations)
+            if citation_fallback_items:
+                merged_packet = merge_news_packets(
+                    existing_packet=packet.get("news", []),
+                    extra_items=citation_fallback_items,
+                    max_items=settings.max_news_items,
+                    merge_rank_fn=_merge_rank,
+                )
+                if observer is not None:
+                    observer.log_event(
+                        "web_backfill_result",
+                        before_count=len(packet.get("news", [])),
+                        extra_item_count=len(citation_fallback_items),
+                        merged_count=len(merged_packet),
+                        citation_count=len(citations),
+                        items=_loggable_backfill_items(citation_fallback_items),
+                        output_preview=output_text[:200],
+                        reason="source_only_fallback",
+                    )
+                logger.info(
+                    "OpenAI 웹 검색 본문은 비어 있었지만 source 후보 %s건을 살려 최종 뉴스 %s건으로 정리했어요.",
+                    len(citation_fallback_items),
+                    len(merged_packet),
+                )
+                return merged_packet, citations
             if observer is not None:
                 observer.log_event(
                     "web_backfill_result",
