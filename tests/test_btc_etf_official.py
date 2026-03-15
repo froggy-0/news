@@ -303,3 +303,61 @@ def test_fetch_official_btc_etf_snapshots_uses_perplexity_request(monkeypatch):
 
     assert snapshots == expected
     assert captured["api_key"] == "pplx-test-key"
+
+
+def test_request_reference_snapshots_uses_json_schema_response_format(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def model_dump(self):
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "snapshots": [
+                                        {
+                                            "ticker": "IBIT",
+                                            "issuer": "iShares",
+                                            "source_url": official.IBIT_URL,
+                                            "as_of": "03/11/2026",
+                                            "shares_outstanding": 1,
+                                            "daily_volume": 1,
+                                            "aum_usd": 1,
+                                            "total_btc": 1,
+                                        }
+                                    ]
+                                }
+                            )
+                        }
+                    }
+                ]
+            }
+
+    class FakeCompletions:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return FakeResponse()
+
+    class FakeChat:
+        def __init__(self):
+            self.completions = FakeCompletions()
+
+    class FakeClient:
+        def __init__(self):
+            self.chat = FakeChat()
+
+    monkeypatch.setattr(official, "_build_client", lambda api_key: FakeClient())
+
+    snapshots = official.fetch_official_btc_etf_snapshots(api_key="pplx-test-key")
+
+    assert [snapshot.ticker for snapshot in snapshots] == ["IBIT"]
+    assert captured["model"] == official.BTC_ETF_REFERENCE_MODEL
+    assert captured["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "btc_etf_snapshots",
+            "schema": official.BTC_ETF_REFERENCE_RESPONSE_SCHEMA,
+        },
+    }

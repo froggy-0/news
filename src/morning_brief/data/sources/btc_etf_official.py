@@ -69,6 +69,42 @@ Task:
 - Do not include commentary, markdown, or citations outside the JSON.
 """.strip()
 
+BTC_ETF_REFERENCE_RESPONSE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "snapshots": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "ticker": {"type": "string"},
+                    "issuer": {"type": "string"},
+                    "source_url": {"type": "string"},
+                    "as_of": {"type": "string"},
+                    "shares_outstanding": {"type": "number"},
+                    "daily_volume": {"type": "number"},
+                    "aum_usd": {"type": "number"},
+                    "total_btc": {"type": "number"},
+                    "bitcoin_per_share": {"type": "number"},
+                },
+                "required": [
+                    "ticker",
+                    "issuer",
+                    "source_url",
+                    "as_of",
+                    "shares_outstanding",
+                    "daily_volume",
+                    "aum_usd",
+                    "total_btc",
+                ],
+            },
+        }
+    },
+    "required": ["snapshots"],
+}
+
 DATE_RE = r"(?:[A-Z][a-z]{2}\s+\d{1,2},\s+\d{4}|\d{2}/\d{2}/\d{4})"
 VALUE_RE = r"\$?[\d,]+(?:\.\d+)?(?:[MB])?"
 NEXT_DATA_RE = re.compile(
@@ -621,7 +657,13 @@ def _request_reference_snapshots(
                 country="US",
                 temperature=0.0,
                 max_tokens=900,
-                response_format={"type": "json_object"},
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "btc_etf_snapshots",
+                        "schema": BTC_ETF_REFERENCE_RESPONSE_SCHEMA,
+                    },
+                },
             )
         except (RateLimitError, APITimeoutError, APIConnectionError, APIStatusError) as exc:
             raise _to_http_fetch_error(exc) from exc
