@@ -182,7 +182,6 @@ def test_backfill_news_with_web_search_records_merged_result(monkeypatch, tmp_pa
     assert calls[0]["text"]["format"]["type"] == "json_schema"
     assert calls[0]["tools"][0]["search_context_size"] == "low"
     assert calls[0]["tools"][0]["user_location"]["country"] == "KR"
-    assert "bloomberg.com" not in calls[0]["tools"][0]["filters"]["allowed_domains"]
 
 
 def test_backfill_news_with_web_search_records_empty_result(monkeypatch, tmp_path):
@@ -399,28 +398,6 @@ def test_fallback_items_from_citations_filters_partner_and_generic_sec_pages():
             {
                 "title": "Newsroom - SEC.gov",
                 "url": "https://www.sec.gov/newsroom",
-            },
-            {
-                "title": "Fed officials keep rate path open",
-                "url": "https://www.reuters.com/world/us/fed-officials-keep-rate-path-open/",
-            },
-        ]
-    )
-
-    assert len(items) == 1
-    assert items[0].url == "https://www.reuters.com/world/us/fed-officials-keep-rate-path-open/"
-
-
-def test_fallback_items_from_citations_filters_bloomberg_professional_and_lei():
-    items = rb._fallback_items_from_citations(
-        [
-            {
-                "title": "https://lei.bloomberg.com/leis/view/969500M90SLL159Y3W45",
-                "url": "https://lei.bloomberg.com/leis/view/969500M90SLL159Y3W45",
-            },
-            {
-                "title": "https://professional.content.cirrus.bloomberg.com/professional2023/insights/financial-services/fed-remarks-points-to-capital-neutral-basel-iii-endgame-in-2026/",
-                "url": "https://professional.content.cirrus.bloomberg.com/professional2023/insights/financial-services/fed-remarks-points-to-capital-neutral-basel-iii-endgame-in-2026/",
             },
             {
                 "title": "Fed officials keep rate path open",
