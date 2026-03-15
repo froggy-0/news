@@ -271,6 +271,60 @@ def test_search_once_normalizes_domain_filters_for_api_request():
     assert calls[0]["search_domain_filter"] == ["investor.nvidia.com", "reuters.com"]
 
 
+def test_fetch_news_from_perplexity_supports_multi_query_results(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        ps,
+        "TOPIC_SPECS",
+        (
+            ps.SearchTopic(
+                name="macro",
+                query=("macro one", "macro two"),
+                retry_query="",
+                domain_filter=("reuters.com",),
+            ),
+        ),
+    )
+    monkeypatch.setattr(ps, "TOPIC_RESULT_TARGET", 1)
+    monkeypatch.setattr(
+        ps,
+        "_build_client",
+        lambda api_key: _Client(
+            [
+                _SDKResponse(
+                    {
+                        "results": [
+                            [
+                                {
+                                    "title": "Fed keeps options open",
+                                    "url": "https://www.reuters.com/world/us/fed-keeps-options-open",
+                                    "snippet": "Reuters macro story.",
+                                    "date": "2026-03-13T01:00:00Z",
+                                }
+                            ],
+                            [
+                                {
+                                    "title": "Treasury yields slip after inflation update",
+                                    "url": "https://www.reuters.com/world/us/treasury-yields-slip-after-inflation-update",
+                                    "snippet": "Reuters rates story.",
+                                    "date": "2026-03-13T02:00:00Z",
+                                }
+                            ],
+                        ]
+                    }
+                )
+            ],
+            calls,
+        ),
+    )
+
+    items = ps.fetch_news_from_perplexity(max_items=5, api_key="pplx-test-key")
+
+    assert calls[0]["query"] == ["macro one", "macro two"]
+    assert len(items) == 2
+    assert items[0].source == "Reuters"
+
+
 def test_fetch_news_from_perplexity_uses_last_updated_retry_before_date_retry(
     monkeypatch, tmp_path
 ):

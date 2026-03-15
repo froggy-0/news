@@ -30,6 +30,7 @@ from morning_brief.observability import COLLECTED_ITEM_LOG_LIMIT, PipelineObserv
 
 logger = logging.getLogger(__name__)
 PERPLEXITY_PROVIDER = "perplexity"
+SearchQuery = str | tuple[str, ...]
 
 SEARCH_TIMEOUT_SECONDS = 25
 SEARCH_MAX_RESULTS = 8
@@ -142,8 +143,8 @@ BROADCOM_INDEX_PATHS = {
 @dataclass(frozen=True)
 class SearchTopic:
     name: str
-    query: str
-    retry_query: str
+    query: SearchQuery
+    retry_query: SearchQuery
     domain_filter: tuple[str, ...]
     recency_filter: str = "day"
     retry_last_updated_days: int | None = None
@@ -156,18 +157,14 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
     SearchTopic(
         name="macro",
         query=(
-            "Latest U.S. macro or policy news article published within the last 24 hours about "
-            "the Federal Reserve, Treasury yields, inflation, jobs, the dollar, or volatility. "
-            "Prefer reliable English-language reporting, market analysis, and official policy "
-            "releases that are directly about a new development moving rates, the dollar, or risk "
-            "sentiment. Exclude market data pages, live blogs, summary pages, release index "
-            "pages, and homepages."
+            "latest Federal Reserve Treasury yields market article",
+            "latest inflation jobs dollar volatility market article",
+            "latest Treasury yields rate cut risk sentiment article",
         ),
         retry_query=(
-            "Latest Federal Reserve, Treasury yields, inflation, jobs, or dollar news article "
-            "published within the last week that is still moving U.S. markets. Prefer reliable "
-            "English-language reporting and direct official policy releases. Exclude market data "
-            "pages, summary pages, release index pages, and homepages."
+            "Federal Reserve policy Treasury yields market article",
+            "inflation jobs dollar volatility market article",
+            "Treasury yields rate cut risk sentiment market article",
         ),
         domain_filter=(
             "reuters.com",
@@ -191,17 +188,14 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
     SearchTopic(
         name="us_equity",
         query=(
-            "Latest U.S. stock market article published within the last 24 hours about the S&P "
-            "500, Nasdaq, Wall Street, Dow Jones, futures, semiconductors, market breadth, or "
-            "sector rotation. Prefer reliable English-language reporting and news analysis "
-            "focused on that session's rally, selloff, rotation, or risk sentiment. Exclude "
-            "market data pages and summary pages."
+            "latest S&P 500 Nasdaq Wall Street market article",
+            "latest semiconductor stocks sector rotation market article",
+            "latest Dow Jones futures market breadth article",
         ),
         retry_query=(
-            "Latest Wall Street, Nasdaq, S&P 500, Dow Jones, futures, semiconductor, market "
-            "breadth, or sector rotation article published within the last week that is still "
-            "shaping U.S. equity sentiment. Prefer reliable English-language reporting, exchange "
-            "coverage, and news analysis. Exclude market data pages and summary pages."
+            "Wall Street Nasdaq S&P 500 market sentiment article",
+            "semiconductor stocks sector rotation market breadth article",
+            "Dow Jones futures risk sentiment stock market article",
         ),
         domain_filter=(
             "reuters.com",
@@ -441,6 +435,22 @@ def _usage_container(response: object, payload: dict[str, Any]) -> object | None
     return None
 
 
+def _search_query_value(query: SearchQuery) -> str | list[str]:
+    if isinstance(query, tuple):
+        queries = [candidate.strip() for candidate in query if candidate.strip()]
+        if len(queries) == 1:
+            return queries[0]
+        return queries
+    return str(query).strip()
+
+
+def _search_query_label(query: SearchQuery) -> str:
+    value = _search_query_value(query)
+    if isinstance(value, list):
+        return " | ".join(value)
+    return value
+
+
 def _search_domain_filter_values(domain_filter: tuple[str, ...]) -> list[str]:
     values: list[str] = []
     seen: set[str] = set()
@@ -555,7 +565,7 @@ def _to_http_fetch_error(exc: Exception) -> HttpFetchError:
 def _search_once(
     *,
     client: Perplexity,
-    query: str,
+    query: SearchQuery,
     domain_filter: tuple[str, ...],
     recency_filter: str | None,
     search_after_date_filter: str | None = None,
@@ -573,7 +583,7 @@ def _search_once(
     def perform_search() -> tuple[dict[str, Any], dict[str, int | None], bool]:
         try:
             request_kwargs: dict[str, object] = {
-                "query": query,
+                "query": _search_query_value(query),
                 "max_results": SEARCH_MAX_RESULTS,
                 "search_domain_filter": _search_domain_filter_values(domain_filter),
                 "search_language_filter": ["en"],
@@ -624,7 +634,7 @@ def _search_once(
             "Perplexity Search API를 다시 시도하는 중이에요 (%s/%s). query=%s | %s | sleep=%.2fs",
             attempt,
             max_attempts,
-            " ".join(query.split())[:80],
+            " ".join(_search_query_label(query).split())[:80],
             exc,
             delay,
         ),
@@ -640,13 +650,9 @@ def _parse_results(
     topic: SearchTopic,
     allowed_domains: tuple[str, ...] | None = None,
 ) -> list[NewsItem]:
-    results = payload.get("results", [])
-    if not isinstance(results, list):
-        return []
-
     items: list[NewsItem] = []
     domain_allowlist = allowed_domains or topic.domain_filter
-    for raw in results[:TOPIC_RESULT_LIMIT]:
+    for raw in _flatten_results(payload)[:TOPIC_RESULT_LIMIT]:
         if not isinstance(raw, dict):
             continue
 
@@ -784,11 +790,9 @@ def _loggable_perplexity_items(items: list[NewsItem]) -> list[dict[str, str]]:
 
 
 def _loggable_raw_results(results: object) -> list[dict[str, str]]:
-    if not isinstance(results, list):
-        return []
-
     raw_items: list[dict[str, str]] = []
-    for raw in results[:COLLECTED_ITEM_LOG_LIMIT]:
+    wrapped = {"results": results}
+    for raw in _flatten_results(wrapped)[:COLLECTED_ITEM_LOG_LIMIT]:
         if not isinstance(raw, dict):
             continue
         title = str(raw.get("title", "")).strip()
@@ -803,6 +807,23 @@ def _loggable_raw_results(results: object) -> list[dict[str, str]]:
             }
         )
     return raw_items
+
+
+def _flatten_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    results = payload.get("results", [])
+    if not isinstance(results, list):
+        return []
+
+    flattened: list[dict[str, Any]] = []
+    for item in results:
+        if isinstance(item, dict):
+            flattened.append(item)
+            continue
+        if isinstance(item, list):
+            for nested in item:
+                if isinstance(nested, dict):
+                    flattened.append(nested)
+    return flattened
 
 
 def _fetch_news_from_perplexity(
@@ -881,8 +902,8 @@ def _search_topic_items(
         domain_filter=topic.domain_filter,
         recency_filter=topic.recency_filter,
     )
-    first_results = payload.get("results", [])
-    total_result_count = len(first_results) if isinstance(first_results, list) else 0
+    first_results = _flatten_results(payload)
+    total_result_count = len(first_results)
     raw_items = _loggable_raw_results(first_results)
     _record_perplexity_usage(
         observer=observer,
@@ -918,8 +939,8 @@ def _search_topic_items(
             last_updated_after_filter=last_updated_after_filter,
             last_updated_before_filter=last_updated_before_filter,
         )
-        updated_results = updated_payload.get("results", [])
-        updated_result_count = len(updated_results) if isinstance(updated_results, list) else 0
+        updated_results = _flatten_results(updated_payload)
+        updated_result_count = len(updated_results)
         raw_items.extend(_loggable_raw_results(updated_results))
         _record_perplexity_usage(
             observer=observer,
@@ -961,8 +982,8 @@ def _search_topic_items(
             search_after_date_filter=search_after_date_filter,
             search_before_date_filter=search_before_date_filter,
         )
-        retry_results = retry_payload.get("results", [])
-        retry_result_count = len(retry_results) if isinstance(retry_results, list) else 0
+        retry_results = _flatten_results(retry_payload)
+        retry_result_count = len(retry_results)
         raw_items.extend(_loggable_raw_results(retry_results))
         _record_perplexity_usage(
             observer=observer,
@@ -995,8 +1016,8 @@ def _search_topic_items(
         domain_filter=topic.retry_domain_filter or topic.domain_filter,
         recency_filter=topic.retry_recency_filter or topic.recency_filter,
     )
-    broad_results = broad_payload.get("results", [])
-    broad_result_count = len(broad_results) if isinstance(broad_results, list) else 0
+    broad_results = _flatten_results(broad_payload)
+    broad_result_count = len(broad_results)
     raw_items.extend(_loggable_raw_results(broad_results))
     _record_perplexity_usage(
         observer=observer,
@@ -1028,7 +1049,7 @@ def _dedupe_topic_items(items: list[NewsItem]) -> list[NewsItem]:
 def _record_perplexity_usage(
     *,
     observer: PipelineObserver | None,
-    query: str,
+    query: SearchQuery,
     usage: dict[str, int | None],
     usage_present: bool,
     result_count: int,
@@ -1052,7 +1073,7 @@ def _record_perplexity_usage(
         observer.log_event(
             "provider_usage_unparsed",
             provider=PERPLEXITY_PROVIDER,
-            query=" ".join(query.split())[:80],
+            query=" ".join(_search_query_label(query).split())[:80],
         )
 
 
