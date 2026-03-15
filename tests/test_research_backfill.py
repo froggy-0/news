@@ -180,8 +180,8 @@ def test_backfill_news_with_web_search_records_merged_result(monkeypatch, tmp_pa
     assert events[0]["items"][0]["domain"] == "reuters.com"
     assert calls[0]["include"] == ["web_search_call.action.sources"]
     assert calls[0]["text"]["format"]["type"] == "json_schema"
-    assert calls[0]["tools"][0]["search_context_size"] == "medium"
-    assert calls[0]["tools"][0]["user_location"]["country"] == "US"
+    assert calls[0]["tools"][0]["search_context_size"] == "low"
+    assert calls[0]["tools"][0]["user_location"]["country"] == "KR"
 
 
 def test_backfill_news_with_web_search_records_empty_result(monkeypatch, tmp_path):

@@ -70,6 +70,7 @@ WEB_SEARCH_OUTPUT_SCHEMA = {
 BACKFILL_SOURCE_EXCLUDE_PATTERNS = (
     "/authors/",
     "/opinion/",
+    "/latest/",
     "partners.wsj.com",
     "downloads.coindesk.com",
     "data.coindesk.com",
@@ -368,10 +369,10 @@ def backfill_news_with_web_search(
                 {
                     "type": "web_search",
                     "filters": {"allowed_domains": ALLOWED_NEWS_DOMAINS},
-                    "search_context_size": "medium",
+                    "search_context_size": "low",
                     "user_location": {
                         "type": "approximate",
-                        "country": "US",
+                        "country": "KR",
                         "timezone": settings.timezone,
                     },
                 }
