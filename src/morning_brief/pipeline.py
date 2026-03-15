@@ -56,13 +56,24 @@ def run_pipeline(settings: Settings) -> str:
                 observer=observer,
             )
         with observer.phase("news"):
-            news_packet = build_news_packet(settings=settings, observer=observer)
+            news_packet, topic_summaries, x_signals = build_news_packet(
+                settings=settings, observer=observer
+            )
         logger.info("시장 지표와 뉴스 %s건을 모았어요.", len(news_packet))
 
         packet = {
             **market_packet,
             "news": news_packet,
         }
+        # 신규 데이터 소스를 packet에 추가 (브리핑 프롬프트에서 활용)
+        if topic_summaries:
+            from morning_brief.data.sources.perplexity_sonar import topic_summaries_to_dict
+
+            packet["topic_summaries"] = topic_summaries_to_dict(topic_summaries)
+        if x_signals:
+            from morning_brief.data.sources.grok_x_keyword import x_signals_to_dict
+
+            packet["x_market_signals"] = x_signals_to_dict(x_signals)
         quality = _assess_data_quality(packet=packet, news_packet=news_packet)
         with observer.phase("backfill"):
             if not settings.openai_web_search_enabled:

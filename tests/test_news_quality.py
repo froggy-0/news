@@ -233,7 +233,7 @@ def test_build_news_packet_adds_reliability_metadata(monkeypatch):
     monkeypatch.setattr("morning_brief.data.news.fetch_news", lambda **_: sample)
     monkeypatch.setenv("RESEARCH_PROVIDER", "legacy")
 
-    packet = news.build_news_packet(settings=load_settings())
+    packet, _, _ = news.build_news_packet(settings=load_settings())
 
     assert packet[0]["domain"] == "www.reuters.com"
     assert packet[0]["source_tier"] == "tier_1"
@@ -258,7 +258,7 @@ def test_build_news_packet_uses_legacy_fallback_when_perplexity_is_empty(monkeyp
     monkeypatch.setattr("morning_brief.data.news.fetch_news_from_perplexity", lambda **_: [])
     monkeypatch.setattr("morning_brief.data.news.fetch_news", lambda **_: sample)
 
-    packet = news.build_news_packet(settings=load_settings())
+    packet, _, _ = news.build_news_packet(settings=load_settings())
 
     assert len(packet) == 1
     assert packet[0]["title"] == "Bitcoin ETF demand stays firm"
@@ -275,7 +275,7 @@ def test_build_news_packet_can_skip_legacy_fallback(monkeypatch):
         lambda **_: (_ for _ in ()).throw(AssertionError("legacy fetch should not run")),
     )
 
-    packet = news.build_news_packet(settings=load_settings())
+    packet, _, _ = news.build_news_packet(settings=load_settings())
 
     assert packet == []
 
@@ -302,7 +302,7 @@ def test_build_news_packet_preserves_perplexity_metadata(monkeypatch):
         ],
     )
 
-    packet = news.build_news_packet(settings=load_settings())
+    packet, _, _ = news.build_news_packet(settings=load_settings())
 
     assert packet[0]["topic"] == "macro"
     assert packet[0]["provider"] == "perplexity_search"
@@ -368,7 +368,7 @@ def test_build_news_packet_skips_legacy_when_perplexity_quality_is_good(monkeypa
         lambda **_: (_ for _ in ()).throw(AssertionError("legacy fetch should not run")),
     )
 
-    packet = news.build_news_packet(settings=load_settings())
+    packet, _, _ = news.build_news_packet(settings=load_settings())
 
     assert len(packet) == 4
     assert {item["topic"] for item in packet} == {"macro", "us_equity", "ai_bigtech", "bitcoin"}
@@ -438,7 +438,7 @@ def test_build_news_packet_does_not_trigger_legacy_fallback_for_uncited_grok_ite
         lambda **_: (_ for _ in ()).throw(AssertionError("legacy fetch should not run")),
     )
 
-    packet = news.build_news_packet(settings=load_settings())
+    packet, _, _ = news.build_news_packet(settings=load_settings())
 
     assert len(packet) == 4
 
@@ -507,7 +507,7 @@ def test_build_news_packet_merges_official_x_signals_before_legacy(monkeypatch):
         lambda **_: (_ for _ in ()).throw(AssertionError("legacy fetch should not run")),
     )
 
-    packet = news.build_news_packet(settings=load_settings())
+    packet, _, _ = news.build_news_packet(settings=load_settings())
 
     assert len(packet) == 4
 
@@ -539,7 +539,7 @@ def test_build_news_packet_omits_grok_signals_when_grok_fails(monkeypatch):
         lambda **_: (_ for _ in ()).throw(HttpFetchError("grok unavailable")),
     )
 
-    packet = news.build_news_packet(settings=load_settings())
+    packet, _, _ = news.build_news_packet(settings=load_settings())
 
     assert len(packet) == 1
     assert packet[0]["provider"] == "perplexity_search"
@@ -602,7 +602,7 @@ def test_build_news_packet_uses_legacy_when_perplexity_topics_are_too_narrow(mon
         ],
     )
 
-    packet = news.build_news_packet(settings=load_settings())
+    packet, _, _ = news.build_news_packet(settings=load_settings())
 
     assert len(packet) == 4
     assert {item["provider"] for item in packet} == {"perplexity_search", "legacy_rss"}
@@ -687,7 +687,7 @@ def test_build_news_packet_reduces_broad_legacy_when_recent_runs_are_stable(monk
 
     monkeypatch.setattr("morning_brief.data.news.fetch_news", _fake_fetch_news)
 
-    packet = news.build_news_packet(settings=load_settings())
+    packet, _, _ = news.build_news_packet(settings=load_settings())
 
     assert captured["allow_broad_fallback"] is False
     assert len(packet) == 4

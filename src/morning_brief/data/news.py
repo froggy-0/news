@@ -22,9 +22,19 @@ from morning_brief.data.news_rollout import (
 )
 from morning_brief.data.sources.google_news_rss import fetch_news_from_google_rss
 from morning_brief.data.sources.grok_official_signals import fetch_official_x_signals
+from morning_brief.data.sources.grok_web_search import fetch_grok_web_news
+from morning_brief.data.sources.grok_x_keyword import (
+    XSignal,
+    fetch_x_keyword_signals,
+)
 from morning_brief.data.sources.http_client import HttpFetchError
 from morning_brief.data.sources.newsapi_provider import fetch_news_from_newsapi
 from morning_brief.data.sources.perplexity_search import fetch_news_from_perplexity
+from morning_brief.data.sources.perplexity_sonar import (
+    TopicSummary,
+    collect_sonar_news_items,
+    fetch_sonar_summaries,
+)
 from morning_brief.models import NewsItem
 from morning_brief.observability import PipelineObserver
 
@@ -104,6 +114,66 @@ def _collect_official_signal_items(
     return items
 
 
+def _collect_sonar_summaries(
+    settings: Settings,
+    *,
+    observer: PipelineObserver | None = None,
+) -> tuple[dict[str, TopicSummary], list[NewsItem]]:
+    """Perplexity Sonar 요약을 수집한다."""
+    if not settings.perplexity_use_sonar or not settings.perplexity_api_key:
+        return {}, []
+
+    summaries = fetch_sonar_summaries(
+        api_key=settings.perplexity_api_key,
+        model=settings.perplexity_sonar_model,
+        max_tokens=settings.perplexity_sonar_max_tokens,
+        observer=observer,
+    )
+    news_items = collect_sonar_news_items(summaries)
+    if summaries:
+        logger.info(
+            "Sonar 요약 %d개 토픽 수집 완료, citations에서 NewsItem %d건 추출",
+            len(summaries),
+            len(news_items),
+        )
+    return summaries, news_items
+
+
+def _collect_x_keyword_signals(
+    settings: Settings,
+    *,
+    observer: PipelineObserver | None = None,
+) -> tuple[list[XSignal], list[NewsItem]]:
+    """Grok X 키워드 기반 시장 반응을 수집한다."""
+    if not settings.grok_x_keyword_search_enabled or not settings.grok_api_key:
+        return [], []
+
+    return fetch_x_keyword_signals(
+        api_key=settings.grok_api_key,
+        model=settings.grok_model,
+        lookback_hours=settings.official_x_lookback_hours,
+        max_items=settings.grok_x_search_max_items,
+        observer=observer,
+    )
+
+
+def _collect_grok_web_news(
+    settings: Settings,
+    *,
+    observer: PipelineObserver | None = None,
+) -> list[NewsItem]:
+    """Grok Web Search로 뉴스를 수집한다."""
+    if not settings.grok_web_search_enabled or not settings.grok_api_key:
+        return []
+
+    return fetch_grok_web_news(
+        api_key=settings.grok_api_key,
+        model=settings.grok_model,
+        max_items=settings.grok_web_search_max_items,
+        observer=observer,
+    )
+
+
 def fetch_news(
     max_items: int,
     newsapi_key: str = "",
@@ -151,24 +221,46 @@ def build_news_packet(
     *,
     settings: Settings,
     observer: PipelineObserver | None = None,
-) -> list[dict]:
+) -> tuple[list[dict], dict[str, TopicSummary], list[XSignal]]:
+    """뉴스 패킷을 구성한다.
+
+    Returns:
+        (news_packet, topic_summaries, x_signals) 튜플.
+        기존 호출자와의 하위 호환을 위해 news_packet은 list[dict] 유지.
+    """
     items: list[NewsItem] = []
     legacy_items: list[NewsItem] = []
     official_signal_items = _collect_official_signal_items(settings, observer=observer)
     allow_broad_fallback = True
     fallback_review: dict | None = None
 
+    # --- 신규: Sonar 요약 + Grok X 키워드 + Grok Web Search ---
+    topic_summaries, sonar_news = _collect_sonar_summaries(settings, observer=observer)
+    x_signals, x_news = _collect_x_keyword_signals(settings, observer=observer)
+    grok_web_news = _collect_grok_web_news(settings, observer=observer)
+
     if settings.research_provider == "perplexity":
-        items = fetch_news_from_perplexity(
-            max_items=settings.max_news_items,
-            api_key=settings.perplexity_api_key,
-            observer=observer,
-        )
+        # Sonar 모드가 켜져 있으면 Sonar citations에서 추출한 NewsItem을 우선 사용
+        if settings.perplexity_use_sonar and sonar_news:
+            items = sonar_news
+        else:
+            items = fetch_news_from_perplexity(
+                max_items=settings.max_news_items,
+                api_key=settings.perplexity_api_key,
+                observer=observer,
+            )
         if not items and observer is not None:
             observer.log_event(
                 "perplexity_degraded",
                 reason="Perplexity 결과가 비어 있어 legacy 뉴스와 Grok 보조 모드로 전환했어요.",
             )
+
+        # Grok X 키워드 + Web Search 결과 병합
+        if x_news:
+            items = _merge_rank(items, x_news, max_items=settings.max_news_items * 2)
+        if grok_web_news:
+            items = _merge_rank(items, grok_web_news, max_items=settings.max_news_items * 2)
+
         if official_signal_items:
             items = _merge_rank(items, official_signal_items, max_items=settings.max_news_items)
         items = _dedup_and_rank(items, max_items=settings.max_news_items)
@@ -210,6 +302,11 @@ def build_news_packet(
             newsapi_key=settings.newsapi_key,
         )
         items = _merge_rank(legacy_items, official_signal_items, max_items=settings.max_news_items)
+        # Grok 결과도 legacy 모드에서 병합
+        if x_news:
+            items = _merge_rank(items, x_news, max_items=settings.max_news_items)
+        if grok_web_news:
+            items = _merge_rank(items, grok_web_news, max_items=settings.max_news_items)
 
     if items:
         packet, final_summary = _packet_summary(items)
@@ -235,6 +332,6 @@ def build_news_packet(
                 allow_broad_fallback=allow_broad_fallback,
                 provider_breakdown=provider_breakdown,
             )
-        return packet
+        return packet, topic_summaries, x_signals
 
-    return _news_items_to_packet(items)
+    return _news_items_to_packet(items), topic_summaries, x_signals
