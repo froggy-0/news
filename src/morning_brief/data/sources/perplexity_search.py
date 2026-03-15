@@ -146,6 +146,7 @@ class SearchTopic:
     retry_query: str
     domain_filter: tuple[str, ...]
     recency_filter: str = "day"
+    retry_last_updated_days: int | None = None
     retry_range_days: int | None = INTERMEDIATE_LOOKBACK_DAYS
     retry_domain_filter: tuple[str, ...] | None = None
     retry_recency_filter: str | None = None
@@ -176,6 +177,7 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             "cnbc.com",
             "marketwatch.com",
         ),
+        retry_last_updated_days=INTERMEDIATE_LOOKBACK_DAYS,
         retry_domain_filter=(
             "reuters.com",
             "bloomberg.com",
@@ -210,6 +212,7 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             "marketwatch.com",
             "nasdaq.com",
         ),
+        retry_last_updated_days=INTERMEDIATE_LOOKBACK_DAYS,
         retry_domain_filter=(
             "reuters.com",
             "bloomberg.com",
@@ -438,6 +441,36 @@ def _usage_container(response: object, payload: dict[str, Any]) -> object | None
     return None
 
 
+def _search_domain_filter_values(domain_filter: tuple[str, ...]) -> list[str]:
+    values: list[str] = []
+    seen: set[str] = set()
+
+    for candidate in domain_filter:
+        raw = str(candidate or "").strip().lower()
+        if not raw:
+            continue
+
+        deny = raw.startswith("-")
+        body = raw[1:].strip() if deny else raw
+        if not body:
+            continue
+
+        if body.startswith(".") and "://" not in body and "/" not in body:
+            normalized = body
+        else:
+            normalized = normalize_domain(body).removeprefix("www.")
+        if not normalized:
+            continue
+
+        value = f"-{normalized}" if deny else normalized
+        if value in seen:
+            continue
+        seen.add(value)
+        values.append(value)
+
+    return values
+
+
 def _format_status_error(exc: APIStatusError) -> str:
     status_code = getattr(exc, "status_code", "unknown")
     response = getattr(exc, "response", None)
@@ -524,6 +557,8 @@ def _search_once(
     recency_filter: str | None,
     search_after_date_filter: str | None = None,
     search_before_date_filter: str | None = None,
+    last_updated_after_filter: str | None = None,
+    last_updated_before_filter: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, int | None], bool]:
     unavailable_reason = disabled_reason(PERPLEXITY_PROVIDER)
     if unavailable_reason:
@@ -537,7 +572,7 @@ def _search_once(
             request_kwargs: dict[str, object] = {
                 "query": query,
                 "max_results": SEARCH_MAX_RESULTS,
-                "search_domain_filter": list(domain_filter),
+                "search_domain_filter": _search_domain_filter_values(domain_filter),
                 "search_language_filter": ["en"],
                 "country": "US",
             }
@@ -547,6 +582,10 @@ def _search_once(
                 request_kwargs["search_after_date_filter"] = search_after_date_filter
             if search_before_date_filter:
                 request_kwargs["search_before_date_filter"] = search_before_date_filter
+            if last_updated_after_filter:
+                request_kwargs["last_updated_after_filter"] = last_updated_after_filter
+            if last_updated_before_filter:
+                request_kwargs["last_updated_before_filter"] = last_updated_before_filter
 
             response = client.search.create(
                 **request_kwargs,
@@ -854,6 +893,49 @@ def _search_topic_items(
     )
     if len(topic_items) >= TOPIC_RESULT_TARGET or not topic.retry_query:
         return topic_items, total_result_count, raw_items
+
+    if topic.retry_last_updated_days:
+        last_updated_after_filter, last_updated_before_filter = _search_date_range(
+            topic.retry_last_updated_days
+        )
+        if observer is not None:
+            observer.log_event(
+                "perplexity_search_widened",
+                topic=topic.name,
+                stage="last_updated_retry",
+                last_updated_after_filter=last_updated_after_filter,
+                last_updated_before_filter=last_updated_before_filter,
+                reason="insufficient_24h_results",
+            )
+        updated_payload, updated_usage, updated_usage_present = _search_once(
+            client=client,
+            query=topic.retry_query,
+            domain_filter=topic.domain_filter,
+            recency_filter=None,
+            last_updated_after_filter=last_updated_after_filter,
+            last_updated_before_filter=last_updated_before_filter,
+        )
+        updated_results = updated_payload.get("results", [])
+        updated_result_count = len(updated_results) if isinstance(updated_results, list) else 0
+        raw_items.extend(_loggable_raw_results(updated_results))
+        _record_perplexity_usage(
+            observer=observer,
+            query=topic.retry_query,
+            usage=updated_usage,
+            usage_present=updated_usage_present,
+            result_count=updated_result_count,
+        )
+        topic_items = _dedupe_topic_items(
+            topic_items
+            + _parse_results(
+                payload=updated_payload,
+                topic=topic,
+                allowed_domains=topic.domain_filter,
+            )
+        )
+        total_result_count += updated_result_count
+        if len(topic_items) >= TOPIC_RESULT_TARGET:
+            return topic_items, total_result_count, raw_items
 
     if topic.retry_range_days:
         search_after_date_filter, search_before_date_filter = _search_date_range(

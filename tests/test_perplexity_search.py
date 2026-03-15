@@ -235,6 +235,111 @@ def test_fetch_news_from_perplexity_uses_broad_retry_after_date_retry(monkeypatc
     assert [event["stage"] for event in widen_events] == ["date_range_retry", "broad_retry"]
 
 
+def test_search_once_normalizes_domain_filters_for_api_request():
+    calls = []
+    client = _Client(
+        [
+            _SDKResponse(
+                {
+                    "results": [
+                        {
+                            "title": "Fed keeps options open",
+                            "url": "https://www.ft.com/content/abcd1234",
+                            "snippet": "FT article.",
+                            "date": "2026-03-13T01:00:00Z",
+                        }
+                    ]
+                }
+            )
+        ],
+        calls,
+    )
+
+    ps._search_once(
+        client=client,
+        query="macro query",
+        domain_filter=(
+            ps.FT_CONTENT_URL_PREFIX,
+            "https://news.microsoft.com/source/",
+            "https://www.apple.com/newsroom/",
+            "reuters.com",
+        ),
+        recency_filter="day",
+    )
+
+    assert calls[0]["search_domain_filter"] == [
+        "ft.com",
+        "news.microsoft.com",
+        "apple.com",
+        "reuters.com",
+    ]
+
+
+def test_fetch_news_from_perplexity_uses_last_updated_retry_before_date_retry(
+    monkeypatch, tmp_path
+):
+    calls = []
+    observer = PipelineObserver(output_dir=tmp_path)
+    monkeypatch.setattr(ps, "_utc_now", lambda: datetime(2026, 3, 15, 9, 0, tzinfo=timezone.utc))
+    monkeypatch.setattr(ps, "TOPIC_RESULT_TARGET", 1)
+    monkeypatch.setattr(
+        ps,
+        "TOPIC_SPECS",
+        (
+            ps.SearchTopic(
+                name="macro",
+                query="macro query",
+                retry_query="macro retry",
+                domain_filter=("reuters.com", "https://www.ft.com/content/"),
+                retry_last_updated_days=2,
+                retry_range_days=2,
+                retry_recency_filter="week",
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        ps,
+        "_build_client",
+        lambda api_key: _Client(
+            [
+                _SDKResponse({"results": []}),
+                _SDKResponse(
+                    {
+                        "results": [
+                            {
+                                "title": "Treasury yields edge lower after Fed remarks",
+                                "url": "https://www.reuters.com/world/us/treasury-yields-edge-lower-after-fed-remarks/",
+                                "snippet": "Reuters story",
+                                "last_updated": "2026-03-14T03:00:00Z",
+                            }
+                        ]
+                    }
+                ),
+            ],
+            calls,
+        ),
+    )
+
+    items = ps.fetch_news_from_perplexity(
+        max_items=5,
+        api_key="pplx-test-key",
+        observer=observer,
+    )
+
+    assert len(calls) == 2
+    assert calls[0]["search_recency_filter"] == "day"
+    assert calls[1]["search_domain_filter"] == ["reuters.com", "ft.com"]
+    assert calls[1]["last_updated_after_filter"] == "03/13/2026"
+    assert calls[1]["last_updated_before_filter"] == "03/15/2026"
+    assert "search_recency_filter" not in calls[1]
+    assert "search_after_date_filter" not in calls[1]
+    assert len(items) == 1
+    widen_events = [
+        event for event in observer.events if event["event"] == "perplexity_search_widened"
+    ]
+    assert [event["stage"] for event in widen_events] == ["last_updated_retry"]
+
+
 def test_fetch_news_from_perplexity_filters_unallowed_domain(monkeypatch):
     monkeypatch.setattr(
         ps,
