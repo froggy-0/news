@@ -262,17 +262,13 @@ def test_search_once_normalizes_domain_filters_for_api_request():
             ps.FT_CONTENT_URL_PREFIX,
             "https://news.microsoft.com/source/",
             "https://www.apple.com/newsroom/",
+            "https://investor.nvidia.com",
             "reuters.com",
         ),
         recency_filter="day",
     )
 
-    assert calls[0]["search_domain_filter"] == [
-        "ft.com",
-        "news.microsoft.com",
-        "apple.com",
-        "reuters.com",
-    ]
+    assert calls[0]["search_domain_filter"] == ["investor.nvidia.com", "reuters.com"]
 
 
 def test_fetch_news_from_perplexity_uses_last_updated_retry_before_date_retry(
@@ -328,7 +324,7 @@ def test_fetch_news_from_perplexity_uses_last_updated_retry_before_date_retry(
 
     assert len(calls) == 2
     assert calls[0]["search_recency_filter"] == "day"
-    assert calls[1]["search_domain_filter"] == ["reuters.com", "ft.com"]
+    assert calls[1]["search_domain_filter"] == ["reuters.com"]
     assert calls[1]["last_updated_after_filter"] == "03/13/2026"
     assert calls[1]["last_updated_before_filter"] == "03/15/2026"
     assert "search_recency_filter" not in calls[1]

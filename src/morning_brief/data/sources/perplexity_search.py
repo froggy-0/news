@@ -458,6 +458,9 @@ def _search_domain_filter_values(domain_filter: tuple[str, ...]) -> list[str]:
         if body.startswith(".") and "://" not in body and "/" not in body:
             normalized = body
         else:
+            parsed = urlparse(body if "://" in body else f"https://{body}")
+            if parsed.path not in {"", "/"}:
+                continue
             normalized = normalize_domain(body).removeprefix("www.")
         if not normalized:
             continue
