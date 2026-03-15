@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from json import JSONDecodeError
 
@@ -19,8 +20,12 @@ from morning_brief.prompting import (
 
 logger = logging.getLogger(__name__)
 
-VALIDATOR_MAX_OUTPUT_TOKENS = 1100
+VALIDATOR_MAX_OUTPUT_TOKENS = 1400
 REVIEW_PARSE_PREVIEW_LEN = 240
+JSON_CODE_BLOCK_RE = re.compile(
+    r"```(?:json)?\s*(?P<payload>\{.*?\})\s*```",
+    flags=re.DOTALL | re.IGNORECASE,
+)
 
 BRIEF_REVIEW_SCHEMA = {
     "type": "object",
@@ -31,8 +36,16 @@ BRIEF_REVIEW_SCHEMA = {
         "plain_language_pass": {"type": "boolean"},
         "numeric_consistency_pass": {"type": "boolean"},
         "structure_pass": {"type": "boolean"},
-        "issues": {"type": "array", "items": {"type": "string"}},
-        "rewrite_guidance": {"type": "array", "items": {"type": "string"}},
+        "issues": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {"type": "string", "maxLength": 200},
+        },
+        "rewrite_guidance": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {"type": "string", "maxLength": 200},
+        },
     },
     "required": [
         "pass",
@@ -80,6 +93,28 @@ def _review_parse_preview(text: str) -> str:
     return f"{preview[:REVIEW_PARSE_PREVIEW_LEN]}..."
 
 
+def _review_json_candidates(text: str) -> list[str]:
+    normalized = text.strip().lstrip("\ufeff")
+    candidates = [normalized]
+
+    code_block_match = JSON_CODE_BLOCK_RE.search(normalized)
+    if code_block_match:
+        candidates.append(code_block_match.group("payload").strip())
+
+    first_brace = normalized.find("{")
+    last_brace = normalized.rfind("}")
+    if first_brace != -1 and last_brace != -1 and first_brace < last_brace:
+        candidates.append(normalized[first_brace : last_brace + 1].strip())
+
+    seen: set[str] = set()
+    unique_candidates: list[str] = []
+    for candidate in candidates:
+        if candidate and candidate not in seen:
+            seen.add(candidate)
+            unique_candidates.append(candidate)
+    return unique_candidates
+
+
 def _parse_review_payload_text(
     *,
     response_text: str,
@@ -92,19 +127,26 @@ def _parse_review_payload_text(
             observer.log_event("brief_review_skipped", reason="empty_response")
         return None
 
-    try:
-        payload = json.loads(normalized_text)
-    except JSONDecodeError as exc:
+    last_error: JSONDecodeError | None = None
+    payload: object | None = None
+    for candidate in _review_json_candidates(normalized_text):
+        try:
+            payload = json.loads(candidate)
+            break
+        except JSONDecodeError as exc:
+            last_error = exc
+
+    if payload is None:
         logger.warning(
             "브리핑 검수 JSON을 읽지 못해 이번 검수는 건너뛸게요: %s | preview=%s",
-            exc,
+            last_error,
             _review_parse_preview(normalized_text),
         )
         if observer is not None:
             observer.log_event(
                 "brief_review_skipped",
                 reason="invalid_json",
-                error=str(exc),
+                error=str(last_error),
                 preview=_review_parse_preview(normalized_text),
             )
         return None
