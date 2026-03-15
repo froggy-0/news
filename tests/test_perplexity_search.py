@@ -365,6 +365,7 @@ def test_fetch_news_from_perplexity_uses_last_updated_retry_before_date_retry(
                         ]
                     }
                 ),
+                _SDKResponse({"results": []}),
             ],
             calls,
         ),
@@ -388,6 +389,92 @@ def test_fetch_news_from_perplexity_uses_last_updated_retry_before_date_retry(
         event for event in observer.events if event["event"] == "perplexity_search_widened"
     ]
     assert [event["stage"] for event in widen_events] == ["last_updated_retry"]
+
+
+def test_fetch_news_from_perplexity_discards_last_updated_retry_results_outside_window(
+    monkeypatch, tmp_path
+):
+    calls = []
+    observer = PipelineObserver(output_dir=tmp_path)
+    monkeypatch.setattr(ps, "_utc_now", lambda: datetime(2026, 3, 15, 9, 0, tzinfo=timezone.utc))
+    monkeypatch.setattr(ps, "TOPIC_RESULT_TARGET", 1)
+    monkeypatch.setattr(
+        ps,
+        "TOPIC_SPECS",
+        (
+            ps.SearchTopic(
+                name="macro",
+                query="macro query",
+                retry_query="macro retry",
+                domain_filter=("bloomberg.com",),
+                retry_last_updated_days=2,
+                retry_range_days=None,
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        ps,
+        "_build_client",
+        lambda api_key: _Client(
+            [
+                _SDKResponse({"results": []}),
+                _SDKResponse(
+                    {
+                        "results": [
+                            {
+                                "title": "Investing in Gold: Is Gold Still Considered a Safe Bet",
+                                "url": "https://sponsored.bloomberg.com/article/investing-in-gold",
+                                "snippet": "Sponsored content",
+                                "date": "2023-01-19",
+                            }
+                        ]
+                    }
+                ),
+                _SDKResponse({"results": []}),
+            ],
+            calls,
+        ),
+    )
+
+    items = ps.fetch_news_from_perplexity(
+        max_items=5,
+        api_key="pplx-test-key",
+        observer=observer,
+    )
+
+    assert items == []
+
+
+def test_parse_results_filters_sponsored_bloomberg_pages():
+    topic = ps.SearchTopic(
+        name="macro",
+        query="macro query",
+        retry_query="",
+        domain_filter=("bloomberg.com",),
+    )
+
+    items = ps._parse_results(
+        payload={
+            "results": [
+                {
+                    "title": "Investing in Gold: Is Gold Still Considered a Safe Bet",
+                    "url": "https://sponsored.bloomberg.com/article/investing-in-gold",
+                    "snippet": "Sponsored content",
+                    "date": "2026-03-13",
+                },
+                {
+                    "title": "Treasury yields edge lower after inflation report",
+                    "url": "https://www.bloomberg.com/news/articles/2026-03-13/treasury-yields-edge-lower-after-inflation-report",
+                    "snippet": "Bloomberg article",
+                    "date": "2026-03-13",
+                },
+            ]
+        },
+        topic=topic,
+    )
+
+    assert len(items) == 1
+    assert items[0].source == "Bloomberg"
 
 
 def test_fetch_news_from_perplexity_filters_unallowed_domain(monkeypatch):

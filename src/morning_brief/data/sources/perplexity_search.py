@@ -75,6 +75,7 @@ TOPIC_IMPACT_LINES = {
 
 FT_CONTENT_URL_PREFIX = "https://www.ft.com/content/"
 DISALLOWED_MARKET_DATA_DOMAINS = {"markets.ft.com", "data.coindesk.com"}
+DISALLOWED_SPONSORED_DOMAINS = {"sponsored.bloomberg.com"}
 EXCLUDE_URL_PATTERNS = (
     "/data/equities/tearsheet/",
     "/data/indices/tearsheet/",
@@ -692,6 +693,8 @@ def _is_disallowed_market_data_result(*, title: str, url: str) -> bool:
     domain = normalize_domain(normalized_url)
     if domain in DISALLOWED_MARKET_DATA_DOMAINS:
         return True
+    if domain in DISALLOWED_SPONSORED_DOMAINS:
+        return True
     if normalized_url.rstrip("/") in DISALLOWED_EXACT_URLS:
         return True
     if any(part in normalized_url for part in EXCLUDE_URL_PATTERNS):
@@ -710,6 +713,31 @@ def _search_date_range(days_back: int) -> tuple[str, str]:
     now = _utc_now()
     after_dt = now - timedelta(days=days_back)
     return after_dt.strftime("%m/%d/%Y"), now.strftime("%m/%d/%Y")
+
+
+def _filter_items_to_date_window(
+    items: list[NewsItem],
+    *,
+    after_filter: str,
+    before_filter: str,
+) -> list[NewsItem]:
+    after_dt = datetime.strptime(after_filter, "%m/%d/%Y").replace(tzinfo=timezone.utc)
+    before_dt = datetime.strptime(before_filter, "%m/%d/%Y").replace(
+        hour=23, minute=59, second=59, tzinfo=timezone.utc
+    )
+    filtered: list[NewsItem] = []
+    for item in items:
+        published_at = item.published_at
+        if published_at is None:
+            filtered.append(item)
+            continue
+        if published_at.tzinfo is None:
+            published_at = published_at.replace(tzinfo=timezone.utc)
+        else:
+            published_at = published_at.astimezone(timezone.utc)
+        if after_dt <= published_at <= before_dt:
+            filtered.append(item)
+    return filtered
 
 
 def _normalized_url_path(url: str) -> str:
@@ -957,6 +985,13 @@ def _search_topic_items(
                 allowed_domains=topic.domain_filter,
             )
         )
+        topic_items = _dedupe_topic_items(
+            _filter_items_to_date_window(
+                topic_items,
+                after_filter=last_updated_after_filter,
+                before_filter=last_updated_before_filter,
+            )
+        )
         total_result_count += updated_result_count
         if len(topic_items) >= TOPIC_RESULT_TARGET:
             return topic_items, total_result_count, raw_items
@@ -996,6 +1031,13 @@ def _search_topic_items(
             topic_items
             + _parse_results(
                 payload=retry_payload, topic=topic, allowed_domains=topic.domain_filter
+            )
+        )
+        topic_items = _dedupe_topic_items(
+            _filter_items_to_date_window(
+                topic_items,
+                after_filter=search_after_date_filter,
+                before_filter=search_before_date_filter,
             )
         )
         total_result_count += retry_result_count
