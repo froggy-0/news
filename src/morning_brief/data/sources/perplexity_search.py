@@ -111,6 +111,7 @@ MINIMUM_NEWS_TITLE_LENGTH = 10
 INTERMEDIATE_LOOKBACK_DAYS = 2
 FEDERAL_RESERVE_INDEX_PATHS = {
     "/",
+    "/default.htm",
     "/newsevents.htm",
     "/recentpostings.htm",
     "/publications.htm",
