@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlparse
 
 from perplexity import (
     APIConnectionError,
@@ -107,6 +108,24 @@ EXCLUDE_TITLE_PATTERNS = (
 NON_ENGLISH_TITLE_PATTERN = re.compile("[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 DATE_ONLY_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MINIMUM_NEWS_TITLE_LENGTH = 10
+FEDERAL_RESERVE_INDEX_PATHS = {
+    "/",
+    "/newsevents.htm",
+    "/recentpostings.htm",
+    "/publications.htm",
+    "/releases/h15",
+    "/releases/cp",
+    "/releases/h41/current",
+}
+FEDERAL_RESERVE_YEARLY_PRESS_INDEX = re.compile(
+    r"^/newsevents/pressreleases/\d{4}-press\.htm$",
+    re.IGNORECASE,
+)
+BROADCOM_INDEX_PATHS = {
+    "/latest",
+    "/releases",
+    "/emea/releases",
+}
 
 
 @dataclass(frozen=True)
@@ -127,13 +146,13 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             "Latest U.S. macro or policy news article published within the last 24 hours about "
             "the Federal Reserve, Treasury yields, the dollar, inflation, or volatility. Prefer "
             "reliable English-language reporting, news analysis, and official releases. Exclude "
-            "market data pages, live blogs, and summary pages."
+            "market data pages, live blogs, summary pages, release index pages, and homepages."
         ),
         retry_query=(
             "Latest Federal Reserve, Treasury yields, inflation, or dollar news article or "
             "official release published within the last week that is still moving U.S. markets. "
             "Prefer reliable English-language reporting and official releases. Exclude market "
-            "data pages and summary pages."
+            "data pages, summary pages, release index pages, and homepages."
         ),
         domain_filter=(
             "reuters.com",
@@ -190,13 +209,13 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             "Latest AI and big tech market-moving article published within the last 24 hours on "
             "Nvidia, Microsoft, Apple, Amazon, Google, Meta, AMD, TSMC, ASML, or Broadcom. "
             "Prefer reliable English-language reporting and news analysis. Exclude market data "
-            "pages, app listings, podcast pages, and summary pages."
+            "pages, app listings, podcast pages, category pages, archive pages, and summary pages."
         ),
         retry_query=(
             "Latest AI infrastructure, data center, semiconductor, or big tech capex article or "
             "company newsroom release published within the last week. Prefer reliable "
             "English-language reporting, news analysis, and company IR/newsroom. Exclude market "
-            "data pages and summary pages."
+            "data pages, summary pages, category pages, and archive pages."
         ),
         domain_filter=(
             "reuters.com",
@@ -229,14 +248,14 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
         query=(
             "Latest bitcoin market article published within the last 24 hours on BTC ETF flows, "
             "regulation, institutional demand, or price-moving events. Prefer reliable "
-            "English-language reporting and news analysis. Exclude market data pages and summary "
-            "pages."
+            "English-language reporting and news analysis. Exclude market data pages, ETF product "
+            "pages, issuer landing pages, and summary pages."
         ),
         retry_query=(
             "Latest spot bitcoin ETF flow, issuer update, or bitcoin regulation article or "
             "official release published within the last week. Prefer reliable English-language "
             "reporting, ETF issuers, regulators, and news analysis. Exclude market data pages "
-            "and summary pages."
+            "summary pages, ETF product pages, and issuer landing pages."
         ),
         domain_filter=(
             "reuters.com",
@@ -560,6 +579,7 @@ def _parse_results(*, payload: dict[str, Any], topic: SearchTopic) -> list[NewsI
             or not url
             or not _is_allowed_domain(url, topic.domain_filter)
             or _is_disallowed_market_data_result(title=title, url=url)
+            or _is_topic_landing_page(topic=topic.name, url=url, title=title)
             or _is_invalid_news_title(title)
         ):
             continue
@@ -600,6 +620,43 @@ def _is_invalid_news_title(title: str) -> bool:
     if len(normalized_title) < MINIMUM_NEWS_TITLE_LENGTH:
         return True
     return bool(NON_ENGLISH_TITLE_PATTERN.search(normalized_title))
+
+
+def _normalized_url_path(url: str) -> str:
+    path = urlparse(str(url or "").strip()).path.lower().rstrip("/")
+    return path or "/"
+
+
+def _is_topic_landing_page(*, topic: str, url: str, title: str) -> bool:
+    normalized_url = str(url or "").strip().lower()
+    normalized_title = " ".join(str(title or "").split()).strip().lower()
+    domain = normalize_domain(normalized_url)
+    path = _normalized_url_path(normalized_url)
+
+    if topic == "macro" and domain_matches(domain, "federalreserve.gov"):
+        if path in FEDERAL_RESERVE_INDEX_PATHS:
+            return True
+        if FEDERAL_RESERVE_YEARLY_PRESS_INDEX.match(path):
+            return True
+
+    if topic == "ai_bigtech" and domain_matches(domain, "news.broadcom.com"):
+        if path in BROADCOM_INDEX_PATHS or path.startswith("/category/"):
+            return True
+
+    if topic == "bitcoin":
+        if domain_matches(domain, "ishares.com") and path.startswith("/us/products/"):
+            return True
+        if domain_matches(domain, "bitbetf.com") and path.startswith("/fund/"):
+            return True
+        if domain_matches(domain, "etfs.grayscale.com") and path.count("/") <= 1:
+            return True
+        if (
+            "ethereum trust etf" in normalized_title
+            or "blockchain and tech etf" in normalized_title
+        ):
+            return True
+
+    return False
 
 
 def _collection_timestamp(item: NewsItem) -> str:

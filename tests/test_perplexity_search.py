@@ -396,6 +396,130 @@ def test_fetch_news_from_perplexity_filters_sec_listing_pages_and_coindesk_data(
     assert items[0].url == "https://www.sec.gov/newsroom/press-releases/2026-42"
 
 
+def test_parse_results_filters_fed_index_pages_but_keeps_speech_pages():
+    topic = ps.SearchTopic(
+        name="macro",
+        query="macro query",
+        retry_query="",
+        domain_filter=("federalreserve.gov",),
+    )
+
+    items = ps._parse_results(
+        payload={
+            "results": [
+                {
+                    "title": "News & Events - Federal Reserve Board",
+                    "url": "https://www.federalreserve.gov/newsevents.htm",
+                    "snippet": "Index page.",
+                    "date": "2026-03-13",
+                },
+                {
+                    "title": "2026 Press Releases - Federal Reserve Board",
+                    "url": "https://www.federalreserve.gov/newsevents/pressreleases/2026-press.htm",
+                    "snippet": "Year listing.",
+                    "date": "2026-03-13",
+                },
+                {
+                    "title": "Fed official says inflation progress remains uneven",
+                    "url": "https://www.federalreserve.gov/newsevents/speech/waller20260313a.htm",
+                    "snippet": "A valid speech page.",
+                    "date": "2026-03-13",
+                },
+            ]
+        },
+        topic=topic,
+    )
+
+    assert len(items) == 1
+    assert items[0].url == "https://www.federalreserve.gov/newsevents/speech/waller20260313a.htm"
+
+
+def test_parse_results_filters_broadcom_category_and_archive_pages():
+    topic = ps.SearchTopic(
+        name="ai_bigtech",
+        query="ai query",
+        retry_query="",
+        domain_filter=("broadcom.com",),
+    )
+
+    items = ps._parse_results(
+        payload={
+            "results": [
+                {
+                    "title": "Latest News & Stories - Broadcom",
+                    "url": "https://news.broadcom.com/latest",
+                    "snippet": "Landing page.",
+                    "date": "2026-03-13",
+                },
+                {
+                    "title": "Technologies - Broadcom News and Stories",
+                    "url": "https://news.broadcom.com/category/technologies",
+                    "snippet": "Category page.",
+                    "date": "2026-03-13",
+                },
+                {
+                    "title": "Broadcom launches new optical interconnect platform",
+                    "url": "https://news.broadcom.com/releases/broadcom-launches-new-optical-interconnect-platform",
+                    "snippet": "A valid release page.",
+                    "date": "2026-03-13",
+                },
+            ]
+        },
+        topic=topic,
+    )
+
+    assert len(items) == 1
+    assert items[0].url == (
+        "https://news.broadcom.com/releases/broadcom-launches-new-optical-interconnect-platform"
+    )
+
+
+def test_parse_results_filters_bitcoin_etf_product_pages():
+    topic = ps.SearchTopic(
+        name="bitcoin",
+        query="bitcoin query",
+        retry_query="",
+        domain_filter=("ishares.com", "bitbetf.com", "etfs.grayscale.com", "reuters.com"),
+    )
+
+    items = ps._parse_results(
+        payload={
+            "results": [
+                {
+                    "title": "iShares Ethereum Trust ETF | ETHA",
+                    "url": "https://www.ishares.com/us/products/337614/ishares-ethereum-trust-etf",
+                    "snippet": "Wrong ETF product page.",
+                    "date": "2026-03-13",
+                },
+                {
+                    "title": "iShares Bitcoin Trust ETF | IBIT",
+                    "url": "https://www.ishares.com/us/products/333011/ishares-bitcoin-trust-etf",
+                    "snippet": "Issuer product page.",
+                    "date": "2026-03-13",
+                },
+                {
+                    "title": "Bitwise Bitcoin ETF | BITB",
+                    "url": "https://www.bitbetf.com/fund/bitb",
+                    "snippet": "Issuer fund page.",
+                    "date": "2026-03-13",
+                },
+                {
+                    "title": "Bitcoin ETF inflows stay firm as issuers add assets",
+                    "url": "https://www.reuters.com/world/us/bitcoin-etf-inflows-stay-firm-2026-03-13/",
+                    "snippet": "A valid market article.",
+                    "date": "2026-03-13",
+                },
+            ]
+        },
+        topic=topic,
+    )
+
+    assert len(items) == 1
+    assert (
+        items[0].url == "https://www.reuters.com/world/us/bitcoin-etf-inflows-stay-firm-2026-03-13/"
+    )
+
+
 def test_fetch_news_from_perplexity_records_raw_candidates_when_everything_is_filtered(
     monkeypatch, tmp_path
 ):
