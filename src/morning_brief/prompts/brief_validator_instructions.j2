@@ -27,10 +27,17 @@
 - 데이터에 없는 주장, 투자 권유, 단정적 예측은 실패다.
 
 출력 규칙:
-- 반드시 JSON만 출력한다.
-- 문제를 적을 때는 짧고 실행 가능한 문장으로 적는다.
-- rewrite_guidance에는 실제로 다시 쓸 때 반영할 지시만 남긴다.
+- 반드시 아래 JSON 스키마만 출력한다. 마크다운 코드블록이나 설명 텍스트는 붙이지 않는다.
+- JSON 스키마:
+  {
+    "pass": true 또는 false,
+    "structure_pass": true 또는 false (3개 LAYER 구조가 모두 있으면 true),
+    "issues": ["짧고 실행 가능한 수정 지시 문장", ...],
+    "rewrite_needed": true 또는 false (자동 재작성이 필요하면 true),
+    "rewrite_guidance": ["실제로 다시 쓸 때 반영할 지시", ...]
+  }
 - issues와 rewrite_guidance는 각각 최대 5개까지만 남긴다.
 - 각 항목은 짧게 쓰고, 불필요한 배경 설명은 줄인다.
+- 문제가 없으면 pass를 true로, issues와 rewrite_guidance를 빈 배열로 반환한다.
 
 Prompt Version: {{ prompt_template_version }}
