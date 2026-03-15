@@ -79,6 +79,7 @@ def run_pipeline(settings: Settings) -> str:
                     packet=packet,
                     quality=quality,
                     settings=settings,
+                    observer=observer,
                 )
                 news_packet = merged_news
                 packet["news"] = merged_news

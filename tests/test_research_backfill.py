@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from morning_brief import research_backfill as rb
 from morning_brief.config import load_settings
+from morning_brief.observability import PipelineObserver
 from morning_brief.research_backfill import (
     _extract_web_citations,
     _needs_web_search_backfill,
@@ -92,3 +94,133 @@ def test_backfill_news_with_web_search_is_disabled_when_setting_is_off(monkeypat
 
     assert merged_news == packet["news"]
     assert references == []
+
+
+class _FakeResponsesAPI:
+    def __init__(self, response):
+        self._response = response
+
+    def create(self, **kwargs):
+        return self._response
+
+
+class _FakeOpenAIClient:
+    def __init__(self, response):
+        self.responses = _FakeResponsesAPI(response)
+
+
+def test_backfill_news_with_web_search_records_merged_result(monkeypatch, tmp_path):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_WEB_SEARCH_ENABLED", "true")
+    settings = load_settings()
+    observer = PipelineObserver(output_dir=tmp_path)
+    packet = {
+        "news": [
+            {
+                "title": "Old item",
+                "url": "https://www.reuters.com/world/us/old-item",
+                "source": "Reuters",
+                "published_at": "2026-03-13T00:00:00+00:00",
+                "domain": "reuters.com",
+                "source_tier": "tier_1",
+                "preferred_source": True,
+                "age_hours": 20.0,
+            }
+        ],
+        "macro": [],
+        "us_indices": [],
+        "tech_stocks": [],
+        "bitcoin": {
+            "spot": {},
+            "official_etf_total_btc": None,
+            "official_etf_daily_flow_btc": None,
+        },
+    }
+    quality = {
+        "status": "degraded",
+        "news_count": 1,
+        "preferred_news_count": 1,
+        "tier_1_news_count": 1,
+        "unique_news_domains": 1,
+        "fresh_news_count": 0,
+    }
+    response = SimpleNamespace(
+        output_text=(
+            '{"items":[{"title":"Fed officials keep rate path open",'
+            '"url":"https://www.reuters.com/world/us/fed-officials-keep-rate-path-open/",'
+            '"source":"Reuters","published_at":"2026-03-15T00:00:00Z"}]}'
+        ),
+        output=[],
+    )
+
+    monkeypatch.setattr(rb, "OpenAI", lambda api_key: _FakeOpenAIClient(response))
+    monkeypatch.setattr(
+        rb,
+        "render_web_search_prompts",
+        lambda **kwargs: ("instructions", "user prompt"),
+    )
+    monkeypatch.setattr(rb, "build_prompt_cache_key", lambda **kwargs: "cache-key")
+
+    merged_news, references = backfill_news_with_web_search(
+        packet=packet,
+        quality=quality,
+        settings=settings,
+        observer=observer,
+    )
+
+    assert len(merged_news) >= 1
+    assert references == []
+    events = [event for event in observer.events if event["event"] == "web_backfill_result"]
+    assert len(events) == 1
+    assert events[0]["reason"] == "merged"
+    assert events[0]["extra_item_count"] == 1
+    assert events[0]["items"][0]["domain"] == "reuters.com"
+
+
+def test_backfill_news_with_web_search_records_empty_result(monkeypatch, tmp_path):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_WEB_SEARCH_ENABLED", "true")
+    settings = load_settings()
+    observer = PipelineObserver(output_dir=tmp_path)
+    packet = {
+        "news": [],
+        "macro": [],
+        "us_indices": [],
+        "tech_stocks": [],
+        "bitcoin": {
+            "spot": {},
+            "official_etf_total_btc": None,
+            "official_etf_daily_flow_btc": None,
+        },
+    }
+    quality = {
+        "status": "degraded",
+        "news_count": 0,
+        "preferred_news_count": 0,
+        "tier_1_news_count": 0,
+        "unique_news_domains": 0,
+        "fresh_news_count": 0,
+    }
+    response = SimpleNamespace(output_text='{"items":[]}', output=[])
+
+    monkeypatch.setattr(rb, "OpenAI", lambda api_key: _FakeOpenAIClient(response))
+    monkeypatch.setattr(
+        rb,
+        "render_web_search_prompts",
+        lambda **kwargs: ("instructions", "user prompt"),
+    )
+    monkeypatch.setattr(rb, "build_prompt_cache_key", lambda **kwargs: "cache-key")
+
+    merged_news, references = backfill_news_with_web_search(
+        packet=packet,
+        quality=quality,
+        settings=settings,
+        observer=observer,
+    )
+
+    assert merged_news == []
+    assert references == []
+    events = [event for event in observer.events if event["event"] == "web_backfill_result"]
+    assert len(events) == 1
+    assert events[0]["reason"] == "no_items_parsed"
+    assert events[0]["extra_item_count"] == 0

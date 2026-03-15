@@ -13,12 +13,14 @@ from openai import OpenAI
 from morning_brief.config import Settings
 from morning_brief.data.news_packet import merge_news_packets
 from morning_brief.data.news_selection import _merge_rank
+from morning_brief.data.sources.domain_utils import normalize_domain
 from morning_brief.llm_provider_policy import (
     CAPABILITY_WEB_BACKFILL,
     OPENAI_PROVIDER,
     capability_allowed,
 )
 from morning_brief.models import NewsItem
+from morning_brief.observability import COLLECTED_ITEM_LOG_LIMIT, PipelineObserver
 from morning_brief.prompting import build_prompt_cache_key, render_web_search_prompts
 
 logger = logging.getLogger(__name__)
@@ -168,11 +170,23 @@ def _parse_web_news_items(payload: dict) -> list[NewsItem]:
     return items
 
 
+def _loggable_backfill_items(items: list[NewsItem]) -> list[dict[str, str]]:
+    return [
+        {
+            "title": item.title,
+            "url": item.url,
+            "domain": normalize_domain(item.url).removeprefix("www."),
+        }
+        for item in items[:COLLECTED_ITEM_LOG_LIMIT]
+    ]
+
+
 def backfill_news_with_web_search(
     *,
     packet: dict,
     quality: dict,
     settings: Settings,
+    observer: PipelineObserver | None = None,
 ) -> tuple[list[dict], list[dict[str, str]]]:
     if not settings.openai_web_search_enabled:
         logger.info("OpenAI web_search 설정이 꺼져 있어 뉴스 백필은 건너뛸게요.")
@@ -225,6 +239,16 @@ def backfill_news_with_web_search(
         extra_items = _parse_web_news_items(payload)
         citations = _extract_web_citations(response)
         if not extra_items:
+            if observer is not None:
+                observer.log_event(
+                    "web_backfill_result",
+                    before_count=len(packet.get("news", [])),
+                    extra_item_count=0,
+                    merged_count=len(packet.get("news", [])),
+                    citation_count=len(citations),
+                    reason="no_items_parsed",
+                )
+            logger.info("OpenAI 웹 검색을 돌렸지만 새 기사 후보는 찾지 못했어요.")
             return packet.get("news", []), citations
 
         merged_packet = merge_news_packets(
@@ -233,6 +257,16 @@ def backfill_news_with_web_search(
             max_items=settings.max_news_items,
             merge_rank_fn=_merge_rank,
         )
+        if observer is not None:
+            observer.log_event(
+                "web_backfill_result",
+                before_count=len(packet.get("news", [])),
+                extra_item_count=len(extra_items),
+                merged_count=len(merged_packet),
+                citation_count=len(citations),
+                items=_loggable_backfill_items(extra_items),
+                reason="merged",
+            )
         logger.info(
             "OpenAI 웹 검색으로 후보 뉴스 %s건을 더 확인했고, 최종 뉴스는 %s건으로 정리했어요.",
             len(extra_items),
@@ -240,5 +274,7 @@ def backfill_news_with_web_search(
         )
         return merged_packet, citations
     except Exception as exc:
+        if observer is not None:
+            observer.log_event("web_backfill_result", reason="error", detail=str(exc))
         logger.warning("OpenAI 웹 검색으로 뉴스를 보강하는 중 문제가 있었어요: %s", exc)
         return packet.get("news", []), []
