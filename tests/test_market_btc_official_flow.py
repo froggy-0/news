@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+from morning_brief.observability import PipelineObserver
 from morning_brief.data.market import fetch_bitcoin_snapshot
 from morning_brief.data.sources.http_client import HttpFetchError
 from morning_brief.models import BitcoinEtfIssuerSnapshot, MarketPoint
@@ -192,3 +194,32 @@ def test_fetch_bitcoin_snapshot_keeps_pipeline_alive_when_perplexity_etf_parsing
     assert snapshot.official_etf_snapshots == []
     assert snapshot.official_etf_total_btc is None
     assert snapshot.official_etf_daily_flow_btc is None
+
+
+def test_fetch_bitcoin_snapshot_records_empty_official_etf_state(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(
+        "morning_brief.data.market._fetch_btc_spot_point",
+        lambda: MarketPoint(label="BTC-USD", ticker="BTC-USD", price=80_000.0, change_pct=1.2),
+    )
+    monkeypatch.setattr("morning_brief.data.market._fetch_fear_greed", lambda: (60, "Greed"))
+    monkeypatch.setattr(
+        "morning_brief.data.market._safe_stooq_point_and_volume",
+        lambda label, ticker, stooq_symbol=None: (
+            MarketPoint(label=label, ticker=ticker, price=50.0, change_pct=1.0),
+            10,
+        ),
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.market.fetch_official_btc_etf_snapshots",
+        lambda **_: [],
+    )
+
+    observer = PipelineObserver(output_dir=tmp_path / "observability")
+    snapshot = fetch_bitcoin_snapshot(cache_dir=tmp_path, observer=observer)
+
+    assert snapshot.official_etf_snapshots == []
+    state_file = tmp_path / "btc_etf" / "state.json"
+    assert state_file.exists()
+    payload = json.loads(state_file.read_text(encoding="utf-8"))
+    assert payload["reason"] == "empty_snapshots"
+    assert any(event["event"] == "btc_etf_reference_empty" for event in observer.events)

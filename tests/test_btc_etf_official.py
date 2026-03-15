@@ -104,6 +104,21 @@ def test_official_btc_etf_cache_roundtrip(tmp_path: Path):
     assert loaded["BITB"] == snapshots[0]
 
 
+def test_official_btc_etf_cache_state_writes_metadata_file(tmp_path: Path):
+    cache_dir = tmp_path / "btc_etf"
+
+    official.save_official_btc_etf_cache_state(
+        cache_dir,
+        snapshot_count=0,
+        reason="empty_snapshots",
+    )
+
+    payload = json.loads((cache_dir / official.OFFICIAL_BTC_ETF_STATE_FILE).read_text())
+    assert payload["snapshot_count"] == 0
+    assert payload["reason"] == "empty_snapshots"
+    assert payload["fetched_at_utc"].endswith("+00:00")
+
+
 def test_reference_prompt_renders_today_without_breaking_json_example():
     rendered = official._render_reference_prompt(official.date(2026, 3, 14))
 

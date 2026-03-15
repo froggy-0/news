@@ -5,7 +5,7 @@ import json
 import logging
 import re
 from dataclasses import asdict
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -116,6 +116,7 @@ JSON_CODE_BLOCK_RE = re.compile(
     flags=re.DOTALL | re.IGNORECASE,
 )
 RESPONSE_PREVIEW_LEN = 200
+OFFICIAL_BTC_ETF_STATE_FILE = "state.json"
 
 
 def _render_reference_prompt(today: date) -> str:
@@ -743,6 +744,22 @@ def save_official_btc_etf_cache(
     cache_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def save_official_btc_etf_cache_state(
+    cache_dir: Path,
+    *,
+    snapshot_count: int,
+    reason: str,
+) -> None:
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    state_file = cache_dir / OFFICIAL_BTC_ETF_STATE_FILE
+    payload = {
+        "fetched_at_utc": datetime.now(timezone.utc).isoformat(),
+        "snapshot_count": snapshot_count,
+        "reason": reason,
+    }
+    state_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 __all__ = [
     "BitcoinEtfIssuerSnapshot",
     "GBTC_URL",
@@ -754,4 +771,5 @@ __all__ = [
     "parse_gbtc_snapshot",
     "parse_ibit_snapshot",
     "save_official_btc_etf_cache",
+    "save_official_btc_etf_cache_state",
 ]

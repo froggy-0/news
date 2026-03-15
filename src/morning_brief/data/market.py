@@ -17,6 +17,7 @@ from morning_brief.data.sources.btc_etf_official import (
     fetch_official_btc_etf_snapshots,
     load_official_btc_etf_cache,
     save_official_btc_etf_cache,
+    save_official_btc_etf_cache_state,
 )
 from morning_brief.data.sources.coingecko import fetch_btc_usd_price_change
 from morning_brief.data.sources.fred import fetch_macro_points_from_fred
@@ -739,6 +740,7 @@ def _fetch_official_btc_etf_data(
 ]:
     cache_file = _official_btc_etf_cache_file(cache_dir)
     previous_by_ticker = load_official_btc_etf_cache(cache_file)
+    empty_reason = "empty_snapshots"
 
     try:
         snapshots = fetch_official_btc_etf_snapshots(
@@ -752,8 +754,24 @@ def _fetch_official_btc_etf_data(
             exc,
         )
         snapshots = []
+        empty_reason = f"fetch_error:{type(exc).__name__}"
 
     if not snapshots:
+        save_official_btc_etf_cache_state(
+            cache_file.parent,
+            snapshot_count=0,
+            reason=empty_reason,
+        )
+        logger.info(
+            "BTC ETF 공식 스냅샷이 비어 있어 캐시 상태만 남길게요. reason=%s",
+            empty_reason,
+        )
+        if observer is not None:
+            observer.log_event(
+                "btc_etf_reference_empty",
+                cache_dir=str(cache_file.parent),
+                reason=empty_reason,
+            )
         return [], None, None, None, None, []
 
     save_official_btc_etf_cache(cache_file, snapshots)
