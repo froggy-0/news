@@ -16,6 +16,11 @@ from morning_brief.data.news_policy import (
 from morning_brief.models import NewsItem
 
 PERPLEXITY_PROVIDER = "perplexity_search"
+PERPLEXITY_SONAR_PROVIDER = "perplexity_sonar"
+GROK_KEYWORD_PROVIDER = "grok_x_keyword"
+GROK_WEB_PROVIDER = "grok_web_search"
+_PERPLEXITY_PROVIDERS = {PERPLEXITY_PROVIDER, PERPLEXITY_SONAR_PROVIDER}
+_GROK_PROVIDERS = {OFFICIAL_SIGNAL_PROVIDER, GROK_KEYWORD_PROVIDER, GROK_WEB_PROVIDER}
 
 
 def _normalize_url(url: str) -> str:
@@ -143,12 +148,16 @@ def _provider_breakdown(items: list[NewsItem]) -> dict[str, int]:
 
 def _provider_counts(items: list[NewsItem]) -> tuple[int, int, int, dict[str, int]]:
     breakdown = _provider_breakdown(items)
-    perplexity_count = breakdown.get(PERPLEXITY_PROVIDER, 0)
-    official_signal_count = breakdown.get(OFFICIAL_SIGNAL_PROVIDER, 0)
+    perplexity_count = sum(
+        count for provider, count in breakdown.items() if provider in _PERPLEXITY_PROVIDERS
+    )
+    official_signal_count = sum(
+        count for provider, count in breakdown.items() if provider in _GROK_PROVIDERS
+    )
     legacy_count = sum(
         count
         for provider, count in breakdown.items()
-        if provider not in {PERPLEXITY_PROVIDER, OFFICIAL_SIGNAL_PROVIDER}
+        if provider not in _PERPLEXITY_PROVIDERS and provider not in _GROK_PROVIDERS
     )
     return perplexity_count, official_signal_count, legacy_count, breakdown
 

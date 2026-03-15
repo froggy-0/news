@@ -8,6 +8,9 @@ MIN_UNIQUE_NEWS_DOMAINS = 3
 MIN_FRESH_NEWS_ITEMS = 2
 MIN_TOPIC_COVERAGE = 2
 PERPLEXITY_PROVIDER = "perplexity_search"
+PERPLEXITY_SONAR_PROVIDER = "perplexity_sonar"
+GROK_X_KEYWORD_PROVIDER = "grok_x_keyword"
+GROK_WEB_SEARCH_PROVIDER = "grok_web_search"
 OFFICIAL_SIGNAL_PROVIDER = "grok_official_x"
 
 
@@ -82,7 +85,7 @@ def _increment(summary: dict[str, int | set[str]], key: str) -> None:
 
 def _record_provider_counts(item: dict, summary: dict[str, int | set[str]]) -> str:
     provider = str(item.get("provider", "")).strip().lower()
-    if provider == PERPLEXITY_PROVIDER:
+    if provider in {PERPLEXITY_PROVIDER, PERPLEXITY_SONAR_PROVIDER}:
         _increment(summary, "perplexity_item_count")
     if provider == OFFICIAL_SIGNAL_PROVIDER or bool(item.get("official_source")):
         _increment(summary, "official_signal_count")
@@ -103,7 +106,7 @@ def _record_citation_and_explanation_counts(
     if has_explanation:
         _increment(summary, "explained_count")
 
-    if provider != PERPLEXITY_PROVIDER:
+    if provider not in {PERPLEXITY_PROVIDER, PERPLEXITY_SONAR_PROVIDER}:
         return
     if has_citations:
         _increment(summary, "perplexity_citation_backed_count")
