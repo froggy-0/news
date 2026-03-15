@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from morning_brief.observability import PipelineObserver
 from morning_brief.data.market import fetch_bitcoin_snapshot
 from morning_brief.data.sources.http_client import HttpFetchError
 from morning_brief.models import BitcoinEtfIssuerSnapshot, MarketPoint
+from morning_brief.observability import PipelineObserver
 
 
 def _snapshot(
