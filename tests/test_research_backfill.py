@@ -180,6 +180,8 @@ def test_backfill_news_with_web_search_records_merged_result(monkeypatch, tmp_pa
     assert events[0]["items"][0]["domain"] == "reuters.com"
     assert calls[0]["include"] == ["web_search_call.action.sources"]
     assert calls[0]["text"]["format"]["type"] == "json_schema"
+    assert calls[0]["tools"][0]["search_context_size"] == "medium"
+    assert calls[0]["tools"][0]["user_location"]["country"] == "US"
 
 
 def test_backfill_news_with_web_search_records_empty_result(monkeypatch, tmp_path):
@@ -369,6 +371,21 @@ def test_fallback_items_from_citations_derives_title_from_article_url():
 
     assert len(items) == 1
     assert items[0].title == "Fed officials keep rate path open"
+
+
+def test_fallback_items_from_citations_trims_tracking_tokens_and_derives_date():
+    items = rb._fallback_items_from_citations(
+        [
+            {
+                "title": "https://www.wsj.com/livecoverage/cpi-inflation-data-stock-market-03-11-2026/card/treasury-yields-hold-gains-after-inflation-report-uhb6OXQJkFcKOgtsOm7j",
+                "url": "https://www.wsj.com/livecoverage/cpi-inflation-data-stock-market-03-11-2026/card/treasury-yields-hold-gains-after-inflation-report-uhb6OXQJkFcKOgtsOm7j",
+            }
+        ]
+    )
+
+    assert len(items) == 1
+    assert items[0].title == "Treasury yields hold gains after inflation report"
+    assert items[0].published_at.isoformat() == "2026-03-11T00:00:00+00:00"
 
 
 def test_fallback_items_from_citations_filters_partner_and_generic_sec_pages():

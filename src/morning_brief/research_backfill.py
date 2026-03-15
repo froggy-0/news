@@ -7,6 +7,7 @@ import logging
 import re
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlparse
 
 from openai import OpenAI
 
@@ -87,6 +88,11 @@ BACKFILL_SOURCE_EXCLUDE_TITLES = (
 )
 URL_ONLY_RE = re.compile(r"^https?://", re.IGNORECASE)
 URL_WORD_RE = re.compile(r"[a-z]{3,}")
+URL_DATE_PATTERNS = (
+    re.compile(r"/(?P<year>20\d{2})/(?P<month>\d{2})/(?P<day>\d{2})/"),
+    re.compile(r"(?P<month>\d{2})-(?P<day>\d{2})-(?P<year>20\d{2})"),
+)
+TRAILING_TRACKING_TOKEN_RE = re.compile(r"\b[a-z0-9]*\d[a-z0-9]{5,}\b$", re.IGNORECASE)
 
 
 def _needs_web_search_backfill(quality: dict) -> bool:
@@ -263,12 +269,13 @@ def _fallback_items_from_citations(citations: list[dict[str, str]]) -> list[News
             continue
         seen_urls.add(url)
         source_domain = normalize_domain(url).removeprefix("www.")
+        published_at = _published_at_from_article_url(url)
         items.append(
             NewsItem(
                 title=title,
                 url=url,
                 source=source_domain or "Unknown",
-                published_at=None,
+                published_at=published_at,
                 provider="openai_web_search",
                 citations=[url],
             )
@@ -290,9 +297,31 @@ def _title_from_article_url(url: str) -> str:
     if len(words) < 3:
         return ""
     title = " ".join(words).strip()
+    title = TRAILING_TRACKING_TOKEN_RE.sub("", title).strip()
     if not title:
         return ""
     return title[:1].upper() + title[1:]
+
+
+def _published_at_from_article_url(url: str) -> datetime | None:
+    normalized_url = str(url or "").strip()
+    if not normalized_url:
+        return None
+    path = urlparse(normalized_url).path
+    for pattern in URL_DATE_PATTERNS:
+        match = pattern.search(path)
+        if not match:
+            continue
+        try:
+            return datetime(
+                year=int(match.group("year")),
+                month=int(match.group("month")),
+                day=int(match.group("day")),
+                tzinfo=timezone.utc,
+            )
+        except ValueError:
+            return None
+    return None
 
 
 def backfill_news_with_web_search(
@@ -339,10 +368,10 @@ def backfill_news_with_web_search(
                 {
                     "type": "web_search",
                     "filters": {"allowed_domains": ALLOWED_NEWS_DOMAINS},
-                    "search_context_size": "low",
+                    "search_context_size": "medium",
                     "user_location": {
                         "type": "approximate",
-                        "country": "KR",
+                        "country": "US",
                         "timezone": settings.timezone,
                     },
                 }
