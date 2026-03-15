@@ -29,8 +29,15 @@ class Settings:
     prompt_template_version: str
     fred_api_key: str
     perplexity_api_key: str
+    perplexity_use_sonar: bool
+    perplexity_sonar_model: str
+    perplexity_sonar_max_tokens: int
     grok_api_key: str
     grok_model: str
+    grok_x_keyword_search_enabled: bool
+    grok_web_search_enabled: bool
+    grok_x_search_max_items: int
+    grok_web_search_max_items: int
     research_provider: str
     enable_legacy_news_fallback: bool
     enable_official_x_signals: bool
@@ -125,8 +132,21 @@ def load_settings() -> Settings:
         ).strip(),
         fred_api_key=os.getenv("FRED_API_KEY", "").strip(),
         perplexity_api_key=os.getenv("PERPLEXITY_API_KEY", "").strip(),
+        perplexity_use_sonar=_env_bool("PERPLEXITY_USE_SONAR_SUMMARY", False),
+        perplexity_sonar_model=os.getenv("PERPLEXITY_SONAR_MODEL", "sonar").strip(),
+        perplexity_sonar_max_tokens=_env_bounded_int(
+            "PERPLEXITY_SONAR_MAX_TOKENS", default=1500, minimum=500, maximum=4000
+        ),
         grok_api_key=os.getenv("GROK_API_KEY", "").strip(),
-        grok_model=os.getenv("GROK_MODEL", "grok-4.20-beta-latest-non-reasoning").strip(),
+        grok_model=os.getenv("GROK_MODEL", "grok-4-1-fast-non-reasoning").strip(),
+        grok_x_keyword_search_enabled=_env_bool("GROK_X_KEYWORD_SEARCH_ENABLED", False),
+        grok_web_search_enabled=_env_bool("GROK_WEB_SEARCH_ENABLED", False),
+        grok_x_search_max_items=_env_bounded_int(
+            "GROK_X_SEARCH_MAX_ITEMS", default=6, minimum=1, maximum=10
+        ),
+        grok_web_search_max_items=_env_bounded_int(
+            "GROK_WEB_SEARCH_MAX_ITEMS", default=8, minimum=1, maximum=12
+        ),
         research_provider=_env_choice(
             "RESEARCH_PROVIDER",
             default="perplexity",
