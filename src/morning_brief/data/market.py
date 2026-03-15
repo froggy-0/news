@@ -740,6 +740,7 @@ def _fetch_official_btc_etf_data(
 ]:
     cache_file = _official_btc_etf_cache_file(cache_dir)
     previous_by_ticker = load_official_btc_etf_cache(cache_file)
+    previous_snapshots = [previous_by_ticker[ticker] for ticker in sorted(previous_by_ticker)]
     empty_reason = "empty_snapshots"
 
     try:
@@ -757,6 +758,32 @@ def _fetch_official_btc_etf_data(
         empty_reason = f"fetch_error:{type(exc).__name__}"
 
     if not snapshots:
+        if previous_snapshots:
+            save_official_btc_etf_cache_state(
+                cache_file.parent,
+                snapshot_count=len(previous_snapshots),
+                reason=f"{empty_reason}:stale_cache",
+            )
+            logger.info(
+                "BTC ETF 공식 스냅샷을 새로 가져오지 못해 직전 공식 스냅샷 %s건을 이어서 쓸게요. reason=%s",
+                len(previous_snapshots),
+                empty_reason,
+            )
+            if observer is not None:
+                observer.log_event(
+                    "btc_etf_reference_stale_fallback",
+                    cache_dir=str(cache_file.parent),
+                    previous_snapshot_count=len(previous_snapshots),
+                    reason=empty_reason,
+                )
+            return (
+                previous_snapshots,
+                *_summarize_official_btc_etf_snapshots(
+                    snapshots=previous_snapshots,
+                    previous_by_ticker={},
+                    spot_price_usd=spot_price_usd,
+                ),
+            )
         save_official_btc_etf_cache_state(
             cache_file.parent,
             snapshot_count=0,

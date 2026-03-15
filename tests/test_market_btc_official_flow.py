@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from morning_brief.data.market import fetch_bitcoin_snapshot
+from morning_brief.data.sources.btc_etf_official import save_official_btc_etf_cache
 from morning_brief.data.sources.http_client import HttpFetchError
 from morning_brief.models import BitcoinEtfIssuerSnapshot, MarketPoint
 from morning_brief.observability import PipelineObserver
@@ -223,3 +224,54 @@ def test_fetch_bitcoin_snapshot_records_empty_official_etf_state(monkeypatch, tm
     payload = json.loads(state_file.read_text(encoding="utf-8"))
     assert payload["reason"] == "empty_snapshots"
     assert any(event["event"] == "btc_etf_reference_empty" for event in observer.events)
+
+
+def test_fetch_bitcoin_snapshot_uses_stale_official_etf_cache_when_reference_is_empty(
+    monkeypatch, tmp_path: Path
+):
+    monkeypatch.setattr(
+        "morning_brief.data.market._fetch_btc_spot_point",
+        lambda: MarketPoint(label="BTC-USD", ticker="BTC-USD", price=80_000.0, change_pct=1.2),
+    )
+    monkeypatch.setattr("morning_brief.data.market._fetch_fear_greed", lambda: (60, "Greed"))
+    monkeypatch.setattr(
+        "morning_brief.data.market._safe_stooq_point_and_volume",
+        lambda label, ticker, stooq_symbol=None: (
+            MarketPoint(label=label, ticker=ticker, price=50.0, change_pct=1.0),
+            10,
+        ),
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.market.fetch_official_btc_etf_snapshots",
+        lambda **_: [],
+    )
+
+    cache_file = tmp_path / "btc_etf" / "official_snapshots.json"
+    save_official_btc_etf_cache(
+        cache_file,
+        [
+            BitcoinEtfIssuerSnapshot(
+                ticker="IBIT",
+                issuer="iShares",
+                source_url="https://www.ishares.com/us/products/333011/ishares-bitcoin-trust-etf",
+                as_of="03/14/2026",
+                shares_outstanding=10,
+                daily_volume=2,
+                aum_usd=100.0,
+                total_btc=1.5,
+                bitcoin_per_share=0.15,
+            )
+        ],
+    )
+
+    observer = PipelineObserver(output_dir=tmp_path / "observability")
+    snapshot = fetch_bitcoin_snapshot(cache_dir=tmp_path, observer=observer)
+
+    assert len(snapshot.official_etf_snapshots) == 1
+    assert snapshot.official_etf_snapshots[0].ticker == "IBIT"
+    assert snapshot.official_etf_total_btc == 1.5
+    assert snapshot.official_etf_daily_flow_btc is None
+    state_file = tmp_path / "btc_etf" / "state.json"
+    payload = json.loads(state_file.read_text(encoding="utf-8"))
+    assert payload["reason"] == "empty_snapshots:stale_cache"
+    assert any(event["event"] == "btc_etf_reference_stale_fallback" for event in observer.events)

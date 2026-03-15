@@ -583,8 +583,7 @@ def _snapshot_from_item(item: dict[str, Any]) -> BitcoinEtfIssuerSnapshot:
     )
 
 
-def _parse_reference_snapshot_response(payload: dict[str, Any]) -> list[BitcoinEtfIssuerSnapshot]:
-    text = _extract_response_text(payload)
+def _parse_reference_snapshot_text(text: str) -> list[BitcoinEtfIssuerSnapshot]:
     decoded = _decode_reference_snapshot_json(text)
     if not isinstance(decoded, dict):
         raise HttpFetchError("Perplexity ETF 참조 JSON 구조가 예상과 달라요.")
@@ -616,6 +615,11 @@ def _parse_reference_snapshot_response(payload: dict[str, Any]) -> list[BitcoinE
 
     snapshots.sort(key=lambda item: item.ticker)
     return snapshots
+
+
+def _parse_reference_snapshot_response(payload: dict[str, Any]) -> list[BitcoinEtfIssuerSnapshot]:
+    text = _extract_response_text(payload)
+    return _parse_reference_snapshot_text(text)
 
 
 def _request_reference_snapshots(
@@ -680,7 +684,15 @@ def _request_reference_snapshots(
         if not isinstance(payload, dict):
             raise HttpFetchError("Perplexity ETF 참조 응답 구조가 예상과 달라요.")
 
-        return _parse_reference_snapshot_response(payload)
+        text = _extract_response_text(payload)
+        snapshots = _parse_reference_snapshot_text(text)
+        if observer is not None and not snapshots:
+            observer.log_event(
+                "btc_etf_reference_parse_empty",
+                response_preview=_response_preview(text),
+                source_domain_count=len(BTC_ETF_REFERENCE_DOMAINS),
+            )
+        return snapshots
 
     snapshots = execute_with_provider_retry(
         provider=PERPLEXITY_PROVIDER,

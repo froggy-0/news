@@ -5,6 +5,7 @@ from pathlib import Path
 
 from morning_brief.data.sources import btc_etf_official as official
 from morning_brief.models import BitcoinEtfIssuerSnapshot
+from morning_brief.observability import PipelineObserver
 
 IBIT_SAMPLE = """
 Net Assets of Fund as of Mar 11, 2026 $53,660,350,151
@@ -376,3 +377,45 @@ def test_request_reference_snapshots_uses_json_schema_response_format(monkeypatc
             "schema": official.BTC_ETF_REFERENCE_RESPONSE_SCHEMA,
         },
     }
+
+
+def test_request_reference_snapshots_records_parse_empty_preview(monkeypatch, tmp_path):
+    observer = PipelineObserver(output_dir=tmp_path)
+
+    class FakeResponse:
+        def model_dump(self):
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps({"snapshots": []}),
+                        }
+                    }
+                ]
+            }
+
+    class FakeCompletions:
+        def create(self, **kwargs):
+            return FakeResponse()
+
+    class FakeChat:
+        def __init__(self):
+            self.completions = FakeCompletions()
+
+    class FakeClient:
+        def __init__(self):
+            self.chat = FakeChat()
+
+    monkeypatch.setattr(official, "_build_client", lambda api_key: FakeClient())
+
+    snapshots = official.fetch_official_btc_etf_snapshots(
+        api_key="pplx-test-key",
+        observer=observer,
+    )
+
+    assert snapshots == []
+    events = [
+        event for event in observer.events if event["event"] == "btc_etf_reference_parse_empty"
+    ]
+    assert len(events) == 1
+    assert '"snapshots": []' in events[0]["response_preview"]
