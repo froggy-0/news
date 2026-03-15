@@ -4,6 +4,7 @@ import json
 from types import SimpleNamespace
 
 from morning_brief.briefing import (
+    _brief_structure_issues,
     _append_reference_block,
     _fallback_brief,
     _improve_readability_spacing,
@@ -143,6 +144,53 @@ def test_fallback_brief_mentions_official_btc_etf_flow_when_available():
     assert "IBIT, BITB, GBTC 합산 보유량" in briefing
     assert "1,234.56 BTC" in briefing
     assert "직전 스냅샷 대비 순유입" in briefing
+
+
+def test_brief_structure_issues_accepts_layer_two_bullets_outside_metrics_label():
+    brief = """Morning Market Brief (2026-03-14)
+
+1. LAYER 1 | 오늘 한줄 판단
+한줄 결론
+- 오늘은 관망 국면입니다.
+
+2. LAYER 2 | 주요 뉴스
+왜 중요한지
+- Nvidia가 AI 투자 기대를 자극했습니다. | 반도체 투자 심리에 직접 연결됩니다. | 국내 투자자는 반도체주 반응을 같이 볼 필요가 있습니다.
+- 비트코인 ETF 흐름이 다시 개선됐습니다. | 수급 심리 회복 여부를 판단하는 재료입니다. | 국내 투자자는 관련주 변동성도 함께 볼 필요가 있습니다.
+
+3. LAYER 3 | 종목 브리핑
+쉽게 보면
+- NVDA는 AI 수요 기대가 이어지며 1.20% 상승했습니다. [출처: Stooq]
+- AMD는 반도체 내 종목별 차이가 나타나며 0.80% 하락했습니다. [출처: Stooq]
+"""
+
+    issues = _brief_structure_issues(brief)
+
+    assert not any("LAYER 2 bullet 수가 부족해요" in issue for issue in issues)
+    assert not any("LAYER 3 종목 bullet 수가 부족해요" in issue for issue in issues)
+
+
+def test_brief_structure_issues_does_not_fail_only_for_missing_macro_subheading():
+    brief = """Morning Market Brief (2026-03-14)
+
+1. LAYER 1 | 오늘 한줄 판단
+핵심 판단
+- 오늘은 관망 국면입니다.
+
+2. LAYER 2 | 주요 뉴스
+핵심 이슈
+- Nvidia 투자 확대 | AI 투자 기대를 자극했습니다. | 국내 투자자는 반도체주 반응을 같이 볼 필요가 있습니다.
+- 비트코인 ETF 유입 | 수급 심리를 판단하는 재료입니다. | 국내 투자자는 관련주 변동성도 함께 볼 필요가 있습니다.
+
+3. LAYER 3 | 종목 브리핑
+주요 지표
+- NVDA는 AI 투자 기대가 이어지며 1.20% 상승했습니다. [출처: Stooq]
+- AMD는 종목별 차이가 나타나며 0.80% 하락했습니다. [출처: Stooq]
+"""
+
+    issues = _brief_structure_issues(brief)
+
+    assert "LAYER 3 안에 거시 지표 소제목이 없어요." not in issues
 
 
 def test_fallback_brief_marks_previous_values_and_appends_footer_notes():

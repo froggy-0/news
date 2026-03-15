@@ -200,6 +200,17 @@ def _count_metric_bullets(text: str, *, stop_at_label: str | None = None) -> int
     return count
 
 
+def _count_section_bullets(text: str, *, stop_at_label: str | None = None) -> int:
+    count = 0
+    for raw_line in improve_readability_spacing(text).splitlines():
+        stripped = raw_line.strip()
+        if stop_at_label is not None and stripped == stop_at_label:
+            break
+        if stripped.startswith("- "):
+            count += 1
+    return count
+
+
 def _brief_structure_issues(text: str) -> list[str]:
     _, _, sections = extract_brief_structure(text)
     section_map = {heading: content for heading, content in sections}
@@ -213,6 +224,8 @@ def _brief_structure_issues(text: str) -> list[str]:
     if layer_two:
         layer_two_groups = split_section_groups(layer_two)
         layer_two_bullets = _count_metric_bullets(layer_two_groups["metrics"][1])
+        if layer_two_bullets == 0:
+            layer_two_bullets = _count_section_bullets(layer_two)
         if layer_two_bullets < MIN_LAYER_TWO_BULLETS:
             issues.append(
                 f"LAYER 2 bullet 수가 부족해요. count={layer_two_bullets}, expected>={MIN_LAYER_TWO_BULLETS}"
@@ -225,12 +238,12 @@ def _brief_structure_issues(text: str) -> list[str]:
             layer_three_groups["metrics"][1],
             stop_at_label="거시 지표",
         )
+        if layer_three_bullets == 0:
+            layer_three_bullets = _count_section_bullets(layer_three, stop_at_label="거시 지표")
         if layer_three_bullets < MIN_LAYER_THREE_BULLETS:
             issues.append(
                 f"LAYER 3 종목 bullet 수가 부족해요. count={layer_three_bullets}, expected>={MIN_LAYER_THREE_BULLETS}"
             )
-        if "거시 지표" not in layer_three:
-            issues.append("LAYER 3 안에 거시 지표 소제목이 없어요.")
 
     return issues
 
