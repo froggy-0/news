@@ -79,6 +79,8 @@ EXCLUDE_URL_PATTERNS = (
     "/data/",
     "/summary?",
     "/summary/",
+    "/markets/companies/",
+    "/markets/quote/",
     "apps.apple.com",
     "podcasts.apple.com",
     "tv.apple.com",
@@ -147,15 +149,16 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
         name="macro",
         query=(
             "Latest U.S. macro or policy news article published within the last 24 hours about "
-            "the Federal Reserve, Treasury yields, the dollar, inflation, or volatility. Prefer "
-            "reliable English-language reporting, news analysis, and official releases. Exclude "
-            "market data pages, live blogs, summary pages, release index pages, and homepages."
+            "the Federal Reserve, Treasury yields, inflation, jobs, the dollar, or volatility. "
+            "Prefer reliable English-language reporting, news analysis, and official policy "
+            "releases that are directly about a new development. Exclude market data pages, live "
+            "blogs, summary pages, release index pages, and homepages."
         ),
         retry_query=(
-            "Latest Federal Reserve, Treasury yields, inflation, or dollar news article or "
-            "official release published within the last week that is still moving U.S. markets. "
-            "Prefer reliable English-language reporting and official releases. Exclude market "
-            "data pages, summary pages, release index pages, and homepages."
+            "Latest Federal Reserve, Treasury yields, inflation, jobs, or dollar news article "
+            "published within the last week that is still moving U.S. markets. Prefer reliable "
+            "English-language reporting and direct official policy releases. Exclude market data "
+            "pages, summary pages, release index pages, and homepages."
         ),
         domain_filter=(
             "reuters.com",
@@ -170,8 +173,9 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             "wsj.com",
             FT_CONTENT_URL_PREFIX,
             "cnbc.com",
-            "federalreserve.gov",
-            "home.treasury.gov",
+            "https://www.federalreserve.gov/newsevents/pressreleases/",
+            "https://www.federalreserve.gov/newsevents/speech/",
+            "https://home.treasury.gov/news/press-releases",
         ),
         retry_recency_filter="week",
     ),
@@ -179,15 +183,16 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
         name="us_equity",
         query=(
             "Latest U.S. stock market article published within the last 24 hours about the S&P "
-            "500, Nasdaq, semiconductors, market breadth, or sector rotation. Prefer reliable "
-            "English-language reporting and news analysis. Exclude market data pages and summary "
+            "500, Nasdaq, futures, semiconductors, market breadth, or sector rotation. Prefer "
+            "reliable English-language reporting and news analysis focused on that session's "
+            "rally, selloff, rotation, or risk sentiment. Exclude market data pages and summary "
             "pages."
         ),
         retry_query=(
-            "Latest Nasdaq, S&P 500, semiconductor, or market breadth article published within "
-            "the last week that is still shaping U.S. equity sentiment. Prefer reliable "
-            "English-language reporting, exchange coverage, and news analysis. Exclude market "
-            "data pages and summary pages."
+            "Latest Nasdaq, S&P 500, futures, semiconductor, market breadth, or sector rotation "
+            "article published within the last week that is still shaping U.S. equity sentiment. "
+            "Prefer reliable English-language reporting, exchange coverage, and news analysis. "
+            "Exclude market data pages and summary pages."
         ),
         domain_filter=(
             "reuters.com",
@@ -218,7 +223,8 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             "Latest AI infrastructure, data center, semiconductor, or big tech capex article or "
             "company newsroom release published within the last week. Prefer reliable "
             "English-language reporting, news analysis, and company IR/newsroom. Exclude market "
-            "data pages, summary pages, category pages, and archive pages."
+            "data pages, stock quote pages, summary pages, category pages, archive pages, and "
+            "podcast pages."
         ),
         domain_filter=(
             "reuters.com",
@@ -233,16 +239,15 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             "wsj.com",
             FT_CONTENT_URL_PREFIX,
             "cnbc.com",
-            "investor.nvidia.com",
-            "news.microsoft.com",
-            "apple.com",
-            "aboutamazon.com",
-            "blog.google",
-            "about.fb.com",
-            "ir.amd.com",
-            "tsmc.com",
-            "asml.com",
-            "broadcom.com",
+            "https://investor.nvidia.com",
+            "https://news.microsoft.com/source/",
+            "https://www.apple.com/newsroom/",
+            "https://www.aboutamazon.com/news/",
+            "https://blog.google/",
+            "https://about.fb.com/news/",
+            "https://ir.amd.com/news-events/press-releases",
+            "https://www.tsmc.com/english/news-events/press-releases",
+            "https://www.asml.com/en/news/press-releases",
         ),
         retry_recency_filter="week",
     ),
@@ -257,8 +262,8 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
         retry_query=(
             "Latest spot bitcoin ETF flow, issuer update, or bitcoin regulation article or "
             "official release published within the last week. Prefer reliable English-language "
-            "reporting, ETF issuers, regulators, and news analysis. Exclude market data pages "
-            "summary pages, ETF product pages, and issuer landing pages."
+            "reporting, regulators, and news analysis. Exclude market data pages, summary pages, "
+            "ETF product pages, issuer landing pages, and newsroom listing pages."
         ),
         domain_filter=(
             "reuters.com",
@@ -276,10 +281,7 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             FT_CONTENT_URL_PREFIX,
             "cnbc.com",
             "coindesk.com",
-            "sec.gov",
-            "ishares.com",
-            "bitbetf.com",
-            "etfs.grayscale.com",
+            "https://www.sec.gov/newsroom/press-releases/",
         ),
         retry_recency_filter="week",
     ),
@@ -672,6 +674,9 @@ def _is_topic_landing_page(*, topic: str, url: str, title: str) -> bool:
     if topic == "ai_bigtech" and domain_matches(domain, "news.broadcom.com"):
         if path in BROADCOM_INDEX_PATHS or path.startswith("/category/"):
             return True
+    if topic == "ai_bigtech" and domain_matches(domain, "reuters.com"):
+        if path in {"/business/tech-ai", "/business/tech-ai/"}:
+            return True
 
     if topic == "bitcoin":
         if domain_matches(domain, "ishares.com") and path.startswith("/us/products/"):
@@ -679,6 +684,12 @@ def _is_topic_landing_page(*, topic: str, url: str, title: str) -> bool:
         if domain_matches(domain, "bitbetf.com") and path.startswith("/fund/"):
             return True
         if domain_matches(domain, "etfs.grayscale.com") and path.count("/") <= 1:
+            return True
+        if domain_matches(domain, "sec.gov") and path in {
+            "/newsroom",
+            "/newsroom/whats-new",
+            "/newsroom/press-releases",
+        }:
             return True
         if (
             "ethereum trust etf" in normalized_title

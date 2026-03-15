@@ -541,6 +541,51 @@ def test_parse_results_filters_broadcom_category_and_archive_pages():
     )
 
 
+def test_parse_results_filters_reuters_quote_and_topic_index_pages():
+    ai_topic = ps.SearchTopic(
+        name="ai_bigtech",
+        query="ai query",
+        retry_query="",
+        domain_filter=("reuters.com",),
+    )
+    equity_topic = ps.SearchTopic(
+        name="us_equity",
+        query="equity query",
+        retry_query="",
+        domain_filter=("reuters.com",),
+    )
+
+    ai_items = ps._parse_results(
+        payload={
+            "results": [
+                {
+                    "title": "AIの進化と社会 | 最新の自動車産業の未来ニュース - ロイター",
+                    "url": "https://www.reuters.com/business/tech-ai/",
+                    "snippet": "Topic landing page.",
+                    "date": "2026-03-13",
+                }
+            ]
+        },
+        topic=ai_topic,
+    )
+    equity_items = ps._parse_results(
+        payload={
+            "results": [
+                {
+                    "title": "NVDA.O - | Stock Price & Latest News",
+                    "url": "https://www.reuters.com/markets/companies/NVDA.O",
+                    "snippet": "Quote page.",
+                    "date": "2026-03-13",
+                }
+            ]
+        },
+        topic=equity_topic,
+    )
+
+    assert ai_items == []
+    assert equity_items == []
+
+
 def test_parse_results_filters_bitcoin_etf_product_pages():
     topic = ps.SearchTopic(
         name="bitcoin",
@@ -585,6 +630,38 @@ def test_parse_results_filters_bitcoin_etf_product_pages():
     assert (
         items[0].url == "https://www.reuters.com/world/us/bitcoin-etf-inflows-stay-firm-2026-03-13/"
     )
+
+
+def test_parse_results_filters_sec_newsroom_listings_for_bitcoin():
+    topic = ps.SearchTopic(
+        name="bitcoin",
+        query="bitcoin query",
+        retry_query="",
+        domain_filter=("sec.gov",),
+    )
+
+    items = ps._parse_results(
+        payload={
+            "results": [
+                {
+                    "title": "Press Releases - SEC.gov",
+                    "url": "https://www.sec.gov/newsroom/press-releases",
+                    "snippet": "Listing page.",
+                    "date": "2026-03-13",
+                },
+                {
+                    "title": "SEC updates timeline for spot bitcoin ETF filing review",
+                    "url": "https://www.sec.gov/newsroom/press-releases/2026-42",
+                    "snippet": "Valid press release.",
+                    "date": "2026-03-13",
+                },
+            ]
+        },
+        topic=topic,
+    )
+
+    assert len(items) == 1
+    assert items[0].url == "https://www.sec.gov/newsroom/press-releases/2026-42"
 
 
 def test_fetch_news_from_perplexity_records_raw_candidates_when_everything_is_filtered(
