@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlparse
 
@@ -108,6 +108,7 @@ EXCLUDE_TITLE_PATTERNS = (
 NON_ENGLISH_TITLE_PATTERN = re.compile("[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 DATE_ONLY_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MINIMUM_NEWS_TITLE_LENGTH = 10
+INTERMEDIATE_LOOKBACK_DAYS = 2
 FEDERAL_RESERVE_INDEX_PATHS = {
     "/",
     "/newsevents.htm",
@@ -135,6 +136,7 @@ class SearchTopic:
     retry_query: str
     domain_filter: tuple[str, ...]
     recency_filter: str = "day"
+    retry_range_days: int | None = INTERMEDIATE_LOOKBACK_DAYS
     retry_domain_filter: tuple[str, ...] | None = None
     retry_recency_filter: str | None = None
 
@@ -354,6 +356,10 @@ def _build_client(api_key: str) -> Perplexity:
     )
 
 
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def _usage_field(container: object, *keys: str) -> object | None:
     current = container
     for key in keys:
@@ -503,7 +509,9 @@ def _search_once(
     client: Perplexity,
     query: str,
     domain_filter: tuple[str, ...],
-    recency_filter: str,
+    recency_filter: str | None,
+    search_after_date_filter: str | None = None,
+    search_before_date_filter: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, int | None], bool]:
     unavailable_reason = disabled_reason(PERPLEXITY_PROVIDER)
     if unavailable_reason:
@@ -514,12 +522,21 @@ def _search_once(
 
     def perform_search() -> tuple[dict[str, Any], dict[str, int | None], bool]:
         try:
+            request_kwargs: dict[str, object] = {
+                "query": query,
+                "max_results": SEARCH_MAX_RESULTS,
+                "search_domain_filter": list(domain_filter),
+                "country": "US",
+            }
+            if recency_filter:
+                request_kwargs["search_recency_filter"] = recency_filter
+            if search_after_date_filter:
+                request_kwargs["search_after_date_filter"] = search_after_date_filter
+            if search_before_date_filter:
+                request_kwargs["search_before_date_filter"] = search_before_date_filter
+
             response = client.search.create(
-                query=query,
-                max_results=SEARCH_MAX_RESULTS,
-                search_domain_filter=list(domain_filter),
-                search_recency_filter=recency_filter,
-                country="US",
+                **request_kwargs,
             )
         except (RateLimitError, APITimeoutError, APIConnectionError, APIStatusError) as exc:
             raise _to_http_fetch_error(exc) from exc
@@ -562,12 +579,18 @@ def _search_once(
     )
 
 
-def _parse_results(*, payload: dict[str, Any], topic: SearchTopic) -> list[NewsItem]:
+def _parse_results(
+    *,
+    payload: dict[str, Any],
+    topic: SearchTopic,
+    allowed_domains: tuple[str, ...] | None = None,
+) -> list[NewsItem]:
     results = payload.get("results", [])
     if not isinstance(results, list):
         return []
 
     items: list[NewsItem] = []
+    domain_allowlist = allowed_domains or topic.domain_filter
     for raw in results[:TOPIC_RESULT_LIMIT]:
         if not isinstance(raw, dict):
             continue
@@ -577,7 +600,7 @@ def _parse_results(*, payload: dict[str, Any], topic: SearchTopic) -> list[NewsI
         if (
             not title
             or not url
-            or not _is_allowed_domain(url, topic.domain_filter)
+            or not _is_allowed_domain(url, domain_allowlist)
             or _is_disallowed_market_data_result(title=title, url=url)
             or _is_topic_landing_page(topic=topic.name, url=url, title=title)
             or _is_invalid_news_title(title)
@@ -620,6 +643,12 @@ def _is_invalid_news_title(title: str) -> bool:
     if len(normalized_title) < MINIMUM_NEWS_TITLE_LENGTH:
         return True
     return bool(NON_ENGLISH_TITLE_PATTERN.search(normalized_title))
+
+
+def _search_date_range(days_back: int) -> tuple[str, str]:
+    now = _utc_now()
+    after_dt = now - timedelta(days=days_back)
+    return after_dt.strftime("%m/%d/%Y"), now.strftime("%m/%d/%Y")
 
 
 def _normalized_url_path(url: str) -> str:
@@ -790,28 +819,95 @@ def _search_topic_items(
         usage_present=usage_present,
         result_count=total_result_count,
     )
-    topic_items = _parse_results(payload=payload, topic=topic)
+    topic_items = _dedupe_topic_items(
+        _parse_results(payload=payload, topic=topic, allowed_domains=topic.domain_filter)
+    )
     if len(topic_items) >= TOPIC_RESULT_TARGET or not topic.retry_query:
         return topic_items, total_result_count, raw_items
 
-    retry_payload, retry_usage, retry_usage_present = _search_once(
+    if topic.retry_range_days:
+        search_after_date_filter, search_before_date_filter = _search_date_range(
+            topic.retry_range_days
+        )
+        if observer is not None:
+            observer.log_event(
+                "perplexity_search_widened",
+                topic=topic.name,
+                stage="date_range_retry",
+                search_after_date_filter=search_after_date_filter,
+                search_before_date_filter=search_before_date_filter,
+                reason="insufficient_24h_results",
+            )
+        retry_payload, retry_usage, retry_usage_present = _search_once(
+            client=client,
+            query=topic.retry_query,
+            domain_filter=topic.domain_filter,
+            recency_filter=None,
+            search_after_date_filter=search_after_date_filter,
+            search_before_date_filter=search_before_date_filter,
+        )
+        retry_results = retry_payload.get("results", [])
+        retry_result_count = len(retry_results) if isinstance(retry_results, list) else 0
+        raw_items.extend(_loggable_raw_results(retry_results))
+        _record_perplexity_usage(
+            observer=observer,
+            query=topic.retry_query,
+            usage=retry_usage,
+            usage_present=retry_usage_present,
+            result_count=retry_result_count,
+        )
+        topic_items = _dedupe_topic_items(
+            topic_items
+            + _parse_results(
+                payload=retry_payload, topic=topic, allowed_domains=topic.domain_filter
+            )
+        )
+        total_result_count += retry_result_count
+        if len(topic_items) >= TOPIC_RESULT_TARGET:
+            return topic_items, total_result_count, raw_items
+
+    if observer is not None:
+        observer.log_event(
+            "perplexity_search_widened",
+            topic=topic.name,
+            stage="broad_retry",
+            recency_filter=topic.retry_recency_filter or topic.recency_filter,
+            reason="insufficient_recent_results_after_date_retry",
+        )
+    broad_payload, broad_usage, broad_usage_present = _search_once(
         client=client,
         query=topic.retry_query,
         domain_filter=topic.retry_domain_filter or topic.domain_filter,
         recency_filter=topic.retry_recency_filter or topic.recency_filter,
     )
-    retry_results = retry_payload.get("results", [])
-    retry_result_count = len(retry_results) if isinstance(retry_results, list) else 0
-    raw_items.extend(_loggable_raw_results(retry_results))
+    broad_results = broad_payload.get("results", [])
+    broad_result_count = len(broad_results) if isinstance(broad_results, list) else 0
+    raw_items.extend(_loggable_raw_results(broad_results))
     _record_perplexity_usage(
         observer=observer,
         query=topic.retry_query,
-        usage=retry_usage,
-        usage_present=retry_usage_present,
-        result_count=retry_result_count,
+        usage=broad_usage,
+        usage_present=broad_usage_present,
+        result_count=broad_result_count,
     )
-    topic_items.extend(_parse_results(payload=retry_payload, topic=topic))
-    return topic_items, total_result_count + retry_result_count, raw_items
+    topic_items = _dedupe_topic_items(
+        topic_items
+        + _parse_results(
+            payload=broad_payload,
+            topic=topic,
+            allowed_domains=topic.retry_domain_filter or topic.domain_filter,
+        )
+    )
+    return topic_items, total_result_count + broad_result_count, raw_items
+
+
+def _dedupe_topic_items(items: list[NewsItem]) -> list[NewsItem]:
+    deduped: dict[tuple[str, str], NewsItem] = {}
+    for item in items:
+        key = (item.url.strip().lower(), item.title.strip().lower())
+        if key not in deduped:
+            deduped[key] = item
+    return list(deduped.values())
 
 
 def _record_perplexity_usage(

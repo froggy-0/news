@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from morning_brief.data.sources import perplexity_search as ps
 from morning_brief.data.sources import provider_runtime
 from morning_brief.data.sources.http_client import HttpFetchError
@@ -100,6 +102,7 @@ def test_fetch_news_from_perplexity_calls_search_api_with_expected_payload(monke
 
 def test_fetch_news_from_perplexity_retries_with_topic_retry_query(monkeypatch):
     calls = []
+    monkeypatch.setattr(ps, "_utc_now", lambda: datetime(2026, 3, 15, 9, 0, tzinfo=timezone.utc))
 
     monkeypatch.setattr(
         ps,
@@ -154,12 +157,76 @@ def test_fetch_news_from_perplexity_retries_with_topic_retry_query(monkeypatch):
     assert [call["query"] for call in calls] == ["bitcoin query", "bitcoin retry"]
     assert calls[0]["search_domain_filter"] == ["coindesk.com"]
     assert calls[0]["search_recency_filter"] == "day"
-    assert calls[1]["search_domain_filter"] == ["coindesk.com", "sec.gov"]
-    assert calls[1]["search_recency_filter"] == "week"
+    assert calls[1]["search_domain_filter"] == ["coindesk.com"]
+    assert "search_recency_filter" not in calls[1]
+    assert calls[1]["search_after_date_filter"] == "03/13/2026"
+    assert calls[1]["search_before_date_filter"] == "03/15/2026"
     assert len(items) == 2
     assert items[0].topic == "bitcoin"
     assert items[1].why_it_matters
     assert items[0].published_at.isoformat() == "2026-03-13T12:00:00+00:00"
+
+
+def test_fetch_news_from_perplexity_uses_broad_retry_after_date_retry(monkeypatch, tmp_path):
+    calls = []
+    observer = PipelineObserver(output_dir=tmp_path)
+    monkeypatch.setattr(ps, "_utc_now", lambda: datetime(2026, 3, 15, 9, 0, tzinfo=timezone.utc))
+    monkeypatch.setattr(
+        ps,
+        "TOPIC_SPECS",
+        (
+            ps.SearchTopic(
+                name="bitcoin",
+                query="bitcoin query",
+                retry_query="bitcoin retry",
+                domain_filter=("coindesk.com",),
+                retry_domain_filter=("coindesk.com", "sec.gov"),
+                retry_recency_filter="week",
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        ps,
+        "_build_client",
+        lambda api_key: _Client(
+            [
+                _SDKResponse({"results": []}),
+                _SDKResponse({"results": []}),
+                _SDKResponse(
+                    {
+                        "results": [
+                            {
+                                "title": "SEC clarifies timeline for spot bitcoin ETF filing",
+                                "url": "https://www.sec.gov/newsroom/press-releases/2026-42",
+                                "snippet": "SEC update",
+                                "date": "2026-03-14T03:00:00Z",
+                            }
+                        ]
+                    }
+                ),
+            ],
+            calls,
+        ),
+    )
+
+    items = ps.fetch_news_from_perplexity(
+        max_items=5,
+        api_key="pplx-test-key",
+        observer=observer,
+    )
+
+    assert [call["query"] for call in calls] == ["bitcoin query", "bitcoin retry", "bitcoin retry"]
+    assert calls[0]["search_recency_filter"] == "day"
+    assert calls[1]["search_after_date_filter"] == "03/13/2026"
+    assert calls[1]["search_before_date_filter"] == "03/15/2026"
+    assert calls[2]["search_domain_filter"] == ["coindesk.com", "sec.gov"]
+    assert calls[2]["search_recency_filter"] == "week"
+    assert len(items) == 1
+    assert items[0].url == "https://www.sec.gov/newsroom/press-releases/2026-42"
+    widen_events = [
+        event for event in observer.events if event["event"] == "perplexity_search_widened"
+    ]
+    assert [event["stage"] for event in widen_events] == ["date_range_retry", "broad_retry"]
 
 
 def test_fetch_news_from_perplexity_filters_unallowed_domain(monkeypatch):
