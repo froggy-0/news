@@ -97,16 +97,18 @@ def test_backfill_news_with_web_search_is_disabled_when_setting_is_off(monkeypat
 
 
 class _FakeResponsesAPI:
-    def __init__(self, response):
+    def __init__(self, response, calls=None):
         self._response = response
+        self._calls = calls if calls is not None else []
 
     def create(self, **kwargs):
+        self._calls.append(kwargs)
         return self._response
 
 
 class _FakeOpenAIClient:
-    def __init__(self, response):
-        self.responses = _FakeResponsesAPI(response)
+    def __init__(self, response, calls=None):
+        self.responses = _FakeResponsesAPI(response, calls)
 
 
 def test_backfill_news_with_web_search_records_merged_result(monkeypatch, tmp_path):
@@ -144,6 +146,7 @@ def test_backfill_news_with_web_search_records_merged_result(monkeypatch, tmp_pa
         "unique_news_domains": 1,
         "fresh_news_count": 0,
     }
+    calls = []
     response = SimpleNamespace(
         output_text=(
             '{"items":[{"title":"Fed officials keep rate path open",'
@@ -153,7 +156,7 @@ def test_backfill_news_with_web_search_records_merged_result(monkeypatch, tmp_pa
         output=[],
     )
 
-    monkeypatch.setattr(rb, "OpenAI", lambda api_key: _FakeOpenAIClient(response))
+    monkeypatch.setattr(rb, "OpenAI", lambda api_key: _FakeOpenAIClient(response, calls))
     monkeypatch.setattr(
         rb,
         "render_web_search_prompts",
@@ -175,6 +178,8 @@ def test_backfill_news_with_web_search_records_merged_result(monkeypatch, tmp_pa
     assert events[0]["reason"] == "merged"
     assert events[0]["extra_item_count"] == 1
     assert events[0]["items"][0]["domain"] == "reuters.com"
+    assert calls[0]["include"] == ["web_search_call.action.sources"]
+    assert calls[0]["text"]["format"]["type"] == "json_schema"
 
 
 def test_backfill_news_with_web_search_records_empty_result(monkeypatch, tmp_path):
@@ -224,3 +229,26 @@ def test_backfill_news_with_web_search_records_empty_result(monkeypatch, tmp_pat
     assert len(events) == 1
     assert events[0]["reason"] == "no_items_parsed"
     assert events[0]["extra_item_count"] == 0
+    assert events[0]["output_preview"] == '{"items":[]}'
+
+
+def test_extract_web_citations_reads_web_search_call_sources():
+    response = SimpleNamespace(
+        output=[
+            SimpleNamespace(
+                type="web_search_call",
+                action=SimpleNamespace(
+                    sources=[
+                        SimpleNamespace(
+                            title="Reuters",
+                            url="https://www.reuters.com/markets/example",
+                        )
+                    ]
+                ),
+            )
+        ]
+    )
+
+    citations = _extract_web_citations(response)
+
+    assert citations == [{"title": "Reuters", "url": "https://www.reuters.com/markets/example"}]

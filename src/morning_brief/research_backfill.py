@@ -41,6 +41,29 @@ ALLOWED_NEWS_DOMAINS = [
 ]
 
 JSON_BLOCK_RE = re.compile(r"```(?:json)?\s*(\{.*\})\s*```", re.DOTALL)
+WEB_SEARCH_OUTPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "items": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "title": {"type": "string"},
+                    "url": {"type": "string"},
+                    "source": {"type": "string"},
+                    "published_at": {"type": "string"},
+                    "why_it_matters": {"type": "string"},
+                },
+                "required": ["title", "url", "source", "published_at", "why_it_matters"],
+            },
+        }
+    },
+    "required": ["items"],
+}
 
 
 def _needs_web_search_backfill(quality: dict) -> bool:
@@ -115,6 +138,21 @@ def _extract_web_citations(response: object) -> list[dict[str, str]]:
     seen: set[tuple[str, str]] = set()
 
     for item in getattr(response, "output", []) or []:
+        if getattr(item, "type", "") == "web_search_call":
+            action = getattr(item, "action", None)
+            sources = getattr(action, "sources", None)
+            if isinstance(sources, list):
+                for source in sources:
+                    url = str(getattr(source, "url", "") or "").strip()
+                    title = str(getattr(source, "title", "") or "").strip()
+                    if not url:
+                        continue
+                    key = (title, url)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    citations.append({"title": title or url, "url": url})
+            continue
         if getattr(item, "type", "") != "message":
             continue
         for content in getattr(item, "content", []) or []:
@@ -220,6 +258,7 @@ def backfill_news_with_web_search(
             model=settings.openai_web_search_model,
             instructions=instructions,
             input=user_prompt,
+            include=["web_search_call.action.sources"],
             tools=[
                 {
                     "type": "web_search",
@@ -232,10 +271,19 @@ def backfill_news_with_web_search(
                     },
                 }
             ],
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "web_search_backfill",
+                    "schema": WEB_SEARCH_OUTPUT_SCHEMA,
+                    "strict": True,
+                }
+            },
             max_output_tokens=1200,
             prompt_cache_key=prompt_cache_key,
         )
-        payload = _extract_json_object((response.output_text or "").strip())
+        output_text = (response.output_text or "").strip()
+        payload = _extract_json_object(output_text)
         extra_items = _parse_web_news_items(payload)
         citations = _extract_web_citations(response)
         if not extra_items:
@@ -246,6 +294,7 @@ def backfill_news_with_web_search(
                     extra_item_count=0,
                     merged_count=len(packet.get("news", [])),
                     citation_count=len(citations),
+                    output_preview=output_text[:200],
                     reason="no_items_parsed",
                 )
             logger.info("OpenAI 웹 검색을 돌렸지만 새 기사 후보는 찾지 못했어요.")
