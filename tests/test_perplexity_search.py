@@ -159,6 +159,7 @@ def test_fetch_news_from_perplexity_retries_with_topic_retry_query(monkeypatch):
     assert len(items) == 2
     assert items[0].topic == "bitcoin"
     assert items[1].why_it_matters
+    assert items[0].published_at.isoformat() == "2026-03-13T12:00:00+00:00"
 
 
 def test_fetch_news_from_perplexity_filters_unallowed_domain(monkeypatch):
@@ -293,6 +294,53 @@ def test_fetch_news_from_perplexity_filters_service_status_pages(monkeypatch):
 
     assert len(items) == 1
     assert items[0].url == "https://www.broadcom.com/company/news/product-releases/example"
+
+
+def test_fetch_news_from_perplexity_filters_statuspage_urls(monkeypatch):
+    monkeypatch.setattr(
+        ps,
+        "TOPIC_SPECS",
+        (
+            ps.SearchTopic(
+                name="macro",
+                query="macro query",
+                retry_query="",
+                domain_filter=("federalreserve.gov",),
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        ps,
+        "_build_client",
+        lambda api_key: _Client(
+            [
+                _SDKResponse(
+                    {
+                        "results": [
+                            {
+                                "title": "Federal Reserve Status Page",
+                                "url": "https://statuspage.example.com/fed",
+                                "snippet": "ignore",
+                                "date": "2026-03-14",
+                            },
+                            {
+                                "title": "Fed governor says inflation path remains uneven",
+                                "url": "https://www.federalreserve.gov/newsevents/speech/example.htm",
+                                "snippet": "Federal Reserve speech",
+                                "date": "2026-03-14",
+                            },
+                        ]
+                    }
+                )
+            ],
+            [],
+        ),
+    )
+
+    items = ps.fetch_news_from_perplexity(max_items=5, api_key="pplx-test-key")
+
+    assert len(items) == 1
+    assert items[0].url == "https://www.federalreserve.gov/newsevents/speech/example.htm"
 
 
 def test_search_once_exposes_status_details(monkeypatch):

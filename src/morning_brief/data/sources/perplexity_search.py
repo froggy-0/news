@@ -85,14 +85,19 @@ EXCLUDE_URL_PATTERNS = (
     "jp.reuters.com",
     "news.google.com/rss",
     "://status.",
+    "statuspage",
 )
 EXCLUDE_TITLE_PATTERNS = (
     re.compile(r"markets data\b.*ft\.com$", re.IGNORECASE),
     re.compile(r"\bsummary\s*-\s*ft\.com$", re.IGNORECASE),
     re.compile(r"company announcements", re.IGNORECASE),
     re.compile(r"\bservice status\b", re.IGNORECASE),
+    re.compile(r"\bstatus page\b", re.IGNORECASE),
+    re.compile(r"\bsystem status\b", re.IGNORECASE),
+    re.compile(r"\buptime\b", re.IGNORECASE),
 )
 NON_ENGLISH_TITLE_PATTERN = re.compile("[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+DATE_ONLY_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MINIMUM_NEWS_TITLE_LENGTH = 10
 
 
@@ -267,6 +272,13 @@ def _parse_datetime(value: object) -> datetime | None:
     raw = str(value or "").strip()
     if not raw:
         return None
+
+    if DATE_ONLY_PATTERN.match(raw):
+        try:
+            parsed = datetime.strptime(raw, "%Y-%m-%d")
+        except ValueError:
+            return None
+        return parsed.replace(hour=12, tzinfo=timezone.utc)
 
     for candidate in (raw, raw.replace("Z", "+00:00")):
         try:
