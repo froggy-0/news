@@ -31,6 +31,8 @@ ALLOWED_NEWS_DOMAINS = [
     "wsj.com",
     "ft.com",
     "cnbc.com",
+    "marketwatch.com",
+    "nasdaq.com",
     "coindesk.com",
     "federalreserve.gov",
     "home.treasury.gov",
@@ -66,11 +68,25 @@ WEB_SEARCH_OUTPUT_SCHEMA = {
 }
 BACKFILL_SOURCE_EXCLUDE_PATTERNS = (
     "/authors/",
+    "/opinion/",
+    "partners.wsj.com",
     "downloads.coindesk.com",
+    "data.coindesk.com",
     ".pdf",
     "cn.wsj.com",
     "jp.reuters.com",
+    "/newsroom/whats-new",
+    "/newsroom/press-releases",
+    "/archives/edgar/data/",
 )
+BACKFILL_SOURCE_EXCLUDE_TITLES = (
+    "home",
+    "newsroom - sec.gov",
+    "what's new - sec.gov",
+    "press releases - sec.gov",
+)
+URL_ONLY_RE = re.compile(r"^https?://", re.IGNORECASE)
+URL_WORD_RE = re.compile(r"[a-z]{3,}")
 
 
 def _needs_web_search_backfill(quality: dict) -> bool:
@@ -234,12 +250,14 @@ def _fallback_items_from_citations(citations: list[dict[str, str]]) -> list[News
         title = str(citation.get("title", "")).strip()
         url = str(citation.get("url", "")).strip()
         normalized_url = url.lower()
+        if not title or URL_ONLY_RE.match(title):
+            title = _title_from_article_url(url)
+        normalized_title = title.strip().lower()
         if (
             not title
             or not url
             or url in seen_urls
-            or title.startswith("http://")
-            or title.startswith("https://")
+            or normalized_title in BACKFILL_SOURCE_EXCLUDE_TITLES
             or any(pattern in normalized_url for pattern in BACKFILL_SOURCE_EXCLUDE_PATTERNS)
         ):
             continue
@@ -257,6 +275,24 @@ def _fallback_items_from_citations(citations: list[dict[str, str]]) -> list[News
         )
 
     return items
+
+
+def _title_from_article_url(url: str) -> str:
+    path = re.sub(r"/+$", "", re.sub(r"^https?://[^/]+", "", str(url or "").strip()))
+    if not path:
+        return ""
+    segment = path.rsplit("/", 1)[-1]
+    segment = segment.split("?", 1)[0].split("#", 1)[0]
+    segment = re.sub(r"\.[a-z0-9]+$", "", segment, flags=re.IGNORECASE)
+    if not segment or segment.isdigit():
+        return ""
+    words = [part for part in re.split(r"[-_]+", segment) if URL_WORD_RE.search(part or "")]
+    if len(words) < 3:
+        return ""
+    title = " ".join(words).strip()
+    if not title:
+        return ""
+    return title[:1].upper() + title[1:]
 
 
 def backfill_news_with_web_search(
@@ -342,6 +378,7 @@ def backfill_news_with_web_search(
                         extra_item_count=len(citation_fallback_items),
                         merged_count=len(merged_packet),
                         citation_count=len(citations),
+                        citation_samples=citations[:COLLECTED_ITEM_LOG_LIMIT],
                         items=_loggable_backfill_items(citation_fallback_items),
                         output_preview=output_text[:200],
                         reason="source_only_fallback",
@@ -359,6 +396,7 @@ def backfill_news_with_web_search(
                     extra_item_count=0,
                     merged_count=len(packet.get("news", [])),
                     citation_count=len(citations),
+                    citation_samples=citations[:COLLECTED_ITEM_LOG_LIMIT],
                     output_preview=output_text[:200],
                     reason="no_items_parsed",
                 )

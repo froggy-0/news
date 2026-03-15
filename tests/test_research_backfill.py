@@ -355,3 +355,39 @@ def test_fallback_items_from_citations_filters_author_and_pdf_pages():
 
     assert len(items) == 1
     assert items[0].url == "https://www.reuters.com/world/us/fed-officials-keep-rate-path-open/"
+
+
+def test_fallback_items_from_citations_derives_title_from_article_url():
+    items = rb._fallback_items_from_citations(
+        [
+            {
+                "title": "https://www.reuters.com/world/us/fed-officials-keep-rate-path-open/",
+                "url": "https://www.reuters.com/world/us/fed-officials-keep-rate-path-open/",
+            }
+        ]
+    )
+
+    assert len(items) == 1
+    assert items[0].title == "Fed officials keep rate path open"
+
+
+def test_fallback_items_from_citations_filters_partner_and_generic_sec_pages():
+    items = rb._fallback_items_from_citations(
+        [
+            {
+                "title": "AI to impact: Building the AI-Native Enterprise - Paid Program - WSJ",
+                "url": "https://partners.wsj.com/ntt-data/ai-to-impact/building-the-ai-native-enterprise/",
+            },
+            {
+                "title": "Newsroom - SEC.gov",
+                "url": "https://www.sec.gov/newsroom",
+            },
+            {
+                "title": "Fed officials keep rate path open",
+                "url": "https://www.reuters.com/world/us/fed-officials-keep-rate-path-open/",
+            },
+        ]
+    )
+
+    assert len(items) == 1
+    assert items[0].url == "https://www.reuters.com/world/us/fed-officials-keep-rate-path-open/"
