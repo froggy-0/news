@@ -529,6 +529,7 @@ def _search_once(
                 "query": query,
                 "max_results": SEARCH_MAX_RESULTS,
                 "search_domain_filter": list(domain_filter),
+                "search_language_filter": ["en"],
                 "country": "US",
             }
             if recency_filter:

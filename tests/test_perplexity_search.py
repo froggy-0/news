@@ -91,6 +91,7 @@ def test_fetch_news_from_perplexity_calls_search_api_with_expected_payload(monke
     assert len(calls) == 1
     assert calls[0]["query"] == "macro query"
     assert calls[0]["search_domain_filter"] == ["reuters.com", "federalreserve.gov"]
+    assert calls[0]["search_language_filter"] == ["en"]
     assert calls[0]["max_results"] == ps.SEARCH_MAX_RESULTS
     assert "search_mode" not in calls[0]
     assert items[0].source == "Reuters"
@@ -156,8 +157,10 @@ def test_fetch_news_from_perplexity_retries_with_topic_retry_query(monkeypatch):
 
     assert [call["query"] for call in calls] == ["bitcoin query", "bitcoin retry"]
     assert calls[0]["search_domain_filter"] == ["coindesk.com"]
+    assert calls[0]["search_language_filter"] == ["en"]
     assert calls[0]["search_recency_filter"] == "day"
     assert calls[1]["search_domain_filter"] == ["coindesk.com"]
+    assert calls[1]["search_language_filter"] == ["en"]
     assert "search_recency_filter" not in calls[1]
     assert calls[1]["search_after_date_filter"] == "03/13/2026"
     assert calls[1]["search_before_date_filter"] == "03/15/2026"
@@ -217,9 +220,12 @@ def test_fetch_news_from_perplexity_uses_broad_retry_after_date_retry(monkeypatc
 
     assert [call["query"] for call in calls] == ["bitcoin query", "bitcoin retry", "bitcoin retry"]
     assert calls[0]["search_recency_filter"] == "day"
+    assert calls[0]["search_language_filter"] == ["en"]
     assert calls[1]["search_after_date_filter"] == "03/13/2026"
     assert calls[1]["search_before_date_filter"] == "03/15/2026"
+    assert calls[1]["search_language_filter"] == ["en"]
     assert calls[2]["search_domain_filter"] == ["coindesk.com", "sec.gov"]
+    assert calls[2]["search_language_filter"] == ["en"]
     assert calls[2]["search_recency_filter"] == "week"
     assert len(items) == 1
     assert items[0].url == "https://www.sec.gov/newsroom/press-releases/2026-42"
