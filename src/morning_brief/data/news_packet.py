@@ -7,6 +7,7 @@ from morning_brief.data.news_policy import extract_domain, is_preferred_domain, 
 from morning_brief.models import NewsItem
 
 OFFICIAL_SIGNAL_PROVIDER = "grok_official_x"
+GROK_PROVIDERS = {"grok_official_x", "grok_x_keyword", "grok_web_search"}
 
 
 def packet_item_to_news_item(item: dict) -> NewsItem | None:
