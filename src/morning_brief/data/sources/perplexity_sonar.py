@@ -134,7 +134,7 @@ def _load_topic_prompt(topic: str) -> str:
     """Jinja 없이 간단히 토픽 프롬프트를 로드한다."""
     from pathlib import Path
 
-    template_dir = Path(__file__).resolve().parent.parent / "prompts"
+    template_dir = Path(__file__).resolve().parent.parent.parent / "prompts"
     template_path = template_dir / f"sonar_topic_{topic}.j2"
     if not template_path.exists():
         raise FileNotFoundError(f"Sonar 토픽 프롬프트를 찾을 수 없어요: {template_path}")
@@ -145,7 +145,7 @@ def _load_topic_prompt(topic: str) -> str:
 def _load_system_prompt() -> str:
     from pathlib import Path
 
-    template_dir = Path(__file__).resolve().parent.parent / "prompts"
+    template_dir = Path(__file__).resolve().parent.parent.parent / "prompts"
     path = template_dir / "sonar_system.j2"
     return path.read_text(encoding="utf-8").strip()
 
@@ -494,7 +494,7 @@ MAX_CONTEXT_ARTICLES = 12  # 섹터별 3건 × 4섹터
 def _load_context_prompts(articles: list[dict[str, str]]) -> tuple[str, str]:
     from pathlib import Path
 
-    template_dir = Path(__file__).resolve().parent.parent / "prompts"
+    template_dir = Path(__file__).resolve().parent.parent.parent / "prompts"
     system = (template_dir / "sonar_context_system.j2").read_text(encoding="utf-8").strip()
     raw_input = (template_dir / "sonar_context_input.j2").read_text(encoding="utf-8")
     # 간단한 Jinja 치환
