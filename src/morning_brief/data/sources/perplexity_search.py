@@ -862,7 +862,7 @@ def _fetch_news_from_perplexity(
     del max_items
 
     if not api_key:
-        logger.info("Perplexity API 키가 아직 없어 legacy 뉴스 수집으로 이어갈게요.")
+        logger.debug("Perplexity API 키가 아직 없어 legacy 뉴스 수집으로 이어갈게요.")
         return []
 
     client = _build_client(api_key)

@@ -57,6 +57,7 @@ cp .env.example .env
 ```
 
 주요 항목:
+- `LOG_LEVEL` (기본 `INFO`, `DEBUG`로 변경 시 데이터 소스 선택 경로·캐시 히트 등 상세 로그 출력)
 - `CACHE_DIR` (기본 `.cache`, ETF 공식 스냅샷 캐시 저장 경로)
 - `OPENAI_API_KEY`
 - `OPENAI_BRIEF_VALIDATION_ENABLED` (기본 `true`, 브리핑 최종 검수 사용)

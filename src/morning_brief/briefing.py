@@ -711,7 +711,7 @@ def generate_briefing(
         text = _improve_readability_spacing(text)
         cached_tokens = cached_input_tokens(response)
         if cached_tokens is not None:
-            logger.info(
+            logger.debug(
                 "OpenAI 프롬프트 캐시를 사용했어요. key=%s | cached_input_tokens=%s",
                 prompt_cache_key,
                 cached_tokens,

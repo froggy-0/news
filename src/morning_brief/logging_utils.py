@@ -19,5 +19,8 @@ def setup_logging() -> None:
         "openai._base_client",
         "urllib3.connectionpool",
         "googleapiclient.discovery_cache",
+        "perplexity",
+        "google.genai",
+        "google.auth",
     ]:
         logging.getLogger(logger_name).setLevel(logging.WARNING)

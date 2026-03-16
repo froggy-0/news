@@ -359,12 +359,12 @@ def fetch_macro_points(fred_api_key: str = "") -> list[MarketPoint]:
             existing_keys = {point.canonical_key for point in points if point.canonical_key}
             supplemental_points = _fallback_macro_points(existing_keys)
             if supplemental_points:
-                logger.info(
+                logger.debug(
                     "거시 지표는 FRED 기준으로 가져오고, 일부 보완 지표(%s)는 yfinance 기준으로 채웠어요.",
                     ", ".join(point.label for point in supplemental_points),
                 )
             else:
-                logger.info("거시 지표는 FRED 기준으로 가져왔어요.")
+                logger.debug("거시 지표는 FRED 기준으로 가져왔어요.")
             return [*points, *supplemental_points]
         except Exception as exc:
             _warn_once(
@@ -373,7 +373,7 @@ def fetch_macro_points(fred_api_key: str = "") -> list[MarketPoint]:
                 exc,
             )
 
-    logger.info("거시 지표는 yfinance 폴백 기준으로 가져왔어요.")
+    logger.debug("거시 지표는 yfinance 폴백 기준으로 가져왔어요.")
     return _fallback_macro_points()
 
 
@@ -388,7 +388,7 @@ def fetch_us_index_points() -> list[MarketPoint]:
         )
         for canonical_key, ticker, stooq_symbol in US_INDEX_TARGETS
     ]
-    logger.info("미국 지수 흐름은 Stooq 기준으로 보고, 필요하면 yfinance로 보강했어요.")
+    logger.debug("미국 지수 흐름은 Stooq 기준으로 보고, 필요하면 yfinance로 보강했어요.")
     return points
 
 
@@ -405,7 +405,7 @@ def fetch_tech_stock_points() -> list[MarketPoint]:
         key=lambda point: abs(point.change_pct) if point.change_pct is not None else -1.0,
         reverse=True,
     )
-    logger.info("기술주는 Stooq 기준으로 보고, 필요하면 yfinance로 보강했어요.")
+    logger.debug("기술주는 Stooq 기준으로 보고, 필요하면 yfinance로 보강했어요.")
     return points
 
 
@@ -419,7 +419,7 @@ def fetch_korea_investor_points() -> list[MarketPoint]:
         )
         for canonical_key, ticker, scale in KOREA_INVESTOR_TARGETS
     ]
-    logger.info("한국 투자자 참고 지표는 yfinance 기준으로 가져왔어요.")
+    logger.debug("한국 투자자 참고 지표는 yfinance 기준으로 가져왔어요.")
     return points
 
 
@@ -469,7 +469,7 @@ def _fetch_fear_greed() -> tuple[int | None, str | None]:
 def _fetch_btc_spot_point() -> MarketPoint:
     try:
         price, change_pct = fetch_btc_usd_price_change()
-        logger.info("비트코인 현물 가격은 CoinGecko 기준으로 가져왔어요.")
+        logger.debug("비트코인 현물 가격은 CoinGecko 기준으로 가져왔어요.")
         return MarketPoint(
             label="BTC-USD",
             ticker="BTC-USD",

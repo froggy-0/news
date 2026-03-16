@@ -333,7 +333,7 @@ def backfill_news_with_web_search(
     observer: PipelineObserver | None = None,
 ) -> tuple[list[dict], list[dict[str, str]]]:
     if not settings.openai_web_search_enabled:
-        logger.info("OpenAI web_search 설정이 꺼져 있어 뉴스 백필은 건너뛸게요.")
+        logger.debug("OpenAI web_search 설정이 꺼져 있어 뉴스 백필은 건너뛸게요.")
         return packet.get("news", []), []
     if not capability_allowed(OPENAI_PROVIDER, CAPABILITY_WEB_BACKFILL):
         logger.warning(

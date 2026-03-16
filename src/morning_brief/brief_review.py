@@ -197,7 +197,7 @@ def _review_briefing(
         raise BriefGenerationError(f"브리핑 검수 OpenAI 호출에 실패했어요: {exc}") from exc
     cached_tokens = cached_input_tokens(response)
     if cached_tokens is not None:
-        logger.info(
+        logger.debug(
             "브리핑 검수 프롬프트 캐시를 사용했어요. key=%s | cached_input_tokens=%s",
             prompt_cache_key,
             cached_tokens,
@@ -253,7 +253,7 @@ def _rewrite_briefing(
         raise BriefGenerationError("검수 반영 재작성 결과가 비어 있어요.")
     cached_tokens = cached_input_tokens(response)
     if cached_tokens is not None:
-        logger.info(
+        logger.debug(
             "브리핑 재작성 프롬프트 캐시를 사용했어요. key=%s | cached_input_tokens=%s",
             prompt_cache_key,
             cached_tokens,

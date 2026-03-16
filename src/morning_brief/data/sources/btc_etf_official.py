@@ -663,7 +663,7 @@ def _request_reference_snapshots(
     observer: PipelineObserver | None = None,
 ) -> list[BitcoinEtfIssuerSnapshot]:
     if not api_key:
-        logger.info("Perplexity API 키가 없어 BTC ETF 참조 스냅샷은 건너뛸게요.")
+        logger.debug("Perplexity API 키가 없어 BTC ETF 참조 스냅샷은 건너뛸게요.")
         return []
 
     unavailable_reason = disabled_reason(PERPLEXITY_PROVIDER)

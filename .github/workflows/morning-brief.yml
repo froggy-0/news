@@ -136,6 +136,7 @@ jobs:
           CI: "true"
           TIMEZONE: Asia/Seoul
           CACHE_DIR: .cache
+          LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5-mini-2025-08-07' }}
           OPENAI_BRIEF_VALIDATION_ENABLED: ${{ vars.OPENAI_BRIEF_VALIDATION_ENABLED || 'true' }}
