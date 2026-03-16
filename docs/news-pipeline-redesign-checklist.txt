@@ -1,0 +1,519 @@
+# 뉴스 파이프라인 재설계 — 작업 체크리스트
+
+> 기준 문서: `docs/news-pipeline-redesign.md`
+> 작성일: 2026-03-16
+> 원칙: 각 Step은 독립 배포 가능. Step 완료 후 반드시 검증 통과 확인 후 다음 진행.
+
+---
+
+## 사전 준비
+
+- [ ] 현재 테스트 베이스라인 확인
+  ```bash
+  make check   # ruff format + ruff check + pytest
+  ```
+- [ ] 작업 브랜치 생성
+  ```bash
+  git checkout -b feat/news-pipeline-redesign
+  ```
+
+---
+
+## Step 1: Perplexity Search API — allowlist → deny list 전환
+
+> 목표: 검색 자유도 확보로 주말 0건 문제 해결
+> 파일: `src/morning_brief/data/sources/perplexity_search.py`
+> 테스트: `tests/test_perplexity_search.py`
+
+### 1-1. 공통 deny list 상수 정의
+
+- [ ] `SEARCH_DENY_DOMAINS` 튜플 추가 (기존 `DISALLOWED_MARKET_DATA_DOMAINS` 근처)
+  ```python
+  SEARCH_DENY_DOMAINS = (
+      "-markets.ft.com",
+      "-data.coindesk.com",
+      "-downloads.coindesk.com",
+      "-sponsored.bloomberg.com",
+      "-cn.wsj.com",
+      "-jp.reuters.com",
+      "-apps.apple.com",
+      "-podcasts.apple.com",
+      "-tv.apple.com",
+      "-status.perplexity.ai",
+  )
+  ```
+
+### 1-2. 저품질 소스 deny 필터 추가
+
+- [ ] `LOW_QUALITY_DOMAINS` set 추가
+  ```python
+  LOW_QUALITY_DOMAINS = {
+      "reddit.com", "twitter.com", "x.com", "facebook.com",
+      "linkedin.com", "quora.com", "medium.com",
+      "tradingview.com", "investing.com", "stockanalysis.com",
+      "finance.yahoo.com",
+      "wikipedia.org", "investopedia.com",
+      "glassdoor.com", "indeed.com",
+  }
+  ```
+- [ ] `_is_low_quality_source(url: str) -> bool` 함수 추가
+- [ ] 테스트: `test_is_low_quality_source()` — 각 도메인 매칭 확인
+
+### 1-3. SearchTopic dataclass 변경
+
+- [ ] `domain_filter` 필드: 토픽별 allowlist → 공통 `SEARCH_DENY_DOMAINS` 참조로 변경
+- [ ] `retry_domain_filter` 필드: 제거 또는 공통 deny list 동일 참조
+- [ ] `retry_last_updated_days`, `retry_range_days` 필드: 유지 (retry 간소화는 1-6에서)
+- [ ] 4개 `TOPIC_SPECS` 항목 전부 수정
+  - `domain_filter` → `SEARCH_DENY_DOMAINS`
+  - `retry_domain_filter` → 제거
+  - 쿼리 텍스트는 유지 (검색 품질 유도 역할)
+
+### 1-4. _search_once() API 파라미터 변경
+
+- [ ] `_search_domain_filter_values(domain_filter)` 호출 부분 확인
+  - 이미 `-` prefix 지원함 → deny list 전달 시 자동 동작
+- [ ] `search_domain_filter` 파라미터에 deny list가 정상 전달되는지 확인
+
+### 1-5. _parse_results() 필터 체인 변경
+
+- [ ] `allowed_domains` 파라미터 제거
+- [ ] `_is_allowed_domain(url, domain_allowlist)` 호출 제거
+- [ ] 남은 필터 체인 확인:
+  1. `_is_disallowed_market_data_result(title, url)` — 유지
+  2. `_is_topic_landing_page(topic, url, title)` — 유지
+  3. `_is_invalid_news_title(title)` — 유지
+  4. `_is_low_quality_source(url)` — **추가**
+- [ ] `_is_allowed_domain()` 함수 자체 삭제 (더 이상 사용하지 않음)
+- [ ] `_matches_source_filter()` 함수: `_is_allowed_domain`에서만 사용하는지 확인 후 불필요하면 삭제
+
+### 1-6. retry 전략 간소화
+
+- [ ] `_search_topic_items()` 수정:
+  - AS-IS: 1차 → last_updated retry → date_range retry → broad retry (4단계)
+  - TO-BE: 1차 → recency 확장 retry (2단계)
+- [ ] 1차 검색 실패 시: `recency_filter`를 `day` → `week`로 확장하여 1회 재시도
+- [ ] 기존 `retry_query` 필드는 유지 (recency 확장 시 사용)
+- [ ] `retry_last_updated_days`, `retry_range_days` 관련 코드 제거 또는 비활성화
+
+### 1-7. FT content 경로 보호 (allowlist 제거 보완)
+
+- [ ] `www.ft.com/markets/`, `www.ft.com/stream/` 등 비기사 경로를 `EXCLUDE_URL_PATTERNS`에 추가
+  ```python
+  # 기존 패턴에 추가
+  "/markets/",
+  "/stream/",
+  ```
+- [ ] `apple.com` newsroom 외 페이지 차단: `_is_low_quality_source` 또는 `EXCLUDE_URL_PATTERNS`에 반영
+  ```python
+  # apple.com은 /newsroom/ 외 차단 → _is_disallowed_market_data_result에 조건 추가
+  ```
+
+### 1-8. SOURCE_LABELS 확장
+
+- [ ] deny list 전환 후 새로 유입될 수 있는 도메인의 라벨 추가
+  ```python
+  # 기존에 없던 품질 도메인 라벨
+  "barrons.com": "Barron's",
+  "seekingalpha.com": "Seeking Alpha",
+  "theblock.co": "The Block",
+  "techcrunch.com": "TechCrunch",
+  "theverge.com": "The Verge",
+  "apnews.com": "AP News",
+  ```
+
+### 1-9. 테스트 수정
+
+- [ ] `test_perplexity_search.py` — 도메인 필터 관련 테스트 전면 수정
+  - allowlist 검증 테스트 → deny list 검증 테스트로 교체
+  - `_is_allowed_domain` 테스트 제거
+  - `_is_low_quality_source` 테스트 추가
+  - retry 단계 축소 반영
+  - 결과 파싱에서 비신뢰 도메인 기사가 통과하는지 확인
+- [ ] `test_news_quality.py` — 새로운 도메인 유입에 따른 랭킹 테스트 확인
+- [ ] `test_pipeline_quality.py` — fallback 판단 로직 테스트 확인
+
+### 1-10. 검증
+
+- [ ] 단위 테스트 통과
+  ```bash
+  pytest tests/test_perplexity_search.py -v
+  pytest tests/test_news_quality.py -v
+  pytest tests/test_pipeline_quality.py -v
+  ```
+- [ ] 전체 품질 게이트 통과
+  ```bash
+  make check
+  ```
+- [ ] 로컬 1회 실행으로 실제 수집 확인
+  ```bash
+  SEND_EMAIL=false python3 main.py once --print-brief
+  ```
+  - [ ] observability 로그에서 `perplexity_items_collected` > 0건 확인
+  - [ ] 수집된 기사의 도메인 다양성 확인
+  - [ ] `perplexity_result_filter_empty` 이벤트가 사라졌는지 확인
+- [ ] 커밋
+  ```bash
+  git add src/morning_brief/data/sources/perplexity_search.py tests/test_perplexity_search.py ...
+  git commit -m "feat(news): Perplexity Search API allowlist → deny list 전환"
+  ```
+
+---
+
+## Step 2: Grok X keyword + web search 활성화
+
+> 목표: X 실시간 시그널 + 웹 뉴스 커버리지 확대
+> 파일: `grok_x_keyword.py`, `grok_web_search.py`, `grok_official_signals.py`, `provider_runtime.py`
+> 테스트: `tests/test_grok_new_sources.py`
+
+### 2-1. 서킷 브레이커 분리
+
+- [ ] `grok_official_signals.py`: `GROK_PROVIDER = "grok"` → `"grok_official"` 로 변경
+- [ ] `grok_x_keyword.py`: `GROK_PROVIDER = "grok"` → `"grok_keyword"` 로 변경
+- [ ] `grok_web_search.py`: `GROK_PROVIDER = "grok"` → `"grok_web"` 로 변경
+- [ ] `provider_runtime.py`: 새 provider 이름들에 대한 policy 등록 확인
+  - 기존 `"grok"` policy를 3개 provider가 각각 상속하거나 복제
+- [ ] `data_quality.py`: provider 이름 상수 업데이트 (사용하고 있다면)
+- [ ] `news_selection.py`: provider 이름으로 분류하는 로직 확인 및 업데이트
+- [ ] `observability.py`: provider_usage_summary에 새 이름 반영 확인
+- [ ] 테스트: 한 모듈 429 시 나머지가 계속 동작하는지 확인
+
+### 2-2. grok_x_keyword — 그룹 확장
+
+- [ ] `AI_BIGTECH_PROMPT` 상수 추가
+  ```
+  Focus: NVIDIA, AMD, TSMC, ASML, Microsoft, Apple, Amazon, Google, Meta
+  AI 인프라, 데이터센터 capex, 모델 발표, 실적 가이던스
+  ```
+- [ ] `BTC_ETF_PRIMARY_PROMPT` 상수 추가
+  ```
+  Focus: IBIT, BITB, GBTC 공식 운용사 발신, ETF 수수료, 보유량
+  ```
+- [ ] `GROUP_PROMPTS` dict에 2개 그룹 추가
+  ```python
+  "ai_bigtech_primary": AI_BIGTECH_PROMPT,
+  "btc_etf_primary": BTC_ETF_PRIMARY_PROMPT,
+  ```
+- [ ] `GROUP_TOPIC_MAP` dict에 2개 그룹 추가
+  ```python
+  "ai_bigtech_primary": "ai_bigtech",
+  "btc_etf_primary": "bitcoin",
+  ```
+- [ ] `fetch_x_keyword_signals()` 함수: 4개 그룹 순회하도록 확인
+  - `grouped_verified_x_handles()`가 4개 그룹을 반환하는지 `official_signal_registry.py` 확인
+  - 반환하지 않는 그룹이 있으면 빈 handles로 skip되는지 확인
+
+### 2-3. grok_x_keyword — 주말 대응
+
+- [ ] `_is_weekend()` 유틸 함수 추가 (또는 기존 것 재사용)
+- [ ] 프롬프트에 주말 맥락 힌트 추가
+  ```python
+  if _is_weekend():
+      prompt += "\nIt is currently the weekend. Include Friday post-market analysis and weekly review commentary."
+  ```
+- [ ] `lookback_hours`: 주말에는 48h → 72h 확장 고려 (설정 레벨에서)
+
+### 2-4. grok_web_search — 품질 보강
+
+- [ ] `WEB_SEARCH_PROMPT` 수정:
+  - `{time_window}` placeholder 추가 (현재 "last 24 hours" 하드코딩)
+  - `{weekend_hint}` placeholder 추가
+  - `why_it_matters` 필드를 JSON 스키마에 추가
+    ```
+    For each: title, url, source, published_at, topic, summary, why_it_matters
+    ```
+- [ ] `_build_prompt(max_items)` 함수 신규:
+  - 주말 감지 → `time_window = "last 48 hours"`
+  - 주말 힌트 → 금요일 장마감 후 분석, 위클리 리뷰 포함 유도
+- [ ] `_article_to_news_item()` 수정:
+  - `why_it_matters` 필드 파싱 및 `NewsItem`에 반영
+  - `citations` 필드 설정 (URL 자체를 citation으로)
+- [ ] API 호출에 `include=["inline_citations"]` 추가 (x_keyword과 동일하게)
+- [ ] 반환된 `topic` 값 정규화:
+  ```python
+  VALID_TOPICS = {"macro", "us_equity", "ai_bigtech", "bitcoin"}
+  topic = raw_topic.strip().lower()
+  if topic not in VALID_TOPICS:
+      topic = "macro"  # fallback
+  ```
+
+### 2-5. official signals ↔ keyword 중복 제거
+
+- [ ] `news.py`의 `build_news_packet()`에서 병합 시 중복 제거 로직 추가
+  - 같은 `source_handle` + 유사 `headline` (제목 앞 40자 일치 등) → 하나만 유지
+  - official signals 우선 (provider 신뢰도 높음)
+- [ ] 또는 `news_selection._dedup_and_rank()`에 `source_handle` 기반 dedup 추가
+
+### 2-6. config.py 기본값 변경
+
+- [ ] `GROK_X_KEYWORD_SEARCH_ENABLED` 기본값: `False` → `True`
+- [ ] `GROK_WEB_SEARCH_ENABLED` 기본값: `False` → `True`
+- [ ] 또는 기본값은 유지하고 `.env.example`과 GitHub Variables 문서만 업데이트
+
+### 2-7. 테스트 수정
+
+- [ ] `test_grok_new_sources.py`:
+  - 새 그룹 프롬프트 생성 확인 테스트
+  - `why_it_matters` 필드 파싱 테스트 (web search)
+  - `citations` 필드 설정 테스트 (web search)
+  - 토픽 정규화 테스트
+  - 주말 프롬프트 힌트 테스트
+- [ ] `test_news_quality.py`:
+  - 서킷 브레이커 분리 후 provider 이름 변경 반영
+  - Grok 중복 제거 테스트
+
+### 2-8. 검증
+
+- [ ] 단위 테스트 통과
+  ```bash
+  pytest tests/test_grok_new_sources.py -v
+  pytest tests/test_news_quality.py -v
+  ```
+- [ ] 전체 품질 게이트 통과
+  ```bash
+  make check
+  ```
+- [ ] 로컬 1회 실행 (Grok 모듈 활성화)
+  ```bash
+  GROK_X_KEYWORD_SEARCH_ENABLED=true GROK_WEB_SEARCH_ENABLED=true SEND_EMAIL=false python3 main.py once --print-brief
+  ```
+  - [ ] `grok_x_keyword` provider 로그에 시그널 수집 확인
+  - [ ] `grok_web_search` provider 로그에 기사 수집 확인
+  - [ ] 서킷 브레이커가 모듈별로 독립 동작하는지 확인
+  - [ ] official signals와 keyword 간 중복이 제거되는지 확인
+  - [ ] 총 뉴스 건수가 이전보다 증가했는지 확인
+- [ ] 커밋
+  ```bash
+  git commit -m "feat(news): Grok X keyword + web search 활성화 및 그룹 확장"
+  ```
+
+---
+
+## Step 3: Perplexity Sonar 맥락 보강 레이어
+
+> 목표: Phase 1 수집 결과에 심층 맥락 + 교차 검증 추가
+> 파일: `perplexity_sonar.py`, `news.py`, `pipeline.py`, `briefing.py`
+> 테스트: `tests/test_perplexity_sonar.py`
+
+### 3-1. Sonar 역할 재정의
+
+- [ ] 기존 `perplexity_sonar.py`의 독립 수집 로직을 맥락 분석 로직으로 교체
+  - 기존 `fetch_sonar_summaries()`: 토픽별 4회 호출, 독립 수집
+  - 신규 `analyze_news_context()`: Phase 1 결과를 입력받아 1회 호출
+
+### 3-2. 맥락 분석 함수 구현
+
+- [ ] `analyze_news_context()` 함수 신규
+  ```python
+  def analyze_news_context(
+      *,
+      api_key: str,
+      model: str,
+      collected_signals: list[dict],  # Phase 1 수집 결과 (title, summary, topic, source)
+      max_tokens: int = 2000,
+      observer: PipelineObserver | None = None,
+  ) -> ContextAnalysis | None:
+  ```
+- [ ] 입력 포맷팅: Phase 1 `NewsItem` 리스트 → 텍스트 요약
+  ```python
+  def _format_signals_for_sonar(items: list[NewsItem]) -> str:
+      lines = []
+      for i, item in enumerate(items, 1):
+          lines.append(f"{i}. [{item.topic}] {item.title}")
+          if item.summary:
+              lines.append(f"   요약: {item.summary}")
+          lines.append(f"   출처: {item.source}")
+      return "\n".join(lines)
+  ```
+
+### 3-3. Sonar 프롬프트 + JSON Schema
+
+- [ ] `SONAR_CONTEXT_PROMPT` 상수 정의 (또는 Jinja 템플릿)
+  - Phase 1 시그널 목록을 `{collected_signals}` 자리에 삽입
+  - "URL을 직접 분석하지 말고, 제목/요약 기반으로 웹 검색하여 배경 보강" 지시
+  - "데이터 포탈, 시세 페이지는 출처로 사용 금지" 지시
+- [ ] `SONAR_CONTEXT_SCHEMA` JSON Schema 정의
+  ```python
+  # 필수 필드: analyses[], key_narrative
+  # analyses 각 항목: signal_ref, background, market_impact, confidence
+  # 선택 필드: cross_references[]
+  ```
+- [ ] `search_domain_filter`: Sonar 기존 deny list (`SONAR_DENY_DOMAINS`) 유지
+- [ ] `search_recency_filter`: 평일 `"day"`, 주말 `"week"`
+
+### 3-4. Sonar 모델 선택 로직
+
+- [ ] 평일: `sonar` (기본, 저렴)
+- [ ] 주말: `sonar-pro` (다단계 추론으로 약한 신호 보강)
+  ```python
+  def _select_model(settings: Settings) -> str:
+      if _is_weekend():
+          return "sonar-pro"
+      return settings.perplexity_sonar_model
+  ```
+- [ ] 설정: `PERPLEXITY_SONAR_WEEKEND_MODEL` 환경변수 추가 (선택)
+
+### 3-5. ContextAnalysis 데이터 모델
+
+- [ ] `ContextAnalysis` dataclass 정의
+  ```python
+  @dataclass
+  class ContextAnalysis:
+      analyses: list[SignalAnalysis]
+      key_narrative: str
+      citations: list[str]
+
+  @dataclass
+  class SignalAnalysis:
+      signal_ref: str
+      background: str
+      market_impact: str
+      confidence: str  # high / medium / low
+      cross_references: list[str]
+  ```
+
+### 3-6. news.py 오케스트레이션 수정
+
+- [ ] `build_news_packet()` 수정:
+  - Phase 1 수집 완료 후, Phase 2 Sonar 분석 호출 추가
+  - Sonar에 전달할 시그널 목록 준비 (수집된 `NewsItem` → 텍스트 요약)
+  - Sonar 결과를 반환값에 포함
+- [ ] 반환 타입 확장:
+  ```python
+  # AS-IS
+  def build_news_packet(...) -> tuple[list[dict], dict[str, TopicSummary], list[XSignal]]:
+
+  # TO-BE
+  def build_news_packet(...) -> tuple[list[dict], dict[str, TopicSummary], list[XSignal], ContextAnalysis | None]:
+  ```
+- [ ] 하위 호환: 기존 호출자(`pipeline.py`)에서 4번째 반환값 처리
+
+### 3-7. pipeline.py 수정
+
+- [ ] `run_pipeline()`에서 `build_news_packet()` 반환값 확장 처리
+- [ ] Sonar 분석 결과를 `briefing.py`의 브리핑 생성 함수에 전달
+
+### 3-8. briefing.py / 프롬프트 템플릿 수정
+
+- [ ] 브리핑 생성 프롬프트에 "맥락 분석" 섹션 추가
+  - Sonar의 `key_narrative`를 최상단에 배치
+  - 각 `SignalAnalysis`의 `background`와 `market_impact`를 관련 뉴스 항목에 매칭
+- [ ] Sonar 실패 시 (None 반환): 맥락 섹션 없이 기존 방식으로 브리핑 생성 (graceful degradation)
+- [ ] Jinja 프롬프트 템플릿 (`src/morning_brief/prompts/`) 수정:
+  - `{% if context_analysis %}` 조건부 맥락 섹션
+
+### 3-9. Sonar 실패 처리
+
+- [ ] API 에러 시 `None` 반환 (기존 에러 핸들링 패턴 유지)
+- [ ] observability에 `sonar_context_analysis_failed` 이벤트 기록
+- [ ] 파이프라인은 Phase 1 결과만으로 계속 진행
+
+### 3-10. 기존 Sonar 코드 정리
+
+- [ ] `fetch_sonar_summaries()`: 신규 `analyze_news_context()`로 대체
+  - 기존 호출자가 있으면 deprecation wrapper 유지, 아니면 삭제
+- [ ] `TopicSummary` dataclass: `ContextAnalysis`로 대체
+  - `topic_summaries_to_dict()` 등 유틸도 교체
+- [ ] 기존 Sonar 토픽 프롬프트 (`sonar_topic_*.j2`): 제거
+- [ ] `sonar_system.j2`: 새 맥락 분석용 시스템 프롬프트로 교체
+- [ ] `TOPIC_SUMMARY_SCHEMA`: `SONAR_CONTEXT_SCHEMA`로 교체
+
+### 3-11. 테스트 수정
+
+- [ ] `test_perplexity_sonar.py` 전면 재작성:
+  - `analyze_news_context()` 입력/출력 테스트
+  - JSON Schema 파싱 테스트
+  - 빈 시그널 입력 시 처리 테스트
+  - API 실패 시 None 반환 테스트
+  - 주말 모델 선택 테스트
+- [ ] `test_news_quality.py`: `build_news_packet()` 반환값 변경 반영
+- [ ] `test_briefing_quality.py`: 맥락 섹션 포함/미포함 테스트
+
+### 3-12. 설정 업데이트
+
+- [ ] `config.py`:
+  - `PERPLEXITY_USE_SONAR_SUMMARY` 기본값: `False` → `True` (또는 이름 변경)
+  - `PERPLEXITY_SONAR_WEEKEND_MODEL` 추가 (선택, 기본 `sonar-pro`)
+- [ ] `.env.example` 업데이트
+- [ ] `README.md` 환경변수 섹션 업데이트
+
+### 3-13. 검증
+
+- [ ] 단위 테스트 통과
+  ```bash
+  pytest tests/test_perplexity_sonar.py -v
+  pytest tests/test_news_quality.py -v
+  pytest tests/test_briefing_quality.py -v
+  ```
+- [ ] 전체 품질 게이트 통과
+  ```bash
+  make check
+  ```
+- [ ] 로컬 1회 실행
+  ```bash
+  PERPLEXITY_USE_SONAR_SUMMARY=true SEND_EMAIL=false python3 main.py once --print-brief
+  ```
+  - [ ] Sonar 맥락 분석 로그 확인 (`sonar_context_analysis` 이벤트)
+  - [ ] 브리핑에 맥락 섹션이 반영되었는지 확인
+  - [ ] Sonar citations 목록 확인
+  - [ ] 전체 파이프라인 소요 시간이 허용 범위 내인지 확인 (3분 이내)
+- [ ] 커밋
+  ```bash
+  git commit -m "feat(news): Perplexity Sonar 맥락 보강 레이어 구현"
+  ```
+
+---
+
+## Step 4: 통합 검증 + 문서 업데이트
+
+> 목표: 전체 파이프라인 안정성 확인 및 문서 정비
+
+### 4-1. 통합 테스트
+
+- [ ] 전체 테스트 스위트 통과
+  ```bash
+  make check
+  ```
+- [ ] 로컬 전체 파이프라인 실행 (이메일 발송 포함)
+  ```bash
+  python3 main.py once --print-brief
+  ```
+  - [ ] 브리핑 품질 육안 확인
+  - [ ] observability 로그에서 전체 provider 상태 확인
+  - [ ] 뉴스 건수 / 도메인 다양성 / 토픽 커버리지 확인
+
+### 4-2. GitHub Actions 설정 업데이트
+
+- [ ] `.github/workflows/morning-brief.yml`:
+  - `GROK_X_KEYWORD_SEARCH_ENABLED: true` 추가
+  - `GROK_WEB_SEARCH_ENABLED: true` 추가
+  - `PERPLEXITY_USE_SONAR_SUMMARY: true` 추가 (또는 새 변수명)
+- [ ] GitHub Variables 업데이트 (필요시)
+
+### 4-3. README.md 업데이트
+
+- [ ] 환경변수 섹션: 새 변수 / 변경된 기본값 반영
+- [ ] 프로젝트 구조 섹션: 변경된 모듈 역할 반영
+- [ ] 수집 신뢰성 운영 원칙 섹션: 새 아키텍처 반영
+  - Perplexity: 뉴스 수집(deny list) + 맥락 분석(Sonar)
+  - Grok: 공식 X 시그널 + 키워드 X 검색 + 웹 뉴스 수집
+
+### 4-4. docs/news-pipeline-redesign.md 업데이트
+
+- [ ] "현재 뉴스 수집 흐름 (AS-IS)" → 구현 완료 후 상태로 업데이트
+- [ ] 각 Phase 상세에 실제 구현 결과 반영
+
+### 4-5. 모니터링 (1~2주)
+
+- [ ] 매일 observability 로그 확인:
+  - `perplexity_items_collected` 건수 추이
+  - `grok_x_keyword`, `grok_web_search` 건수 추이
+  - `sonar_context_analysis` 성공률
+  - 데이터 품질 상태 (`ok` / `degraded` / `critical`)
+- [ ] 주말 실행 특별 확인:
+  - Perplexity deny list 전환으로 주말 0건 문제 해소되었는지
+  - Grok 주말 프롬프트 힌트가 효과적인지
+  - Sonar 주말 모델 (`sonar-pro`) 품질 차이
+- [ ] 필요시 deny list 확장 (`LOW_QUALITY_DOMAINS`에 추가)
+- [ ] 필요시 프롬프트 튜닝
+- [ ] legacy fallback 사용 빈도 확인 → 안정적이면 rollout 기준 강화
