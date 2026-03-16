@@ -328,7 +328,7 @@ def test_pipeline_observability_writes_provider_usage_summary_event(tmp_path):
         usage_parse_failures=2,
     )
     observer.record_provider_usage(
-        "grok",
+        "grok_official",
         requests=1,
         input_tokens=120,
         output_tokens=30,
@@ -354,12 +354,12 @@ def test_pipeline_observability_writes_provider_usage_summary_event(tmp_path):
     )
 
     assert summary["provider_usage_line"] == (
-        "openai[requests=3, input=900, output=150, cached=40, reasoning=12, sources=0, parse_failures=0, cost_usd=0.000222] | "
+        "openai[requests=3, input=900, output=150, cached=40, reasoning=12, sources=0, parse_failures=0, cost_usd=0.000516] | "
         "perplexity[requests=2, input=null, output=null, cached=null, reasoning=null, sources=10, parse_failures=2, cost_usd=null] | "
-        "grok[requests=1, input=120, output=30, cached=8, reasoning=0, sources=0, parse_failures=0, cost_usd=null]"
+        "grok_official[requests=1, input=120, output=30, cached=8, reasoning=0, sources=0, parse_failures=0, cost_usd=3.8e-05]"
     )
     assert summary_event["line"] == summary["provider_usage_line"]
     assert summary_event["providers"]["openai"]["input_tokens"] == 900
     assert summary_event["providers"]["perplexity"]["input_tokens"] is None
-    assert summary_event["providers"]["openai"]["cost_usd"] == 0.000222
-    assert summary["total_cost_usd"] == 0.000222
+    assert summary_event["providers"]["openai"]["cost_usd"] == 0.000516
+    assert summary["total_cost_usd"] == 0.000554

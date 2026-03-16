@@ -28,10 +28,12 @@ from morning_brief.models import NewsItem
 from morning_brief.observability import PipelineObserver
 
 logger = logging.getLogger(__name__)
-GROK_PROVIDER = "grok"
+GROK_KEYWORD_PROVIDER = "grok_keyword"
 
 MACRO_EQUITY_GROUP = "macro_and_equity"
 CRYPTO_ETF_GROUP = "crypto_and_etf"
+AI_BIGTECH_GROUP = "ai_bigtech_primary"
+BTC_ETF_GROUP = "btc_etf_primary"
 
 MACRO_EQUITY_PROMPT = """Search X for the most significant market-moving posts from the last {lookback_hours} hours.
 Focus on:
@@ -69,15 +71,58 @@ Return the top {max_items} most impactful posts as JSON array "signals":
 Prioritize posts with specific data points. Skip promotional content.
 Output format: {{"signals": [...]}}"""
 
+AI_BIGTECH_PROMPT = """Search X for the most significant AI and Big Tech posts from the last {lookback_hours} hours.
+Focus on:
+1. NVIDIA, AMD, TSMC, ASML semiconductor news and analyst commentary
+2. Microsoft, Apple, Amazon, Google, Meta strategic moves
+3. AI infrastructure, data center capex, model announcements
+4. Earnings guidance, revenue signals, product launches
+
+Return the top {max_items} most market-moving posts as JSON:
+{{"keywords": ["keyword1", "keyword2"], "signals": [
+{{"headline": "...", "summary": "...", "why_it_matters": "...", "sentiment": "bullish|bearish|neutral", "source_handle": "...", "posted_at": "ISO8601"}}
+]}}
+Skip marketing, promotional, and non-market posts."""
+
+BTC_ETF_PRIMARY_PROMPT = """Search X for the most significant Bitcoin ETF and institutional crypto posts from the last {lookback_hours} hours.
+Focus on:
+1. IBIT, BITB, GBTC daily flow data and AUM changes
+2. New ETF filings or SEC decisions
+3. Institutional Bitcoin adoption announcements
+4. Major exchange or custodian updates
+
+Return the top {max_items} most impactful posts as JSON:
+{{"keywords": ["keyword1", "keyword2"], "signals": [
+{{"headline": "...", "summary": "...", "why_it_matters": "...", "sentiment": "bullish|bearish|neutral", "source_handle": "...", "posted_at": "ISO8601"}}
+]}}
+Prioritize posts with specific data points. Skip promotional content."""
+
 GROUP_PROMPTS = {
     MACRO_EQUITY_GROUP: MACRO_EQUITY_PROMPT,
     CRYPTO_ETF_GROUP: CRYPTO_ETF_PROMPT,
+    AI_BIGTECH_GROUP: AI_BIGTECH_PROMPT,
+    BTC_ETF_GROUP: BTC_ETF_PRIMARY_PROMPT,
 }
 
 GROUP_TOPIC_MAP = {
     MACRO_EQUITY_GROUP: "macro",
     CRYPTO_ETF_GROUP: "bitcoin",
+    AI_BIGTECH_GROUP: "ai_bigtech",
+    BTC_ETF_GROUP: "bitcoin",
 }
+
+WEEKEND_CONTEXT = (
+    "\nNote: It is currently the weekend or Monday morning. "
+    "Include posts from Friday after-hours through the weekend. "
+    "Focus on pre-market positioning and weekend developments."
+)
+
+
+def _is_weekend_context() -> bool:
+    """월요일 오전(KST) 또는 주말이면 True."""
+    now_utc = datetime.now(timezone.utc)
+    # 0=Monday, 5=Saturday, 6=Sunday
+    return now_utc.weekday() in {0, 5, 6}
 
 
 @dataclass
@@ -153,11 +198,13 @@ def _to_http_fetch_error(exc: Exception) -> HttpFetchError:
     )
     if status_code == 429:
         msg = f"Grok X Search 호출 한도에 걸렸어요: {exc}"
-        open_circuit(GROK_PROVIDER, msg)
-        return HttpFetchError(msg, provider=GROK_PROVIDER, retryable=False, rate_limited=True)
+        open_circuit(GROK_KEYWORD_PROVIDER, msg)
+        return HttpFetchError(
+            msg, provider=GROK_KEYWORD_PROVIDER, retryable=False, rate_limited=True
+        )
     retryable = status_code in {500, 502, 503, 504} if status_code else False
     return HttpFetchError(
-        f"Grok X Search 호출 실패: {exc}", provider=GROK_PROVIDER, retryable=retryable
+        f"Grok X Search 호출 실패: {exc}", provider=GROK_KEYWORD_PROVIDER, retryable=retryable
     )
 
 
@@ -169,13 +216,15 @@ def _perform_keyword_search(
     handles: list[str],
     lookback_hours: int,
     max_items: int,
-) -> tuple[list[dict[str, Any]], dict[str, int | None]]:
+) -> tuple[list[dict[str, Any]], dict[str, int | None], list[str]]:
     client = _build_client(api_key)
     to_date = datetime.now(timezone.utc)
     from_date = to_date - timedelta(hours=lookback_hours)
 
     prompt_template = GROUP_PROMPTS.get(group, MACRO_EQUITY_PROMPT)
     prompt = prompt_template.format(lookback_hours=lookback_hours, max_items=max_items)
+    if _is_weekend_context():
+        prompt += WEEKEND_CONTEXT
 
     try:
         tool_handles = handles[:10] if handles else None
@@ -201,21 +250,23 @@ def _perform_keyword_search(
         data = json.loads(content)
     except json.JSONDecodeError:
         logger.warning("Grok X Search %s 응답 JSON 파싱 실패: %.200s", group, content)
-        return [], _usage_snapshot(response)
+        return [], _usage_snapshot(response), []
 
     signals = data.get("signals", []) if isinstance(data, dict) else []
-    return signals, _usage_snapshot(response)
+    keywords = data.get("keywords", []) if isinstance(data, dict) else []
+    return signals, _usage_snapshot(response), keywords
 
 
 def _signal_to_x_signal(item: dict[str, Any], topic: str) -> XSignal | None:
     headline = str(item.get("headline", "")).strip()
     summary = str(item.get("summary", "")).strip()
-    if not headline or not summary:
+    why_it_matters = str(item.get("why_it_matters", "")).strip()
+    if not headline or not summary or not why_it_matters:
         return None
     return XSignal(
         headline=headline,
         summary=summary,
-        why_it_matters=str(item.get("why_it_matters", "")).strip(),
+        why_it_matters=why_it_matters,
         sentiment=str(item.get("sentiment", "neutral")).strip().lower(),
         source_handle=str(item.get("source_handle", "")).strip().lstrip("@"),
         posted_at=_normalize_datetime(item.get("posted_at")),
@@ -246,7 +297,7 @@ def _record_usage(
         return
     failures = 1 if all(v is None for v in usage.values()) else 0
     observer.record_provider_usage(
-        GROK_PROVIDER,
+        GROK_KEYWORD_PROVIDER,
         requests=1,
         input_tokens=usage["input_tokens"],
         output_tokens=usage["output_tokens"],
@@ -263,31 +314,36 @@ def fetch_x_keyword_signals(
     lookback_hours: int = 24,
     max_items: int = 6,
     observer: PipelineObserver | None = None,
-) -> tuple[list[XSignal], list[NewsItem]]:
-    """키워드 기반 X Search로 시장 반응 시그널을 수집한다."""
+) -> tuple[list[XSignal], list[NewsItem], dict[str, list[str]]]:
+    """키워드 기반 X Search로 시장 반응 시그널을 수집한다.
+
+    Returns:
+        (signals, news_items, keywords_by_sector) 튜플.
+    """
     if not api_key.strip():
         logger.warning("Grok API 키가 없어서 X 키워드 검색을 건너뛸게요.")
-        return [], []
+        return [], [], {}
 
     all_handles = grouped_verified_x_handles()
-    search_groups = [MACRO_EQUITY_GROUP, CRYPTO_ETF_GROUP]
+    search_groups = [MACRO_EQUITY_GROUP, CRYPTO_ETF_GROUP, AI_BIGTECH_GROUP, BTC_ETF_GROUP]
 
     all_signals: list[XSignal] = []
     all_news_items: list[NewsItem] = []
+    keywords_by_sector: dict[str, list[str]] = {}
 
     for group in search_groups:
-        reason = disabled_reason(GROK_PROVIDER)
+        reason = disabled_reason(GROK_KEYWORD_PROVIDER)
         if reason:
-            record_skip(GROK_PROVIDER)
-            logger.warning("Grok은 이번 실행에서 더 이상 쓰지 않을게요: %s", reason)
+            record_skip(GROK_KEYWORD_PROVIDER)
+            logger.warning("Grok keyword는 이번 실행에서 더 이상 쓰지 않을게요: %s", reason)
             break
 
         handles = all_handles.get(group, [])
         topic = GROUP_TOPIC_MAP.get(group, "us_equity")
 
         try:
-            raw_signals, usage = execute_with_provider_retry(
-                provider=GROK_PROVIDER,
+            raw_signals, usage, keywords = execute_with_provider_retry(
+                provider=GROK_KEYWORD_PROVIDER,
                 operation=lambda: _perform_keyword_search(
                     api_key=api_key,
                     model=model,
@@ -311,6 +367,10 @@ def fetch_x_keyword_signals(
             )
             _record_usage(observer, group, usage)
 
+            if keywords:
+                sector = GROUP_TOPIC_MAP.get(group, "us_equity")
+                keywords_by_sector.setdefault(sector, []).extend(keywords)
+
             for item in raw_signals[:max_items]:
                 signal = _signal_to_x_signal(item, topic)
                 if signal:
@@ -323,7 +383,7 @@ def fetch_x_keyword_signals(
             if observer:
                 observer.log_event("grok_x_keyword_failed", group=group, reason=str(exc))
 
-    return all_signals, all_news_items
+    return all_signals, all_news_items, keywords_by_sector
 
 
 def x_signals_to_dict(signals: list[XSignal]) -> list[dict[str, Any]]:

@@ -10,6 +10,7 @@
 - `news_focus_json`의 `x_market_signals`가 있으면, `sentiment`(bullish/bearish/neutral)를 LAYER 1 판단 근거의 보조 시그널로 참고한다.
 - `x_market_signals`의 `headline`과 `why_it_matters`는 LAYER 2 핵심 이슈 bullet의 후보로 사용할 수 있다.
 - `x_market_signals`의 `source_handle`이 @DeItaone, @FirstSquawk 등 속보 계정이면 시장 반응 속도가 빠른 뉴스로 우선 반영한다.
+- `news_focus_json`의 `sonar_context`가 있으면, `key_narrative`를 LAYER 1 한줄 판단의 보조 근거로 참고하고, `analyses`의 `cross_sector_link`를 LAYER 2 "왜 중요한지" 블록에서 섹터 간 연결 설명에 활용한다.
 </mission>
 
 <output_contract>

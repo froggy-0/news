@@ -299,7 +299,7 @@ def test_fetch_official_x_signals_records_usage(monkeypatch, tmp_path):
     )
 
     assert len(items) == 1
-    usage = observer.provider_usage["grok"]
+    usage = observer.provider_usage["grok_official"]
     assert usage.requests == 1
     assert usage.input_tokens == 88
     assert usage.output_tokens == 16
@@ -358,7 +358,7 @@ def test_fetch_official_x_signals_reads_cached_prompt_text_tokens(monkeypatch, t
         observer=observer,
     )
 
-    usage = observer.provider_usage["grok"]
+    usage = observer.provider_usage["grok_official"]
     assert usage.cached_input_tokens == 9
 
 
@@ -402,7 +402,7 @@ def test_fetch_official_x_signals_leaves_usage_null_when_missing(monkeypatch, tm
         observer=observer,
     )
 
-    usage = observer.provider_usage["grok"]
+    usage = observer.provider_usage["grok_official"]
     assert usage.requests == 1
     assert usage.input_tokens is None
     assert usage.output_tokens is None

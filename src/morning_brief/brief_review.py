@@ -20,7 +20,7 @@ from morning_brief.prompting import (
 
 logger = logging.getLogger(__name__)
 
-VALIDATOR_MAX_OUTPUT_TOKENS = 1400
+VALIDATOR_MAX_OUTPUT_TOKENS = 2000
 REVIEW_PARSE_PREVIEW_LEN = 240
 JSON_CODE_BLOCK_RE = re.compile(
     r"```(?:json)?\s*(?P<payload>\{.*?\})\s*```",

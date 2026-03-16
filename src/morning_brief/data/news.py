@@ -20,6 +20,7 @@ from morning_brief.data.news_rollout import (
     record_news_rollout_run,
     should_reduce_legacy_broad_fallback,
 )
+from morning_brief.data.sources.gemini_grounding import fetch_gemini_grounding
 from morning_brief.data.sources.google_news_rss import fetch_news_from_google_rss
 from morning_brief.data.sources.grok_official_signals import fetch_official_x_signals
 from morning_brief.data.sources.grok_web_search import fetch_grok_web_news
@@ -123,12 +124,16 @@ def _collect_sonar_summaries(
     if not settings.perplexity_use_sonar or not settings.perplexity_api_key:
         return {}, []
 
-    summaries = fetch_sonar_summaries(
-        api_key=settings.perplexity_api_key,
-        model=settings.perplexity_sonar_model,
-        max_tokens=settings.perplexity_sonar_max_tokens,
-        observer=observer,
-    )
+    try:
+        summaries = fetch_sonar_summaries(
+            api_key=settings.perplexity_api_key,
+            model=settings.perplexity_sonar_model,
+            max_tokens=settings.perplexity_sonar_max_tokens,
+            observer=observer,
+        )
+    except Exception as exc:
+        logger.warning("Sonar 요약 수집 중 오류 발생, 건너뛸게요: %s", exc)
+        return {}, []
     news_items = collect_sonar_news_items(summaries)
     if summaries:
         logger.info(
@@ -143,10 +148,10 @@ def _collect_x_keyword_signals(
     settings: Settings,
     *,
     observer: PipelineObserver | None = None,
-) -> tuple[list[XSignal], list[NewsItem]]:
+) -> tuple[list[XSignal], list[NewsItem], dict[str, list[str]]]:
     """Grok X 키워드 기반 시장 반응을 수집한다."""
     if not settings.grok_x_keyword_search_enabled or not settings.grok_api_key:
-        return [], []
+        return [], [], {}
 
     return fetch_x_keyword_signals(
         api_key=settings.grok_api_key,
@@ -221,6 +226,7 @@ def build_news_packet(
     *,
     settings: Settings,
     observer: PipelineObserver | None = None,
+    keywords_by_topic: dict[str, list[str]] | None = None,
 ) -> tuple[list[dict], dict[str, TopicSummary], list[XSignal]]:
     """뉴스 패킷을 구성한다.
 
@@ -236,8 +242,20 @@ def build_news_packet(
 
     # --- 신규: Sonar 요약 + Grok X 키워드 + Grok Web Search ---
     topic_summaries, sonar_news = _collect_sonar_summaries(settings, observer=observer)
-    x_signals, x_news = _collect_x_keyword_signals(settings, observer=observer)
+    x_signals, x_news, grok_keywords = _collect_x_keyword_signals(settings, observer=observer)
     grok_web_news = _collect_grok_web_news(settings, observer=observer)
+
+    # official signals와 keyword signals 간 source_handle 기반 dedup
+    if x_news and official_signal_items:
+        official_handles = {it.source.lstrip("@") for it in official_signal_items}
+        x_news = [n for n in x_news if n.source.lstrip("@") not in official_handles]
+
+    # Grok 키워드를 Perplexity 쿼리 키워드에 합산
+    if grok_keywords:
+        if keywords_by_topic is None:
+            keywords_by_topic = {}
+        for sector, kws in grok_keywords.items():
+            keywords_by_topic.setdefault(sector, []).extend(kws)
 
     if settings.research_provider == "perplexity":
         # Sonar 모드가 켜져 있으면 Sonar citations에서 추출한 NewsItem을 우선 사용
@@ -248,12 +266,26 @@ def build_news_packet(
                 max_items=settings.max_news_items,
                 api_key=settings.perplexity_api_key,
                 observer=observer,
+                keywords_by_topic=keywords_by_topic,
             )
         if not items and observer is not None:
             observer.log_event(
                 "perplexity_degraded",
                 reason="Perplexity 결과가 비어 있어 legacy 뉴스와 Grok 보조 모드로 전환했어요.",
             )
+
+        # Perplexity 0건 시 Gemini fallback
+        if not items and settings.gemini_api_key:
+            gemini_items = fetch_gemini_grounding(
+                api_key=settings.gemini_api_key,
+                model=settings.gemini_model,
+                topics=["macro", "ai_bigtech", "bitcoin", "us_equity"],
+                keywords_by_topic=keywords_by_topic,
+                observer=observer,
+            )
+            if gemini_items:
+                items = gemini_items
+                logger.info("Gemini grounding fallback으로 %d건 수집", len(gemini_items))
 
         # Grok X 키워드 + Web Search 결과 병합
         if x_news:

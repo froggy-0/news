@@ -11,14 +11,20 @@ from typing import Iterator
 
 from morning_brief.data.sources.domain_utils import normalize_domain
 
-PREFERRED_PROVIDER_ORDER = ("openai", "perplexity", "grok")
+PREFERRED_PROVIDER_ORDER = (
+    "openai",
+    "perplexity",
+    "grok_official",
+    "grok_keyword",
+    "gemini",
+)
 COLLECTED_ITEM_LOG_LIMIT = 20
 LLM_PRICING_USD_PER_1M: dict[str, dict[str, float | None]] = {
     "openai": {
-        "input": 0.150,
-        "output": 0.600,
-        "cached_input": 0.075,
-        "reasoning": 0.600,
+        "input": 0.250,
+        "output": 2.000,
+        "cached_input": 0.025,
+        "reasoning": 2.000,
     },
     "perplexity": {
         "input": 1.000,
@@ -26,9 +32,21 @@ LLM_PRICING_USD_PER_1M: dict[str, dict[str, float | None]] = {
         "cached_input": None,
         "reasoning": None,
     },
-    "grok": {
-        "input": None,
-        "output": None,
+    "grok_official": {
+        "input": 0.200,
+        "output": 0.500,
+        "cached_input": 0.050,
+        "reasoning": None,
+    },
+    "grok_keyword": {
+        "input": 0.200,
+        "output": 0.500,
+        "cached_input": 0.050,
+        "reasoning": None,
+    },
+    "gemini": {
+        "input": 0.100,
+        "output": 0.400,
         "cached_input": None,
         "reasoning": None,
     },

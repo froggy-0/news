@@ -80,6 +80,41 @@ DISALLOWED_SPONSORED_DOMAINS = {
     "data.coindesk.com",
     "downloads.coindesk.com",
 }
+
+# deny list: API search_domain_filter에 전달 (검색 단계 차단)
+SEARCH_DENY_DOMAINS: tuple[str, ...] = (
+    "-markets.ft.com",
+    "-data.coindesk.com",
+    "-downloads.coindesk.com",
+    "-sponsored.bloomberg.com",
+    "-cn.wsj.com",
+    "-jp.reuters.com",
+    "-apps.apple.com",
+    "-podcasts.apple.com",
+    "-tv.apple.com",
+    "-status.perplexity.ai",
+)
+
+# 파싱 단계에서 차단하는 저품질 소스
+LOW_QUALITY_DOMAINS: frozenset[str] = frozenset(
+    {
+        "reddit.com",
+        "twitter.com",
+        "x.com",
+        "facebook.com",
+        "linkedin.com",
+        "quora.com",
+        "medium.com",
+        "tradingview.com",
+        "investing.com",
+        "stockanalysis.com",
+        "finance.yahoo.com",
+        "wikipedia.org",
+        "investopedia.com",
+        "glassdoor.com",
+        "indeed.com",
+    }
+)
 EXCLUDE_URL_PATTERNS = (
     "/data/equities/tearsheet/",
     "/data/indices/tearsheet/",
@@ -150,11 +185,7 @@ class SearchTopic:
     name: str
     query: SearchQuery
     retry_query: SearchQuery
-    domain_filter: tuple[str, ...]
     recency_filter: str = "day"
-    retry_last_updated_days: int | None = None
-    retry_range_days: int | None = INTERMEDIATE_LOOKBACK_DAYS
-    retry_domain_filter: tuple[str, ...] | None = None
     retry_recency_filter: str | None = None
 
 
@@ -183,23 +214,6 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             "published within the last week in English. Prefer reliable financial reporting. "
             "Exclude non-English pages, data pages, and summary pages.",
         ),
-        domain_filter=(
-            "reuters.com",
-            "bloomberg.com",
-            "wsj.com",
-            FT_CONTENT_URL_PREFIX,
-            "cnbc.com",
-            "marketwatch.com",
-        ),
-        retry_last_updated_days=INTERMEDIATE_LOOKBACK_DAYS,
-        retry_domain_filter=(
-            "reuters.com",
-            "bloomberg.com",
-            "wsj.com",
-            FT_CONTENT_URL_PREFIX,
-            "cnbc.com",
-            "marketwatch.com",
-        ),
         retry_recency_filter="week",
     ),
     SearchTopic(
@@ -226,25 +240,6 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             "published within the last week in English. Prefer reliable financial reporting. "
             "Exclude non-English pages, data pages, and archive pages.",
         ),
-        domain_filter=(
-            "reuters.com",
-            "bloomberg.com",
-            "wsj.com",
-            FT_CONTENT_URL_PREFIX,
-            "cnbc.com",
-            "marketwatch.com",
-            "nasdaq.com",
-        ),
-        retry_last_updated_days=INTERMEDIATE_LOOKBACK_DAYS,
-        retry_domain_filter=(
-            "reuters.com",
-            "bloomberg.com",
-            "wsj.com",
-            FT_CONTENT_URL_PREFIX,
-            "cnbc.com",
-            "nasdaq.com",
-            "marketwatch.com",
-        ),
         retry_recency_filter="week",
     ),
     SearchTopic(
@@ -262,29 +257,6 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             "data pages, stock quote pages, summary pages, category pages, archive pages, and "
             "podcast pages."
         ),
-        domain_filter=(
-            "reuters.com",
-            "bloomberg.com",
-            "wsj.com",
-            FT_CONTENT_URL_PREFIX,
-            "cnbc.com",
-        ),
-        retry_domain_filter=(
-            "reuters.com",
-            "bloomberg.com",
-            "wsj.com",
-            FT_CONTENT_URL_PREFIX,
-            "cnbc.com",
-            "https://investor.nvidia.com",
-            "https://news.microsoft.com/source/",
-            "https://www.apple.com/newsroom/",
-            "https://www.aboutamazon.com/news/",
-            "https://blog.google/",
-            "https://about.fb.com/news/",
-            "https://ir.amd.com/news-events/press-releases",
-            "https://www.tsmc.com/english/news-events/press-releases",
-            "https://www.asml.com/en/news/press-releases",
-        ),
         retry_recency_filter="week",
     ),
     SearchTopic(
@@ -300,23 +272,6 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             "official release published within the last week. Prefer reliable English-language "
             "reporting, regulators, and news analysis. Exclude market data pages, summary pages, "
             "ETF product pages, issuer landing pages, and newsroom listing pages."
-        ),
-        domain_filter=(
-            "reuters.com",
-            "bloomberg.com",
-            "wsj.com",
-            FT_CONTENT_URL_PREFIX,
-            "cnbc.com",
-            "coindesk.com",
-        ),
-        retry_domain_filter=(
-            "reuters.com",
-            "bloomberg.com",
-            "wsj.com",
-            FT_CONTENT_URL_PREFIX,
-            "cnbc.com",
-            "coindesk.com",
-            "https://www.sec.gov/newsroom/press-releases/",
         ),
         retry_recency_filter="week",
     ),
@@ -396,6 +351,16 @@ def _build_client(api_key: str) -> Perplexity:
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _inject_keywords(query: SearchQuery, keywords: list[str] | None) -> SearchQuery:
+    """쿼리 끝에 키워드를 주입. 최대 3개까지."""
+    if not keywords:
+        return query
+    suffix = " ".join(keywords[:3])
+    if isinstance(query, tuple):
+        return tuple(f"{q} {suffix}" for q in query)
+    return f"{query} {suffix}"
 
 
 def _is_weekend() -> bool:
@@ -598,7 +563,6 @@ def _search_once(
     *,
     client: Perplexity,
     query: SearchQuery,
-    domain_filter: tuple[str, ...],
     recency_filter: str | None,
     search_after_date_filter: str | None = None,
     search_before_date_filter: str | None = None,
@@ -617,7 +581,7 @@ def _search_once(
             request_kwargs: dict[str, object] = {
                 "query": _search_query_value(query),
                 "max_results": SEARCH_MAX_RESULTS,
-                "search_domain_filter": _search_domain_filter_values(domain_filter),
+                "search_domain_filter": _search_domain_filter_values(SEARCH_DENY_DOMAINS),
                 "search_language_filter": ["en"],
                 "country": "US",
             }
@@ -680,10 +644,8 @@ def _parse_results(
     *,
     payload: dict[str, Any],
     topic: SearchTopic,
-    allowed_domains: tuple[str, ...] | None = None,
 ) -> list[NewsItem]:
     items: list[NewsItem] = []
-    domain_allowlist = allowed_domains or topic.domain_filter
     for raw in _flatten_results(payload)[:TOPIC_RESULT_LIMIT]:
         if not isinstance(raw, dict):
             continue
@@ -693,7 +655,7 @@ def _parse_results(
         if (
             not title
             or not url
-            or not _is_allowed_domain(url, domain_allowlist)
+            or _is_low_quality_source(url)
             or _is_disallowed_market_data_result(title=title, url=url)
             or _is_topic_landing_page(topic=topic.name, url=url, title=title)
             or _is_invalid_news_title(title)
@@ -716,6 +678,11 @@ def _parse_results(
         )
 
     return items
+
+
+def _is_low_quality_source(url: str) -> bool:
+    domain = normalize_domain(url)
+    return any(domain_matches(domain, blocked) for blocked in LOW_QUALITY_DOMAINS)
 
 
 def _is_disallowed_market_data_result(*, title: str, url: str) -> bool:
@@ -890,6 +857,7 @@ def _fetch_news_from_perplexity(
     max_items: int,
     api_key: str,
     observer: PipelineObserver | None,
+    keywords_by_topic: dict[str, list[str]] | None = None,
 ) -> list[NewsItem]:
     del max_items
 
@@ -902,10 +870,12 @@ def _fetch_news_from_perplexity(
 
     for topic in TOPIC_SPECS:
         try:
+            topic_keywords = (keywords_by_topic or {}).get(topic.name, [])
             topic_items, total_result_count, raw_items = _search_topic_items(
                 client=client,
                 topic=topic,
                 observer=observer,
+                keywords=topic_keywords,
             )
             if observer is not None:
                 observer.record_perplexity_topic_results(
@@ -954,14 +924,15 @@ def _search_topic_items(
     client: Perplexity,
     topic: SearchTopic,
     observer: PipelineObserver | None,
+    keywords: list[str] | None = None,
 ) -> tuple[list[NewsItem], int, list[dict[str, str]]]:
     effective_recency = (
         "week" if _is_weekend() and topic.recency_filter == "day" else topic.recency_filter
     )
+    effective_query = _inject_keywords(topic.query, keywords)
     payload, usage, usage_present = _search_once(
         client=client,
-        query=topic.query,
-        domain_filter=topic.domain_filter,
+        query=effective_query,
         recency_filter=effective_recency,
     )
     first_results = _flatten_results(payload)
@@ -969,136 +940,44 @@ def _search_topic_items(
     raw_items = _loggable_raw_results(first_results)
     _record_perplexity_usage(
         observer=observer,
-        query=topic.query,
+        query=effective_query,
         usage=usage,
         usage_present=usage_present,
         result_count=total_result_count,
     )
-    topic_items = _dedupe_topic_items(
-        _parse_results(payload=payload, topic=topic, allowed_domains=topic.domain_filter)
-    )
+    topic_items = _dedupe_topic_items(_parse_results(payload=payload, topic=topic))
     if len(topic_items) >= TOPIC_RESULT_TARGET or not topic.retry_query:
         return topic_items, total_result_count, raw_items
 
-    if topic.retry_last_updated_days:
-        last_updated_after_filter, last_updated_before_filter = _search_date_range(
-            topic.retry_last_updated_days
-        )
-        if observer is not None:
-            observer.log_event(
-                "perplexity_search_widened",
-                topic=topic.name,
-                stage="last_updated_retry",
-                last_updated_after_filter=last_updated_after_filter,
-                last_updated_before_filter=last_updated_before_filter,
-                reason="insufficient_24h_results",
-            )
-        updated_payload, updated_usage, updated_usage_present = _search_once(
-            client=client,
-            query=topic.retry_query,
-            domain_filter=topic.domain_filter,
-            recency_filter=None,
-            last_updated_after_filter=last_updated_after_filter,
-            last_updated_before_filter=last_updated_before_filter,
-        )
-        updated_results = _flatten_results(updated_payload)
-        updated_result_count = len(updated_results)
-        raw_items.extend(_loggable_raw_results(updated_results))
-        _record_perplexity_usage(
-            observer=observer,
-            query=topic.retry_query,
-            usage=updated_usage,
-            usage_present=updated_usage_present,
-            result_count=updated_result_count,
-        )
-        new_items = _filter_items_to_date_window(
-            _parse_results(
-                payload=updated_payload,
-                topic=topic,
-                allowed_domains=topic.domain_filter,
-            ),
-            after_filter=last_updated_after_filter,
-            before_filter=last_updated_before_filter,
-        )
-        topic_items = _dedupe_topic_items(topic_items + new_items)
-        total_result_count += updated_result_count
-        if len(topic_items) >= TOPIC_RESULT_TARGET:
-            return topic_items, total_result_count, raw_items
-
-    if topic.retry_range_days:
-        search_after_date_filter, search_before_date_filter = _search_date_range(
-            topic.retry_range_days
-        )
-        if observer is not None:
-            observer.log_event(
-                "perplexity_search_widened",
-                topic=topic.name,
-                stage="date_range_retry",
-                search_after_date_filter=search_after_date_filter,
-                search_before_date_filter=search_before_date_filter,
-                reason="insufficient_24h_results",
-            )
-        retry_payload, retry_usage, retry_usage_present = _search_once(
-            client=client,
-            query=topic.retry_query,
-            domain_filter=topic.domain_filter,
-            recency_filter=None,
-            search_after_date_filter=search_after_date_filter,
-            search_before_date_filter=search_before_date_filter,
-        )
-        retry_results = _flatten_results(retry_payload)
-        retry_result_count = len(retry_results)
-        raw_items.extend(_loggable_raw_results(retry_results))
-        _record_perplexity_usage(
-            observer=observer,
-            query=topic.retry_query,
-            usage=retry_usage,
-            usage_present=retry_usage_present,
-            result_count=retry_result_count,
-        )
-        new_range_items = _filter_items_to_date_window(
-            _parse_results(payload=retry_payload, topic=topic, allowed_domains=topic.domain_filter),
-            after_filter=search_after_date_filter,
-            before_filter=search_before_date_filter,
-        )
-        topic_items = _dedupe_topic_items(topic_items + new_range_items)
-        total_result_count += retry_result_count
-        if len(topic_items) >= TOPIC_RESULT_TARGET:
-            return topic_items, total_result_count, raw_items
-
+    # recency 확장 retry (1회)
+    retry_recency = topic.retry_recency_filter or topic.recency_filter
     if observer is not None:
         observer.log_event(
             "perplexity_search_widened",
             topic=topic.name,
-            stage="broad_retry",
-            recency_filter=topic.retry_recency_filter or topic.recency_filter,
-            reason="insufficient_recent_results_after_date_retry",
+            stage="recency_retry",
+            recency_filter=retry_recency,
+            reason="insufficient_recent_results",
         )
-    broad_payload, broad_usage, broad_usage_present = _search_once(
+    retry_payload, retry_usage, retry_usage_present = _search_once(
         client=client,
         query=topic.retry_query,
-        domain_filter=topic.retry_domain_filter or topic.domain_filter,
-        recency_filter=topic.retry_recency_filter or topic.recency_filter,
+        recency_filter=retry_recency,
     )
-    broad_results = _flatten_results(broad_payload)
-    broad_result_count = len(broad_results)
-    raw_items.extend(_loggable_raw_results(broad_results))
+    retry_results = _flatten_results(retry_payload)
+    retry_result_count = len(retry_results)
+    raw_items.extend(_loggable_raw_results(retry_results))
     _record_perplexity_usage(
         observer=observer,
         query=topic.retry_query,
-        usage=broad_usage,
-        usage_present=broad_usage_present,
-        result_count=broad_result_count,
+        usage=retry_usage,
+        usage_present=retry_usage_present,
+        result_count=retry_result_count,
     )
     topic_items = _dedupe_topic_items(
-        topic_items
-        + _parse_results(
-            payload=broad_payload,
-            topic=topic,
-            allowed_domains=topic.retry_domain_filter or topic.domain_filter,
-        )
+        topic_items + _parse_results(payload=retry_payload, topic=topic)
     )
-    return topic_items, total_result_count + broad_result_count, raw_items
+    return topic_items, total_result_count + retry_result_count, raw_items
 
 
 def _dedupe_topic_items(items: list[NewsItem]) -> list[NewsItem]:
@@ -1146,5 +1025,11 @@ def fetch_news_from_perplexity(
     max_items: int,
     api_key: str,
     observer: PipelineObserver | None = None,
+    keywords_by_topic: dict[str, list[str]] | None = None,
 ) -> list[NewsItem]:
-    return _fetch_news_from_perplexity(max_items=max_items, api_key=api_key, observer=observer)
+    return _fetch_news_from_perplexity(
+        max_items=max_items,
+        api_key=api_key,
+        observer=observer,
+        keywords_by_topic=keywords_by_topic,
+    )

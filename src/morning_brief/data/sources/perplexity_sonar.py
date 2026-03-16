@@ -455,3 +455,134 @@ def collect_sonar_news_items(summaries: dict[str, TopicSummary]) -> list[NewsIte
                 seen_urls.add(item.url)
                 items.append(item)
     return items
+
+
+# --- Phase 3: Sonar 맥락 보강 ---
+
+SONAR_CONTEXT_SCHEMA: dict[str, Any] = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "sonar_context_analysis",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "required": ["analyses", "key_narrative"],
+            "properties": {
+                "analyses": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["topic", "context", "cross_sector_link"],
+                        "properties": {
+                            "topic": {"type": "string"},
+                            "context": {"type": "string"},
+                            "cross_sector_link": {"type": "string"},
+                        },
+                        "additionalProperties": False,
+                    },
+                },
+                "key_narrative": {"type": "string"},
+            },
+            "additionalProperties": False,
+        },
+    },
+}
+
+MAX_CONTEXT_ARTICLES = 12  # 섹터별 3건 × 4섹터
+
+
+def _load_context_prompts(articles: list[dict[str, str]]) -> tuple[str, str]:
+    from pathlib import Path
+
+    template_dir = Path(__file__).resolve().parent.parent / "prompts"
+    system = (template_dir / "sonar_context_system.j2").read_text(encoding="utf-8").strip()
+    raw_input = (template_dir / "sonar_context_input.j2").read_text(encoding="utf-8")
+    # 간단한 Jinja 치환
+    time_range = _time_range()
+    raw_input = raw_input.replace("{{ time_range }}", time_range)
+    article_block = ""
+    for a in articles:
+        article_block += f"[{a.get('topic', '')}] {a.get('title', '')}\n{a.get('summary', '')}\n\n"
+    raw_input = raw_input.replace(
+        "{% for article in articles %}\n[{{ article.topic }}] {{ article.title }}\n{{ article.summary }}\n{% endfor %}\n",
+        article_block,
+    )
+    return system, raw_input
+
+
+@dataclass
+class SonarContextResult:
+    """Sonar 맥락 분석 결과."""
+
+    analyses: list[dict[str, str]] = field(default_factory=list)
+    key_narrative: str = ""
+
+
+def fetch_sonar_context(
+    *,
+    api_key: str,
+    articles: list[dict[str, str]],
+    model: str | None = None,
+    max_tokens: int = 1500,
+    observer: PipelineObserver | None = None,
+) -> SonarContextResult | None:
+    """수집된 뉴스 기반 Sonar 맥락 분석을 수행한다.
+
+    주말에는 sonar-pro, 평일에는 sonar를 사용한다.
+    """
+    if not api_key.strip() or not articles:
+        return None
+
+    effective_model = model or ("sonar-pro" if _is_weekend() else "sonar")
+    trimmed = articles[:MAX_CONTEXT_ARTICLES]
+    system_prompt, user_prompt = _load_context_prompts(trimmed)
+    client = _build_sonar_client(api_key)
+
+    def perform() -> tuple[SonarContextResult, dict[str, int | None]]:
+        try:
+            response = client.chat.completions.create(
+                model=effective_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                search_domain_filter=SONAR_DENY_DOMAINS,
+                search_recency_filter=_recency_filter(),
+                response_format=SONAR_CONTEXT_SCHEMA,
+                temperature=SONAR_TEMPERATURE,
+                max_tokens=max_tokens,
+            )
+        except (RateLimitError, APITimeoutError, APIConnectionError, APIStatusError) as exc:
+            raise _to_http_fetch_error(exc) from exc
+
+        content = ""
+        if hasattr(response, "choices") and response.choices:
+            msg = response.choices[0].message
+            content = getattr(msg, "content", "") or ""
+
+        parsed = _parse_sonar_content(content, "context")
+        usage = _usage_snapshot(response)
+        result = SonarContextResult(
+            analyses=parsed.get("analyses", []),
+            key_narrative=str(parsed.get("key_narrative", "")),
+        )
+        return result, usage
+
+    try:
+        result, usage = execute_with_provider_retry(
+            provider=SONAR_PROVIDER,
+            operation=perform,
+            should_retry=lambda exc: isinstance(exc, HttpFetchError) and exc.retryable,
+        )
+        _record_sonar_usage(observer, "context", usage)
+        logger.info(
+            "Sonar 맥락 분석 완료: analyses=%d, narrative=%s",
+            len(result.analyses),
+            result.key_narrative[:80] if result.key_narrative else "(없음)",
+        )
+        return result
+    except HttpFetchError as exc:
+        logger.warning("Sonar 맥락 분석 실패: %s", exc)
+        if observer:
+            observer.log_event("sonar_context_failed", reason=str(exc))
+        return None

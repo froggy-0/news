@@ -19,6 +19,8 @@ class Settings:
     openai_brief_validation_enabled: bool
     openai_brief_validation_model: str
     openai_brief_max_rewrites: int
+    gemini_api_key: str
+    gemini_model: str
     openai_web_search_enabled: bool
     openai_web_search_model: str
     openai_web_search_max_results: int
@@ -103,6 +105,8 @@ def load_settings() -> Settings:
             minimum=0,
             maximum=2,
         ),
+        gemini_api_key=os.getenv("GEMINI_API_KEY", "").strip(),
+        gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash").strip(),
         openai_web_search_enabled=_env_bool("OPENAI_WEB_SEARCH_ENABLED", True),
         openai_web_search_model=os.getenv("OPENAI_WEB_SEARCH_MODEL", "").strip()
         or os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL).strip(),
@@ -132,14 +136,14 @@ def load_settings() -> Settings:
         ).strip(),
         fred_api_key=os.getenv("FRED_API_KEY", "").strip(),
         perplexity_api_key=os.getenv("PERPLEXITY_API_KEY", "").strip(),
-        perplexity_use_sonar=_env_bool("PERPLEXITY_USE_SONAR_SUMMARY", False),
+        perplexity_use_sonar=_env_bool("PERPLEXITY_USE_SONAR_SUMMARY", True),
         perplexity_sonar_model=os.getenv("PERPLEXITY_SONAR_MODEL", "sonar").strip(),
         perplexity_sonar_max_tokens=_env_bounded_int(
             "PERPLEXITY_SONAR_MAX_TOKENS", default=1500, minimum=500, maximum=4000
         ),
         grok_api_key=os.getenv("GROK_API_KEY", "").strip(),
         grok_model=os.getenv("GROK_MODEL", "grok-4-1-fast-non-reasoning").strip(),
-        grok_x_keyword_search_enabled=_env_bool("GROK_X_KEYWORD_SEARCH_ENABLED", False),
+        grok_x_keyword_search_enabled=_env_bool("GROK_X_KEYWORD_SEARCH_ENABLED", True),
         grok_web_search_enabled=_env_bool("GROK_WEB_SEARCH_ENABLED", False),
         grok_x_search_max_items=_env_bounded_int(
             "GROK_X_SEARCH_MAX_ITEMS", default=6, minimum=1, maximum=10

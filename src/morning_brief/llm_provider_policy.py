@@ -14,6 +14,7 @@ class ProviderRolePolicy:
 PERPLEXITY_PROVIDER = "perplexity"
 GROK_PROVIDER = "grok"
 OPENAI_PROVIDER = "openai"
+GEMINI_PROVIDER = "gemini"
 
 CAPABILITY_NEWS_COLLECTION = "news_collection"
 CAPABILITY_X_SIGNAL = "x_signal"
@@ -21,6 +22,9 @@ CAPABILITY_BTC_ETF_REFERENCE = "btc_etf_reference"
 CAPABILITY_BRIEF_GENERATION = "brief_generation"
 CAPABILITY_BRIEF_REVIEW = "brief_review"
 CAPABILITY_WEB_BACKFILL = "web_backfill"
+
+
+CAPABILITY_NEWS_FALLBACK = "news_fallback"
 
 
 PROVIDER_ROLE_POLICIES = {
@@ -59,6 +63,18 @@ PROVIDER_ROLE_POLICIES = {
             CAPABILITY_NEWS_COLLECTION,
             CAPABILITY_X_SIGNAL,
             CAPABILITY_BTC_ETF_REFERENCE,
+        ),
+    ),
+    GEMINI_PROVIDER: ProviderRolePolicy(
+        provider=GEMINI_PROVIDER,
+        primary_role="뉴스 fallback 전담",
+        allowed_capabilities=(CAPABILITY_NEWS_FALLBACK,),
+        forbidden_capabilities=(
+            CAPABILITY_X_SIGNAL,
+            CAPABILITY_BTC_ETF_REFERENCE,
+            CAPABILITY_BRIEF_GENERATION,
+            CAPABILITY_BRIEF_REVIEW,
+            CAPABILITY_WEB_BACKFILL,
         ),
     ),
 }

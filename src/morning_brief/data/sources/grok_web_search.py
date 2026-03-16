@@ -15,6 +15,7 @@ from xai_sdk import Client
 from xai_sdk.chat import user
 from xai_sdk.tools import web_search
 
+from morning_brief.data.sources.grok_official_signals import GROK_PROVIDER
 from morning_brief.data.sources.http_client import HttpFetchError
 from morning_brief.data.sources.provider_runtime import (
     disabled_reason,
@@ -26,7 +27,6 @@ from morning_brief.models import NewsItem
 from morning_brief.observability import PipelineObserver
 
 logger = logging.getLogger(__name__)
-GROK_PROVIDER = "grok"
 
 WEB_SEARCH_PROMPT = """Search the web for the most important financial news articles
 from the last 24 hours covering:

@@ -97,8 +97,10 @@ class TestXSignalsToDict:
 
 class TestFetchXKeywordSignals:
     def test_empty_api_key_returns_empty(self):
-        signals, items = fetch_x_keyword_signals(api_key="", model="test")
+        signals, items, keywords = fetch_x_keyword_signals(api_key="", model="test")
         assert signals == []
+        assert items == []
+        assert keywords == {}
         assert items == []
 
 

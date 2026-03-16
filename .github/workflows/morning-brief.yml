@@ -2,8 +2,8 @@ name: Morning Market Brief
 
 on:
   schedule:
-    # 08:00 KST daily == 23:00 UTC (previous day)
-    - cron: "0 23 * * *"
+    # 07:54 KST daily == 22:54 UTC (previous day)
+    - cron: "54 22 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -149,11 +149,15 @@ jobs:
           PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
           GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
           GROK_MODEL: ${{ vars.GROK_MODEL || 'grok-4.20-beta-latest-non-reasoning' }}
+          GROK_X_KEYWORD_SEARCH_ENABLED: ${{ vars.GROK_X_KEYWORD_SEARCH_ENABLED || 'true' }}
           RESEARCH_PROVIDER: ${{ vars.RESEARCH_PROVIDER || 'perplexity' }}
           ENABLE_LEGACY_NEWS_FALLBACK: ${{ vars.ENABLE_LEGACY_NEWS_FALLBACK || 'true' }}
           ENABLE_OFFICIAL_X_SIGNALS: ${{ vars.ENABLE_OFFICIAL_X_SIGNALS || 'true' }}
           OFFICIAL_X_LOOKBACK_HOURS: ${{ vars.OFFICIAL_X_LOOKBACK_HOURS || '48' }}
           OFFICIAL_X_MAX_ITEMS: ${{ vars.OFFICIAL_X_MAX_ITEMS || '4' }}
+          PERPLEXITY_USE_SONAR_SUMMARY: ${{ vars.PERPLEXITY_USE_SONAR_SUMMARY || 'true' }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.0-flash' }}
           NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
           GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
           GMAIL_RECIPIENT: ${{ secrets.GMAIL_RECIPIENT }}

@@ -23,7 +23,7 @@ from morning_brief.models import NewsItem
 from morning_brief.observability import PipelineObserver
 
 logger = logging.getLogger(__name__)
-GROK_PROVIDER = "grok"
+GROK_PROVIDER = "grok_official"
 
 GROUP_TOPIC_MAP = {
     "macro_regulator": "macro",

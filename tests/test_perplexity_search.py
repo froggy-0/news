@@ -59,7 +59,6 @@ def test_fetch_news_from_perplexity_calls_search_api_with_expected_payload(monke
                 name="macro",
                 query="macro query",
                 retry_query="macro retry",
-                domain_filter=("reuters.com", "federalreserve.gov"),
             ),
         ),
     )
@@ -90,9 +89,11 @@ def test_fetch_news_from_perplexity_calls_search_api_with_expected_payload(monke
 
     assert len(calls) == 1
     assert calls[0]["query"] == "macro query"
-    assert calls[0]["search_domain_filter"] == ["reuters.com", "federalreserve.gov"]
     assert calls[0]["search_language_filter"] == ["en"]
     assert calls[0]["max_results"] == ps.SEARCH_MAX_RESULTS
+    # deny list가 적용되는지 확인
+    domain_filter = calls[0]["search_domain_filter"]
+    assert all(v.startswith("-") for v in domain_filter)
     assert "search_mode" not in calls[0]
     assert items[0].source == "Reuters"
     assert items[0].provider == "perplexity_search"
@@ -113,8 +114,6 @@ def test_fetch_news_from_perplexity_retries_with_topic_retry_query(monkeypatch):
                 name="bitcoin",
                 query="bitcoin query",
                 retry_query="bitcoin retry",
-                domain_filter=("coindesk.com",),
-                retry_domain_filter=("coindesk.com", "sec.gov"),
                 retry_recency_filter="week",
             ),
         ),
@@ -156,22 +155,20 @@ def test_fetch_news_from_perplexity_retries_with_topic_retry_query(monkeypatch):
     items = ps.fetch_news_from_perplexity(max_items=5, api_key="pplx-test-key")
 
     assert [call["query"] for call in calls] == ["bitcoin query", "bitcoin retry"]
-    assert calls[0]["search_domain_filter"] == ["coindesk.com"]
-    assert calls[0]["search_language_filter"] == ["en"]
     # 2026-03-15는 일요일이므로 주말 recency가 "week"으로 적용됨
     assert calls[0]["search_recency_filter"] == "week"
-    assert calls[1]["search_domain_filter"] == ["coindesk.com"]
+    assert calls[0]["search_language_filter"] == ["en"]
+    assert calls[1]["search_recency_filter"] == "week"
     assert calls[1]["search_language_filter"] == ["en"]
-    assert "search_recency_filter" not in calls[1]
-    assert calls[1]["search_after_date_filter"] == "03/13/2026"
-    assert calls[1]["search_before_date_filter"] == "03/15/2026"
     assert len(items) == 2
     assert items[0].topic == "bitcoin"
     assert items[1].why_it_matters
     assert items[0].published_at.isoformat() == "2026-03-13T12:00:00+00:00"
 
 
-def test_fetch_news_from_perplexity_uses_broad_retry_after_date_retry(monkeypatch, tmp_path):
+def test_fetch_news_from_perplexity_uses_recency_retry_when_first_search_empty(
+    monkeypatch, tmp_path
+):
     calls = []
     observer = PipelineObserver(output_dir=tmp_path)
     monkeypatch.setattr(ps, "_utc_now", lambda: datetime(2026, 3, 15, 9, 0, tzinfo=timezone.utc))
@@ -183,8 +180,6 @@ def test_fetch_news_from_perplexity_uses_broad_retry_after_date_retry(monkeypatc
                 name="bitcoin",
                 query="bitcoin query",
                 retry_query="bitcoin retry",
-                domain_filter=("coindesk.com",),
-                retry_domain_filter=("coindesk.com", "sec.gov"),
                 retry_recency_filter="week",
             ),
         ),
@@ -194,7 +189,6 @@ def test_fetch_news_from_perplexity_uses_broad_retry_after_date_retry(monkeypatc
         "_build_client",
         lambda api_key: _Client(
             [
-                _SDKResponse({"results": []}),
                 _SDKResponse({"results": []}),
                 _SDKResponse(
                     {
@@ -219,22 +213,18 @@ def test_fetch_news_from_perplexity_uses_broad_retry_after_date_retry(monkeypatc
         observer=observer,
     )
 
-    assert [call["query"] for call in calls] == ["bitcoin query", "bitcoin retry", "bitcoin retry"]
+    assert [call["query"] for call in calls] == ["bitcoin query", "bitcoin retry"]
     # 2026-03-15는 일요일이므로 주말 recency가 "week"으로 적용됨
     assert calls[0]["search_recency_filter"] == "week"
     assert calls[0]["search_language_filter"] == ["en"]
-    assert calls[1]["search_after_date_filter"] == "03/13/2026"
-    assert calls[1]["search_before_date_filter"] == "03/15/2026"
+    assert calls[1]["search_recency_filter"] == "week"
     assert calls[1]["search_language_filter"] == ["en"]
-    assert calls[2]["search_domain_filter"] == ["coindesk.com", "sec.gov"]
-    assert calls[2]["search_language_filter"] == ["en"]
-    assert calls[2]["search_recency_filter"] == "week"
     assert len(items) == 1
     assert items[0].url == "https://www.sec.gov/newsroom/press-releases/2026-42"
     widen_events = [
         event for event in observer.events if event["event"] == "perplexity_search_widened"
     ]
-    assert [event["stage"] for event in widen_events] == ["date_range_retry", "broad_retry"]
+    assert [event["stage"] for event in widen_events] == ["recency_retry"]
 
 
 def test_search_once_normalizes_domain_filters_for_api_request():
@@ -260,23 +250,13 @@ def test_search_once_normalizes_domain_filters_for_api_request():
     ps._search_once(
         client=client,
         query="macro query",
-        domain_filter=(
-            ps.FT_CONTENT_URL_PREFIX,
-            "https://news.microsoft.com/source/",
-            "https://www.apple.com/newsroom/",
-            "https://investor.nvidia.com",
-            "reuters.com",
-        ),
         recency_filter="day",
     )
 
-    assert calls[0]["search_domain_filter"] == [
-        "ft.com",
-        "news.microsoft.com",
-        "apple.com",
-        "investor.nvidia.com",
-        "reuters.com",
-    ]
+    # deny list가 적용되는지 확인
+    domain_filter = calls[0]["search_domain_filter"]
+    assert all(v.startswith("-") for v in domain_filter)
+    assert any("markets.ft.com" in v for v in domain_filter)
 
 
 def test_fetch_news_from_perplexity_supports_multi_query_results(monkeypatch):
@@ -289,7 +269,6 @@ def test_fetch_news_from_perplexity_supports_multi_query_results(monkeypatch):
                 name="macro",
                 query=("macro one", "macro two"),
                 retry_query="",
-                domain_filter=("reuters.com",),
             ),
         ),
     )
@@ -333,9 +312,7 @@ def test_fetch_news_from_perplexity_supports_multi_query_results(monkeypatch):
     assert items[0].source == "Reuters"
 
 
-def test_fetch_news_from_perplexity_uses_last_updated_retry_before_date_retry(
-    monkeypatch, tmp_path
-):
+def test_fetch_news_from_perplexity_uses_recency_retry_before_giving_up(monkeypatch, tmp_path):
     calls = []
     observer = PipelineObserver(output_dir=tmp_path)
     monkeypatch.setattr(ps, "_utc_now", lambda: datetime(2026, 3, 15, 9, 0, tzinfo=timezone.utc))
@@ -348,9 +325,6 @@ def test_fetch_news_from_perplexity_uses_last_updated_retry_before_date_retry(
                 name="macro",
                 query="macro query",
                 retry_query="macro retry",
-                domain_filter=("reuters.com", "https://www.ft.com/content/"),
-                retry_last_updated_days=2,
-                retry_range_days=2,
                 retry_recency_filter="week",
             ),
         ),
@@ -373,7 +347,6 @@ def test_fetch_news_from_perplexity_uses_last_updated_retry_before_date_retry(
                         ]
                     }
                 ),
-                _SDKResponse({"results": []}),
             ],
             calls,
         ),
@@ -388,21 +361,15 @@ def test_fetch_news_from_perplexity_uses_last_updated_retry_before_date_retry(
     assert len(calls) == 2
     # 2026-03-15는 일요일이므로 주말 recency가 "week"으로 적용됨
     assert calls[0]["search_recency_filter"] == "week"
-    assert calls[1]["search_domain_filter"] == ["reuters.com", "ft.com"]
-    assert calls[1]["last_updated_after_filter"] == "03/13/2026"
-    assert calls[1]["last_updated_before_filter"] == "03/15/2026"
-    assert "search_recency_filter" not in calls[1]
-    assert "search_after_date_filter" not in calls[1]
+    assert calls[1]["search_recency_filter"] == "week"
     assert len(items) == 1
     widen_events = [
         event for event in observer.events if event["event"] == "perplexity_search_widened"
     ]
-    assert [event["stage"] for event in widen_events] == ["last_updated_retry"]
+    assert [event["stage"] for event in widen_events] == ["recency_retry"]
 
 
-def test_fetch_news_from_perplexity_discards_last_updated_retry_results_outside_window(
-    monkeypatch, tmp_path
-):
+def test_fetch_news_from_perplexity_filters_sponsored_in_retry(monkeypatch, tmp_path):
     calls = []
     observer = PipelineObserver(output_dir=tmp_path)
     monkeypatch.setattr(ps, "_utc_now", lambda: datetime(2026, 3, 15, 9, 0, tzinfo=timezone.utc))
@@ -415,9 +382,6 @@ def test_fetch_news_from_perplexity_discards_last_updated_retry_results_outside_
                 name="macro",
                 query="macro query",
                 retry_query="macro retry",
-                domain_filter=("bloomberg.com",),
-                retry_last_updated_days=2,
-                retry_range_days=None,
             ),
         ),
     )
@@ -439,7 +403,6 @@ def test_fetch_news_from_perplexity_discards_last_updated_retry_results_outside_
                         ]
                     }
                 ),
-                _SDKResponse({"results": []}),
             ],
             calls,
         ),
@@ -459,7 +422,6 @@ def test_parse_results_filters_sponsored_bloomberg_pages():
         name="macro",
         query="macro query",
         retry_query="",
-        domain_filter=("bloomberg.com",),
     )
 
     items = ps._parse_results(
@@ -486,7 +448,7 @@ def test_parse_results_filters_sponsored_bloomberg_pages():
     assert items[0].source == "Bloomberg"
 
 
-def test_fetch_news_from_perplexity_filters_unallowed_domain(monkeypatch):
+def test_fetch_news_from_perplexity_filters_low_quality_domain(monkeypatch):
     monkeypatch.setattr(
         ps,
         "TOPIC_SPECS",
@@ -495,7 +457,6 @@ def test_fetch_news_from_perplexity_filters_unallowed_domain(monkeypatch):
                 name="us_equity",
                 query="equity query",
                 retry_query="",
-                domain_filter=("reuters.com",),
             ),
         ),
     )
@@ -508,8 +469,8 @@ def test_fetch_news_from_perplexity_filters_unallowed_domain(monkeypatch):
                     {
                         "results": [
                             {
-                                "title": "Bad source",
-                                "url": "https://example.com/market-story",
+                                "title": "Reddit discussion about market trends today",
+                                "url": "https://www.reddit.com/r/stocks/market-story",
                                 "snippet": "ignore",
                                 "date": "2026-03-13T01:00:00Z",
                             }
@@ -535,7 +496,6 @@ def test_fetch_news_from_perplexity_filters_non_newsroom_apple_urls(monkeypatch)
                 name="ai_bigtech",
                 query="ai query",
                 retry_query="",
-                domain_filter=("apple.com",),
             ),
         ),
     )
@@ -582,7 +542,6 @@ def test_fetch_news_from_perplexity_filters_service_status_pages(monkeypatch):
                 name="ai_bigtech",
                 query="ai query",
                 retry_query="",
-                domain_filter=("broadcom.com",),
             ),
         ),
     )
@@ -629,7 +588,6 @@ def test_fetch_news_from_perplexity_filters_paid_partner_pages(monkeypatch):
                 name="ai_bigtech",
                 query="ai query",
                 retry_query="",
-                domain_filter=("wsj.com", "reuters.com"),
             ),
         ),
     )
@@ -676,7 +634,6 @@ def test_fetch_news_from_perplexity_filters_statuspage_urls(monkeypatch):
                 name="macro",
                 query="macro query",
                 retry_query="",
-                domain_filter=("federalreserve.gov",),
             ),
         ),
     )
@@ -723,7 +680,6 @@ def test_fetch_news_from_perplexity_filters_sec_listing_pages_and_coindesk_data(
                 name="bitcoin",
                 query="bitcoin query",
                 retry_query="",
-                domain_filter=("coindesk.com", "sec.gov"),
             ),
         ),
     )
@@ -784,7 +740,6 @@ def test_parse_results_filters_fed_index_pages_but_keeps_speech_pages():
         name="macro",
         query="macro query",
         retry_query="",
-        domain_filter=("federalreserve.gov",),
     )
 
     items = ps._parse_results(
@@ -822,7 +777,6 @@ def test_parse_results_filters_broadcom_category_and_archive_pages():
         name="ai_bigtech",
         query="ai query",
         retry_query="",
-        domain_filter=("broadcom.com",),
     )
 
     items = ps._parse_results(
@@ -862,13 +816,11 @@ def test_parse_results_filters_reuters_quote_and_topic_index_pages():
         name="ai_bigtech",
         query="ai query",
         retry_query="",
-        domain_filter=("reuters.com",),
     )
     equity_topic = ps.SearchTopic(
         name="us_equity",
         query="equity query",
         retry_query="",
-        domain_filter=("reuters.com",),
     )
 
     ai_items = ps._parse_results(
@@ -907,7 +859,6 @@ def test_parse_results_filters_bitcoin_etf_product_pages():
         name="bitcoin",
         query="bitcoin query",
         retry_query="",
-        domain_filter=("ishares.com", "bitbetf.com", "etfs.grayscale.com", "reuters.com"),
     )
 
     items = ps._parse_results(
@@ -953,7 +904,6 @@ def test_parse_results_filters_sec_newsroom_listings_for_bitcoin():
         name="bitcoin",
         query="bitcoin query",
         retry_query="",
-        domain_filter=("sec.gov",),
     )
 
     items = ps._parse_results(
@@ -985,13 +935,11 @@ def test_parse_results_filters_sec_taxonomy_notice_and_meta_news_root():
         name="bitcoin",
         query="bitcoin query",
         retry_query="",
-        domain_filter=("sec.gov",),
     )
     ai_topic = ps.SearchTopic(
         name="ai_bigtech",
         query="ai query",
         retry_query="",
-        domain_filter=("about.fb.com",),
     )
 
     bitcoin_items = ps._parse_results(
@@ -1037,7 +985,6 @@ def test_fetch_news_from_perplexity_records_raw_candidates_when_everything_is_fi
                 name="macro",
                 query="macro query",
                 retry_query="",
-                domain_filter=("reuters.com",),
             ),
         ),
     )
@@ -1083,7 +1030,6 @@ def test_search_once_exposes_status_details(monkeypatch):
         ps._search_once(
             client=client,
             query="macro query",
-            domain_filter=("reuters.com",),
             recency_filter="day",
         )
     except HttpFetchError as exc:
@@ -1127,7 +1073,6 @@ def test_search_once_retries_timeout_with_provider_backoff(monkeypatch):
     payload, usage, usage_present = ps._search_once(
         client=client,
         query="macro query",
-        domain_filter=("reuters.com",),
         recency_filter="day",
     )
 
@@ -1148,7 +1093,6 @@ def test_fetch_news_from_perplexity_records_usage_and_topic_audit(monkeypatch, t
                 name="macro",
                 query="macro query",
                 retry_query="",
-                domain_filter=("reuters.com",),
             ),
         ),
     )
@@ -1214,7 +1158,6 @@ def test_fetch_news_from_perplexity_reads_usage_from_model_extra(monkeypatch, tm
                 name="macro",
                 query="macro query",
                 retry_query="",
-                domain_filter=("reuters.com",),
             ),
         ),
     )
@@ -1274,7 +1217,6 @@ def test_fetch_news_from_perplexity_leaves_token_usage_null_when_usage_missing(
                 name="macro",
                 query="macro query",
                 retry_query="",
-                domain_filter=("reuters.com",),
             ),
         ),
     )
@@ -1325,7 +1267,6 @@ def test_fetch_news_from_perplexity_records_empty_reason(monkeypatch, tmp_path):
                 name="macro",
                 query="macro query",
                 retry_query="",
-                domain_filter=("reuters.com",),
             ),
         ),
     )
@@ -1355,7 +1296,6 @@ def test_parse_results_filters_ft_market_data_pages():
         name="us_equity",
         query="equity query",
         retry_query="",
-        domain_filter=("reuters.com", ps.FT_CONTENT_URL_PREFIX),
     )
 
     items = ps._parse_results(
@@ -1386,7 +1326,6 @@ def test_parse_results_filters_apple_and_non_english_results():
         name="ai_bigtech",
         query="ai query",
         retry_query="",
-        domain_filter=("reuters.com", "apple.com"),
     )
 
     items = ps._parse_results(
@@ -1423,7 +1362,6 @@ def test_parse_results_accepts_ft_article_paths():
         name="macro",
         query="macro query",
         retry_query="",
-        domain_filter=(ps.FT_CONTENT_URL_PREFIX,),
     )
 
     items = ps._parse_results(
@@ -1454,7 +1392,6 @@ def test_fetch_news_from_perplexity_logs_filtered_empty_results(monkeypatch, tmp
                 name="us_equity",
                 query="equity query",
                 retry_query="",
-                domain_filter=("reuters.com", ps.FT_CONTENT_URL_PREFIX),
             ),
         ),
     )
@@ -1504,7 +1441,6 @@ def test_parse_results_filters_short_titles():
         name="macro",
         query="macro query",
         retry_query="",
-        domain_filter=("reuters.com",),
     )
 
     items = ps._parse_results(

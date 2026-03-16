@@ -69,15 +69,17 @@ cp .env.example .env
 - `PROMPT_TEMPLATE_VERSION` (프롬프트 변경 시 버전 증가 권장)
 - `FRED_API_KEY` (권장, 매크로 공식 소스)
 - `PERPLEXITY_API_KEY` (Perplexity Search API 키)
-- `PERPLEXITY_USE_SONAR_SUMMARY` (기본 `false`, Sonar Chat Completions 모드 활성화)
+- `PERPLEXITY_USE_SONAR_SUMMARY` (기본 `true`, Sonar Chat Completions 모드 활성화)
 - `PERPLEXITY_SONAR_MODEL` (기본 `sonar`)
 - `PERPLEXITY_SONAR_MAX_TOKENS` (기본 `1500`, 토픽당 최대 출력)
 - `GROK_API_KEY` (검증된 공식 X 시그널 조회용)
 - `GROK_MODEL` (기본 `grok-4-1-fast-non-reasoning`)
-- `GROK_X_KEYWORD_SEARCH_ENABLED` (기본 `false`, 키워드 기반 X Search)
+- `GROK_X_KEYWORD_SEARCH_ENABLED` (기본 `true`, 키워드 기반 X Search)
 - `GROK_WEB_SEARCH_ENABLED` (기본 `false`, Web Search 뉴스 수집)
 - `GROK_X_SEARCH_MAX_ITEMS` (기본 `6`, X Search 최대 결과)
 - `GROK_WEB_SEARCH_MAX_ITEMS` (기본 `8`, Web Search 최대 결과)
+- `GEMINI_API_KEY` (Gemini Flash fallback용)
+- `GEMINI_MODEL` (기본 `gemini-2.0-flash`)
 - `RESEARCH_PROVIDER` (기본 `perplexity`, 토픽별 Search API를 먼저 조회)
 - `ENABLE_LEGACY_NEWS_FALLBACK` (기본 `true`, 품질 비교 기간에는 켜두는 것을 권장)
 - `ENABLE_OFFICIAL_X_SIGNALS` (기본 `true`, 검증된 공식 X 계정만 조회)
@@ -137,9 +139,11 @@ python3 main.py schedule
 
 ## 6) 수집 신뢰성 운영 원칙
 - LLM provider 역할은 고정합니다.
-  - Perplexity: 뉴스 수집, 출처 URL 추적, BTC ETF structured response
-  - Grok: 공식 X 실시간 시그널만 담당
-  - OpenAI: 브리핑 생성과 검수만 담당
+  - Perplexity: 뉴스 수집, 출처 URL 추적, BTC ETF structured response, Sonar 맥락 보강
+  - Grok: 공식 X 실시간 시그널 + 키워드 기반 시장 반응 수집
+  - OpenAI: 브리핑 생성과 검수(fallback)만 담당
+  - OpenAI: 브리핑 생성과 검수 담당
+  - Gemini: Perplexity 0건 시 Google Search grounding fallback
 - 공급자별로 요청 간격과 재시도 규칙이 다르게 적용됩니다. `404` 같은 영구 실패는 바로 중단하고, `429/5xx/timeout` 중심으로만 다시 시도합니다.
 - HTTP 요청뿐 아니라 Perplexity/Grok SDK 호출과 yfinance 폴백도 공통 `provider_runtime` 계층의 지수 백오프와 provider별 간격 제어를 따릅니다.
 - Alpha Vantage free tier는 구조적 quota 한계 때문에 비활성화했고, 시장 가격 수집은 Stooq/yfinance 경로로 고정했습니다.
@@ -197,6 +201,7 @@ make validate-pre-commit
 - `PERPLEXITY_API_KEY`
 - `GROK_API_KEY`
 - `NEWSAPI_KEY`
+- `GEMINI_API_KEY`
 
 선택 GitHub Variables:
 - `OPENAI_MODEL` (기본 `gpt-5-mini-2025-08-07`)

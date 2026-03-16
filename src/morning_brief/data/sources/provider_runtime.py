@@ -44,8 +44,20 @@ PROVIDER_POLICIES = {
         base_backoff_seconds=1.5,
         max_backoff_seconds=10.0,
     ),
-    "grok": ProviderPolicy(
-        name="grok",
+    "grok_official": ProviderPolicy(
+        name="grok_official",
+        min_interval_seconds=0.5,
+        base_backoff_seconds=1.5,
+        max_backoff_seconds=10.0,
+    ),
+    "grok_keyword": ProviderPolicy(
+        name="grok_keyword",
+        min_interval_seconds=0.5,
+        base_backoff_seconds=1.5,
+        max_backoff_seconds=10.0,
+    ),
+    "gemini": ProviderPolicy(
+        name="gemini",
         min_interval_seconds=0.5,
         base_backoff_seconds=1.5,
         max_backoff_seconds=10.0,

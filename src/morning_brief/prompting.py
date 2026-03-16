@@ -66,6 +66,7 @@ def _build_news_focus(packet: dict) -> dict:
             "official_signals": [],
             "topic_summaries": packet.get("topic_summaries", []),
             "x_market_signals": packet.get("x_market_signals", []),
+            "sonar_context": packet.get("sonar_context"),
         }
 
     top_items = []
@@ -103,6 +104,7 @@ def _build_news_focus(packet: dict) -> dict:
         "official_signals": official_signals,
         "topic_summaries": packet.get("topic_summaries", []),
         "x_market_signals": packet.get("x_market_signals", []),
+        "sonar_context": packet.get("sonar_context"),
     }
 
 
@@ -123,6 +125,7 @@ def render_brief_prompts(packet: dict, settings: Settings) -> tuple[str, str]:
         template_name=INPUT_TEMPLATE,
         packet_json=packet_json,
         news_focus_json=news_focus_json,
+        sonar_context=packet.get("sonar_context"),
     )
     return instructions, user_prompt
 

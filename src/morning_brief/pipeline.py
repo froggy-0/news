@@ -9,6 +9,7 @@ from morning_brief.briefing import generate_briefing
 from morning_brief.config import Settings
 from morning_brief.data.data_quality import assess_data_quality
 from morning_brief.data.market import build_market_packet, reset_market_warned_state
+from morning_brief.data.market_keywords import build_search_keywords, extract_market_keywords
 from morning_brief.data.news import build_news_packet
 from morning_brief.data.sources.provider_runtime import (
     provider_stats_snapshot,
@@ -56,8 +57,17 @@ def run_pipeline(settings: Settings) -> str:
                 observer=observer,
             )
         with observer.phase("news"):
+            market_keywords = extract_market_keywords(market_packet)
+            keywords_by_topic = build_search_keywords(market_keywords)
+            if market_keywords and observer is not None:
+                observer.log_event(
+                    "market_keywords_extracted",
+                    keywords=market_keywords,
+                )
             news_packet, topic_summaries, x_signals = build_news_packet(
-                settings=settings, observer=observer
+                settings=settings,
+                observer=observer,
+                keywords_by_topic=keywords_by_topic,
             )
         logger.info("시장 지표와 뉴스 %s건을 모았어요.", len(news_packet))
 
@@ -74,6 +84,31 @@ def run_pipeline(settings: Settings) -> str:
             from morning_brief.data.sources.grok_x_keyword import x_signals_to_dict
 
             packet["x_market_signals"] = x_signals_to_dict(x_signals)
+
+        # Phase 3: Sonar 맥락 보강
+        if news_packet and settings.perplexity_use_sonar and settings.perplexity_api_key:
+            from morning_brief.data.sources.perplexity_sonar import fetch_sonar_context
+
+            context_articles = [
+                {
+                    "topic": n.get("topic", ""),
+                    "title": n.get("title", ""),
+                    "summary": n.get("summary", ""),
+                }
+                for n in news_packet[:12]
+                if n.get("title")
+            ]
+            sonar_context = fetch_sonar_context(
+                api_key=settings.perplexity_api_key,
+                articles=context_articles,
+                observer=observer,
+            )
+            if sonar_context:
+                packet["sonar_context"] = {
+                    "analyses": sonar_context.analyses,
+                    "key_narrative": sonar_context.key_narrative,
+                }
+
         quality = _assess_data_quality(packet=packet, news_packet=news_packet)
         with observer.phase("backfill"):
             if not settings.openai_web_search_enabled:
