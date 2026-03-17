@@ -307,7 +307,134 @@ def _news_reference(item: dict) -> str:
     return str(item.get("url", "")).strip() or "출처 없음"
 
 
+_TOPIC_LABEL = {
+    "macro": "거시경제",
+    "ai_bigtech": "AI·빅테크",
+    "us_equity": "미국 증시",
+    "bitcoin": "비트코인",
+}
+
+
+def _overall_direction(judgement: str) -> str:
+    if judgement == "매수 관심":
+        return "bullish"
+    if judgement == "리스크 주의":
+        return "bearish"
+    return "mixed"
+
+
+def _available_topics(news: list[dict]) -> list[str]:
+    topics = sorted({str(item.get("topic", "")).strip() for item in news if item.get("topic")})
+    return [_TOPIC_LABEL.get(t, t) for t in topics if t]
+
+
+def _layer1_easy_summary(direction: str) -> str:
+    if direction == "bullish":
+        return "금리가 안정되고 지수와 선물이 함께 강해, 위험자산 선호가 이어지는 흐름입니다."
+    if direction == "bearish":
+        return "금리 부담과 지수 약세가 겹쳐, 방어적 시각이 우선되는 흐름입니다."
+    return "금리와 지수 신호가 엇갈려, 한쪽 방향을 단정하기 어려운 구간입니다."
+
+
+def _layer2_headline(news: list[dict]) -> str:
+    if not news:
+        return "오늘은 주요 뉴스가 충분히 수집되지 않아 시장 해석을 보수적으로 유지합니다."
+    labels = _available_topics(news)
+    if labels:
+        return f"오늘 뉴스는 {', '.join(labels)} 쪽에 집중됐습니다."
+    return "오늘 뉴스는 여러 주제에 걸쳐 수집됐습니다."
+
+
+def _layer2_why_matters(news: list[dict]) -> str:
+    if len(news) < 2:
+        return ""
+    labels = _available_topics(news)
+    if len(labels) >= 2:
+        return f"{labels[0]}과 {labels[1]} 흐름이 겹치는 구간이라, 개별 뉴스보다 흐름 간 연결을 함께 보는 편이 적절합니다."
+    if labels:
+        return (
+            f"{labels[0]} 관련 뉴스가 집중된 만큼, 해당 섹터 후속 반응을 함께 볼 필요가 있습니다."
+        )
+    return "뉴스와 가격 흐름이 다르게 움직인 구간은 기사 자체보다 시장 반응 속도를 함께 보는 편이 적절합니다."
+
+
+def _layer3_headline(tech: list[dict]) -> str:
+    gainers = [p for p in tech if (_point_change_pct(p) or 0) > 0.1]
+    losers = [p for p in tech if (_point_change_pct(p) or 0) < -0.1]
+    if gainers and losers:
+        return f"오늘은 {gainers[0]['label']} 등이 강했고 {losers[0]['label']} 등은 약했습니다."
+    if gainers:
+        return f"기술주 전반이 상승했고, {gainers[0]['label']}의 상승폭이 가장 컸습니다."
+    if losers:
+        return f"기술주 전반이 약했고, {losers[0]['label']}의 하락폭이 가장 컸습니다."
+    return "주요 종목 등락률이 충분히 확인되지 않았습니다."
+
+
+def _layer3_easy_summary(direction: str) -> str:
+    if direction == "bullish":
+        return (
+            "기술주와 비트코인이 함께 강해, 위험자산 전반에 자금이 들어오는 흐름으로 읽힙니다.\n\n"
+            "다만 종목별 상승폭 차이가 있으므로, 어떤 테마에 자금이 집중되는지 함께 보는 편이 적절합니다."
+        )
+    if direction == "bearish":
+        return (
+            "기술주와 비트코인이 함께 약해, 위험자산에서 자금이 빠지는 흐름으로 읽힙니다.\n\n"
+            "하락폭이 큰 종목과 상대적으로 버틴 종목의 차이를 비교해서 보는 편이 적절합니다."
+        )
+    return (
+        "종목별로 방향이 갈려, 시장 전체보다 개별 종목 흐름을 따로 보는 편이 적절합니다.\n\n"
+        "같은 섹터 안에서도 차이가 나타나고 있어, 숫자 자체보다 상대적 강약을 비교할 필요가 있습니다."
+    )
+
+
+def _dynamic_checkpoints(
+    *,
+    layer: str,
+    direction: str,
+    macro: list[dict] | None = None,
+    korea_watch: list[dict] | None = None,
+    tech: list[dict] | None = None,
+    news: list[dict] | None = None,
+) -> list[str]:
+    points: list[str] = []
+    if layer == "layer1":
+        vix = _point_price(_point_by_key(macro or [], "vix"))
+        nq_change = _point_change_pct(_point_by_key(korea_watch or [], "nq_futures"))
+        if vix is not None and vix > 20:
+            points.append(f"VIX가 {vix:.1f}로 높은 편이라 변동성이 줄어드는지")
+        if nq_change is not None and abs(nq_change) > 0.3:
+            d = "상승" if nq_change > 0 else "하락"
+            points.append(f"나스닥 선물 {d} 흐름이 본장에서도 이어지는지")
+        if not points:
+            points.append("장 마감 후 금리와 지수 방향이 정리되는지")
+    elif layer == "layer2":
+        labels = _available_topics(news or [])
+        if labels:
+            points.append(f"{labels[0]} 관련 후속 뉴스가 장중에도 이어지는지")
+        if len(labels) >= 2:
+            points.append(f"{labels[1]} 쪽 뉴스가 가격에 실제로 반영되는지")
+        if not points:
+            points.append("장중 주요 매체에서 새로운 재료가 나오는지")
+    elif layer == "layer3":
+        if tech:
+            top = tech[0]
+            change = _point_change_pct(top)
+            if change is not None:
+                d = "상승" if change > 0 else "하락"
+                points.append(f"{top['label']} {d} 흐름이 장중에도 유지되는지")
+        if direction == "bearish":
+            points.append("하락 종목의 낙폭이 더 커지는지 아니면 반등하는지")
+        elif direction == "bullish":
+            points.append("상승 흐름이 다른 종목으로도 번지는지")
+        if not points:
+            points.append("종목별 등락 방향이 장중에 바뀌는지")
+    return points[:2]
+
+
 def _fallback_news_takeaway(item: dict) -> str:
+    wim = str(item.get("why_it_matters", "")).strip()
+    if wim:
+        return wim
     topic = str(item.get("topic", "")).strip().lower()
     if topic == "bitcoin":
         return "국내 투자자에게는 비트코인과 관련주 반응을 함께 보는 편이 적절합니다."
@@ -592,6 +719,29 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
         korea_watch=korea_watch,
     )
     kospi_impact = _kospi_impact_line(korea_watch=korea_watch, indices=indices)
+    direction = _overall_direction(judgement)
+
+    # LAYER 2: 뉴스 0건이면 축소하되 bullet ≥ 2 유지
+    if news_lines:
+        layer2_headline = _layer2_headline(news)
+        layer2_issues = chr(10).join(news_lines)
+        layer2_why = _layer2_why_matters(news)
+        layer2_why_block = f"\n왜 중요한지\n{layer2_why}" if layer2_why else ""
+        layer2_checkpoints = _bullet_lines(
+            _dynamic_checkpoints(layer="layer2", direction=direction, news=news)
+        )
+    else:
+        layer2_headline = "오늘은 주요 뉴스가 충분히 수집되지 않았습니다. 장중 주요 매체를 직접 확인하는 편이 적절합니다."
+        layer2_issues = (
+            "- 수집된 뉴스가 없어 시장 해석을 보수적으로 유지합니다."
+            " | 장중 Reuters, Bloomberg 등을 직접 확인하는 편이 적절합니다."
+            " | 국내 투자자에게는 환율과 선물 흐름으로 방향을 가늠할 필요가 있습니다.\n"
+            "- 뉴스 부재 시에는 지표 흐름과 전일 대비 변화율 중심으로 판단하는 편이 적절합니다."
+            " | 가격 데이터만으로도 방향성 확인은 가능합니다."
+            " | 국내 투자자에게는 원/달러 환율과 나스닥 선물 방향을 우선 확인할 필요가 있습니다."
+        )
+        layer2_why_block = ""
+        layer2_checkpoints = _bullet_lines(["장중 주요 매체에서 새로운 재료가 나오는지"])
 
     body = f"""Morning Market Brief ({date_str})
 
@@ -614,49 +764,33 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
     }
 
 쉽게 보면
-금리와 달러, 지수 흐름이 한 방향으로 정렬되지 않아 미국 장 마감 신호를 함께 비교할 필요가 있습니다.
+{_layer1_easy_summary(direction)}
 
 {kospi_impact}
 
 오늘 체크할 포인트
 {
         _bullet_lines(
-            [
-                "전일 종가 대비 금리와 기술주 반응이 다시 같은 방향으로 모이는지",
-                "직전 스냅샷 대비 BTC ETF 자금 흐름이 이어지는지",
-            ]
+            _dynamic_checkpoints(
+                layer="layer1", direction=direction, macro=macro, korea_watch=korea_watch
+            )
         )
     }
 
 2. LAYER 2 | 주요 뉴스
 한줄 결론
-오늘 뉴스는 금리 경로, AI 투자 기대, 비트코인 ETF 수급처럼 시장이 민감하게 보는 주제에 집중됐습니다.
+{layer2_headline}
 
 핵심 이슈
-{
-        chr(10).join(news_lines)
-        if news_lines
-        else "- 오늘 반영할 주요 뉴스가 충분하지 않았습니다. | 시장 영향 해석을 보수적으로 유지합니다. | 국내 투자자에게는 관련 섹터 반응을 더 확인할 필요가 있습니다. | 출처 없음"
-    }
-
-왜 중요한지
-오늘 뉴스는 금리 경로, AI 투자 기대, 비트코인 ETF 수급처럼 시장이 민감하게 보는 주제에 집중됐습니다.
-
-뉴스와 가격 흐름이 다르게 움직인 구간은 기사 자체보다 시장 반응 속도를 함께 보는 편이 적절합니다.
+{layer2_issues}
+{layer2_why_block}
 
 오늘 체크할 포인트
-{
-        _bullet_lines(
-            [
-                "같은 주제를 다른 신뢰 출처도 같이 다루는지",
-                "공식 채널 확인이 붙은 이슈가 장중에도 이어지는지",
-            ]
-        )
-    }
+{layer2_checkpoints}
 
 3. LAYER 3 | 종목 브리핑
 한줄 결론
-오늘 종목 흐름은 AI와 반도체 기대가 유지된 구간과, 금리 부담이 먼저 반영된 구간이 함께 나타났습니다.
+{_layer3_headline(tech)}
 
 주요 지표
 {_bullet_lines(stock_lines or ["주요 종목 등락률은 이번 집계에서 충분히 확인되지 않았습니다."])}
@@ -665,19 +799,10 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
 {_bullet_lines(macro_lines)}
 
 쉽게 보면
-종목별로는 같은 AI 테마 안에서도 차이가 보였고, 비트코인과 ETF 흐름도 가격과 완전히 같은 방향으로만 움직이지는 않았습니다.
-
-그래서 오늘은 숫자 자체보다 서로 다른 자산이 얼마나 비슷하거나 다르게 반응하는지 비교해서 보는 편이 적절합니다.
+{_layer3_easy_summary(direction)}
 
 오늘 체크할 포인트
-{
-        _bullet_lines(
-            [
-                "대형 기술주와 반도체의 등락률 차이가 더 커지는지",
-                "VIX, 달러 인덱스, 미국 10년물 금리와 위험자산 반응이 다시 엇갈리는지",
-            ]
-        )
-    }
+{_bullet_lines(_dynamic_checkpoints(layer="layer3", direction=direction, tech=tech))}
 """
     return _finalize_briefing(body, packet)
 
