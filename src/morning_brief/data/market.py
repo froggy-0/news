@@ -137,7 +137,7 @@ def _latest_price_point_from_yfinance(
     canonical_key: str,
     price_scale: float = 1.0,
 ) -> MarketPoint:
-    history = _history_with_retry(ticker=ticker, period="5d", interval="1d")
+    history = _history_with_retry(ticker=ticker, period="7d", interval="1d")
     if len(history) < 2:
         raise ValueError(f"{ticker} 일봉 데이터가 충분하지 않아요.")
 

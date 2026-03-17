@@ -321,10 +321,11 @@ def _fetch_direct_reference_snapshots(
 ) -> list[BitcoinEtfIssuerSnapshot]:
     snapshots: list[BitcoinEtfIssuerSnapshot] = []
     failures: list[dict[str, str]] = []
+    # GBTC는 Grayscale이 429로 직접 scraping을 차단하므로 제외한다.
+    # GBTC 데이터는 Perplexity structured query 경로에서만 수집한다.
     targets = (
         ("IBIT", IBIT_URL, parse_ibit_snapshot),
         ("BITB", BITB_URL, parse_bitb_snapshot),
-        ("GBTC", GBTC_URL, parse_gbtc_snapshot),
     )
 
     for ticker, url, parser in targets:

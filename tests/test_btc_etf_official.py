@@ -327,7 +327,6 @@ def test_fetch_official_btc_etf_snapshots_falls_back_to_direct_official_pages(mo
     page_payloads = {
         official.IBIT_URL: IBIT_SAMPLE,
         official.BITB_URL: BITB_CURRENT_SAMPLE,
-        official.GBTC_URL: GBTC_SAMPLE,
     }
 
     def fake_get_text(url: str, **kwargs):
@@ -337,10 +336,10 @@ def test_fetch_official_btc_etf_snapshots_falls_back_to_direct_official_pages(mo
 
     snapshots = official.fetch_official_btc_etf_snapshots(api_key="pplx-test-key")
 
-    assert [snapshot.ticker for snapshot in snapshots] == ["BITB", "GBTC", "IBIT"]
+    # GBTC는 Grayscale 429 차단으로 direct scraping 대상에서 제외됨
+    assert [snapshot.ticker for snapshot in snapshots] == ["BITB", "IBIT"]
     assert snapshots[0].source_url == official.BITB_URL
-    assert snapshots[1].source_url == official.GBTC_URL
-    assert snapshots[2].source_url == official.IBIT_URL
+    assert snapshots[1].source_url == official.IBIT_URL
 
 
 def test_request_reference_snapshots_uses_json_schema_response_format(monkeypatch):
