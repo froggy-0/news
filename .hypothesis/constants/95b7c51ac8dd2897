@@ -1,0 +1,4 @@
+# file: /Users/giwon/code/news/src/morning_brief/config.py
+# hypothesis_version: 6.151.9
+
+[500, 1500, 2300, 4000, '.cache', '1', 'Asia/Seoul', 'CACHE_DIR', 'CI', 'FRED_API_KEY', 'GEMINI_API_KEY', 'GEMINI_MODEL', 'GMAIL_RECIPIENT', 'GMAIL_SENDER', 'GMAIL_TOKEN_FILE', 'GROK_API_KEY', 'GROK_MODEL', 'MAX_NEWS_ITEMS', 'NEWSAPI_KEY', 'OFFICIAL_X_MAX_ITEMS', 'OPENAI_API_KEY', 'OPENAI_MODEL', 'OUTPUT_DIR', 'PERPLEXITY_API_KEY', 'PROMPT_TEMPLATE_DIR', 'RESEARCH_PROVIDER', 'SEND_EMAIL', 'TIMEZONE', 'credentials.json', 'gemini-2.0-flash', 'high', 'legacy', 'low', 'market_brief_v4', 'medium', 'minimal', 'on', 'outputs', 'perplexity', 'sonar', 'token.json', 'true', 'yes']

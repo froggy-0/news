@@ -1,0 +1,4 @@
+# file: /Users/giwon/code/news/src/morning_brief/data/market_keywords.py
+# hypothesis_version: 6.151.9
+
+[1.0, 1.5, 3.0, '%B %d %Y', 'Asia/Seoul', 'SPX', 'US10Y', 'VIX', 'ai_bigtech', 'bitcoin', 'btc', 'canonical_key', 'change_pct', 'decline', 'dollar', 'dow', 'drop', 'fed', 'inflation', 'label', 'macro', 'nasdaq', 'price', 'rally', 'rate', 's&p', 'selloff', 'soxx', 'spot', 'surge', 'tech_stocks', 'ticker', 'treasury', 'us_equity', 'us_indices', 'yields']

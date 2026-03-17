@@ -1,0 +1,4 @@
+# file: /Users/giwon/code/news/src/morning_brief/llm_provider_policy.py
+# hypothesis_version: 6.151.9
+
+['brief_generation', 'brief_review', 'btc_etf_reference', 'gemini', 'grok', 'news_collection', 'news_fallback', 'openai', 'perplexity', 'web_backfill', 'x_signal', '공식 X 실시간 시그널', '뉴스 fallback 전담', '브리핑 생성 + 검수']

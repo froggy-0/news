@@ -1,0 +1,4 @@
+# file: /Users/giwon/code/news/src/morning_brief/data/market.py
+# hypothesis_version: 6.151.9
+
+[-1.0, 0.0, 0.1, 1.0, 1.2, 100, 3600, ', ', '.cache', '1d', '2d', '7d', 'AAPL', 'AMD', 'AMZN', 'ARKB', 'ASML', 'AVGO', 'BITB', 'BTC-USD', 'Close', 'DX=F', 'FBTC', 'GBTC', 'GOOGL', 'IBIT', 'KRW=X', 'META', 'MSFT', 'NQ=F', 'NVDA', 'QQQ', 'SOXX', 'SPY', 'TSM', 'Volume', '^IRX', '^TNX', '^VIX', 'alternative_me', 'anomaly', 'bitcoin', 'data', 'data_footer_notes', 'dxy', 'empty_snapshots', 'etf_points', 'etf_total_volume', 'fear_greed_fail', 'fear_greed_label', 'fear_greed_value', 'fred_fallback', 'generated_at_utc', 'korea_watch', 'macro', 'missing', 'nq_futures', 'ok', 'previous_value', 'qqq', 'qqq.us', 'soxx', 'soxx.us', 'spot', 'spy', 'spy.us', 'tech_stocks', 'us10y', 'us3m', 'us_indices', 'usdkrw', 'utf-8', 'value', 'vix', 'yahoo_dns', 'yfinance', '공포', '극단적 공포', '극단적 탐욕', '원본 데이터를 가져오지 못했어요.', '중립', '탐욕']

@@ -1,0 +1,4 @@
+# file: /Users/giwon/code/news/src/morning_brief/data/sources/newsapi_provider.py
+# hypothesis_version: 6.151.9
+
+['+00:00', ',', 'Unknown', 'X-Api-Key', 'Z', 'articles', 'domains', 'en', 'language', 'legacy_newsapi', 'name', 'newsapi', 'pageSize', 'publishedAt', 'q', 'sortBy', 'source', 'title', 'url']

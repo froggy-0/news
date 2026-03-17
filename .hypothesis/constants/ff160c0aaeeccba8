@@ -1,0 +1,4 @@
+# file: /Users/giwon/code/news/src/morning_brief/data/sources/provider_runtime.py
+# hypothesis_version: 6.151.9
+
+[0.0, 0.1, 0.2, 0.25, 0.35, 0.5, 1.0, 1.2, 1.5, 10.0, 12.0, 408, 425, 429, 500, 502, 503, 504, '_T', 'alternative_me', 'btc_etf_official', 'coingecko', 'default', 'fred', 'gemini', 'grok_keyword', 'grok_official', 'newsapi', 'perplexity', 'stooq', 'yfinance']

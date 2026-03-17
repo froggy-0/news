@@ -1,0 +1,4 @@
+# file: /Users/giwon/code/news/src/morning_brief/prompting.py
+# hypothesis_version: 6.151.9
+
+[',', '-', ':', '[^a-zA-Z0-9:._-]+', 'brief_input.j2', 'citations', 'default', 'general', 'grok_official_x', 'morning-market-brief', 'news', 'official_signals', 'official_source', 'preferred_source', 'provider', 'sonar_context', 'source', 'source_tier', 'summary', 'title', 'top_items', 'topic', 'topic_summaries', 'topics', 'utf-8', 'web_search_input.j2', 'why_it_matters', 'x_market_signals']

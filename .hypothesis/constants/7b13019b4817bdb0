@@ -1,0 +1,4 @@
+# file: /Users/giwon/code/news/src/morning_brief/data/market_policy.py
+# hypothesis_version: 6.151.9
+
+[0.5, 8.0, 10.0, 80.0, 95.0, 115.0, 300.0, 700.0, 10000.0, 200000.0, '-', '.', 'BTC-USD', 'DGS10', 'DGS2', 'DX-Y.NYB', 'DX=F', 'KRW=X', 'NASDAQ', 'NQ=F', 'QQQ', 'S&P500', 'SOXX', 'SPY', 'VIX', 'VIXCLS', '^', '^IRX', '^TNX', '^VIX', '_', 'btc', 'dxy', 'nq_futures', 'qqq', 'qqq.us', 'soxx', 'soxx.us', 'spy', 'spy.us', 'us10y', 'us2y', 'us3m', 'usdkrw', 'vix', '나스닥 선물', '달러 인덱스', '미국 10년물 국채금리', '미국 13주물 단기금리', '미국 2년물 국채금리', '반도체 섹터 (SOXX)', '원/달러 환율', '적어도 하나의 식별자가 필요해요.']

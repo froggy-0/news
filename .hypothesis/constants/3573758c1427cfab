@@ -1,0 +1,4 @@
+# file: /Users/giwon/code/news/src/morning_brief/data/sources/stooq.py
+# hypothesis_version: 6.151.9
+
+[0.0, 100, '%Y-%m-%d', '.us', '0', 'Close', 'Date', 'HttpFetchError', 'N/D', 'NA', 'NULL', 'StooqDailyPoint', 'Volume', 'd', 'i', 's', 'stooq', 'to_stooq_symbol']

@@ -1,0 +1,4 @@
+# file: /Users/giwon/code/news/src/morning_brief/data/sources/gemini_grounding.py
+# hypothesis_version: 6.151.9
+
+[0.1, 1000, '429', '500', '502', '503', '504', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE', 'candidates', 'gemini', 'gemini_grounding', 'grounding_chunks', 'grounding_metadata', 'prompt_token_count', 'title', 'uri', 'usage_metadata', 'web']

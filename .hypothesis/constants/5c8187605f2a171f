@@ -1,0 +1,4 @@
+# file: /Users/giwon/code/news/src/morning_brief/data/sources/grok_x_keyword.py
+# hypothesis_version: 6.151.9
+
+[429, 500, 502, 503, 504, '+00:00', '@', 'X', 'Z', 'ai_bigtech', 'ai_bigtech_primary', 'bitcoin', 'btc_etf_primary', 'cached_input_tokens', 'citations', 'completion_tokens', 'content', 'crypto_and_etf', 'grok_keyword', 'grok_x_keyword', 'headline', 'inline_citations', 'input_tokens', 'json_object', 'keywords', 'macro', 'macro_and_equity', 'neutral', 'output_tokens', 'posted_at', 'prompt_tokens', 'reasoning_tokens', 'required', 'response', 'sentiment', 'signals', 'source_handle', 'status_code', 'summary', 'topic', 'us_equity', 'usage', 'why_it_matters']

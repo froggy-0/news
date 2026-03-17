@@ -1,0 +1,4 @@
+# file: /Users/giwon/code/news/src/morning_brief/data/news_packet.py
+# hypothesis_version: 6.151.9
+
+[3600, '+00:00', 'Unknown', 'Z', 'age_hours', 'citations', 'domain', 'grok_official_x', 'grok_web_search', 'grok_x_keyword', 'official_source', 'preferred_source', 'provider', 'published_at', 'source', 'source_tier', 'summary', 'title', 'topic', 'url', 'why_it_matters']

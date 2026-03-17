@@ -1,0 +1,4 @@
+# file: /Users/giwon/code/news/src/morning_brief/data/sources/http_client.py
+# hypothesis_version: 6.151.9
+
+[1.2, 300.0, 400, 429, '://', 'Accept', 'Retry-After', 'User-Agent']

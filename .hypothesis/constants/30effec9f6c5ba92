@@ -1,0 +1,4 @@
+# file: /Users/giwon/code/news/src/morning_brief/data/sources/fred.py
+# hypothesis_version: 6.151.9
+
+[0.0, 100, '.', 'DGS10', 'DGS2', 'FRED API 키가 필요해요.', 'HttpFetchError', 'SERIES_MAP', 'VIXCLS', 'api_key', 'desc', 'file_type', 'fred', 'json', 'limit', 'observations', 'series_id', 'sort_order', 'us10y', 'us2y', 'value', 'vix']

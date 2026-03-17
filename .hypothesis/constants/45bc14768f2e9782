@@ -1,0 +1,4 @@
+# file: /Users/giwon/code/news/src/morning_brief/data/news_rollout.py
+# hypothesis_version: 6.151.9
+
+['allow_broad_fallback', 'count', 'fallback_reasons', 'fresh_count', 'legacy_used', 'perplexity_count', 'provider_breakdown', 'reasons', 'runs', 'timestamp', 'topic_coverage_count', 'unique_domains', 'utf-8']
