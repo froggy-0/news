@@ -3,7 +3,7 @@
 <tr><td style="padding:0 0 24px 0;">
 <table role="presentation" width="100%" class="card" style="width:100%;background:#fff;border:1px solid #e2e8f0;border-radius:16px;">
 <tr><td class="card-pad" style="padding:28px 24px;">
-<div style="border-left:3px solid #1e40af;padding-left:12px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#1e40af;font-size:13px;font-weight:600;">&#9632; &#xD575;&#xC2EC; &#xB274;&#xC2A4;</div>
+<div style="border-left:3px solid #1e40af;padding-left:12px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#1e40af;font-size:13px;font-weight:600;">&#9632; 핵심 뉴스</div>
 {% for item in news_items %}
 <div style="padding:20px 0 0 0;{% if not loop.first %}border-top:1px solid #e2e8f0;margin-top:16px;{% endif %}">
 <div style="font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#0f172a;font-size:20px;line-height:1.6;font-weight:800;" class="text-strong">{{ item.number }} {{ item.headline }}{% if item.source_name %} <span style="font-size:13px;font-weight:{% if item.source_tier == 1 %}700{% else %}400{% endif %};color:#64748b;" class="text-muted">&#8212; {{ item.source_name }}</span>{% endif %}</div>
@@ -11,10 +11,10 @@
 <div style="margin-top:12px;border-left:3px solid #3b82f6;padding:12px 16px;background:#f8fafc;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#334155;font-size:15px;line-height:1.9;white-space:pre-line;" class="text-body">{{ item.body }}</div>
 {% endif %}
 {% if item.source_url %}
-<div style="padding-top:8px;"><a href="{{ item.source_url }}" style="color:#3b82f6;font-size:13px;text-decoration:none;">&#xC6D0;&#xBB38; &#xBCF4;&#xAE30; &#8594;</a></div>
+<div style="padding-top:8px;"><a href="{{ item.source_url }}" style="color:#3b82f6;font-size:13px;text-decoration:none;">원문 보기 &#8594;</a></div>
 {% endif %}
 {% if item.tldr %}
-<div style="margin-top:12px;padding:10px 14px;background:#f0fdf4;border-radius:6px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#166534;font-size:14px;line-height:1.6;font-weight:600;">&#9679; &#xD575;&#xC2EC; &#xD55C;&#xC904;: {{ item.tldr }}</div>
+<div style="margin-top:12px;padding:10px 14px;background:#f0fdf4;border-radius:6px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#166534;font-size:14px;line-height:1.6;font-weight:600;">&#9679; 핵심 한줄: {{ item.tldr }}</div>
 {% endif %}
 </div>
 {% endfor %}

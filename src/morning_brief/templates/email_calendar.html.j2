@@ -2,12 +2,12 @@
 <tr><td style="padding:0 0 24px 0;">
 <table role="presentation" width="100%" class="card" style="width:100%;background:#fff;border:1px solid #e2e8f0;border-radius:16px;">
 <tr><td class="card-pad" style="padding:20px 24px;">
-<div style="border-left:3px solid #0369a1;padding-left:12px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#0369a1;font-size:13px;font-weight:600;">&#9632; &#xC774;&#xBCA4;&#xD2B8; &#xCE98;&#xB9B0;&#xB354;</div>
+<div style="border-left:3px solid #0369a1;padding-left:12px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#0369a1;font-size:13px;font-weight:600;">&#9632; 이벤트 캘린더</div>
 <table role="presentation" width="100%" style="padding-top:10px;font-size:13px;">
-<tr style="color:#94a3b8;font-weight:600;"><td>&#xC2DC;&#xAC04;</td><td>&#xC774;&#xBCA4;&#xD2B8;</td><td align="right">&#xC608;&#xC0C1;</td><td align="right">&#xC601;&#xD5A5;&#xB3C4;</td></tr>
+<tr style="color:#94a3b8;font-weight:600;"><td>시간</td><td>이벤트</td><td align="right">예상</td><td align="right">영향도</td></tr>
 {% for evt in event_calendar %}
 {% if evt.is_today and loop.first %}
-<tr><td colspan="4" style="padding:8px 0 4px;color:#0369a1;font-weight:700;font-size:12px;">&#xC624;&#xB298; &#xBC1C;&#xD45C;</td></tr>
+<tr><td colspan="4" style="padding:8px 0 4px;color:#0369a1;font-weight:700;font-size:12px;">오늘 발표</td></tr>
 {% endif %}
 <tr style="border-top:1px solid #e2e8f0;{% if evt.is_today %}background:#f0f9ff;{% endif %}">
 <td style="padding:6px 0;color:#475569;" class="text-body">{{ evt.time or evt.date }}</td>

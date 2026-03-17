@@ -3,7 +3,7 @@
 <tr><td style="padding:0 0 24px 0;">
 <table role="presentation" width="100%" class="card" style="width:100%;background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;">
 <tr><td class="card-pad" style="padding:20px 24px;">
-<div style="border-left:3px solid #0f766e;padding-left:12px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#0f766e;font-size:13px;font-weight:600;">&#9632; &#xC2DC;&#xC7A5; &#xC9C0;&#xD45C;</div>
+<div style="border-left:3px solid #0f766e;padding-left:12px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#0f766e;font-size:13px;font-weight:600;">&#9632; 시장 지표</div>
 {% if stock_indices %}
 <table role="presentation" width="100%" style="padding-top:10px;font-size:13px;">
 {% for s in stock_indices %}
@@ -17,7 +17,7 @@
 </table>
 {% endif %}
 {% if stock_tech %}
-<div style="padding-top:12px;font-size:12px;color:#94a3b8;font-weight:600;" class="text-muted">&#xBE45;&#xD14C;&#xD06C; 10&#xC885;</div>
+<div style="padding-top:12px;font-size:12px;color:#94a3b8;font-weight:600;" class="text-muted">빅테크 10종</div>
 <table role="presentation" width="100%" style="padding-top:6px;font-size:13px;">
 {% for s in stock_tech %}
 <tr>
@@ -29,7 +29,7 @@
 {% endif %}
 {% if macro_indicators %}
 <div style="padding-top:12px;border-top:1px solid #e2e8f0;margin-top:8px;">
-<div style="font-size:12px;color:#94a3b8;font-weight:600;" class="text-muted">&#xAC70;&#xC2DC; &#xC9C0;&#xD45C;</div>
+<div style="font-size:12px;color:#94a3b8;font-weight:600;" class="text-muted">거시 지표</div>
 <table role="presentation" width="100%" style="padding-top:6px;font-size:13px;">
 {% for m in macro_indicators %}
 <tr>
