@@ -15,6 +15,16 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
 
 from morning_brief.brief_formatting import (
+    BTCData,
+    MacroIndicator,
+    SectionMap,
+    StockItem,
+    extract_sections,
+    parse_event_calendar,
+    parse_news_items,
+    parse_sector_mapping,
+)
+from morning_brief.brief_formatting import (
     extract_brief_structure as _extract_brief_structure,
 )
 from morning_brief.brief_formatting import (
@@ -715,6 +725,365 @@ def _primary_cta(reference_items: list[dict[str, str | None]]) -> dict[str, str]
     if first_reference is not None:
         return {"label": "대표 출처 열기", "url": str(first_reference["safe_url"])}
     return {"label": "GitHub에서 보기", "url": PROJECT_GITHUB_URL}
+
+
+# ---------------------------------------------------------------------------
+# V2 이메일 빌더 함수들
+# ---------------------------------------------------------------------------
+
+FEAR_GREED_LABELS: dict[tuple[int, int], str] = {
+    (0, 24): "Extreme Fear",
+    (25, 49): "Fear",
+    (50, 74): "Greed",
+    (75, 100): "Extreme Greed",
+}
+
+_DAY_NAMES = ["월", "화", "수", "목", "금", "토", "일"]
+
+
+def _build_snapshot_badges(packet: dict) -> list[dict]:
+    """S&P 500, 나스닥, BTC, VIX 4개 배지 생성."""
+    badges: list[dict] = []
+
+    for idx in packet.get("us_indices", []):
+        ticker = idx.get("ticker", "")
+        if ticker in ("SPY", "QQQ"):
+            label = "S&P 500" if ticker == "SPY" else "나스닥"
+            change = idx.get("change_pct", 0)
+            badges.append(
+                {
+                    "label": label,
+                    "value": f"{change:+.1f}%",
+                    "direction": "up" if change > 0 else "down" if change < 0 else "flat",
+                }
+            )
+
+    btc = packet.get("bitcoin", {})
+    btc_change = btc.get("spot", {}).get("change_pct", 0)
+    badges.append(
+        {
+            "label": "BTC",
+            "value": f"{btc_change:+.1f}%",
+            "direction": "up" if btc_change > 0 else "down" if btc_change < 0 else "flat",
+        }
+    )
+
+    macro = packet.get("macro", {})
+    vix = macro.get("VIX", {})
+    vix_val = vix.get("value", 0)
+    badges.append(
+        {
+            "label": "VIX",
+            "value": f"{vix_val:.1f}",
+            "direction": "up" if vix_val >= 25 else "flat",
+        }
+    )
+
+    return badges[:4]
+
+
+def _format_volume(volume: float) -> str:
+    """거래량을 읽기 쉬운 형식으로 포맷."""
+    if volume >= 1_000_000_000:
+        return f"${volume / 1_000_000_000:.1f}B"
+    if volume >= 1_000_000:
+        return f"${volume / 1_000_000:.1f}M"
+    if volume >= 1_000:
+        return f"${volume / 1_000:.0f}K"
+    return f"${volume:.0f}"
+
+
+def _build_btc_data(packet: dict, section_3: str) -> BTCData:
+    """packet의 bitcoin 데이터로 BTCData 구성."""
+    btc = packet.get("bitcoin", {})
+    spot = btc.get("spot", {})
+    fg_value = btc.get("fear_greed_value", 50)
+
+    fg_label = "Greed"
+    for (lo, hi), label in FEAR_GREED_LABELS.items():
+        if lo <= fg_value <= hi:
+            fg_label = label
+            break
+
+    flow_btc = btc.get("official_etf_daily_flow_btc", 0)
+    flow_label = "기관 순매수" if flow_btc > 0 else "기관 순매도" if flow_btc < 0 else ""
+    spot_price = spot.get("price", 0)
+
+    return BTCData(
+        spot_price=f"${spot_price:,.0f}",
+        spot_change=f"{spot.get('change_pct', 0):+.1f}%",
+        spot_direction="up"
+        if spot.get("change_pct", 0) > 0
+        else "down"
+        if spot.get("change_pct", 0) < 0
+        else "flat",
+        fear_greed_value=fg_value,
+        fear_greed_label=fg_label,
+        fear_greed_warning="과열 경계" if fg_value >= 75 else "",
+        etf_items=btc.get("etf_points", []),
+        etf_total_volume=_format_volume(sum(e.get("volume", 0) for e in btc.get("etf_points", []))),
+        official_snapshots=btc.get("official_etf_snapshots", []),
+        daily_flow_btc=flow_btc,
+        daily_flow_usd=f"${abs(flow_btc) * spot_price:,.0f}",
+        flow_label=flow_label,
+    )
+
+
+def _format_subject_date(packet: dict) -> str:
+    """packet에서 날짜를 추출하여 '3/18 화' 형식으로 반환."""
+    import datetime
+
+    date_str = packet.get("date", "")
+    if date_str:
+        try:
+            dt = datetime.date.fromisoformat(date_str)
+            return f"{dt.month}/{dt.day} {_DAY_NAMES[dt.weekday()]}"
+        except (ValueError, IndexError):
+            pass
+    return ""
+
+
+def _extract_index_change(packet: dict, ticker: str) -> str:
+    """packet에서 특정 지수의 등락을 추출."""
+    for idx in packet.get("us_indices", []):
+        if idx.get("ticker") == ticker:
+            change = idx.get("change_pct", 0)
+            label = "S&P" if ticker == "SPY" else "나스닥" if ticker == "QQQ" else ticker
+            return f"{label} {change:+.1f}%"
+    return ""
+
+
+def _extract_btc_price(packet: dict) -> str:
+    """packet에서 BTC 가격을 추출."""
+    btc = packet.get("bitcoin", {})
+    price = btc.get("spot", {}).get("price", 0)
+    return f"BTC ${price:,.0f}" if price else ""
+
+
+def _extract_key_event(section_map: SectionMap) -> str:
+    """Section 6에서 가장 영향도 높은 이벤트를 추출."""
+    events = parse_event_calendar(section_map.get("section_6", ""))
+    if events:
+        today_events = [e for e in events if e["is_today"]]
+        target = today_events[0] if today_events else events[0]
+        return target["name"][:20]
+    return ""
+
+
+def _build_subject_line(section_map: SectionMap, packet: dict) -> str:
+    """[날짜 요일] 브리핑 — [지수 등락] · [BTC 가격] · [핵심 변수]"""
+    date_str = _format_subject_date(packet)
+    sp500_change = _extract_index_change(packet, "SPY")
+    btc_price = _extract_btc_price(packet)
+    key_event = _extract_key_event(section_map)
+
+    parts = [p for p in [sp500_change, btc_price, key_event] if p]
+    subject = f"{date_str} 브리핑 — {' · '.join(parts)}" if parts else f"{date_str} 브리핑"
+
+    if packet.get("data_quality", {}).get("status") == "critical":
+        subject = f"[데이터 참고] {subject}"
+
+    return subject
+
+
+def _build_preheader(badges: list[dict], section_map: SectionMap) -> str:
+    """preheader 텍스트 생성."""
+    parts = [f"{b['label']} {b['value']}" for b in badges[:3]]
+    return " · ".join(parts)[:140]
+
+
+def _format_display_date_v2(packet: dict) -> str:
+    """packet에서 표시용 날짜 생성."""
+    import datetime
+
+    date_str = packet.get("date", "")
+    if date_str:
+        try:
+            dt = datetime.date.fromisoformat(date_str)
+            return f"{dt.year}년 {dt.month}월 {dt.day}일 {_DAY_NAMES[dt.weekday()]}요일"
+        except (ValueError, IndexError):
+            pass
+    return ""
+
+
+def _parse_macro_indicators(section_1: str) -> list[MacroIndicator]:
+    """Section 1 거시 지표 텍스트를 MacroIndicator 리스트로 파싱."""
+    indicators: list[MacroIndicator] = []
+    if not section_1.strip():
+        return indicators
+
+    indicator_re = re.compile(r"(.+?):\s*(.+?)\s*\((.+?)\)")
+    for line in section_1.splitlines():
+        stripped = line.strip().lstrip("- ")
+        if not stripped:
+            continue
+        match = indicator_re.match(stripped)
+        if match:
+            label = match.group(1).strip()
+            value = match.group(2).strip()
+            change = match.group(3).strip()
+            is_prev = "(전일" in stripped or "전일 값" in stripped
+            is_anom = "anomaly" in stripped.lower() or value == "—"
+            direction = "flat"
+            if change.startswith("+"):
+                direction = "up"
+            elif change.startswith("-"):
+                direction = "down"
+            indicators.append(
+                MacroIndicator(
+                    label=label,
+                    value=value,
+                    change=change,
+                    direction=direction,
+                    is_previous=is_prev,
+                    is_anomaly=is_anom,
+                )
+            )
+    return indicators
+
+
+def _parse_stocks(section_2: str) -> tuple[list[StockItem], list[StockItem]]:
+    """Section 2 미국 증시 텍스트를 (주요 지수, 빅테크) 튜플로 파싱."""
+    indices: list[StockItem] = []
+    tech: list[StockItem] = []
+    if not section_2.strip():
+        return indices, tech
+
+    in_tech = False
+    stock_re = re.compile(r"(\w+)\s+\$?([\d,.]+)\s*([+-][\d.]+%)")
+    for line in section_2.splitlines():
+        stripped = line.strip()
+        if "빅테크" in stripped or "Big Tech" in stripped.lower():
+            in_tech = True
+            continue
+        match = stock_re.search(stripped)
+        if match:
+            ticker = match.group(1)
+            price = match.group(2)
+            change_pct = match.group(3)
+            direction = (
+                "up"
+                if change_pct.startswith("+")
+                else "down"
+                if change_pct.startswith("-")
+                else "flat"
+            )
+            item = StockItem(
+                ticker=ticker,
+                name=ticker,
+                price=price,
+                change_pct=change_pct,
+                direction=direction,
+                volume=None,
+            )
+            if in_tech:
+                tech.append(item)
+            else:
+                indices.append(item)
+    return indices, tech
+
+
+def _parse_issue_briefings(section_4_1: str) -> list[dict]:
+    """Section 4-1 이슈 브리핑을 딕셔너리 리스트로 파싱."""
+    if not section_4_1.strip():
+        return []
+    briefings: list[dict] = []
+    current_topic = ""
+    current_lines: list[str] = []
+
+    for line in section_4_1.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            if current_topic and current_lines:
+                briefings.append({"topic": current_topic, "body": "\n".join(current_lines).strip()})
+                current_topic = ""
+                current_lines = []
+            continue
+        if not current_topic:
+            current_topic = stripped
+        else:
+            current_lines.append(stripped)
+
+    if current_topic and current_lines:
+        briefings.append({"topic": current_topic, "body": "\n".join(current_lines).strip()})
+    return briefings
+
+
+def _parse_sonar(section_5_2: str) -> list[dict] | None:
+    """Section 5-2 Sonar 교차 분석을 딕셔너리 리스트로 파싱."""
+    if not section_5_2.strip():
+        return None
+    analyses: list[dict] = []
+    current_lines: list[str] = []
+
+    for line in section_5_2.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            if current_lines:
+                analyses.append({"body": "\n".join(current_lines).strip()})
+                current_lines = []
+            continue
+        current_lines.append(stripped)
+
+    if current_lines:
+        analyses.append({"body": "\n".join(current_lines).strip()})
+    return analyses[:3] if analyses else None
+
+
+def _build_email_context_v2(
+    subject: str,
+    body: str,
+    packet: dict,
+    *,
+    sender: str = "",
+) -> dict[str, object]:
+    """새 섹션 구조 기반 이메일 컨텍스트 빌드."""
+    section_map = extract_sections(body)
+
+    snapshot_badges = _build_snapshot_badges(packet)
+    news_items = parse_news_items(section_map.get("section_4_2", ""))
+    sector_mapping = parse_sector_mapping(section_map.get("section_4_3", ""))
+    btc_data = _build_btc_data(packet, section_map.get("section_3", ""))
+    events = parse_event_calendar(section_map.get("section_6", ""))
+    event_calendar = events if events else None
+    macro_indicators = _parse_macro_indicators(section_map.get("section_1", ""))
+    stock_indices, stock_tech = _parse_stocks(section_map.get("section_2", ""))
+
+    dq = packet.get("data_quality", {})
+    data_quality_status = dq.get("status", "ok")
+    footer_notes = packet.get("data_footer_notes", [])
+
+    final_subject = _build_subject_line(section_map, packet) if not subject else subject
+
+    return {
+        "subject": final_subject,
+        "preheader": _build_preheader(snapshot_badges, section_map),
+        "display_date": _format_display_date_v2(packet),
+        "read_time": "3분 읽기",
+        "snapshot_badges": snapshot_badges,
+        "hero_summary": section_map.get("section_0", ""),
+        "hero_alerts": [],
+        "macro_indicators": macro_indicators,
+        "stock_indices": stock_indices,
+        "stock_tech": stock_tech,
+        "btc_data": btc_data,
+        "issue_briefings": _parse_issue_briefings(section_map.get("section_4_1", "")),
+        "news_items": news_items,
+        "sector_mapping": sector_mapping,
+        "weekly_context": section_map.get("section_5_1", ""),
+        "sonar_analyses": _parse_sonar(section_map.get("section_5_2", "")),
+        "x_reactions": section_map.get("section_5_3", "") or None,
+        "event_calendar": event_calendar,
+        "data_quality_status": data_quality_status,
+        "footer_notes": footer_notes if data_quality_status != "ok" else [],
+        "unsubscribe_url": _unsubscribe_url(sender),
+        "github_url": PROJECT_GITHUB_URL,
+    }
+
+
+# ---------------------------------------------------------------------------
+# V1 레거시 이메일 빌더
+# ---------------------------------------------------------------------------
 
 
 def _build_email_context(subject: str, body: str, *, sender: str = "") -> dict[str, object]:

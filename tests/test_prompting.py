@@ -41,20 +41,17 @@ def test_render_brief_prompts_contains_contract_and_packet(monkeypatch):
     instructions, user_prompt = render_brief_prompts(packet=packet, settings=settings)
 
     assert "Morning Market Brief" in instructions
-    assert "LAYER 1 | 오늘 한줄 판단" in instructions
-    assert "헤드라인 | 시장 의미 | 한국 투자자 관점" in instructions
-    assert "한국어로 번역" in instructions
-    assert "한국 투자자 관점" in instructions
-    assert "None" in instructions
-    assert "오늘은 매수 관심 국면입니다." in instructions
-    assert "오늘은 관망 국면입니다." in instructions
-    assert "오늘은 리스크 주의 국면입니다." in instructions
-    assert "원/달러 환율" in instructions
+    # V2 Section 구조 검증
+    assert "오늘의 핵심" in instructions
+    assert "핵심 뉴스 5선" in instructions
+    assert "섹터/자산 영향 매핑" in instructions
+    assert "이벤트 캘린더" in instructions
+    assert "수혜" in instructions
+    assert "압력" in instructions
+    assert "중립" in instructions
+    assert "원/달러" in instructions
     assert "나스닥 선물" in instructions
-    assert "코스피" in instructions
-    assert "오늘 시장이 왜 이 뉴스를 신경 쓰는지" in instructions
-    assert "종목명은 {원인 한줄}로 {N}% {상승/하락}했습니다." in instructions
-    assert "상관관계 중심" in instructions or "상관관계" in instructions
+    assert "상관관계" in instructions
     assert "Prompt Version: market_brief_test" in instructions
     assert "<market_data_json>" in user_prompt
     assert "<news_focus_json>" in user_prompt
@@ -62,9 +59,6 @@ def test_render_brief_prompts_contains_contract_and_packet(monkeypatch):
     assert '"topic":"macro"' in user_prompt
     assert '"why_it_matters":"금리 흐름을 읽는 데 도움이 되는 기사예요."' in user_prompt
     assert '"official_signals"' in user_prompt
-    assert "하단 `참고 출처` 섹션" in user_prompt
-    assert "원/달러 환율" in user_prompt
-    assert "오늘 미국 증시 흐름이 코스피에 미치는 영향" in user_prompt
 
 
 def test_prompt_cache_key_is_stable_and_sanitized(monkeypatch):

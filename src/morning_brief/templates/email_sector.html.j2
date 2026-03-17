@@ -1,0 +1,29 @@
+{# 변수: sector_mapping (SectorMapping) #}
+<tr><td style="padding:0 0 24px 0;">
+<table role="presentation" width="100%" class="card" style="width:100%;background:#fff;border:1px solid #e2e8f0;border-radius:16px;">
+<tr><td class="card-pad" style="padding:20px 24px;">
+<div style="border-left:3px solid #7c3aed;padding-left:12px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#7c3aed;font-size:13px;font-weight:600;">&#9632; &#xC624;&#xB298; &#xC8FC;&#xBAA9; &#xD750;&#xB984;</div>
+<div style="padding-top:12px;">
+<div style="color:#166534;font-size:12px;font-weight:700;">&#9650; &#xC218;&#xD61C; &#xBC29;&#xD5A5;</div>
+{% for item in sector_mapping.positive %}
+<div style="padding:4px 0 4px 16px;font-size:13px;color:#334155;" class="text-body"><span style="font-weight:600;">{{ item.ticker }}</span> {{ item.reason }}</div>
+{% endfor %}
+</div>
+<div style="padding-top:8px;">
+<div style="color:#991b1b;font-size:12px;font-weight:700;">&#9660; &#xC555;&#xB825; &#xBC29;&#xD5A5;</div>
+{% for item in sector_mapping.negative %}
+<div style="padding:4px 0 4px 16px;font-size:13px;color:#334155;" class="text-body"><span style="font-weight:600;">{{ item.ticker }}</span> {{ item.reason }}</div>
+{% endfor %}
+</div>
+<div style="padding-top:8px;">
+<div style="color:#4b5563;font-size:12px;font-weight:700;">&#8212; &#xC911;&#xB9BD; / &#xAD00;&#xB9DD;</div>
+{% for item in sector_mapping.neutral %}
+<div style="padding:4px 0 4px 16px;font-size:13px;color:#334155;" class="text-body"><span style="font-weight:600;">{{ item.ticker }}</span> {{ item.reason }}</div>
+{% endfor %}
+</div>
+{% if sector_mapping.commentary %}
+<div style="padding-top:12px;border-top:1px solid #e2e8f0;margin-top:8px;font-size:14px;color:#475569;line-height:1.8;" class="text-body">{{ sector_mapping.commentary }}</div>
+{% endif %}
+</td></tr>
+</table>
+</td></tr>

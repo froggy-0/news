@@ -1,0 +1,40 @@
+{# 변수: btc_data (BTCData) #}
+{% from "email_macros.html.j2" import badge %}
+<tr><td style="padding:0 0 24px 0;">
+<table role="presentation" width="100%" class="card" style="width:100%;background:#fff;border:1px solid #e2e8f0;border-radius:16px;">
+<tr><td class="card-pad" style="padding:24px;">
+<div style="border-left:3px solid #f59e0b;padding-left:12px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#92400e;font-size:13px;font-weight:600;">&#9632; BTC &amp; &#xD06C;&#xB9BD;&#xD1A0;</div>
+<table role="presentation" width="100%" style="padding-top:16px;">
+<tr>
+<td style="font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#0f172a;font-size:18px;font-weight:800;" class="text-strong">BTC {{ btc_data.spot_price }} {{ badge(btc_data.spot_change, btc_data.spot_direction) }}</td>
+<td align="right" style="font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#475569;font-size:14px;" class="text-body">&#xACF5;&#xD3EC;&#xD0D0;&#xC695; {{ btc_data.fear_greed_value }} / 100 <span style="font-weight:600;">{{ btc_data.fear_greed_label }}</span>{% if btc_data.fear_greed_warning %} <span style="color:#991b1b;font-size:12px;font-weight:700;">&#9888; {{ btc_data.fear_greed_warning }}</span>{% endif %}</td>
+</tr>
+</table>
+{% if btc_data.etf_items %}
+<table role="presentation" width="100%" style="padding-top:12px;font-size:13px;">
+<tr style="color:#94a3b8;font-weight:600;"><td>ETF</td><td align="right">&#xAC00;&#xACA9;</td><td align="right">&#xB4F1;&#xB77D;</td><td align="right">&#xAC70;&#xB798;&#xB7C9;</td></tr>
+{% for etf in btc_data.etf_items %}
+<tr style="border-top:1px solid #e2e8f0;color:#334155;" class="text-body">
+<td style="padding:6px 0;font-weight:600;">{{ etf.ticker }}</td>
+<td align="right">${{ etf.price }}</td>
+<td align="right">{{ badge(etf.change_pct|default('0%'), etf.direction|default('flat')) }}</td>
+<td align="right" style="color:#94a3b8;">{{ etf.volume }}</td>
+</tr>
+{% endfor %}
+<tr style="border-top:1px solid #e2e8f0;color:#475569;font-weight:600;"><td style="padding:6px 0;">&#xD569;&#xC0B0; &#xAC70;&#xB798;&#xB7C9;</td><td colspan="3" align="right">{{ btc_data.etf_total_volume }}</td></tr>
+</table>
+{% endif %}
+{% if btc_data.official_snapshots %}
+<div style="padding-top:12px;border-top:1px solid #e2e8f0;margin-top:12px;">
+<div style="font-size:12px;color:#94a3b8;font-weight:600;" class="text-muted">&#xAE30;&#xAD00; &#xBCF4;&#xC720; &#xD604;&#xD669;</div>
+{% for snap in btc_data.official_snapshots %}
+<div style="padding-top:6px;font-size:13px;color:#334155;" class="text-body">{{ snap.issuer }} {{ snap.ticker }} &#8212; {{ snap.btc_held }} BTC &#183; AUM {{ snap.aum }}</div>
+{% endfor %}
+{% if btc_data.flow_label %}
+<div style="padding-top:8px;font-size:14px;font-weight:700;color:{% if btc_data.daily_flow_btc > 0 %}#166534{% else %}#991b1b{% endif %};">&#xC804;&#xC77C; &#xB300;&#xBE44;: {{ btc_data.flow_label }} {{ btc_data.daily_flow_usd }}</div>
+{% endif %}
+</div>
+{% endif %}
+</td></tr>
+</table>
+</td></tr>

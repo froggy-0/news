@@ -1,0 +1,19 @@
+{# 컬러 배지 매크로 — 모든 파셜에서 import하여 사용 #}
+{% macro badge(value, direction) %}
+<span style="display:inline-block;background:{% if direction == 'up' %}#dcfce7{% elif direction == 'down' %}#fef2f2{% else %}#f3f4f6{% endif %};color:{% if direction == 'up' %}#166534{% elif direction == 'down' %}#991b1b{% else %}#4b5563{% endif %};padding:2px 8px;border-radius:4px;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;" class="{% if direction == 'up' %}badge-up{% elif direction == 'down' %}badge-down{% else %}badge-flat{% endif %}">{% if direction == 'up' %}&#9650;{% elif direction == 'down' %}&#9660;{% else %}&#8212;{% endif %} {{ value }}</span>
+{% endmacro %}
+
+{# KR 라벨 매크로 #}
+{% macro kr_label() %}
+<span class="kr-label" style="display:inline-block;border:1px solid #166534;border-radius:3px;padding:1px 5px;color:#166534;font-size:11px;font-weight:700;">KR</span>
+{% endmacro %}
+
+{# 섹션 라벨 매크로 #}
+{% macro section_label(text, color) %}
+<div style="border-left:3px solid {{ color }};padding-left:12px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:{{ color }};font-size:13px;font-weight:600;">{{ text }}</div>
+{% endmacro %}
+
+{# 데이터 품질 인라인 마크 #}
+{% macro quality_mark(text) %}
+<span style="font-size:11px;color:#94a3b8;">({{ text }})</span>
+{% endmacro %}

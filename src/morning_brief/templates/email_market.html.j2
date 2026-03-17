@@ -1,0 +1,46 @@
+{# 변수: stock_indices, stock_tech, macro_indicators #}
+{% from "email_macros.html.j2" import badge, quality_mark %}
+<tr><td style="padding:0 0 24px 0;">
+<table role="presentation" width="100%" class="card" style="width:100%;background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;">
+<tr><td class="card-pad" style="padding:20px 24px;">
+<div style="border-left:3px solid #0f766e;padding-left:12px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#0f766e;font-size:13px;font-weight:600;">&#9632; &#xC2DC;&#xC7A5; &#xC9C0;&#xD45C;</div>
+{% if stock_indices %}
+<table role="presentation" width="100%" style="padding-top:10px;font-size:13px;">
+{% for s in stock_indices %}
+<tr style="border-top:1px solid #e2e8f0;">
+<td style="padding:6px 0;font-weight:600;color:#0f172a;" class="text-strong">{{ s.ticker }}</td>
+<td style="color:#64748b;" class="text-muted">{{ s.name }}</td>
+<td align="right" class="text-body">{{ s.price }}</td>
+<td align="right">{{ badge(s.change_pct, s.direction) }}</td>
+</tr>
+{% endfor %}
+</table>
+{% endif %}
+{% if stock_tech %}
+<div style="padding-top:12px;font-size:12px;color:#94a3b8;font-weight:600;" class="text-muted">&#xBE45;&#xD14C;&#xD06C; 10&#xC885;</div>
+<table role="presentation" width="100%" style="padding-top:6px;font-size:13px;">
+{% for s in stock_tech %}
+<tr>
+<td style="padding:4px 0;font-weight:600;color:#0f172a;" class="text-strong">{{ s.ticker }}</td>
+<td align="right">{{ badge(s.change_pct, s.direction) }}</td>
+</tr>
+{% endfor %}
+</table>
+{% endif %}
+{% if macro_indicators %}
+<div style="padding-top:12px;border-top:1px solid #e2e8f0;margin-top:8px;">
+<div style="font-size:12px;color:#94a3b8;font-weight:600;" class="text-muted">&#xAC70;&#xC2DC; &#xC9C0;&#xD45C;</div>
+<table role="presentation" width="100%" style="padding-top:6px;font-size:13px;">
+{% for m in macro_indicators %}
+<tr>
+<td style="padding:4px 0;color:#475569;font-weight:600;" class="text-body">{{ m.label }}</td>
+<td align="right" style="color:#0f172a;" class="text-strong">{% if m.is_anomaly %}&#8212;{% else %}{{ m.value }}{% endif %}{% if m.is_previous %} {{ quality_mark("전일") }}{% endif %}</td>
+<td align="right">{% if not m.is_anomaly %}{{ badge(m.change, m.direction) }}{% endif %}</td>
+</tr>
+{% endfor %}
+</table>
+</div>
+{% endif %}
+</td></tr>
+</table>
+</td></tr>

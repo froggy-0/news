@@ -1,0 +1,23 @@
+{# 변수: display_date, read_time, snapshot_badges #}
+{% from "email_macros.html.j2" import badge %}
+<tr><td style="padding:0 0 24px 0;">
+<table role="presentation" width="100%" class="card" style="width:100%;background:#fff;border:1px solid #e2e8f0;border-radius:16px;">
+<tr><td class="card-pad" style="padding:32px 24px 20px 24px;">
+<div style="font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#0f172a;font-size:15px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;" class="text-strong">MORNING MARKET BRIEF</div>
+<div style="padding-top:6px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#94a3b8;font-size:13px;" class="text-muted">{{ display_date }} &#183; {{ read_time }}</div>
+<div class="gradient-line" style="margin-top:20px;height:2px;background:linear-gradient(90deg,#cbd5e1,#3b82f6,#cbd5e1);"></div>
+{% if snapshot_badges %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:16px;">
+<tr>
+{% for b in snapshot_badges %}
+<td class="snapshot-badge" style="text-align:center;padding:4px;">
+<div style="font-size:11px;color:#94a3b8;font-weight:600;" class="text-muted">{{ b.label }}</div>
+<div style="padding-top:2px;">{{ badge(b.value, b.direction) }}</div>
+</td>
+{% endfor %}
+</tr>
+</table>
+{% endif %}
+</td></tr>
+</table>
+</td></tr>
