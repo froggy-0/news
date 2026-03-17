@@ -292,33 +292,31 @@ def test_parse_reference_snapshot_response_includes_preview_on_failure():
         raise AssertionError("HttpFetchError was expected")
 
 
-def test_fetch_official_btc_etf_snapshots_uses_perplexity_request(monkeypatch):
-    expected = [
-        BitcoinEtfIssuerSnapshot(
-            ticker="IBIT",
-            issuer="iShares",
-            source_url=official.IBIT_URL,
-            as_of="03/11/2026",
-            shares_outstanding=1,
-            daily_volume=1,
-            aum_usd=1.0,
-            total_btc=1.0,
-            bitcoin_per_share=1.0,
-        )
-    ]
-    captured: dict[str, str] = {}
+def test_fetch_official_btc_etf_snapshots_uses_direct_fetch_not_perplexity(monkeypatch):
+    """fetch_official_btc_etf_snapshots()가 Perplexity를 거치지 않고
+    direct fetch를 primary 경로로 사용하는지 확인한다.
 
-    def fake_request(api_key: str, *, observer=None):
-        captured["api_key"] = api_key
-        assert observer is None
-        return expected
+    Perplexity structured query는 구조적으로 빈 배열만 반환하여 제거되었다.
+    """
+    page_payloads = {
+        official.IBIT_URL: IBIT_SAMPLE,
+        official.BITB_URL: BITB_CURRENT_SAMPLE,
+    }
 
-    monkeypatch.setattr(official, "_request_reference_snapshots", fake_request)
+    def fake_get_text(url: str, **kwargs):
+        return page_payloads[url]
+
+    monkeypatch.setattr(official, "get_text_with_retry", fake_get_text)
+
+    # _request_reference_snapshots가 호출되면 실패하도록 설정
+    def should_not_be_called(*args, **kwargs):
+        raise AssertionError("_request_reference_snapshots()가 호출되면 안 됨")
+
+    monkeypatch.setattr(official, "_request_reference_snapshots", should_not_be_called)
 
     snapshots = official.fetch_official_btc_etf_snapshots(api_key="pplx-test-key")
 
-    assert snapshots == expected
-    assert captured["api_key"] == "pplx-test-key"
+    assert [s.ticker for s in snapshots] == ["BITB", "IBIT"]
 
 
 def test_fetch_official_btc_etf_snapshots_falls_back_to_direct_official_pages(monkeypatch):
@@ -387,7 +385,7 @@ def test_request_reference_snapshots_uses_json_schema_response_format(monkeypatc
 
     monkeypatch.setattr(official, "_build_client", lambda api_key: FakeClient())
 
-    snapshots = official.fetch_official_btc_etf_snapshots(api_key="pplx-test-key")
+    snapshots = official._request_reference_snapshots("pplx-test-key")
 
     assert [snapshot.ticker for snapshot in snapshots] == ["IBIT"]
     assert captured["model"] == official.BTC_ETF_REFERENCE_MODEL
@@ -428,10 +426,9 @@ def test_request_reference_snapshots_records_parse_empty_preview(monkeypatch, tm
             self.chat = FakeChat()
 
     monkeypatch.setattr(official, "_build_client", lambda api_key: FakeClient())
-    monkeypatch.setattr(official, "_fetch_direct_reference_snapshots", lambda observer=None: [])
 
-    snapshots = official.fetch_official_btc_etf_snapshots(
-        api_key="pplx-test-key",
+    snapshots = official._request_reference_snapshots(
+        "pplx-test-key",
         observer=observer,
     )
 

@@ -221,7 +221,7 @@ def test_fetch_macro_points_uses_yfinance_for_dxy_even_when_fred_is_available(mo
     by_key = {point.canonical_key: point for point in points}
     assert by_key["us10y"].ticker == "DGS10"
     assert by_key["vix"].ticker == "VIXCLS"
-    assert by_key["dxy"].ticker == "DX-Y.NYB"
+    assert by_key["dxy"].ticker == "DX=F"
     assert by_key["dxy"].price == 104.3
 
 
