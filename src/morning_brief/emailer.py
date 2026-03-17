@@ -768,9 +768,15 @@ def _build_snapshot_badges(packet: dict) -> list[dict]:
         }
     )
 
-    macro = packet.get("macro", {})
-    vix = macro.get("VIX", {})
-    vix_val = vix.get("value", 0)
+    macro_list = packet.get("macro", [])
+    if isinstance(macro_list, list):
+        vix_entry = next(
+            (m for m in macro_list if m.get("canonical_key") == "vix" or m.get("label") == "VIX"),
+            {},
+        )
+    else:
+        vix_entry = macro_list.get("VIX", {}) if isinstance(macro_list, dict) else {}
+    vix_val = vix_entry.get("price", 0) or 0
     badges.append(
         {
             "label": "VIX",
