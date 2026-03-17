@@ -22,7 +22,8 @@ CANONICAL_KEY_BY_SOURCE = {
     "DGS2": "us2y",
     "^IRX": "us3m",
     # ICE DXY만 canonical dxy로 취급하고, FRED broad dollar index는 의도적으로 제외한다.
-    "DX-Y.NYB": "dxy",
+    "DX=F": "dxy",
+    "DX-Y.NYB": "dxy",  # 하위 호환성 유지 (캐시에 이전 티커가 남아있을 수 있음)
     "VIXCLS": "vix",
     "^VIX": "vix",
     "KRW=X": "usdkrw",

@@ -321,8 +321,8 @@ def _fetch_direct_reference_snapshots(
 ) -> list[BitcoinEtfIssuerSnapshot]:
     snapshots: list[BitcoinEtfIssuerSnapshot] = []
     failures: list[dict[str, str]] = []
-    # GBTC는 Grayscale이 429로 직접 scraping을 차단하므로 제외한다.
-    # GBTC 데이터는 Perplexity structured query 경로에서만 수집한다.
+    # GBTC는 Grayscale이 429로 직접 scraping을 차단하여 수집 불가하다.
+    # 브리핑 프롬프트에서 GBTC를 명시적으로 요구하지 않으므로 IBIT+BITB 2종으로 운영한다.
     targets = (
         ("IBIT", IBIT_URL, parse_ibit_snapshot),
         ("BITB", BITB_URL, parse_bitb_snapshot),
@@ -760,15 +760,9 @@ def fetch_official_btc_etf_snapshots(
     api_key: str = "",
     observer: PipelineObserver | None = None,
 ) -> list[BitcoinEtfIssuerSnapshot]:
-    snapshots = _request_reference_snapshots(api_key, observer=observer)
-    if snapshots:
-        return snapshots
-
-    logger.info("Perplexity ETF 참조 스냅샷이 비어 공식 발행사 페이지를 직접 다시 볼게요.")
-    direct_snapshots = _fetch_direct_reference_snapshots(observer=observer)
-    if direct_snapshots:
-        return direct_snapshots
-    return snapshots
+    # IBIT+BITB 2종을 공식 발행사 페이지에서 직접 수집한다.
+    # Perplexity structured query는 구조적으로 빈 배열만 반환하여 제거했다.
+    return _fetch_direct_reference_snapshots(observer=observer)
 
 
 def load_official_btc_etf_cache(cache_file: Path) -> dict[str, BitcoinEtfIssuerSnapshot]:

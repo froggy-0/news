@@ -41,7 +41,7 @@ BTC_ETF_CACHE_MAX_AGE_HOURS = 48
 MACRO_FALLBACK_TARGETS = [
     ("us10y", "^TNX", 0.1),
     ("us3m", "^IRX", 1.0),
-    ("dxy", "DX-Y.NYB", 1.0),
+    ("dxy", "DX=F", 1.0),
     ("vix", "^VIX", 1.0),
 ]
 KOREA_INVESTOR_TARGETS = [
@@ -339,9 +339,11 @@ def fetch_macro_points(fred_api_key: str = "") -> list[MarketPoint]:
         existing_canonical_keys: set[str] | None = None,
     ) -> list[MarketPoint]:
         existing = existing_canonical_keys or set()
-        # ICE DXY is sourced only from Yahoo Finance's DX-Y.NYB path.
-        # Stooq does not expose a compatible symbol, and FRED broad dollar indices
-        # are intentionally excluded because they do not match the ICE DXY definition.
+        # ICE DXY is sourced from Yahoo Finance's DX=F (ICE Dollar Index Futures) path.
+        # The previous DX-Y.NYB ticker was delisted; DX=F tracks the same ICE DXY
+        # and is actively maintained. Stooq does not expose a compatible symbol,
+        # and FRED broad dollar indices are intentionally excluded because they
+        # do not match the ICE DXY definition.
         return [
             _safe_yfinance_point(
                 label=canonical_label_for(canonical_key),
