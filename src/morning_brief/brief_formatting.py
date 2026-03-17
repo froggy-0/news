@@ -338,8 +338,12 @@ SECTION_TITLES: dict[str, str] = {
 
 
 def _is_legacy_layer_format(body: str) -> bool:
-    """기존 LAYER 구조 텍스트인지 감지."""
-    return "LAYER" in body[:500] or bool(re.search(r"^\d+\.\s+LAYER", body[:500], re.MULTILINE))
+    """기존 LAYER 구조 텍스트인지 감지.
+
+    섹션 제목 형식(``1. LAYER 1 |``)이 본문에 있을 때만 레거시로 판단.
+    단순히 "LAYER"라는 단어가 포함된 것만으로는 레거시로 보지 않음.
+    """
+    return bool(re.search(r"^\d+\.\s+LAYER\s+\d", body, re.MULTILINE))
 
 
 def extract_sections(body: str) -> SectionMap:

@@ -137,11 +137,10 @@ def test_render_brief_validator_prompts_contains_draft_and_packet(monkeypatch):
     )
 
     assert "품질 검수 에디터" in instructions
-    assert "LAYER 2" in instructions
-    assert "한국어 제목, 시장 의미, 한국 투자자 관점" in instructions
+    assert "4-2" in instructions
+    assert "한국어 헤드라인" in instructions
     assert "None" in instructions
-    assert "매수 관심" in instructions
-    assert "코스피" in instructions
+    assert "수혜" in instructions
     assert "Prompt Version: market_brief_test" in instructions
     assert "<brief_text>" in user_prompt
     assert '"macro":[{"label":"US10Y"}]' in user_prompt
@@ -159,9 +158,8 @@ def test_render_brief_rewrite_prompts_contains_review_feedback(monkeypatch):
     )
 
     assert "교정 에디터" in instructions
-    assert "3개 번호 섹션 구조" in instructions
-    assert "한국어 제목, 시장 의미, 한국 투자자 관점" in instructions
-    assert "매수 관심" in instructions
-    assert "코스피" in instructions
+    assert "섹션 번호와 제목 구조" in instructions
+    assert "한국어 헤드라인" in instructions
+    assert "LAYER" in instructions  # "LAYER라는 단어를 사용하지 않는다" 규칙 포함
     assert "<review_json>" in user_prompt
     assert '"rewrite_guidance":["쉬운 말로 바꾸기"]' in user_prompt
