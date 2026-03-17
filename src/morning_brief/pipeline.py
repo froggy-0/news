@@ -181,7 +181,7 @@ def run_pipeline(settings: Settings) -> str:
             logger.warning("데이터 품질 critical + 검수 미통과로 이메일 발송을 건너뛸게요.")
         else:
             with observer.phase("email"):
-                GmailSender(settings).send(subject=subject, body=briefing)
+                GmailSender(settings).send(subject=subject, body=briefing, packet=packet)
     except BriefGenerationError as exc:
         status = "openai_failed"
         failure_message = str(exc)

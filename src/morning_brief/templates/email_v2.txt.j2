@@ -1,0 +1,101 @@
+Morning Market Brief
+{{ display_date }}  {{ read_time }}
+─────────────────────────────────────────
+
+{% if hero_summary -%}
+오늘의 핵심
+{{ hero_summary }}
+{% if hero_alerts -%}
+{% for alert in hero_alerts -%}
+· {{ alert }}
+{% endfor %}
+{% endif %}
+{% endif -%}
+
+{% if snapshot_badges -%}
+스냅샷
+{% for b in snapshot_badges -%}
+· {{ b.label }}: {{ b.value }}
+{% endfor %}
+
+{% endif -%}
+{% if news_items -%}
+핵심 뉴스
+{% for item in news_items -%}
+{{ item.number }} {{ item.headline }}{% if item.source_name %} — {{ item.source_name }}{% endif %}
+
+{{ item.body }}
+{% if item.source_url %}→ 원문 보기 {{ item.source_url }}{% endif %}
+{% if item.tldr %}핵심 한줄: {{ item.tldr }}{% endif %}
+
+{% endfor %}
+{% endif -%}
+{% if btc_data -%}
+BTC & 크립토
+· BTC {{ btc_data.spot_price }} ({{ btc_data.spot_change }})
+· 공포탐욕 {{ btc_data.fear_greed_value }}/100 {{ btc_data.fear_greed_label }}{% if btc_data.fear_greed_warning %} ⚠ {{ btc_data.fear_greed_warning }}{% endif %}
+
+{% if btc_data.etf_items -%}
+{% for etf in btc_data.etf_items -%}
+· {{ etf.ticker }} ${{ etf.price }} {{ etf.change_pct }}  거래량 {{ etf.volume }}
+{% endfor %}
+· 합산 거래량 {{ btc_data.etf_total_volume }}
+{% endif %}
+{% endif -%}
+{% if stock_indices or stock_tech -%}
+시장 지표
+{% if stock_indices -%}
+{% for s in stock_indices -%}
+· {{ s.ticker }} {{ s.name }} {{ s.price }} {{ s.change_pct }}
+{% endfor %}
+{% endif -%}
+{% if stock_tech -%}
+빅테크 10종
+{% for s in stock_tech -%}
+· {{ s.ticker }} {{ s.change_pct }}
+{% endfor %}
+{% endif -%}
+{% if macro_indicators -%}
+거시 지표
+{% for m in macro_indicators -%}
+· {{ m.label }}: {% if m.is_anomaly %}—{% else %}{{ m.value }} ({{ m.change }}){% endif %}{% if m.is_previous %} (전일){% endif %}
+
+{% endfor %}
+{% endif %}
+{% endif -%}
+{% if sector_mapping -%}
+오늘 주목 흐름
+▲ 수혜 방향
+{% for item in sector_mapping.positive -%}
+· {{ item.ticker }} {{ item.reason }}
+{% endfor %}
+▼ 압력 방향
+{% for item in sector_mapping.negative -%}
+· {{ item.ticker }} {{ item.reason }}
+{% endfor %}
+— 중립 / 관망
+{% for item in sector_mapping.neutral -%}
+· {{ item.ticker }} {{ item.reason }}
+{% endfor %}
+{% if sector_mapping.commentary %}{{ sector_mapping.commentary }}{% endif %}
+
+{% endif -%}
+{% if event_calendar -%}
+이벤트 캘린더
+{% for evt in event_calendar -%}
+{% if evt.is_today %}[오늘] {% endif %}{{ evt.time or evt.date }} {{ evt.name }} {{ evt.expected }} 영향도 {{ evt.impact }}/5
+{% endfor %}
+
+{% endif -%}
+{% if footer_notes -%}
+[데이터 처리 메모]
+{% for note in footer_notes -%}
+· {{ note }}
+{% endfor %}
+
+{% endif -%}
+─────────────────────────────────────────
+데이터: FRED · Stooq · CoinGecko · Perplexity · Grok X Search
+본 메일은 공개 시장 데이터 기반 정보성 브리핑이며 투자 권유가 아닙니다.
+구독 해지: {{ unsubscribe_url }}
+GitHub: {{ github_url }}

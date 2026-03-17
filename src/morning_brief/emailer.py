@@ -1262,17 +1262,37 @@ def _render_body_line(text: str) -> str:
     return highlighted if highlighted != html.escape(text) else html.escape(text)
 
 
-def render_briefing_email_html(subject: str, body: str, *, sender: str = "") -> str:
+def render_briefing_email_html(
+    subject: str,
+    body: str,
+    *,
+    sender: str = "",
+    packet: dict | None = None,
+) -> str:
     environment = _load_email_environment()
-    template = environment.get_template("email.html.j2")
-    context = _build_email_context(subject=subject, body=body, sender=sender)
+    if packet is not None:
+        template = environment.get_template("email_base.html.j2")
+        context = _build_email_context_v2(subject=subject, body=body, packet=packet, sender=sender)
+    else:
+        template = environment.get_template("email.html.j2")
+        context = _build_email_context(subject=subject, body=body, sender=sender)
     return template.render(**context).strip()
 
 
-def render_briefing_email_text(subject: str, body: str, *, sender: str = "") -> str:
+def render_briefing_email_text(
+    subject: str,
+    body: str,
+    *,
+    sender: str = "",
+    packet: dict | None = None,
+) -> str:
     environment = _load_email_environment()
-    template = environment.get_template("email.txt.j2")
-    context = _build_email_context(subject=subject, body=body, sender=sender)
+    if packet is not None:
+        template = environment.get_template("email_v2.txt.j2")
+        context = _build_email_context_v2(subject=subject, body=body, packet=packet, sender=sender)
+    else:
+        template = environment.get_template("email.txt.j2")
+        context = _build_email_context(subject=subject, body=body, sender=sender)
     return template.render(**context).strip()
 
 
@@ -1282,9 +1302,10 @@ def build_briefing_message(
     body: str,
     sender: str,
     recipients: list[str],
+    packet: dict | None = None,
 ) -> MIMEMultipart:
-    html_body = render_briefing_email_html(subject=subject, body=body, sender=sender)
-    text_body = render_briefing_email_text(subject=subject, body=body, sender=sender)
+    html_body = render_briefing_email_html(subject=subject, body=body, sender=sender, packet=packet)
+    text_body = render_briefing_email_text(subject=subject, body=body, sender=sender, packet=packet)
     msg = MIMEMultipart("alternative")
     msg["to"] = recipients[0] if len(recipients) == 1 else sender
     if len(recipients) > 1:
@@ -1342,7 +1363,7 @@ class GmailSender:
         self.settings.gmail_token_file.write_text(creds.to_json(), encoding="utf-8")
         return creds
 
-    def send(self, subject: str, body: str) -> None:
+    def send(self, subject: str, body: str, *, packet: dict | None = None) -> None:
         if not self.settings.send_email:
             logger.info("SEND_EMAIL=false라서 메일 발송은 건너뛸게요.")
             return
@@ -1359,6 +1380,7 @@ class GmailSender:
             body=body,
             sender=self.settings.gmail_sender,
             recipients=recipients,
+            packet=packet,
         )
 
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode("utf-8")
