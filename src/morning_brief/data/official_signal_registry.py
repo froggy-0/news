@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TypedDict
 
 REGISTRY_PATH = Path(__file__).resolve().parent / "registry" / "official_signal_registry.json"
-MAX_X_HANDLES_PER_GROUP = 10
+MAX_X_HANDLES_PER_GROUP = 12
 
 
 class OfficialSignalEntity(TypedDict):
