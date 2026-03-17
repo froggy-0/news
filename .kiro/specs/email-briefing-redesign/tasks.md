@@ -326,10 +326,10 @@
 - [x] 11. 최종 체크포인트
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 12. CI 파이프라인 검증
+- [x] 12. CI 파이프라인 검증
   - [x] 12.1 전체 테스트 로컬 통과 확인
-  - [-] 12.2 커밋 및 푸시 (pre-commit ruff format/check 통과)
-  - [~] 12.3 GitHub Actions 파이프라인 실행 및 전체 통과 확인
+  - [x] 12.2 커밋 및 푸시 (pre-commit ruff format/check 통과)
+  - [x] 12.3 GitHub Actions 파이프라인 실행 및 전체 통과 확인
   - [x] 11.1 PBT P1~P7 속성 기반 테스트 전체 구현 및 로컬 통과 확인
     - `tests/test_pbt_email_redesign.py` 생성 (7개 테스트)
     - P1 섹션 라운드트립, P2 배지 방향, P3 뉴스 파싱, P4 섹터 매핑, P5 공포탐욕, P6 데이터 품질, P7 배지 개수
