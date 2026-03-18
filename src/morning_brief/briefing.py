@@ -8,8 +8,11 @@ from zoneinfo import ZoneInfo
 from openai import OpenAI
 
 from morning_brief.brief_formatting import (
+    SECTION_TITLES,
+    SectionMap,
     extract_sections,
     improve_readability_spacing,
+    serialize_sections,
 )
 from morning_brief.brief_review import validate_and_rewrite_briefing
 from morning_brief.config import Settings
@@ -249,17 +252,36 @@ def _fallback_if_incomplete(
     if not issues:
         return _finalize_briefing(text, packet)
 
+    # 부분 fallback: LLM이 생성한 섹션은 최대한 살리고, 빠진 섹션만 보충
+    llm_map = extract_sections(text)
+    fallback_raw = _fallback_brief_raw(packet=packet, timezone=settings.timezone)
+    fallback_map = extract_sections(fallback_raw)
+
+    merged = SectionMap(
+        title=llm_map.get("title") or fallback_map.get("title", "Morning Market Brief")
+    )
+    for key in SECTION_TITLES:
+        llm_content = str(llm_map.get(key, ""))
+        fb_content = str(fallback_map.get(key, ""))
+        merged[key] = llm_content if llm_content.strip() else fb_content  # type: ignore[literal-required]
+
+    merged_text = serialize_sections(merged)
+
     logger.warning(
-        "브리핑 구조가 완전하지 않아 안전한 기본 브리핑으로 대체할게요: %s",
+        "브리핑 일부 섹션이 부족해 부분 보충했어요: %s",
         "; ".join(issues[:3]),
     )
     if observer is not None:
+        missing_keys = [
+            key for key in REQUIRED_V2_SECTIONS if not str(llm_map.get(key, "")).strip()
+        ]
         observer.log_event(
-            "brief_fallback_used",
+            "brief_partial_fallback",
             reason="incomplete_structure",
             issues=issues,
+            filled_sections=missing_keys,
         )
-    return _fallback_brief(packet=packet, timezone=settings.timezone)
+    return _finalize_briefing(merged_text, packet)
 
 
 def _finalize_briefing(text: str, packet: dict) -> str:
@@ -680,7 +702,7 @@ def _fallback_stock_lines(
     return stock_lines
 
 
-def _fallback_brief(packet: dict, timezone: str) -> str:
+def _fallback_brief_raw(packet: dict, timezone: str) -> str:
     now = datetime.now(ZoneInfo(timezone))
     date_str = now.strftime("%Y-%m-%d")
 
@@ -786,7 +808,11 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
 6. 이벤트 캘린더
 이번 주 주요 일정은 관측성 로그를 참고해 주세요.
 """
-    return _finalize_briefing(body, packet)
+    return body
+
+
+def _fallback_brief(packet: dict, timezone: str) -> str:
+    return _finalize_briefing(_fallback_brief_raw(packet, timezone), packet)
 
 
 def generate_briefing(
