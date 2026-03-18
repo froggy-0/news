@@ -21,6 +21,9 @@
 ## 프로젝트 구조
 - `main.py`: 실행 엔트리포인트
 - `AGENTS.md`: Codex 작업 규칙 요약
+- `.codex/config.toml`: 이 저장소 전용 Codex 설정과 multi-agent 역할 등록
+- `.agents/skills/`: 저장소 전용 Codex skills
+- `agents/*.toml`: subagent 역할별 Codex 설정
 - `CONTRIBUTING.md`: 기여/커밋/검증 가이드
 - `docs/development-standards.md`: 개발 표준과 리뷰 루브릭
 - `src/morning_brief/config.py`: 환경설정 로더
@@ -178,6 +181,18 @@ make validate-pre-commit
 - 변경 유형별 회귀 기준은 `docs/ai-evals.md`
 - Codex용 단축 규칙은 `AGENTS.md`
 - Python 변경은 `ruff format`, `ruff check`, `pytest`를 모두 통과해야 완료로 봅니다.
+
+### Codex 프로젝트 설정
+- 루트 `AGENTS.md`: 저장소 전체 공통 규칙
+- 하위 `src/morning_brief/data/AGENTS.md`: 데이터 수집 계층 전용 규칙
+- `.codex/config.toml`: 이 저장소에서 `multi_agent`, runtime metrics, project instruction fallback을 켭니다.
+- `.agents/skills/`: 반복 작업용 repo skill을 자동 발견합니다.
+- `agents/*.toml`: `explorer`, `pipeline_investigator`, `docs_researcher` 역할별 기본 설정입니다.
+
+참고:
+- Codex 공식 규칙 파일명은 `AGENTS.md`입니다.
+- 이 저장소는 fallback 파일명으로 `agent.md`, `.agents.md`도 인식하도록 `.codex/config.toml`에 등록했습니다.
+- project-scoped `.codex/config.toml`은 Codex가 이 저장소를 trusted project로 인식할 때만 로드됩니다.
 
 ## 9) 프롬프트 엔지니어링 참고
 - OpenAI Prompt Engineering: <https://platform.openai.com/docs/guides/prompt-engineering>

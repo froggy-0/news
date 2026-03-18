@@ -1,0 +1,35 @@
+#:schema https://developers.openai.com/codex/config-schema.json
+
+personality = "pragmatic"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+web_search = "live"
+model_reasoning_effort = "medium"
+project_doc_fallback_filenames = ["agent.md", ".agents.md"]
+project_doc_max_bytes = 65536
+
+[features]
+multi_agent = true
+runtime_metrics = true
+child_agents_md = true
+prevent_idle_sleep = true
+
+[agents]
+max_threads = 6
+max_depth = 2
+job_max_runtime_seconds = 1800
+
+[agents.explorer]
+description = "코드베이스, 테스트, 로그를 빠르게 읽어 동작과 관련 파일을 먼저 좁히는 역할입니다."
+config_file = "agents/explorer.toml"
+nickname_candidates = ["Scout", "Mapper"]
+
+[agents.pipeline_investigator]
+description = "GitHub Actions, observability 로그, provider 장애, fallback 회귀를 우선 분석하는 역할입니다."
+config_file = "agents/pipeline-investigator.toml"
+nickname_candidates = ["Tracer", "Inspector"]
+
+[agents.docs_researcher]
+description = "OpenAI Codex나 외부 API 계약을 공식 문서 기준으로 먼저 확인하는 역할입니다."
+config_file = "agents/docs-researcher.toml"
+nickname_candidates = ["Archivist", "Docs"]

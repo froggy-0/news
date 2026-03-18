@@ -1,0 +1,4 @@
+personality = "pragmatic"
+sandbox_mode = "read-only"
+web_search = "disabled"
+model_reasoning_effort = "medium"

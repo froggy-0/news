@@ -1,0 +1,6 @@
+interface:
+  display_name: "Pipeline Log Triage"
+  short_description: "GitHub Actions와 observability 로그를 기준으로 파이프라인 장애를 좁힙니다."
+
+policy:
+  allow_implicit_invocation: true
