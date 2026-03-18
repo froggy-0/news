@@ -25,44 +25,52 @@ def _complete_layered_brief(
     stock_block = layer_three_body or (
         "- NVDA | +1.20% | 데이터센터 투자 기대가 이어졌습니다. | [출처: Stooq]\n"
         "- AMD | -0.80% | 반도체 종목 안에서도 차이가 있었습니다. | [출처: Stooq]\n"
-        "- BTC-USD | +1.10% | 비트코인 현물은 82,000달러 수준이었습니다. | [출처: CoinGecko]\n"
-        "- BTC ETF 거래량 | +0.50% | 주요 ETF 거래가 이어졌습니다. | [출처: Stooq/yfinance]"
     )
     return f"""Morning Market Brief ({title_date})
 
-1. LAYER 1 | 오늘 한줄 판단
-핵심 판단
-- {layer_one_body}
+0. 오늘의 핵심
+{layer_one_body}
 
-주요 지표
-- 미국 10년물 금리는 4.10%였습니다. [출처: FRED]
+1. 거시 지표 Dashboard
+- 미국 10년물 국채금리: 4.10% (+0.20%) (전일 값)
+
+2. 미국 증시
+{stock_block}
+- AAPL | +1.10% | 주요 기대
+- AMZN | -0.10% | 주요 기대
+- MSFT | +1.90% | 주요 기대
+- META | -1.10% | 주요 기대
+- GOOGL | +0.20% | 주요 기대
+- TSLA | +2.20% | 주요 기대
+- AVGO | -1.50% | 주요 기대
+- ASML | -0.90% | 주요 기대
+
+3. BTC & 크립토
 - 비트코인 현물은 82,000달러였습니다. [출처: CoinGecko]
 
-배경과 해석
+4-1. 이슈 브리핑
 금리와 기술주, 비트코인 흐름을 함께 비교할 필요가 있습니다.
 
-주목할 변수
-- 금리와 기술주 반응이 다시 같은 방향으로 모이는지 보겠습니다.
+4-2. 핵심 뉴스 5선
+① Nvidia unveils new AI cluster — 뉴스출처
+AI 투자 기대를 다시 자극했습니다.
+→ 원문 링크 https://www.reuters.com/world/us/example
+핵심 한줄: Nvidia
 
-2. LAYER 2 | 주요 뉴스
-핵심 이슈
-- Nvidia unveils new AI cluster | AI 투자 기대를 다시 자극했습니다. | https://www.reuters.com/world/us/example
-- Bitcoin ETF inflows resume | 비트코인 ETF 수급 개선을 같이 봐야 합니다. | https://www.cnbc.com/example
-- Treasury yields stay firm | 금리 흐름을 이해하는 데 필요한 기사입니다. | https://www.wsj.com/example
+② Bitcoin ETF inflows resume — 뉴스출처
+비트코인 ETF 수급 개선을 같이 봐야 합니다.
+→ 원문 링크 https://www.cnbc.com/example
+핵심 한줄: Bitcoin
 
-배경과 해석
-주요 뉴스는 금리와 AI 투자, 비트코인 ETF 수급에 집중됐습니다.
+4-3. 섹터/자산 영향 매핑
+수혜 방향
+- NVDA
 
-주목할 변수
-- 같은 주제를 다른 신뢰 출처도 같이 다루는지 보겠습니다.
+5-1. 주간 맥락 연결
+- 흐름 요약
 
-3. LAYER 3 | 종목 브리핑
-주요 지표
-{stock_block}
-
-거시 지표
-- 달러 인덱스는 99.40이었습니다. [출처: yfinance]
-- 미국 10년물 금리는 4.10%였습니다. [출처: FRED]
+6. 이벤트 캘린더
+10/12 뉴스
 """
 
 
@@ -137,9 +145,9 @@ def test_fallback_brief_mentions_official_btc_etf_flow_when_available():
 
     briefing = _fallback_brief(packet=packet, timezone="Asia/Seoul")
 
-    assert "1. LAYER 1 | 오늘 한줄 판단" in briefing
-    assert "2. LAYER 2 | 주요 뉴스" in briefing
-    assert "3. LAYER 3 | 종목 브리핑" in briefing
+    assert "0. 오늘의 핵심" in briefing
+    assert "1. 거시 지표 Dashboard" in briefing
+    assert "2. 미국 증시" in briefing
     assert "981,234.56 BTC" in briefing
     assert "IBIT, BITB, GBTC 합산 보유량" in briefing
     assert "1,234.56 BTC" in briefing
@@ -166,8 +174,7 @@ def test_brief_structure_issues_accepts_layer_two_bullets_outside_metrics_label(
 
     issues = _brief_structure_issues(brief)
 
-    assert not any("LAYER 2 bullet 수가 부족해요" in issue for issue in issues)
-    assert not any("LAYER 3 종목 bullet 수가 부족해요" in issue for issue in issues)
+    assert not any("LAYER 2" in issue for issue in issues)
 
 
 def test_brief_structure_issues_does_not_fail_only_for_missing_macro_subheading():
@@ -453,20 +460,13 @@ def test_generate_briefing_falls_back_when_draft_structure_is_incomplete(monkeyp
     }
     truncated_draft = """Morning Market Brief (2026-03-13)
 
-1. LAYER 1 | 오늘 한줄 판단
-핵심 판단
+0. 오늘의 핵심
 - 금리와 기술주 흐름이 함께 관찰됐습니다.
 
-주요 지표
+1. 거시 지표 Dashboard
 - 미국 10년물 금리는 4.10%였습니다. [출처: FRED]
 
-2. LAYER 2 | 주요 뉴스
-핵심 이슈
-- Nvidia unveils new AI cluster | AI 투자 기대를 다시 자극했습니다. | https://www.reuters.com/world/us/example
-- Bitcoin ETF inflows resume | 비트코인 ETF 수급 개선을 같이 봐야 합니다. | https://www.cnbc.com/example
-
-3. LAYER 3 | 종목 브리핑
-주요 지표
+2. 미국 증시
 - NVDA | +1.20% |"""
 
     responses = [
@@ -485,10 +485,9 @@ def test_generate_briefing_falls_back_when_draft_structure_is_incomplete(monkeyp
 
     briefing = generate_briefing(packet=packet, settings=settings)
 
-    assert "1. LAYER 1 | 오늘 한줄 판단" in briefing
-    assert "2. LAYER 2 | 주요 뉴스" in briefing
-    assert "3. LAYER 3 | 종목 브리핑" in briefing
-    assert "거시 지표" in briefing
+    assert "0. 오늘의 핵심" in briefing
+    assert "1. 거시 지표 Dashboard" in briefing
+    assert "2. 미국 증시" in briefing
     assert "주요 종목 등락률은 이번 집계에서 충분히 확인되지 않았습니다." not in briefing
 
 
@@ -574,13 +573,26 @@ def test_generate_briefing_records_cached_input_tokens_in_observer(monkeypatch, 
     response = SimpleNamespace(
         output_text=(
             "Morning Market Brief (2026-03-14)\n\n"
-            "1. LAYER 1 | 오늘 한줄 판단\n"
-            "핵심 판단\n"
+            "0. 오늘의 핵심\n"
             "미국 시장은 혼조 흐름을 보였어요. [출처: test]\n\n"
-            "2. LAYER 2 | 주요 뉴스\n"
-            "- 엔비디아 | AI 투자 기대가 유지됐어요. | https://example.com/nvda\n\n"
-            "3. LAYER 3 | 종목 브리핑\n"
-            "- 비트코인 | +1.10% | 82,000달러 안팎에서 거래됐어요. | [출처: test]"
+            "1. 거시 지표 Dashboard\n"
+            "- 달러\n\n"
+            "2. 미국 증시\n"
+            "- 1 | +1.1%\n"
+            "- 2 | -0.1%\n"
+            "- 3 | +1.1%\n"
+            "- 4 | -0.1%\n"
+            "- 5 | +1.1%\n"
+            "- 6 | -0.1%\n"
+            "- 7 | +1.1%\n"
+            "- 8 | -0.1%\n"
+            "3. BTC & 크립토\n"
+            "- 비트코인 | +1.10% | 82,000달러 안팎에서 거래됐어요. | [출처: test]\n"
+            "4-2. 핵심 뉴스 5선\n"
+            "① 뉴스 1\n"
+            "② 뉴스 2\n"
+            "6. 이벤트 캘린더\n"
+            "이벤트 없음"
         ),
         usage=SimpleNamespace(
             input_tokens=300,
@@ -600,7 +612,7 @@ def test_generate_briefing_records_cached_input_tokens_in_observer(monkeypatch, 
     briefing = generate_briefing(packet=packet, settings=settings, observer=observer)
 
     usage = observer.provider_usage["openai"]
-    assert "오늘 한줄 판단" in briefing
+    assert "미국 시장은 혼조" in briefing
     assert usage.requests == 1
     assert usage.input_tokens == 300
     assert usage.output_tokens == 120

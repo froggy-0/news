@@ -8,9 +8,8 @@ from zoneinfo import ZoneInfo
 from openai import OpenAI
 
 from morning_brief.brief_formatting import (
-    extract_brief_structure,
+    extract_sections,
     improve_readability_spacing,
-    split_section_groups,
 )
 from morning_brief.brief_review import validate_and_rewrite_briefing
 from morning_brief.config import Settings
@@ -21,10 +20,13 @@ from morning_brief.prompting import build_prompt_cache_key, render_brief_prompts
 
 logger = logging.getLogger(__name__)
 
-REQUIRED_LAYER_HEADINGS = (
-    "LAYER 1 | 오늘 한줄 판단",
-    "LAYER 2 | 주요 뉴스",
-    "LAYER 3 | 종목 브리핑",
+REQUIRED_V2_SECTIONS = (
+    "section_0",
+    "section_1",
+    "section_2",
+    "section_3",
+    "section_4_2",
+    "section_6",
 )
 MIN_LAYER_TWO_BULLETS = 2
 MIN_LAYER_THREE_BULLETS = 2
@@ -212,38 +214,22 @@ def _count_section_bullets(text: str, *, stop_at_label: str | None = None) -> in
 
 
 def _brief_structure_issues(text: str) -> list[str]:
-    _, _, sections = extract_brief_structure(text)
-    section_map = {heading: content for heading, content in sections}
+    section_map = extract_sections(text)
     issues: list[str] = []
 
-    for heading in REQUIRED_LAYER_HEADINGS:
-        if heading not in section_map:
-            issues.append(f"{heading} 섹션이 없어요.")
+    for key in REQUIRED_V2_SECTIONS:
+        if not section_map.get(key):
+            issues.append(f"{key} 섹션이 없어요.")
 
-    layer_two = section_map.get("LAYER 2 | 주요 뉴스")
-    if layer_two:
-        layer_two_groups = split_section_groups(layer_two)
-        layer_two_bullets = _count_metric_bullets(layer_two_groups["metrics"][1])
-        if layer_two_bullets == 0:
-            layer_two_bullets = _count_section_bullets(layer_two)
-        if layer_two_bullets < MIN_LAYER_TWO_BULLETS:
-            issues.append(
-                f"LAYER 2 bullet 수가 부족해요. count={layer_two_bullets}, expected>={MIN_LAYER_TWO_BULLETS}"
-            )
+    section_4_2 = str(section_map.get("section_4_2", ""))
+    if section_4_2:
+        news_count = sum(1 for line in section_4_2.splitlines() if line.strip() and line.strip()[0] in "①②③④⑤")
+        if news_count < MIN_LAYER_TWO_BULLETS:
+            issues.append(f"핵심 뉴스 항목 수가 부족해요. count={news_count}, expected>={MIN_LAYER_TWO_BULLETS}")
 
-    layer_three = section_map.get("LAYER 3 | 종목 브리핑")
-    if layer_three:
-        layer_three_groups = split_section_groups(layer_three)
-        layer_three_bullets = _count_metric_bullets(
-            layer_three_groups["metrics"][1],
-            stop_at_label="거시 지표",
-        )
-        if layer_three_bullets == 0:
-            layer_three_bullets = _count_section_bullets(layer_three, stop_at_label="거시 지표")
-        if layer_three_bullets < MIN_LAYER_THREE_BULLETS:
-            issues.append(
-                f"LAYER 3 종목 bullet 수가 부족해요. count={layer_three_bullets}, expected>={MIN_LAYER_THREE_BULLETS}"
-            )
+    section_2 = str(section_map.get("section_2", ""))
+    if section_2 and len(section_2.strip()) < 30:
+        issues.append("미국 증시 섹션 내용이 부족해요.")
 
     return issues
 
@@ -447,14 +433,14 @@ def _fallback_news_takeaway(item: dict) -> str:
 
 def _fallback_news_lines(news: list[dict]) -> list[str]:
     lines: list[str] = []
-    for item in news[:5]:
+    circled = ["①", "②", "③", "④", "⑤"]
+    for i, item in enumerate(news[:5]):
         title = str(item.get("title", "")).strip() or "주요 뉴스"
         why_it_matters = (
             str(item.get("why_it_matters", "")).strip() or "시장 해석에 바로 연결되는 기사입니다."
         )
-        lines.append(
-            f"- {title} | {why_it_matters} | {_fallback_news_takeaway(item)} | {_news_reference(item)}"
-        )
+        url = _news_reference(item)
+        lines.append(f"{circled[i]} {title} — 뉴스출처\n{why_it_matters} {_fallback_news_takeaway(item)}\n→ 원문 링크 {url}\n핵심 한줄: {title}\n")
     return lines
 
 
@@ -745,13 +731,12 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
 
     body = f"""Morning Market Brief ({date_str})
 
-1. LAYER 1 | 오늘 한줄 판단
-한줄 결론
+0. 오늘의 핵심
 오늘은 {judgement} 국면입니다.
-
 {judgement_reason}
+{kospi_impact}
 
-핵심 수치
+1. 거시 지표 Dashboard
 {
         _bullet_lines(
             investor_lines
@@ -763,46 +748,31 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
         )
     }
 
-쉽게 보면
+2. 미국 증시
+{_bullet_lines(stock_lines or ["주요 종목 등락률은 이번 집계에서 충분히 확인되지 않았습니다."])}
+
+3. BTC & 크립토
+{_bullet_lines([btc_spot_line, sentiment_text])}
+
+4-1. 이슈 브리핑
 {_layer1_easy_summary(direction)}
+{_layer3_easy_summary(direction)}
 
-{kospi_impact}
-
-오늘 체크할 포인트
-{
-        _bullet_lines(
-            _dynamic_checkpoints(
-                layer="layer1", direction=direction, macro=macro, korea_watch=korea_watch
-            )
-        )
-    }
-
-2. LAYER 2 | 주요 뉴스
-한줄 결론
+4-2. 핵심 뉴스 5선
 {layer2_headline}
-
-핵심 이슈
 {layer2_issues}
 {layer2_why_block}
 
-오늘 체크할 포인트
-{layer2_checkpoints}
+4-3. 섹터/자산 영향 매핑
+오늘의 주요 뉴스가 충분히 수집되지 않아 판단을 보류합니다.
 
-3. LAYER 3 | 종목 브리핑
-한줄 결론
-{_layer3_headline(tech)}
-
-주요 지표
-{_bullet_lines(stock_lines or ["주요 종목 등락률은 이번 집계에서 충분히 확인되지 않았습니다."])}
-
-거시 지표
-{_bullet_lines(macro_lines)}
-
-쉽게 보면
-{_layer3_easy_summary(direction)}
-
-오늘 체크할 포인트
+5-1. 주간 맥락 연결
+{_bullet_lines(_dynamic_checkpoints(layer="layer1", direction=direction, macro=macro, korea_watch=korea_watch))}
+{_bullet_lines(_dynamic_checkpoints(layer="layer2", direction=direction, news=news))}
 {_bullet_lines(_dynamic_checkpoints(layer="layer3", direction=direction, tech=tech))}
+
+6. 이벤트 캘린더
+이번 주 주요 일정은 관측성 로그를 참고해 주세요.
 """
     return _finalize_briefing(body, packet)
 

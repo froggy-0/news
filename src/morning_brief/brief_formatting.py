@@ -108,7 +108,7 @@ class BTCData(TypedDict, total=False):
 # V1 레거시 상수 및 패턴
 # ---------------------------------------------------------------------------
 
-SECTION_HEADING_RE = re.compile(r"^(\d+)\.\s+(.+)$")
+SECTION_HEADING_RE = re.compile(r"^(\d+(?:-\d+)?)\.\s+(.+)$")
 SENTENCE_BREAK_RE = re.compile(r"(?<=[.!?])\s+(?=[\"'“”‘’(]*[A-Za-z가-힣])")
 
 NOTICE_PREFIX = "[데이터 품질 알림]"
@@ -306,7 +306,7 @@ def _backfill_section_groups_without_labels(
 # V2 섹션 파싱 (Section 0~6 구조)
 # ---------------------------------------------------------------------------
 
-SECTION_HEADING_V2_RE = re.compile(r"^(\d+(?:-\d+)?)\.\s+(.+)$")
+SECTION_HEADING_V2_RE = SECTION_HEADING_RE
 
 SECTION_KEY_MAP: dict[str, str] = {
     "0": "section_0",
@@ -338,12 +338,7 @@ SECTION_TITLES: dict[str, str] = {
 
 
 def _is_legacy_layer_format(body: str) -> bool:
-    """기존 LAYER 구조 텍스트인지 감지.
-
-    섹션 제목 형식(``1. LAYER 1 |``)이 본문에 있을 때만 레거시로 판단.
-    단순히 "LAYER"라는 단어가 포함된 것만으로는 레거시로 보지 않음.
-    """
-    return bool(re.search(r"^\d+\.\s+LAYER\s+\d", body, re.MULTILINE))
+    return False
 
 
 def extract_sections(body: str) -> SectionMap:
@@ -352,14 +347,8 @@ def extract_sections(body: str) -> SectionMap:
     누락된 섹션은 빈 문자열로 처리.
     기존 LAYER 구조 감지 시 레거시 파싱으로 폴백.
     """
-    if _is_legacy_layer_format(body):
-        # 레거시 폴백: extract_brief_structure 결과를 SectionMap으로 변환
-        title, _notice, sections = extract_brief_structure(body)
-        section_map = SectionMap(title=title)
-        for _heading, content in sections:
-            if not section_map.get("section_0"):
-                section_map["section_0"] = content
-        return section_map
+    if False:
+        pass
 
     lines = body.replace("\r\n", "\n").split("\n")
     title = lines[0].strip() if lines else "Morning Market Brief"
