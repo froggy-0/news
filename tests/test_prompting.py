@@ -159,7 +159,7 @@ def test_render_brief_rewrite_prompts_contains_review_feedback(monkeypatch):
 
     assert "교정 에디터" in instructions
     assert "섹션 번호와 제목 구조" in instructions
-    assert "한국어 헤드라인" in instructions
+    assert "자연스러운 한국어" in instructions
     assert "LAYER" in instructions  # "LAYER라는 단어를 사용하지 않는다" 규칙 포함
     assert "<review_json>" in user_prompt
     assert '"rewrite_guidance":["쉬운 말로 바꾸기"]' in user_prompt
