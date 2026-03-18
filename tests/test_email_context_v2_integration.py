@@ -82,7 +82,15 @@ def _make_packet(
             "etf_points": [],
             "official_etf_daily_flow_btc": 150,
         },
-        "macro": {"VIX": {"value": 18.5}},
+        "macro": [
+            {
+                "label": "VIX",
+                "canonical_key": "vix",
+                "ticker": "VIX",
+                "price": 18.5,
+                "change_pct": None,
+            }
+        ],
     }
 
 

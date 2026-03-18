@@ -769,13 +769,14 @@ def _build_snapshot_badges(packet: dict) -> list[dict]:
     )
 
     macro_list = packet.get("macro", [])
+    vix_entry: dict = {}
     if isinstance(macro_list, list):
         vix_entry = next(
             (m for m in macro_list if m.get("canonical_key") == "vix" or m.get("label") == "VIX"),
             {},
         )
-    else:
-        vix_entry = macro_list.get("VIX", {}) if isinstance(macro_list, dict) else {}
+    elif isinstance(macro_list, dict):
+        vix_entry = macro_list.get("VIX", {})
     vix_val = vix_entry.get("price", 0) or 0
     badges.append(
         {
@@ -815,6 +816,37 @@ def _build_btc_data(packet: dict, section_3: str) -> BTCData:
     flow_label = "기관 순매수" if flow_btc > 0 else "기관 순매도" if flow_btc < 0 else ""
     spot_price = spot.get("price", 0)
 
+    # ETF 포인트를 템플릿용 dict로 변환 (direction, change_pct 포맷팅)
+    etf_items: list[dict] = []
+    for e in btc.get("etf_points", []):
+        pct = e.get("change_pct", 0) or 0
+        etf_items.append(
+            {
+                "ticker": e.get("ticker", e.get("label", "")),
+                "price": e.get("price", 0),
+                "change_pct": f"{pct:+.1f}%",
+                "direction": "up" if pct > 0 else "down" if pct < 0 else "flat",
+                "volume": _format_volume(e.get("daily_volume", 0) or 0),
+            }
+        )
+
+    # 합산 거래량: packet에 이미 계산된 값 우선, 없으면 개별 합산
+    raw_total_vol = btc.get("etf_total_volume") or 0
+    if not raw_total_vol:
+        raw_total_vol = sum(e.get("daily_volume", 0) or 0 for e in btc.get("etf_points", []))
+
+    # 기관 보유 현황: 모델 필드명 → 템플릿 필드명 매핑
+    official_snapshots: list[dict] = []
+    for snap in btc.get("official_etf_snapshots", []):
+        official_snapshots.append(
+            {
+                "issuer": snap.get("issuer", ""),
+                "ticker": snap.get("ticker", ""),
+                "btc_held": f"{snap.get('total_btc', 0):,.0f}",
+                "aum": f"${snap.get('aum_usd', 0):,.0f}",
+            }
+        )
+
     return BTCData(
         spot_price=f"${spot_price:,.0f}",
         spot_change=f"{spot.get('change_pct', 0):+.1f}%",
@@ -826,9 +858,9 @@ def _build_btc_data(packet: dict, section_3: str) -> BTCData:
         fear_greed_value=fg_value,
         fear_greed_label=fg_label,
         fear_greed_warning="과열 경계" if fg_value >= 75 else "",
-        etf_items=btc.get("etf_points", []),
-        etf_total_volume=_format_volume(sum(e.get("volume", 0) for e in btc.get("etf_points", []))),
-        official_snapshots=btc.get("official_etf_snapshots", []),
+        etf_items=etf_items,
+        etf_total_volume=_format_volume(raw_total_vol),
+        official_snapshots=official_snapshots,
         daily_flow_btc=flow_btc,
         daily_flow_usd=f"${abs(flow_btc) * spot_price:,.0f}",
         flow_label=flow_label,
@@ -900,13 +932,25 @@ def _build_preheader(badges: list[dict], section_map: SectionMap) -> str:
 
 def _format_display_date_v2(packet: dict) -> str:
     """packet에서 표시용 날짜 생성."""
-    import datetime
+    import datetime as _dt
 
+    # 1) 명시적 date 키
     date_str = packet.get("date", "")
     if date_str:
         try:
-            dt = datetime.date.fromisoformat(date_str)
+            dt = _dt.date.fromisoformat(date_str)
             return f"{dt.year}년 {dt.month}월 {dt.day}일 {_DAY_NAMES[dt.weekday()]}요일"
+        except (ValueError, IndexError):
+            pass
+    # 2) generated_at_utc ISO 타임스탬프 폴백
+    gen_str = packet.get("generated_at_utc", "")
+    if gen_str:
+        try:
+            dt2 = _dt.datetime.fromisoformat(gen_str)
+            from zoneinfo import ZoneInfo
+
+            kst = dt2.astimezone(ZoneInfo("Asia/Seoul"))
+            return f"{kst.year}년 {kst.month}월 {kst.day}일 {_DAY_NAMES[kst.weekday()]}요일"
         except (ValueError, IndexError):
             pass
     return ""
@@ -1036,6 +1080,85 @@ def _parse_sonar(section_5_2: str) -> list[dict] | None:
     return analyses[:3] if analyses else None
 
 
+def _split_hero(raw: str) -> tuple[str, list[str]]:
+    """section_0 텍스트를 (첫 문장, 나머지 문장 리스트)로 분리."""
+    lines = [ln.strip() for ln in raw.strip().splitlines() if ln.strip()]
+    if not lines:
+        return "", []
+    return lines[0], lines[1:]
+
+
+def _stock_indices_from_packet(packet: dict) -> list[StockItem]:
+    """packet['us_indices']에서 주요 지수 StockItem 리스트 생성."""
+    _LABEL = {"SPY": "S&P 500", "QQQ": "나스닥"}
+    items: list[StockItem] = []
+    for idx in packet.get("us_indices", []):
+        ticker = idx.get("ticker", "")
+        if ticker not in _LABEL:
+            continue
+        pct = idx.get("change_pct", 0) or 0
+        price = idx.get("price", 0) or 0
+        items.append(
+            StockItem(
+                ticker=ticker,
+                name=_LABEL[ticker],
+                price=f"{price:,.2f}" if price else "",
+                change_pct=f"{pct:+.1f}%",
+                direction="up" if pct > 0 else "down" if pct < 0 else "flat",
+                volume=None,
+            )
+        )
+    return items
+
+
+def _stock_tech_from_packet(packet: dict) -> list[StockItem]:
+    """packet['tech_stocks']에서 빅테크 StockItem 리스트 생성."""
+    items: list[StockItem] = []
+    for s in packet.get("tech_stocks", []):
+        ticker = s.get("ticker", "")
+        pct = s.get("change_pct", 0) or 0
+        items.append(
+            StockItem(
+                ticker=ticker,
+                name=s.get("label", ticker),
+                price="",
+                change_pct=f"{pct:+.1f}%",
+                direction="up" if pct > 0 else "down" if pct < 0 else "flat",
+                volume=None,
+            )
+        )
+    return items
+
+
+def _macro_indicators_from_packet(packet: dict) -> list[MacroIndicator]:
+    """packet['macro'] 리스트에서 MacroIndicator 리스트 생성."""
+    items: list[MacroIndicator] = []
+    macro_list = packet.get("macro", [])
+    if not isinstance(macro_list, list):
+        return items
+    for m in macro_list:
+        label = m.get("label", "")
+        price = m.get("price")
+        pct = m.get("change_pct")
+        if price is None:
+            continue
+        change_str = f"{pct:+.1f}%" if pct is not None else ""
+        direction = "flat"
+        if pct is not None:
+            direction = "up" if pct > 0 else "down" if pct < 0 else "flat"
+        items.append(
+            MacroIndicator(
+                label=label,
+                value=f"{price:,.2f}" if isinstance(price, float) else str(price),
+                change=change_str,
+                direction=direction,
+                is_previous=m.get("is_previous_value", False),
+                is_anomaly=m.get("validation_status", "ok") != "ok",
+            )
+        )
+    return items
+
+
 def _build_email_context_v2(
     subject: str,
     body: str,
@@ -1055,11 +1178,23 @@ def _build_email_context_v2(
     macro_indicators = _parse_macro_indicators(section_map.get("section_1", ""))
     stock_indices, stock_tech = _parse_stocks(section_map.get("section_2", ""))
 
+    # 시장 지표 폴백: LLM 섹션 파싱이 비어있으면 packet 데이터에서 직접 구성
+    if not stock_indices:
+        stock_indices = _stock_indices_from_packet(packet)
+    if not stock_tech:
+        stock_tech = _stock_tech_from_packet(packet)
+    if not macro_indicators:
+        macro_indicators = _macro_indicators_from_packet(packet)
+
     dq = packet.get("data_quality", {})
     data_quality_status = dq.get("status", "ok")
     footer_notes = packet.get("data_footer_notes", [])
 
     final_subject = _build_subject_line(section_map, packet) if not subject else subject
+
+    # hero: 첫 문장만 큰 글씨, 나머지는 보조 알림으로 분리
+    raw_hero = section_map.get("section_0", "")
+    hero_summary, hero_alerts = _split_hero(raw_hero)
 
     return {
         "subject": final_subject,
@@ -1067,8 +1202,8 @@ def _build_email_context_v2(
         "display_date": _format_display_date_v2(packet),
         "read_time": "3분 읽기",
         "snapshot_badges": snapshot_badges,
-        "hero_summary": section_map.get("section_0", ""),
-        "hero_alerts": [],
+        "hero_summary": hero_summary,
+        "hero_alerts": hero_alerts,
         "macro_indicators": macro_indicators,
         "stock_indices": stock_indices,
         "stock_tech": stock_tech,

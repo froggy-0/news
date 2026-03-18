@@ -168,7 +168,7 @@ def test_p2_badge_direction_consistency(change: float) -> None:
     packet = {
         "us_indices": [{"ticker": "SPY", "change_pct": change}],
         "bitcoin": {"spot": {"change_pct": 0}},
-        "macro": {"VIX": {"value": 15}},
+        "macro": [{"label": "VIX", "canonical_key": "vix", "price": 15}],
     }
     badges = _build_snapshot_badges(packet)
     spy_badge = badges[0]
@@ -264,7 +264,7 @@ def test_p6_data_quality_consistency(status: str) -> None:
         "data_footer_notes": ["테스트 노트"] if status != "ok" else [],
         "us_indices": [{"ticker": "SPY", "change_pct": 0.5}],
         "bitcoin": {"spot": {"price": 67000, "change_pct": 1.0}},
-        "macro": {"VIX": {"value": 15}},
+        "macro": [{"label": "VIX", "canonical_key": "vix", "price": 15}],
     }
     body = "Morning Market Brief\n0. 오늘의 핵심\n테스트 요약"
 
@@ -298,7 +298,7 @@ def test_p7_snapshot_badge_count(
             {"ticker": "QQQ", "change_pct": qqq_pct},
         ],
         "bitcoin": {"spot": {"change_pct": btc_pct}},
-        "macro": {"VIX": {"value": vix_val}},
+        "macro": [{"label": "VIX", "canonical_key": "vix", "price": vix_val}],
     }
     badges = _build_snapshot_badges(packet)
 

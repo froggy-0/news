@@ -378,7 +378,7 @@ def serialize_sections(section_map: SectionMap) -> str:
     """SectionMap을 LLM 출력 형식 텍스트로 직렬화."""
     parts = [section_map.get("title", "Morning Market Brief")]
     for key, heading in SECTION_TITLES.items():
-        content = section_map.get(key, "")  # type: ignore[literal-required]
+        content = section_map.get(key, "")
         if content:
             parts.append(f"\n{heading}\n{content}")
     return "\n".join(parts)
@@ -443,11 +443,20 @@ def parse_news_items(section_4_2: str) -> list[NewsItemV2]:
                 continue
             body_lines.append(line)
 
+        body_raw = "\n".join(body_lines).strip()
+        # 중복 단락 제거: LLM이 같은 단락을 반복 생성하는 경우 대응
+        seen_paras: list[str] = []
+        for para in re.split(r"\n{2,}", body_raw):
+            para = para.strip()
+            if para and para not in seen_paras:
+                seen_paras.append(para)
+        body_deduped = "\n\n".join(seen_paras)
+
         items.append(
             NewsItemV2(
                 number=number,
                 headline=headline,
-                body="\n".join(body_lines).strip(),
+                body=body_deduped,
                 source_name=source_name,
                 source_url=url,
                 tldr=tldr,
