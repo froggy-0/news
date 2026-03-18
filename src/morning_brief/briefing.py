@@ -223,9 +223,13 @@ def _brief_structure_issues(text: str) -> list[str]:
 
     section_4_2 = str(section_map.get("section_4_2", ""))
     if section_4_2:
-        news_count = sum(1 for line in section_4_2.splitlines() if line.strip() and line.strip()[0] in "①②③④⑤")
+        news_count = sum(
+            1 for line in section_4_2.splitlines() if line.strip() and line.strip()[0] in "①②③④⑤"
+        )
         if news_count < MIN_LAYER_TWO_BULLETS:
-            issues.append(f"핵심 뉴스 항목 수가 부족해요. count={news_count}, expected>={MIN_LAYER_TWO_BULLETS}")
+            issues.append(
+                f"핵심 뉴스 항목 수가 부족해요. count={news_count}, expected>={MIN_LAYER_TWO_BULLETS}"
+            )
 
     section_2 = str(section_map.get("section_2", ""))
     if section_2 and len(section_2.strip()) < 30:
@@ -440,7 +444,9 @@ def _fallback_news_lines(news: list[dict]) -> list[str]:
             str(item.get("why_it_matters", "")).strip() or "시장 해석에 바로 연결되는 기사입니다."
         )
         url = _news_reference(item)
-        lines.append(f"{circled[i]} {title} — 뉴스출처\n{why_it_matters} {_fallback_news_takeaway(item)}\n→ 원문 링크 {url}\n핵심 한줄: {title}\n")
+        lines.append(
+            f"{circled[i]} {title} — 뉴스출처\n{why_it_matters} {_fallback_news_takeaway(item)}\n→ 원문 링크 {url}\n핵심 한줄: {title}\n"
+        )
     return lines
 
 
@@ -697,7 +703,7 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
     sentiment_text = _fear_greed_line(btc)
     investor_lines = _korea_watch_lines(korea_watch, btc)
     btc_spot_line, btc_spot_price, btc_spot_change = _fallback_btc_spot_line(btc_spot)
-    macro_lines = _fallback_macro_lines(macro, sentiment_text)
+    macro_lines = _fallback_macro_lines(macro, sentiment_text)  # noqa: F841
     stock_lines = _fallback_stock_lines(tech, btc, btc_spot, btc_spot_price, btc_spot_change, news)
     judgement, judgement_reason = _judgement_and_reason(
         macro=macro,
@@ -713,7 +719,7 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
         layer2_issues = chr(10).join(news_lines)
         layer2_why = _layer2_why_matters(news)
         layer2_why_block = f"\n왜 중요한지\n{layer2_why}" if layer2_why else ""
-        layer2_checkpoints = _bullet_lines(
+        layer2_checkpoints = _bullet_lines(  # noqa: F841
             _dynamic_checkpoints(layer="layer2", direction=direction, news=news)
         )
     else:
@@ -727,7 +733,7 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
             " | 국내 투자자에게는 원/달러 환율과 나스닥 선물 방향을 우선 확인할 필요가 있습니다."
         )
         layer2_why_block = ""
-        layer2_checkpoints = _bullet_lines(["장중 주요 매체에서 새로운 재료가 나오는지"])
+        layer2_checkpoints = _bullet_lines(["장중 주요 매체에서 새로운 재료가 나오는지"])  # noqa: F841
 
     body = f"""Morning Market Brief ({date_str})
 
@@ -767,7 +773,13 @@ def _fallback_brief(packet: dict, timezone: str) -> str:
 오늘의 주요 뉴스가 충분히 수집되지 않아 판단을 보류합니다.
 
 5-1. 주간 맥락 연결
-{_bullet_lines(_dynamic_checkpoints(layer="layer1", direction=direction, macro=macro, korea_watch=korea_watch))}
+{
+        _bullet_lines(
+            _dynamic_checkpoints(
+                layer="layer1", direction=direction, macro=macro, korea_watch=korea_watch
+            )
+        )
+    }
 {_bullet_lines(_dynamic_checkpoints(layer="layer2", direction=direction, news=news))}
 {_bullet_lines(_dynamic_checkpoints(layer="layer3", direction=direction, tech=tech))}
 

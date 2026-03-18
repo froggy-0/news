@@ -45,11 +45,7 @@ def _find_latest_brief_file(output_dir: Path) -> Path | None:
 
 
 def _bullet_lines(text: str) -> list[str]:
-    return [
-        line.strip()[2:].strip()
-        for line in text.splitlines()
-        if line.strip().startswith("- ")
-    ]
+    return [line.strip()[2:].strip() for line in text.splitlines() if line.strip().startswith("- ")]
 
 
 def _count_news_items(section_4_2: str) -> int:
@@ -80,9 +76,9 @@ def _build_checks(brief_path: Path) -> list[BriefQualityCheck]:
     section_0 = section_map.get("section_0", "")
     section_1 = section_map.get("section_1", "")
     section_2 = section_map.get("section_2", "")
-    section_3 = section_map.get("section_3", "")
+    _section_3 = section_map.get("section_3", "")  # noqa: F841
     section_4_2 = section_map.get("section_4_2", "")
-    section_6 = section_map.get("section_6", "")
+    _section_6 = section_map.get("section_6", "")  # noqa: F841
 
     stock_lines = _bullet_lines(section_2)
     macro_lines = _bullet_lines(section_1)

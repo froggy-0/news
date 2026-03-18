@@ -1277,7 +1277,9 @@ def render_briefing_email_html(
 ) -> str:
     environment = _load_email_environment()
     template = environment.get_template("email_base.html.j2")
-    context = _build_email_context_v2(subject=subject, body=body, packet=packet or {}, sender=sender)
+    context = _build_email_context_v2(
+        subject=subject, body=body, packet=packet or {}, sender=sender
+    )
     return template.render(**context).strip()
 
 
@@ -1290,7 +1292,9 @@ def render_briefing_email_text(
 ) -> str:
     environment = _load_email_environment()
     template = environment.get_template("email_v2.txt.j2")
-    context = _build_email_context_v2(subject=subject, body=body, packet=packet or {}, sender=sender)
+    context = _build_email_context_v2(
+        subject=subject, body=body, packet=packet or {}, sender=sender
+    )
     return template.render(**context).strip()
 
 
