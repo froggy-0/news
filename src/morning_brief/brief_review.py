@@ -11,7 +11,12 @@ from openai import OpenAI
 from morning_brief.config import Settings
 from morning_brief.llm_errors import BriefGenerationError
 from morning_brief.observability import PipelineObserver
-from morning_brief.openai_utils import cached_input_tokens, usage_snapshot
+from morning_brief.openai_utils import (
+    cached_input_tokens,
+    response_incomplete_reason,
+    response_status,
+    usage_snapshot,
+)
 from morning_brief.prompting import (
     build_prompt_cache_key,
     render_brief_rewrite_prompts,
@@ -208,6 +213,22 @@ def _review_briefing(
             "review",
             int(round((time.perf_counter() - started_at) * 1000)),
         )
+    incomplete_reason = response_incomplete_reason(response)
+    if incomplete_reason is not None:
+        logger.warning(
+            "브리핑 검수 응답이 불완전했어요: status=%s reason=%s",
+            response_status(response) or "unknown",
+            incomplete_reason,
+        )
+        if observer is not None:
+            observer.log_event(
+                "brief_review_response_incomplete",
+                phase="validator",
+                status=response_status(response),
+                reason=incomplete_reason,
+                max_output_tokens=VALIDATOR_MAX_OUTPUT_TOKENS,
+                preview=_review_parse_preview(response.output_text or ""),
+            )
     return _parse_review_payload_text(
         response_text=response.output_text or "",
         observer=observer,
@@ -264,6 +285,22 @@ def _rewrite_briefing(
             "review",
             int(round((time.perf_counter() - started_at) * 1000)),
         )
+    incomplete_reason = response_incomplete_reason(response)
+    if incomplete_reason is not None:
+        logger.warning(
+            "브리핑 재작성 응답이 불완전했어요: status=%s reason=%s",
+            response_status(response) or "unknown",
+            incomplete_reason,
+        )
+        if observer is not None:
+            observer.log_event(
+                "brief_review_response_incomplete",
+                phase="rewrite",
+                status=response_status(response),
+                reason=incomplete_reason,
+                max_output_tokens=settings.openai_max_output_tokens,
+                preview=_review_parse_preview(rewritten),
+            )
     return rewritten
 
 

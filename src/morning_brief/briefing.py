@@ -12,13 +12,19 @@ from morning_brief.brief_formatting import (
     SectionMap,
     extract_sections,
     improve_readability_spacing,
+    parse_news_items,
     serialize_sections,
 )
 from morning_brief.brief_review import validate_and_rewrite_briefing
 from morning_brief.config import Settings
 from morning_brief.llm_errors import BriefGenerationError
 from morning_brief.observability import PipelineObserver
-from morning_brief.openai_utils import cached_input_tokens, usage_snapshot
+from morning_brief.openai_utils import (
+    cached_input_tokens,
+    response_incomplete_reason,
+    response_status,
+    usage_snapshot,
+)
 from morning_brief.prompting import build_prompt_cache_key, render_brief_prompts
 
 logger = logging.getLogger(__name__)
@@ -217,28 +223,71 @@ def _count_section_bullets(text: str, *, stop_at_label: str | None = None) -> in
 
 
 def _brief_structure_issues(text: str) -> list[str]:
+    issues, _ = _brief_replacement_plan(text)
+    return issues
+
+
+def _news_section_issues(section_4_2: str) -> list[str]:
+    issues: list[str] = []
+    raw_news_count = sum(
+        1 for line in section_4_2.splitlines() if line.strip() and line.strip()[0] in "①②③④⑤"
+    )
+    parsed_news = parse_news_items(section_4_2)
+    parsed_count = len(parsed_news)
+
+    if parsed_count < MIN_LAYER_TWO_BULLETS:
+        issues.append(
+            f"핵심 뉴스 항목 수가 부족해요. parsed={parsed_count}, raw_markers={raw_news_count}, expected>={MIN_LAYER_TWO_BULLETS}"
+        )
+        return issues
+
+    if raw_news_count > parsed_count:
+        issues.append(
+            f"핵심 뉴스 항목 일부가 중간에 잘려 파싱되지 않았어요. parsed={parsed_count}, raw_markers={raw_news_count}"
+        )
+
+    incomplete_numbers = [
+        str(item["number"]).strip()
+        for item in parsed_news
+        if not str(item.get("body", "")).strip()
+        or not str(item.get("source_url", "")).strip()
+        or not str(item.get("tldr", "")).strip()
+    ]
+    if incomplete_numbers:
+        issues.append(f"핵심 뉴스 항목 일부가 불완전해요. numbers={', '.join(incomplete_numbers)}")
+    return issues
+
+
+def _brief_replacement_plan(text: str) -> tuple[list[str], set[str]]:
     section_map = extract_sections(text)
     issues: list[str] = []
+    replacement_keys: set[str] = set()
 
     for key in REQUIRED_V2_SECTIONS:
         if not section_map.get(key):
             issues.append(f"{key} 섹션이 없어요.")
+            replacement_keys.add(key)
 
     section_4_2 = str(section_map.get("section_4_2", ""))
     if section_4_2:
-        news_count = sum(
-            1 for line in section_4_2.splitlines() if line.strip() and line.strip()[0] in "①②③④⑤"
-        )
-        if news_count < MIN_LAYER_TWO_BULLETS:
-            issues.append(
-                f"핵심 뉴스 항목 수가 부족해요. count={news_count}, expected>={MIN_LAYER_TWO_BULLETS}"
-            )
+        section_4_2_issues = _news_section_issues(section_4_2)
+        if section_4_2_issues:
+            issues.extend(section_4_2_issues)
+            replacement_keys.add("section_4_2")
 
     section_2 = str(section_map.get("section_2", ""))
     if section_2 and len(section_2.strip()) < 30:
         issues.append("미국 증시 섹션 내용이 부족해요.")
+        replacement_keys.add("section_2")
 
-    return issues
+    return issues, replacement_keys
+
+
+def _brief_output_preview(text: str, *, limit: int = 200) -> str:
+    preview = " ".join(text.split())
+    if len(preview) <= limit:
+        return preview
+    return f"{preview[:limit]}..."
 
 
 def _fallback_if_incomplete(
@@ -247,9 +296,12 @@ def _fallback_if_incomplete(
     packet: dict,
     settings: Settings,
     observer: PipelineObserver | None = None,
+    force_replacements: set[str] | None = None,
 ) -> str:
-    issues = _brief_structure_issues(text)
-    if not issues:
+    issues, replacement_keys = _brief_replacement_plan(text)
+    if force_replacements:
+        replacement_keys.update(force_replacements)
+    if not issues and not replacement_keys:
         return _finalize_briefing(text, packet)
 
     # 부분 fallback: LLM이 생성한 섹션은 최대한 살리고, 빠진 섹션만 보충
@@ -263,23 +315,21 @@ def _fallback_if_incomplete(
     for key in SECTION_TITLES:
         llm_content = str(llm_map.get(key, ""))
         fb_content = str(fallback_map.get(key, ""))
-        merged[key] = llm_content if llm_content.strip() else fb_content  # type: ignore[literal-required]
+        use_fallback = key in replacement_keys or not llm_content.strip()
+        merged[key] = fb_content if use_fallback else llm_content  # type: ignore[literal-required]
 
     merged_text = serialize_sections(merged)
 
     logger.warning(
         "브리핑 일부 섹션이 부족해 부분 보충했어요: %s",
-        "; ".join(issues[:3]),
+        "; ".join((issues or ["불완전 응답을 감지해 섹션을 보강했어요."])[:3]),
     )
     if observer is not None:
-        missing_keys = [
-            key for key in REQUIRED_V2_SECTIONS if not str(llm_map.get(key, "")).strip()
-        ]
         observer.log_event(
             "brief_partial_fallback",
             reason="incomplete_structure",
             issues=issues,
-            filled_sections=missing_keys,
+            filled_sections=sorted(replacement_keys),
         )
     return _finalize_briefing(merged_text, packet)
 
@@ -854,6 +904,28 @@ def generate_briefing(
             observer.record_phase_duration(
                 "brief",
                 int(round((time.perf_counter() - started_at) * 1000)),
+            )
+        incomplete_reason = response_incomplete_reason(response)
+        if incomplete_reason is not None:
+            status = response_status(response)
+            logger.warning(
+                "OpenAI 브리핑 생성 응답이 불완전해 안전 보정으로 이어갈게요: status=%s reason=%s",
+                status or "unknown",
+                incomplete_reason,
+            )
+            if observer is not None:
+                observer.log_event(
+                    "brief_generation_incomplete",
+                    status=status,
+                    reason=incomplete_reason,
+                    max_output_tokens=settings.openai_max_output_tokens,
+                    output_preview=_brief_output_preview(text),
+                )
+            return _fallback_if_incomplete(
+                text=text,
+                packet=packet,
+                settings=settings,
+                observer=observer,
             )
         text = validate_and_rewrite_briefing(
             draft_text=text,

@@ -123,7 +123,7 @@ def load_settings() -> Settings:
         ),
         openai_max_output_tokens=_env_bounded_int(
             "OPENAI_MAX_OUTPUT_TOKENS",
-            default=2300,
+            default=3200,
             minimum=500,
             maximum=4000,
         ),

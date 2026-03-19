@@ -7,6 +7,7 @@ from morning_brief.briefing import (
     _append_reference_block,
     _brief_structure_issues,
     _fallback_brief,
+    _fallback_if_incomplete,
     _improve_readability_spacing,
     _inject_quality_notice,
     generate_briefing,
@@ -695,6 +696,200 @@ def test_generate_briefing_keeps_draft_when_validator_json_is_invalid(monkeypatc
 
     assert briefing.strip() == draft_text.strip()
     assert len(calls) == 2
+
+
+def test_brief_structure_issues_flags_partially_truncated_news_section():
+    brief = """Morning Market Brief (2026-03-19)
+
+0. 오늘의 핵심
+핵심 요약입니다.
+
+1. 거시 지표 Dashboard
+- 미국 10년물 국채금리: 4.10% (+0.20%)
+
+2. 미국 증시
+- NVDA | +1.20% | 데이터센터 투자 기대
+
+3. BTC & 크립토
+- 비트코인 현물은 82,000달러였습니다.
+
+4-2. 핵심 뉴스 5선
+① 첫 번째 뉴스 — Reuters
+설명입니다.
+→ 원문 링크 https://www.reuters.com/world/us/example1
+핵심 한줄: 첫 번째
+
+② 두 번째 뉴스 — CNBC
+설명입니다.
+→ 원문 링크 https://www.cnbc.com/example2
+핵심 한줄: 두 번째
+
+③ 세 번째 뉴스 — WSJ
+설명입니다.
+→ 원문 링크 https://www.wsj.com/example3
+핵심 한줄: 세 번째
+
+④ 네 번째 뉴스 — Bloomberg
+
+6. 이벤트 캘린더
+없음
+"""
+
+    issues = _brief_structure_issues(brief)
+
+    assert any(
+        ("핵심 뉴스 항목 일부가 중간에 잘려" in issue)
+        or ("핵심 뉴스 항목 일부가 불완전해요." in issue)
+        for issue in issues
+    )
+
+
+def test_fallback_if_incomplete_replaces_truncated_news_section():
+    packet = {
+        "macro": [],
+        "korea_watch": [],
+        "us_indices": [],
+        "tech_stocks": [],
+        "bitcoin": {
+            "spot": {"price": 82_000.0, "change_pct": 1.1},
+            "etf_points": [],
+            "etf_total_volume": 0,
+        },
+        "news": [
+            {
+                "title": "Nvidia unveils new AI cluster",
+                "url": "https://www.reuters.com/world/us/example",
+                "citations": ["https://www.reuters.com/world/us/example"],
+                "why_it_matters": "AI 투자 기대를 다시 자극한 기사입니다.",
+            },
+            {
+                "title": "Bitcoin ETF inflows resume",
+                "url": "https://www.cnbc.com/example",
+                "citations": ["https://www.cnbc.com/example"],
+                "why_it_matters": "비트코인 ETF 수급 해석에 바로 연결됩니다.",
+            },
+            {
+                "title": "Treasury yields stay firm",
+                "url": "https://www.wsj.com/example",
+                "citations": ["https://www.wsj.com/example"],
+                "why_it_matters": "금리 흐름을 이해하는 데 필요한 기사입니다.",
+            },
+        ],
+        "data_quality": {"status": "ok", "warnings": []},
+    }
+    truncated = """Morning Market Brief (2026-03-19)
+
+0. 오늘의 핵심
+핵심 요약입니다.
+
+1. 거시 지표 Dashboard
+- 미국 10년물 국채금리: 4.10% (+0.20%)
+
+2. 미국 증시
+- NVDA | +1.20% | 데이터센터 투자 기대
+
+3. BTC & 크립토
+- 비트코인 현물은 82,000달러였습니다.
+
+4-2. 핵심 뉴스 5선
+① 첫 번째 뉴스 — Reuters
+설명입니다.
+→ 원문 링크 https://www.reuters.com/world/us/example
+핵심 한줄: 첫 번째
+
+② 두 번째 뉴스 — CNBC
+설명입니다.
+→ 원문 링크 https://www.cnbc.com/example
+핵심 한줄: 두 번째
+
+④ 네 번째 뉴스 — Bloomberg
+
+6. 이벤트 캘린더
+없음
+"""
+
+    repaired = _fallback_if_incomplete(
+        text=truncated,
+        packet=packet,
+        settings=load_settings(),
+    )
+
+    assert "④ Grayscale" not in repaired
+    assert "Treasury yields stay firm" in repaired
+    assert "→ 원문 링크 https://www.wsj.com/example" in repaired
+
+
+def test_generate_briefing_skips_review_when_generation_response_is_incomplete(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    settings = load_settings()
+    packet = {
+        "macro": [],
+        "korea_watch": [],
+        "us_indices": [],
+        "tech_stocks": [],
+        "bitcoin": {
+            "spot": {"price": 82_000.0, "change_pct": 1.1},
+            "etf_points": [],
+            "etf_total_volume": 0,
+        },
+        "news": [
+            {
+                "title": "Nvidia unveils new AI cluster",
+                "url": "https://www.reuters.com/world/us/example",
+                "citations": ["https://www.reuters.com/world/us/example"],
+                "why_it_matters": "AI 투자 기대를 다시 자극한 기사입니다.",
+            },
+            {
+                "title": "Bitcoin ETF inflows resume",
+                "url": "https://www.cnbc.com/example",
+                "citations": ["https://www.cnbc.com/example"],
+                "why_it_matters": "비트코인 ETF 수급 해석에 바로 연결됩니다.",
+            },
+        ],
+        "data_quality": {"status": "ok", "warnings": []},
+    }
+    truncated_draft = """Morning Market Brief (2026-03-19)
+
+0. 오늘의 핵심
+오늘은 관망 국면입니다.
+
+1. 거시 지표 Dashboard
+- 미국 10년물 국채금리: 4.10% (+0.20%)
+
+2. 미국 증시
+- NVDA | +1.20% | 데이터센터 투자 기대
+
+4-2. 핵심 뉴스 5선
+① 첫 번째 뉴스 — Reuters
+설명입니다.
+→ 원문 링크 https://www.reuters.com/world/us/example
+핵심 한줄: 첫 번째
+"""
+    calls: list[dict] = []
+    observer = PipelineObserver(output_dir=tmp_path)
+    responses = [
+        SimpleNamespace(
+            output_text=truncated_draft,
+            usage=None,
+            status="incomplete",
+            incomplete_details=SimpleNamespace(reason="max_output_tokens"),
+        )
+    ]
+
+    def _create(**kwargs):
+        calls.append(kwargs)
+        return responses.pop(0)
+
+    fake_client = SimpleNamespace(responses=SimpleNamespace(create=_create))
+    monkeypatch.setattr("morning_brief.briefing.OpenAI", lambda **_: fake_client)
+
+    briefing = generate_briefing(packet=packet, settings=settings, observer=observer)
+
+    assert len(calls) == 1
+    assert "Bitcoin ETF inflows resume" in briefing
+    assert any(event["event"] == "brief_generation_incomplete" for event in observer.events)
 
 
 def test_generate_briefing_skips_validator_when_disabled(monkeypatch):

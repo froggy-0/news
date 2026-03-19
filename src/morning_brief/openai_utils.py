@@ -20,6 +20,33 @@ def cached_input_tokens(response: object) -> int | None:
         return None
 
 
+def response_status(response: object) -> str | None:
+    status = getattr(response, "status", None)
+    if status is None:
+        return None
+    text = str(status).strip()
+    return text or None
+
+
+def response_incomplete_reason(response: object) -> str | None:
+    status = response_status(response)
+    details = getattr(response, "incomplete_details", None)
+    if details is None:
+        return "unknown" if status == "incomplete" else None
+
+    reason = None
+    if isinstance(details, dict):
+        reason = details.get("reason")
+    else:
+        reason = getattr(details, "reason", None)
+
+    if reason is None:
+        return "unknown" if status == "incomplete" else None
+
+    text = str(reason).strip()
+    return text or ("unknown" if status == "incomplete" else None)
+
+
 def usage_snapshot(response: object) -> dict[str, int]:
     usage = getattr(response, "usage", None)
     if usage is None:
