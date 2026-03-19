@@ -1,13 +1,19 @@
-Morning Market Brief
-{{ display_date }}  {{ read_time }}
+미국 기술주·비트코인 시장 브리핑
+{{ display_date }} · {{ read_time }}
 ─────────────────────────────────────────
 
-{% if hero_summary -%}
-오늘의 핵심
-{{ hero_summary }}
+{% if hero_verdict -%}
+오늘의 판단
+{{ hero_verdict }}
+{% if hero_reason -%}
+- 판단 근거: {{ hero_reason }}
+{% endif -%}
+{% if hero_kospi_impact -%}
+- 한국장 시사점: {{ hero_kospi_impact }}
+{% endif -%}
 {% if hero_alerts -%}
 {% for alert in hero_alerts -%}
-· {{ alert }}
+· 참고: {{ alert }}
 {% endfor %}
 {% endif %}
 {% endif -%}
@@ -20,13 +26,13 @@ Morning Market Brief
 
 {% endif -%}
 {% if news_items -%}
-핵심 뉴스
+주요 뉴스
 {% for item in news_items -%}
-{{ item.number }} {{ item.headline }}{% if item.source_name %} — {{ item.source_name }}{% endif %}
+{{ item.number }} {{ item.headline }}
 
 {{ item.body }}
-{% if item.source_url %}→ 원문 보기 {{ item.source_url }}{% endif %}
-{% if item.tldr %}핵심 한줄: {{ item.tldr }}{% endif %}
+{% if item.tldr %}시장 의미: {{ item.tldr }}{% endif %}
+{% if item.source_label %}출처: {{ item.source_label }}{% endif %}
 
 {% endfor %}
 {% endif -%}
@@ -94,8 +100,20 @@ BTC & 크립토
 {% endfor %}
 
 {% endif -%}
+출처와 데이터
+{% if news_source_items -%}
+뉴스 출처
+{% for item in news_source_items -%}
+· {{ item.source_kind }} · {{ item.source_name }}
+{% endfor %}
+
+{% endif -%}
+시장 데이터
+{% for line in market_source_lines -%}
+· {{ line }}
+{% endfor %}
+
 ─────────────────────────────────────────
-데이터: FRED · Stooq · CoinGecko · Perplexity · Grok X Search
 본 메일은 공개 시장 데이터 기반 정보성 브리핑이며 투자 권유가 아닙니다.
 구독 해지: {{ unsubscribe_url }}
 GitHub: {{ github_url }}

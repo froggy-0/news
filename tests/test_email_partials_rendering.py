@@ -149,6 +149,8 @@ def test_header_partial_renders_independently() -> None:
         read_time="3분 읽기",
         snapshot_badges=SAMPLE_SNAPSHOT_BADGES,
     )
+    assert "미국 기술주&#183;비트코인 시장 브리핑" in html
+    assert "뉴욕 마감 브리핑" in html
     assert "2026년 3월 18일 화요일" in html
     assert "3분 읽기" in html
     assert "S&P 500" in html or "S&amp;P 500" in html

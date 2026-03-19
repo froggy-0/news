@@ -3,16 +3,17 @@
 <tr><td style="padding:0 0 24px 0;">
 <table role="presentation" width="100%" class="card" style="width:100%;background:#fff;border:1px solid #e2e8f0;border-radius:16px;">
 <tr><td class="card-pad" style="padding:32px 24px 20px 24px;">
-<div style="font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#0f172a;font-size:15px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;" class="text-strong">MORNING MARKET BRIEF</div>
-<div style="padding-top:6px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#94a3b8;font-size:13px;" class="text-muted">{{ display_date }} &#183; {{ read_time }}</div>
-<div class="gradient-line" style="margin-top:20px;height:2px;background:linear-gradient(90deg,#cbd5e1,#3b82f6,#cbd5e1);"></div>
+<div style="font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#1e40af;font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;" class="text-muted">뉴욕 마감 브리핑</div>
+<div style="padding-top:10px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#0f172a;font-size:26px;line-height:1.35;font-weight:800;letter-spacing:-0.03em;" class="text-strong">미국 기술주&#183;비트코인 시장 브리핑</div>
+<div style="padding-top:8px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#64748b;font-size:13px;line-height:1.6;" class="text-muted">{{ display_date }} &#183; {{ read_time }}</div>
+<div class="gradient-line" style="margin-top:18px;height:1px;background:linear-gradient(90deg,#cbd5e1,#1e40af,#cbd5e1);"></div>
 {% if snapshot_badges %}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:16px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:18px;">
 <tr>
 {% for b in snapshot_badges %}
 <td class="snapshot-badge" style="text-align:center;padding:4px;">
-<div style="font-size:11px;color:#94a3b8;font-weight:600;" class="text-muted">{{ b.label }}</div>
-<div style="padding-top:2px;">{{ badge(b.value, b.direction) }}</div>
+<div style="font-size:11px;color:#94a3b8;font-weight:700;letter-spacing:0.04em;" class="text-muted">{{ b.label }}</div>
+<div style="padding-top:4px;">{{ badge(b.value, b.direction) }}</div>
 </td>
 {% endfor %}
 </tr>

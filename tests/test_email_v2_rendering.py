@@ -495,7 +495,8 @@ class TestSnapshotFullHtmlOutput:
 
     def test_contains_header_section(self, rendered_html: str) -> None:
         """헤더 섹션 콘텐츠가 포함되어 있다."""
-        assert "MORNING MARKET BRIEF" in rendered_html
+        assert "미국 기술주&#183;비트코인 시장 브리핑" in rendered_html
+        assert "뉴욕 마감 브리핑" in rendered_html
         assert SAMPLE_CONTEXT["display_date"] in rendered_html
         assert SAMPLE_CONTEXT["read_time"] in rendered_html
 

@@ -11,7 +11,7 @@
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:10px;">
 <tr>
 <td style="font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#334155;font-size:14px;line-height:1.7;" class="text-body">· {{ item.source_kind }}</td>
-<td align="right" style="font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#0f172a;font-size:13px;line-height:1.7;font-weight:700;" class="text-strong">{{ item.source_name }}</td>
+<td align="right" style="font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#0f172a;font-size:13px;line-height:1.7;font-weight:700;" class="text-strong">{% if item.safe_url %}<a href="{{ item.safe_url }}" style="color:#0f172a;text-decoration:none;">{{ item.source_name }}</a>{% else %}{{ item.source_name }}{% endif %}</td>
 </tr>
 </table>
 {% endfor %}
