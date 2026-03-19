@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from datetime import datetime
 from urllib.parse import urlparse
@@ -43,6 +44,13 @@ MIN_LAYER_THREE_BULLETS = 2
 NONE_LIKE_NEWS_TEXTS = {"", "none", "null", "n/a", "na"}
 RETRYABLE_INCOMPLETE_REASON = "max_output_tokens"
 RETRY_MAX_OUTPUT_TOKENS = 50000
+HANGUL_RE = re.compile(r"[가-힣]")
+TOPIC_KOREAN_LABELS = {
+    "macro": "거시경제",
+    "us_equity": "미국 증시",
+    "ai_bigtech": "AI·빅테크",
+    "bitcoin": "비트코인",
+}
 
 
 def _point_price(point: dict) -> float | None:
@@ -551,11 +559,30 @@ def _fallback_news_candidates(news: list[dict]) -> list[dict]:
     return candidates
 
 
+def _fallback_news_title(item: dict) -> str:
+    title = _clean_news_text(item.get("title", ""))
+    if title and HANGUL_RE.search(title):
+        return title
+
+    topic = _clean_news_text(item.get("topic", "")).lower()
+    topic_label = TOPIC_KOREAN_LABELS.get(topic, "시장")
+    source = _clean_news_text(item.get("source", ""))
+    if not source:
+        parsed = urlparse(_news_reference(item))
+        if parsed.hostname and parsed.hostname.endswith("x.com"):
+            handle = parsed.path.strip("/").split("/", 1)[0].strip()
+            if handle:
+                source = f"@{handle}"
+    if source:
+        return f"{topic_label} 관련 기사 ({source})"
+    return f"{topic_label} 관련 기사"
+
+
 def _fallback_news_lines(news: list[dict]) -> list[str]:
     lines: list[str] = []
     circled = ["①", "②", "③", "④", "⑤"]
     for i, item in enumerate(_fallback_news_candidates(news)[:5]):
-        title = str(item.get("title", "")).strip() or "주요 뉴스"
+        title = _fallback_news_title(item)
         why_it_matters = (
             _clean_news_text(item.get("why_it_matters", ""))
             or "시장 해석에 바로 연결되는 기사입니다."

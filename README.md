@@ -73,7 +73,7 @@ cp .env.example .env
 - `PROMPT_TEMPLATE_VERSION` (프롬프트 변경 시 버전 증가 권장)
 - `FRED_API_KEY` (권장, 매크로 공식 소스)
 - `PERPLEXITY_API_KEY` (Perplexity Search API 키)
-- `PERPLEXITY_USE_SONAR_SUMMARY` (기본 `true`, Sonar Chat Completions 모드 활성화)
+- `PERPLEXITY_USE_SONAR_SUMMARY` (기본 `true`, Sonar Chat Completions 요약/맥락 보강 활성화. 실제 뉴스 본문은 Perplexity Search를 우선 사용)
 - `PERPLEXITY_SONAR_MODEL` (기본 `sonar`)
 - `PERPLEXITY_SONAR_MAX_TOKENS` (기본 `1500`, 토픽당 최대 출력)
 - `GROK_API_KEY` (검증된 공식 X 시그널 조회용)
@@ -144,6 +144,7 @@ python3 main.py schedule
 ## 6) 수집 신뢰성 운영 원칙
 - LLM provider 역할은 고정합니다.
   - Perplexity: 뉴스 수집, 출처 URL 추적, BTC ETF structured response, Sonar 맥락 보강
+    - 실제 뉴스 아이템은 Perplexity Search가 1순위이고, Sonar citations는 Search 결과가 비었을 때만 보조로 사용
   - Grok: 공식 X 실시간 시그널 + 키워드 기반 시장 반응 수집
   - OpenAI: 브리핑 생성과 검수(fallback)만 담당
   - OpenAI: 브리핑 생성과 검수 담당

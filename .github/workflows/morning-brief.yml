@@ -143,7 +143,7 @@ jobs:
           OPENAI_BRIEF_VALIDATION_MODEL: ${{ vars.OPENAI_BRIEF_VALIDATION_MODEL || vars.OPENAI_MODEL || 'gpt-5-mini-2025-08-07' }}
           OPENAI_BRIEF_MAX_REWRITES: ${{ vars.OPENAI_BRIEF_MAX_REWRITES || '1' }}
           OPENAI_REASONING_EFFORT: ${{ vars.OPENAI_REASONING_EFFORT || 'low' }}
-          OPENAI_MAX_OUTPUT_TOKENS: ${{ vars.OPENAI_MAX_OUTPUT_TOKENS || '50000' }}
+          OPENAI_MAX_OUTPUT_TOKENS: '50000'
           OPENAI_PROMPT_CACHE_KEY: ${{ vars.OPENAI_PROMPT_CACHE_KEY || 'morning-market-brief' }}
           PROMPT_TEMPLATE_VERSION: ${{ vars.PROMPT_TEMPLATE_VERSION || 'market_brief_v4' }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}

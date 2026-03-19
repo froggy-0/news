@@ -1004,4 +1004,5 @@ def test_fallback_news_lines_skip_file_titles_and_none_like_values():
 
     assert "monetary20260318a1.htm" not in lines
     assert "None None" not in lines
-    assert "AMD Deepens Strategic Collaboration with Samsung" in lines
+    assert "AI·빅테크 관련 기사 (@AMD)" in lines
+    assert "AMD Deepens Strategic Collaboration with Samsung" not in lines

@@ -311,6 +311,81 @@ def test_build_news_packet_preserves_perplexity_metadata(monkeypatch):
     assert packet[0]["citations"] == ["https://www.reuters.com/world/us/fed-keeps-markets-steady"]
 
 
+def test_build_news_packet_prefers_perplexity_search_over_sonar_news(monkeypatch):
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")
+    monkeypatch.setenv("ENABLE_LEGACY_NEWS_FALLBACK", "false")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
+    monkeypatch.setenv("PERPLEXITY_USE_SONAR_SUMMARY", "true")
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news_from_perplexity",
+        lambda **_: [
+            NewsItem(
+                title="Fed keeps markets steady",
+                url="https://www.reuters.com/world/us/fed-keeps-markets-steady",
+                source="Reuters",
+                published_at=now,
+                topic="macro",
+                provider="perplexity_search",
+                why_it_matters="금리 경로를 읽는 데 도움이 되는 기사예요.",
+                citations=["https://www.reuters.com/world/us/fed-keeps-markets-steady"],
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news._collect_sonar_summaries",
+        lambda *_, **__: (
+            {},
+            [
+                NewsItem(
+                    title="monetary20260318a1.htm",
+                    url="https://www.federalreserve.gov/newsevents/pressreleases/monetary20260318a1.htm",
+                    source="Federal Reserve",
+                    published_at=now,
+                    topic="macro",
+                    provider="perplexity_sonar",
+                )
+            ],
+        ),
+    )
+
+    packet, _, _ = news.build_news_packet(settings=load_settings())
+
+    assert len(packet) == 1
+    assert packet[0]["provider"] == "perplexity_search"
+    assert packet[0]["title"] == "Fed keeps markets steady"
+
+
+def test_build_news_packet_uses_sonar_news_only_when_search_is_empty(monkeypatch):
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")
+    monkeypatch.setenv("ENABLE_LEGACY_NEWS_FALLBACK", "false")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
+    monkeypatch.setenv("PERPLEXITY_USE_SONAR_SUMMARY", "true")
+    monkeypatch.setattr("morning_brief.data.news.fetch_news_from_perplexity", lambda **_: [])
+    monkeypatch.setattr(
+        "morning_brief.data.news._collect_sonar_summaries",
+        lambda *_, **__: (
+            {},
+            [
+                NewsItem(
+                    title="Fed holds rates",
+                    url="https://www.reuters.com/world/us/fed-holds-rates",
+                    source="Reuters",
+                    published_at=now,
+                    topic="macro",
+                    provider="perplexity_sonar",
+                )
+            ],
+        ),
+    )
+
+    packet, _, _ = news.build_news_packet(settings=load_settings())
+
+    assert len(packet) == 1
+    assert packet[0]["provider"] == "perplexity_sonar"
+
+
 def test_build_news_packet_skips_legacy_when_perplexity_quality_is_good(monkeypatch):
     now = datetime.now(timezone.utc)
     monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")

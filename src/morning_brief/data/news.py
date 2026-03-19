@@ -258,15 +258,27 @@ def build_news_packet(
             keywords_by_topic.setdefault(sector, []).extend(kws)
 
     if settings.research_provider == "perplexity":
-        # Sonar 모드가 켜져 있으면 Sonar citations에서 추출한 NewsItem을 우선 사용
-        if settings.perplexity_use_sonar and sonar_news:
+        items = fetch_news_from_perplexity(
+            max_items=settings.max_news_items,
+            api_key=settings.perplexity_api_key,
+            observer=observer,
+            keywords_by_topic=keywords_by_topic,
+        )
+        if not items and settings.perplexity_use_sonar and sonar_news:
             items = sonar_news
-        else:
-            items = fetch_news_from_perplexity(
-                max_items=settings.max_news_items,
-                api_key=settings.perplexity_api_key,
-                observer=observer,
-                keywords_by_topic=keywords_by_topic,
+            logger.info(
+                "Perplexity Search 결과가 비어 Sonar citations %s건을 보조 뉴스로 사용할게요.",
+                len(sonar_news),
+            )
+            if observer is not None:
+                observer.log_event(
+                    "perplexity_sonar_degraded",
+                    reason="search_empty",
+                    count=len(sonar_news),
+                )
+        elif items and settings.perplexity_use_sonar and sonar_news:
+            logger.info(
+                "Sonar 요약은 맥락 보강에만 쓰고, 실제 뉴스 본문은 Perplexity Search 결과를 우선 사용할게요."
             )
         if not items and observer is not None:
             observer.log_event(
@@ -298,14 +310,24 @@ def build_news_packet(
         items = _dedup_and_rank(items, max_items=settings.max_news_items)
         packet, _ = _packet_summary(items)
         fallback_review = assess_perplexity_fallback_need(packet)
-        if fallback_review["needs_legacy_fallback"] and settings.enable_legacy_news_fallback:
+        assert fallback_review is not None
+        needs_legacy_fallback = bool(fallback_review.get("needs_legacy_fallback", False))
+        fallback_reasons = [
+            str(reason).strip()
+            for reason in fallback_review.get("reasons", [])
+            if str(reason).strip()
+        ]
+        fallback_count = int(fallback_review.get("count", 0))
+        fallback_unique_domains = int(fallback_review.get("unique_domains", 0))
+        fallback_topic_coverage_count = int(fallback_review.get("topic_coverage_count", 0))
+        if needs_legacy_fallback and settings.enable_legacy_news_fallback:
             reduce_broad_fallback = should_reduce_legacy_broad_fallback(settings.cache_dir)
             allow_broad_fallback = not (
                 reduce_broad_fallback and not _needs_full_legacy_backfill(fallback_review)
             )
             logger.info(
                 "Perplexity와 공식 시그널 결과를 살펴보니 %s. legacy 뉴스로 빈 부분을 함께 채울게요.",
-                "; ".join(fallback_review["reasons"]),
+                "; ".join(fallback_reasons),
             )
             if reduce_broad_fallback and not allow_broad_fallback:
                 logger.info(
@@ -324,9 +346,9 @@ def build_news_packet(
         else:
             logger.info(
                 "Perplexity와 공식 시그널만으로도 기사 %s건, 도메인 %s개, 토픽 %s개 기준을 채웠어요.",
-                fallback_review["count"],
-                fallback_review["unique_domains"],
-                fallback_review["topic_coverage_count"],
+                fallback_count,
+                fallback_unique_domains,
+                fallback_topic_coverage_count,
             )
     else:
         legacy_items = fetch_news(

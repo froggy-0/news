@@ -5,6 +5,7 @@ import logging
 import re
 import time
 from json import JSONDecodeError
+from typing import Any
 
 from openai import OpenAI
 
@@ -25,7 +26,9 @@ from morning_brief.prompting import (
 
 logger = logging.getLogger(__name__)
 
-VALIDATOR_MAX_OUTPUT_TOKENS = 2000
+VALIDATOR_MAX_OUTPUT_TOKENS = 4000
+VALIDATOR_RETRY_MAX_OUTPUT_TOKENS = 8000
+RETRYABLE_INCOMPLETE_REASON = "max_output_tokens"
 REVIEW_PARSE_PREVIEW_LEN = 240
 JSON_CODE_BLOCK_RE = re.compile(
     r"```(?:json)?\s*(?P<payload>\{.*?\})\s*```",
@@ -178,42 +181,64 @@ def _review_briefing(
         instructions=instructions + ":brief-validator",
         model_name=settings.openai_brief_validation_model,
     )
-    started_at = time.perf_counter()
-    try:
-        response = client.responses.create(
-            model=settings.openai_brief_validation_model,
-            instructions=instructions,
-            input=user_prompt,
-            reasoning={"effort": "minimal"},
-            max_output_tokens=VALIDATOR_MAX_OUTPUT_TOKENS,
-            prompt_cache_key=prompt_cache_key,
-            text={
-                "verbosity": "low",
-                "format": {
-                    "type": "json_schema",
-                    "name": "brief_review",
-                    "strict": True,
-                    "schema": BRIEF_REVIEW_SCHEMA,
-                    "description": "Review result for the Korean morning market brief.",
+    total_elapsed_ms = 0
+
+    def create_response(max_output_tokens: int) -> Any:
+        nonlocal total_elapsed_ms
+        started_at = time.perf_counter()
+        try:
+            response = client.responses.create(
+                model=settings.openai_brief_validation_model,
+                instructions=instructions,
+                input=user_prompt,
+                reasoning={"effort": "minimal"},
+                max_output_tokens=max_output_tokens,
+                prompt_cache_key=prompt_cache_key,
+                text={
+                    "verbosity": "low",
+                    "format": {
+                        "type": "json_schema",
+                        "name": "brief_review",
+                        "strict": True,
+                        "schema": BRIEF_REVIEW_SCHEMA,
+                        "description": "Review result for the Korean morning market brief.",
+                    },
                 },
-            },
-        )
-    except Exception as exc:
-        raise BriefGenerationError(f"브리핑 검수 OpenAI 호출에 실패했어요: {exc}") from exc
-    cached_tokens = cached_input_tokens(response)
-    if cached_tokens is not None:
-        logger.debug(
-            "브리핑 검수 프롬프트 캐시를 사용했어요. key=%s | cached_input_tokens=%s",
-            prompt_cache_key,
-            cached_tokens,
-        )
-    if observer is not None:
-        observer.record_provider_usage("openai", requests=1, **usage_snapshot(response))
-        observer.record_phase_duration(
-            "review",
-            int(round((time.perf_counter() - started_at) * 1000)),
-        )
+            )
+        except Exception as exc:
+            raise BriefGenerationError(f"브리핑 검수 OpenAI 호출에 실패했어요: {exc}") from exc
+        total_elapsed_ms += int(round((time.perf_counter() - started_at) * 1000))
+        cached_tokens = cached_input_tokens(response)
+        if cached_tokens is not None:
+            logger.debug(
+                "브리핑 검수 프롬프트 캐시를 사용했어요. key=%s | cached_input_tokens=%s",
+                prompt_cache_key,
+                cached_tokens,
+            )
+        if observer is not None:
+            observer.record_provider_usage("openai", requests=1, **usage_snapshot(response))
+        return response
+
+    response = create_response(VALIDATOR_MAX_OUTPUT_TOKENS)
     incomplete_reason = response_incomplete_reason(response)
+    if incomplete_reason == RETRYABLE_INCOMPLETE_REASON:
+        logger.warning(
+            "브리핑 검수 응답이 max_output_tokens에 걸려 1회 재시도할게요: previous=%s retry=%s",
+            VALIDATOR_MAX_OUTPUT_TOKENS,
+            VALIDATOR_RETRY_MAX_OUTPUT_TOKENS,
+        )
+        if observer is not None:
+            observer.log_event(
+                "brief_review_retry",
+                phase="validator",
+                reason=incomplete_reason,
+                previous_max_output_tokens=VALIDATOR_MAX_OUTPUT_TOKENS,
+                retry_max_output_tokens=VALIDATOR_RETRY_MAX_OUTPUT_TOKENS,
+            )
+        response = create_response(VALIDATOR_RETRY_MAX_OUTPUT_TOKENS)
+        incomplete_reason = response_incomplete_reason(response)
+    if observer is not None:
+        observer.record_phase_duration("review", total_elapsed_ms)
     if incomplete_reason is not None:
         logger.warning(
             "브리핑 검수 응답이 불완전했어요: status=%s reason=%s",
@@ -226,7 +251,9 @@ def _review_briefing(
                 phase="validator",
                 status=response_status(response),
                 reason=incomplete_reason,
-                max_output_tokens=VALIDATOR_MAX_OUTPUT_TOKENS,
+                max_output_tokens=VALIDATOR_RETRY_MAX_OUTPUT_TOKENS
+                if incomplete_reason == RETRYABLE_INCOMPLETE_REASON
+                else VALIDATOR_MAX_OUTPUT_TOKENS,
                 preview=_review_parse_preview(response.output_text or ""),
             )
     return _parse_review_payload_text(
