@@ -1,5 +1,6 @@
 #:schema https://developers.openai.com/codex/config-schema.json
 
+model = "gpt-5.4"
 personality = "pragmatic"
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
@@ -15,8 +16,8 @@ child_agents_md = true
 prevent_idle_sleep = true
 
 [agents]
-max_threads = 6
-max_depth = 2
+max_threads = 4
+max_depth = 1
 job_max_runtime_seconds = 1800
 
 [agents.explorer]
@@ -33,3 +34,23 @@ nickname_candidates = ["Tracer", "Inspector"]
 description = "OpenAI Codex나 외부 API 계약을 공식 문서 기준으로 먼저 확인하는 역할입니다."
 config_file = "agents/docs-researcher.toml"
 nickname_candidates = ["Archivist", "Docs"]
+
+[agents.brief_reviewer]
+description = "브리핑 생성, 검수, 재작성, fallback, 이메일 렌더링 품질을 먼저 좁히는 역할입니다."
+config_file = "agents/brief-reviewer.toml"
+nickname_candidates = ["Editor", "Reviewer"]
+
+[agents.provider_auditor]
+description = "공급자 계약, parser, ranking, fallback, retry 정책을 읽기 위주로 점검하는 역할입니다."
+config_file = "agents/provider-auditor.toml"
+nickname_candidates = ["Contract", "Audit"]
+
+[agents.workflow_run_auditor]
+description = "GitHub Actions run, observability 아티팩트, 저장 브리핑, 메일 원문을 함께 대조하는 역할입니다."
+config_file = "agents/workflow-run-auditor.toml"
+nickname_candidates = ["Runbook", "Trace"]
+
+[agents.apps_operator]
+description = "Morning Market Brief 운영 UI나 ChatGPT Apps SDK 기반 도구 설계를 맡는 역할입니다."
+config_file = "agents/apps-operator.toml"
+nickname_candidates = ["Widget", "Console"]

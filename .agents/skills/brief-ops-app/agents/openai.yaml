@@ -1,0 +1,6 @@
+interface:
+  display_name: "Brief Ops App"
+  short_description: "Morning Market Brief용 Apps SDK 운영 UI를 설계합니다."
+
+policy:
+  allow_implicit_invocation: true

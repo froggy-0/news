@@ -24,6 +24,7 @@
 - `.codex/config.toml`: 이 저장소 전용 Codex 설정과 multi-agent 역할 등록
 - `.agents/skills/`: 저장소 전용 Codex skills
 - `agents/*.toml`: subagent 역할별 Codex 설정
+- `docs/codex-ops.md`: Codex 설정, subagent, skill 운영 가이드
 - `CONTRIBUTING.md`: 기여/커밋/검증 가이드
 - `docs/development-standards.md`: 개발 표준과 리뷰 루브릭
 - `src/morning_brief/config.py`: 환경설정 로더
@@ -186,9 +187,10 @@ make validate-pre-commit
 ### Codex 프로젝트 설정
 - 루트 `AGENTS.md`: 저장소 전체 공통 규칙
 - 하위 `src/morning_brief/data/AGENTS.md`: 데이터 수집 계층 전용 규칙
-- `.codex/config.toml`: 이 저장소에서 `multi_agent`, runtime metrics, project instruction fallback을 켭니다.
+- `.codex/config.toml`: 메인 모델, multi-agent, runtime metrics, project instruction fallback을 관리합니다.
 - `.agents/skills/`: 반복 작업용 repo skill을 자동 발견합니다.
-- `agents/*.toml`: `explorer`, `pipeline_investigator`, `docs_researcher` 역할별 기본 설정입니다.
+- `agents/*.toml`: `explorer`, `pipeline_investigator`, `docs_researcher`, `brief_reviewer`, `provider_auditor`, `workflow_run_auditor`, `apps_operator` 역할별 기본 설정입니다.
+- 상세 운영 기준은 `docs/codex-ops.md`를 따릅니다.
 
 참고:
 - Codex 공식 규칙 파일명은 `AGENTS.md`입니다.
