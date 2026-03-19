@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import time
 from datetime import datetime
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from openai import OpenAI
@@ -39,6 +40,9 @@ REQUIRED_V2_SECTIONS = (
 )
 MIN_LAYER_TWO_BULLETS = 2
 MIN_LAYER_THREE_BULLETS = 2
+NONE_LIKE_NEWS_TEXTS = {"", "none", "null", "n/a", "na"}
+RETRYABLE_INCOMPLETE_REASON = "max_output_tokens"
+RETRY_MAX_OUTPUT_TOKENS = 50000
 
 
 def _point_price(point: dict) -> float | None:
@@ -316,7 +320,7 @@ def _fallback_if_incomplete(
         llm_content = str(llm_map.get(key, ""))
         fb_content = str(fallback_map.get(key, ""))
         use_fallback = key in replacement_keys or not llm_content.strip()
-        merged[key] = fb_content if use_fallback else llm_content  # type: ignore[literal-required]
+        merged[key] = fb_content if use_fallback else llm_content
 
     merged_text = serialize_sections(merged)
 
@@ -494,7 +498,7 @@ def _dynamic_checkpoints(
 
 
 def _fallback_news_takeaway(item: dict) -> str:
-    wim = str(item.get("why_it_matters", "")).strip()
+    wim = _clean_news_text(item.get("why_it_matters", ""))
     if wim:
         return wim
     topic = str(item.get("topic", "")).strip().lower()
@@ -507,13 +511,54 @@ def _fallback_news_takeaway(item: dict) -> str:
     return "국내 투자자에게는 같은 주제를 국내 관련주가 어떻게 반영하는지 확인할 필요가 있습니다."
 
 
+def _clean_news_text(value: object) -> str:
+    text = str(value or "").strip()
+    if text.lower() in NONE_LIKE_NEWS_TEXTS:
+        return ""
+    return text
+
+
+def _looks_like_file_title(title: str) -> bool:
+    normalized = _clean_news_text(title).lower()
+    if not normalized:
+        return False
+    if normalized.endswith(".pdf"):
+        return True
+    return normalized.endswith((".htm", ".html")) and " " not in normalized
+
+
+def _looks_like_file_url(url: str) -> bool:
+    parsed = urlparse(str(url or "").strip())
+    segment = parsed.path.rsplit("/", 1)[-1].strip().lower()
+    if not segment:
+        return False
+    if segment.endswith(".pdf"):
+        return True
+    return segment.endswith((".htm", ".html")) and "-" not in segment and "_" not in segment
+
+
+def _fallback_news_candidates(news: list[dict]) -> list[dict]:
+    candidates: list[dict] = []
+    for raw_item in news[:5]:
+        title = _clean_news_text(raw_item.get("title", ""))
+        url = _news_reference(raw_item)
+        if not title or _looks_like_file_title(title) or _looks_like_file_url(url):
+            continue
+        item = dict(raw_item)
+        item["title"] = title
+        item["why_it_matters"] = _clean_news_text(raw_item.get("why_it_matters", ""))
+        candidates.append(item)
+    return candidates
+
+
 def _fallback_news_lines(news: list[dict]) -> list[str]:
     lines: list[str] = []
     circled = ["①", "②", "③", "④", "⑤"]
-    for i, item in enumerate(news[:5]):
+    for i, item in enumerate(_fallback_news_candidates(news)[:5]):
         title = str(item.get("title", "")).strip() or "주요 뉴스"
         why_it_matters = (
-            str(item.get("why_it_matters", "")).strip() or "시장 해석에 바로 연결되는 기사입니다."
+            _clean_news_text(item.get("why_it_matters", ""))
+            or "시장 해석에 바로 연결되는 기사입니다."
         )
         url = _news_reference(item)
         lines.append(
@@ -879,33 +924,57 @@ def generate_briefing(
     try:
         instructions, user_prompt = render_brief_prompts(packet=packet, settings=settings)
         prompt_cache_key = build_prompt_cache_key(settings=settings, instructions=instructions)
-        started_at = time.perf_counter()
-        response = client.responses.create(
-            model=settings.openai_model,
-            instructions=instructions,
-            input=user_prompt,
-            reasoning={"effort": settings.openai_reasoning_effort},
-            max_output_tokens=settings.openai_max_output_tokens,
-            prompt_cache_key=prompt_cache_key,
-        )
-        text = (response.output_text or "").strip()
-        if not text:
-            raise BriefGenerationError("모델이 비어 있는 브리핑을 반환했어요.")
-        text = _improve_readability_spacing(text)
-        cached_tokens = cached_input_tokens(response)
-        if cached_tokens is not None:
-            logger.debug(
-                "OpenAI 프롬프트 캐시를 사용했어요. key=%s | cached_input_tokens=%s",
-                prompt_cache_key,
-                cached_tokens,
+        total_elapsed_ms = 0
+
+        def create_response(max_output_tokens: int) -> tuple[object, str]:
+            nonlocal total_elapsed_ms
+            started_at = time.perf_counter()
+            response = client.responses.create(
+                model=settings.openai_model,
+                instructions=instructions,
+                input=user_prompt,
+                reasoning={"effort": settings.openai_reasoning_effort},
+                max_output_tokens=max_output_tokens,
+                prompt_cache_key=prompt_cache_key,
             )
-        if observer is not None:
-            observer.record_provider_usage("openai", requests=1, **usage_snapshot(response))
-            observer.record_phase_duration(
-                "brief",
-                int(round((time.perf_counter() - started_at) * 1000)),
-            )
+            total_elapsed_ms += int(round((time.perf_counter() - started_at) * 1000))
+            text = (response.output_text or "").strip()
+            if not text:
+                raise BriefGenerationError("모델이 비어 있는 브리핑을 반환했어요.")
+            text = _improve_readability_spacing(text)
+            cached_tokens = cached_input_tokens(response)
+            if cached_tokens is not None:
+                logger.debug(
+                    "OpenAI 프롬프트 캐시를 사용했어요. key=%s | cached_input_tokens=%s",
+                    prompt_cache_key,
+                    cached_tokens,
+                )
+            if observer is not None:
+                observer.record_provider_usage("openai", requests=1, **usage_snapshot(response))
+            return response, text
+
+        response, text = create_response(settings.openai_max_output_tokens)
         incomplete_reason = response_incomplete_reason(response)
+        if (
+            incomplete_reason == RETRYABLE_INCOMPLETE_REASON
+            and settings.openai_max_output_tokens < RETRY_MAX_OUTPUT_TOKENS
+        ):
+            logger.warning(
+                "OpenAI 브리핑 생성이 max_output_tokens에 걸려 1회 재시도할게요: previous=%s retry=%s",
+                settings.openai_max_output_tokens,
+                RETRY_MAX_OUTPUT_TOKENS,
+            )
+            if observer is not None:
+                observer.log_event(
+                    "brief_generation_retry",
+                    reason=incomplete_reason,
+                    previous_max_output_tokens=settings.openai_max_output_tokens,
+                    retry_max_output_tokens=RETRY_MAX_OUTPUT_TOKENS,
+                )
+            response, text = create_response(RETRY_MAX_OUTPUT_TOKENS)
+            incomplete_reason = response_incomplete_reason(response)
+        if observer is not None:
+            observer.record_phase_duration("brief", total_elapsed_ms)
         if incomplete_reason is not None:
             status = response_status(response)
             logger.warning(

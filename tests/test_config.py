@@ -86,7 +86,7 @@ def test_openai_reasoning_effort_invalid_defaults_to_low(monkeypatch):
 def test_openai_max_output_tokens_bounds(monkeypatch):
     monkeypatch.setenv("OPENAI_MAX_OUTPUT_TOKENS", "99999")
     settings = load_settings()
-    assert settings.openai_max_output_tokens == 4000
+    assert settings.openai_max_output_tokens == 50000
 
 
 def test_openai_defaults_use_snapshot_model_and_prompt_version(monkeypatch):

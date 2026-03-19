@@ -94,7 +94,8 @@ def _build_news_focus(packet: dict) -> dict:
         if not item["title"]:
             continue
         top_items.append(item)
-        topics.setdefault(item["topic"], []).append(item)
+        topic_key = str(item["topic"])
+        topics.setdefault(topic_key, []).append(item)
         if item["official_source"] or item["provider"] == "grok_official_x":
             official_signals.append(item)
 

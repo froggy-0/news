@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlparse
 
 from perplexity import (
     APIConnectionError,
@@ -48,6 +50,7 @@ SONAR_DENY_DOMAINS = [
 ]
 
 TOPIC_NAMES = ("macro", "us_equity", "ai_bigtech", "bitcoin")
+URL_TOKEN_RE = re.compile(r"[A-Za-z]{2,}")
 
 TOPIC_SUMMARY_SCHEMA: dict[str, Any] = {
     "type": "json_schema",
@@ -208,7 +211,15 @@ def _usage_int(obj: object, *keys: str) -> int | None:
             return None
         current = getattr(current, k, None) if not isinstance(current, dict) else current.get(k)
     try:
-        return int(current) if current is not None else None
+        if current is None:
+            return None
+        if isinstance(current, bool):
+            return int(current)
+        if isinstance(current, int):
+            return current
+        if isinstance(current, (str, bytes, bytearray)):
+            return int(current)
+        return None
     except (TypeError, ValueError):
         return None
 
@@ -272,9 +283,12 @@ def _citations_to_news_items(citations: list[str], topic: str) -> list[NewsItem]
     for url in citations:
         if not url.startswith("http"):
             continue
+        title = _title_from_citation_url(url)
+        if not title:
+            continue
         items.append(
             NewsItem(
-                title=url.split("/")[-1].replace("-", " ").replace("_", " ")[:80] or url,
+                title=title,
                 url=url,
                 source=_source_from_url(url),
                 published_at=None,
@@ -286,9 +300,40 @@ def _citations_to_news_items(citations: list[str], topic: str) -> list[NewsItem]
     return items
 
 
-def _source_from_url(url: str) -> str:
-    from urllib.parse import urlparse
+def _title_from_citation_url(url: str) -> str:
+    try:
+        path = urlparse(url).path
+    except Exception:
+        return ""
 
+    segment = path.rsplit("/", 1)[-1].strip()
+    if not segment:
+        return ""
+
+    lower_segment = segment.lower()
+    if lower_segment.endswith(".pdf"):
+        return ""
+
+    extension = ""
+    stem = segment
+    if "." in segment:
+        stem, extension = segment.rsplit(".", 1)
+        extension = f".{extension.lower()}"
+
+    if extension in {".htm", ".html"} and "-" not in stem and "_" not in stem:
+        return ""
+
+    words = [part for part in re.split(r"[-_]+", stem) if URL_TOKEN_RE.search(part or "")]
+    if not words:
+        return ""
+
+    title = " ".join(words).strip()
+    if not title:
+        return ""
+    return title[:80]
+
+
+def _source_from_url(url: str) -> str:
     try:
         host = urlparse(url).hostname or ""
     except Exception:

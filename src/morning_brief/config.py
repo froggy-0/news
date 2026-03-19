@@ -123,9 +123,9 @@ def load_settings() -> Settings:
         ),
         openai_max_output_tokens=_env_bounded_int(
             "OPENAI_MAX_OUTPUT_TOKENS",
-            default=3200,
+            default=50000,
             minimum=500,
-            maximum=4000,
+            maximum=50000,
         ),
         openai_prompt_cache_key=os.getenv("OPENAI_PROMPT_CACHE_KEY", "").strip(),
         prompt_template_dir=Path(

@@ -8,6 +8,7 @@ from morning_brief.briefing import (
     _brief_structure_issues,
     _fallback_brief,
     _fallback_if_incomplete,
+    _fallback_news_lines,
     _improve_readability_spacing,
     _inject_quality_notice,
     generate_briefing,
@@ -922,3 +923,85 @@ def test_generate_briefing_skips_validator_when_disabled(monkeypatch):
     generate_briefing(packet=packet, settings=settings)
 
     assert len(calls) == 1
+
+
+def test_generate_briefing_retries_once_when_max_output_tokens_is_too_low(monkeypatch, tmp_path):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BRIEF_VALIDATION_ENABLED", "false")
+    monkeypatch.setenv("OPENAI_MAX_OUTPUT_TOKENS", "2300")
+    settings = load_settings()
+    packet = {
+        "macro": [],
+        "us_indices": [],
+        "tech_stocks": [],
+        "bitcoin": {"spot": {}, "etf_points": [], "etf_total_volume": 0},
+        "news": [
+            {
+                "title": "Example one",
+                "url": "https://www.reuters.com/world/us/example",
+                "citations": ["https://www.reuters.com/world/us/example"],
+                "why_it_matters": "AI 투자 기대를 다시 자극한 기사입니다.",
+            },
+            {
+                "title": "Example two",
+                "url": "https://www.cnbc.com/example",
+                "citations": ["https://www.cnbc.com/example"],
+                "why_it_matters": "비트코인 ETF 수급 해석에 바로 연결됩니다.",
+            },
+        ],
+        "data_quality": {"status": "ok", "warnings": []},
+    }
+    observer = PipelineObserver(output_dir=tmp_path)
+    calls: list[dict] = []
+    responses = [
+        SimpleNamespace(
+            output_text="Morning Market Brief (2026-03-19)\n\n0. 오늘의 핵심\n잘린 응답",
+            usage=None,
+            status="incomplete",
+            incomplete_details=SimpleNamespace(reason="max_output_tokens"),
+        ),
+        SimpleNamespace(
+            output_text=_complete_layered_brief(),
+            usage=None,
+            status="completed",
+            incomplete_details=None,
+        ),
+    ]
+
+    def _create(**kwargs):
+        calls.append(kwargs)
+        return responses.pop(0)
+
+    fake_client = SimpleNamespace(responses=SimpleNamespace(create=_create))
+    monkeypatch.setattr("morning_brief.briefing.OpenAI", lambda **_: fake_client)
+
+    briefing = generate_briefing(packet=packet, settings=settings, observer=observer)
+
+    assert len(calls) == 2
+    assert calls[0]["max_output_tokens"] == 2300
+    assert calls[1]["max_output_tokens"] == 50000
+    assert "4-2. 핵심 뉴스 5선" in briefing
+    assert any(event["event"] == "brief_generation_retry" for event in observer.events)
+
+
+def test_fallback_news_lines_skip_file_titles_and_none_like_values():
+    news = [
+        {
+            "title": "monetary20260318a1.htm",
+            "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260318a1.htm",
+            "topic": "macro",
+            "why_it_matters": None,
+        },
+        {
+            "title": "AMD Deepens Strategic Collaboration with Samsung",
+            "url": "https://x.com/AMD",
+            "topic": "ai_bigtech",
+            "why_it_matters": None,
+        },
+    ]
+
+    lines = "\n".join(_fallback_news_lines(news))
+
+    assert "monetary20260318a1.htm" not in lines
+    assert "None None" not in lines
+    assert "AMD Deepens Strategic Collaboration with Samsung" in lines

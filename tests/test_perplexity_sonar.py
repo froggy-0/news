@@ -70,6 +70,17 @@ class TestCitationsToNewsItems:
         items = _citations_to_news_items([], "macro")
         assert items == []
 
+    def test_file_like_citation_urls_are_skipped(self):
+        citations = [
+            "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260318a1.htm",
+            "https://www.federalreserve.gov/monetarypolicy/files/monetary20260318a1.pdf",
+            "https://www.reuters.com/markets/us-fed-holds-rates",
+        ]
+        items = _citations_to_news_items(citations, "macro")
+        assert len(items) == 1
+        assert items[0].url == "https://www.reuters.com/markets/us-fed-holds-rates"
+        assert items[0].title == "us fed holds rates"
+
 
 class TestCollectSonarNewsItems:
     def test_deduplicates_urls(self):
