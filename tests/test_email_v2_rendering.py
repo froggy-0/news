@@ -41,6 +41,10 @@ SAMPLE_CONTEXT = {
     ],
     "hero_summary": "오늘 시장은 혼조세를 보였어요.",
     "hero_alerts": ["VIX가 평소보다 높아요"],
+    "hero_verdict": "오늘은 관망 국면입니다.",
+    "hero_reason": "VIX가 평소보다 높아 변동성이 남아 있습니다.",
+    "hero_kospi_impact": "미국 장세가 엇갈려 코스피는 종목별 차별화가 커질 수 있습니다.",
+    "hero_tone": "flat",
     "macro_indicators": [
         {
             "label": "10년물",
@@ -103,7 +107,23 @@ SAMPLE_CONTEXT = {
             "source_url": "https://reuters.com/example",
             "tldr": "엔비디아 AI 칩 신제품 발표",
             "source_tier": 1,
+            "source_kind": "원문 기사",
+            "source_label": "원문 기사 · Reuters",
         },
+    ],
+    "news_source_items": [
+        {
+            "headline": "엔비디아 AI 칩 발표",
+            "source_name": "Reuters",
+            "source_kind": "원문 기사",
+            "safe_url": "https://reuters.com/example",
+        }
+    ],
+    "market_source_lines": [
+        "거시 지표: FRED, yfinance",
+        "미국 지수/기술주: Stooq",
+        "비트코인: CoinGecko",
+        "X 시그널: Grok",
     ],
     "sector_mapping": {
         "positive": [{"ticker": "NVDA", "name": "NVDA", "reason": "AI 수요 확대"}],
@@ -164,6 +184,10 @@ PARTIAL_CONFIGS = [
         {
             "hero_summary": SAMPLE_CONTEXT["hero_summary"],
             "hero_alerts": SAMPLE_CONTEXT["hero_alerts"],
+            "hero_verdict": SAMPLE_CONTEXT["hero_verdict"],
+            "hero_reason": SAMPLE_CONTEXT["hero_reason"],
+            "hero_kospi_impact": SAMPLE_CONTEXT["hero_kospi_impact"],
+            "hero_tone": SAMPLE_CONTEXT["hero_tone"],
         },
     ),
     (
@@ -201,6 +225,8 @@ PARTIAL_CONFIGS = [
     (
         "email_footer.html.j2",
         {
+            "news_source_items": SAMPLE_CONTEXT["news_source_items"],
+            "market_source_lines": SAMPLE_CONTEXT["market_source_lines"],
             "data_quality_status": SAMPLE_CONTEXT["data_quality_status"],
             "footer_notes": SAMPLE_CONTEXT["footer_notes"],
             "unsubscribe_url": SAMPLE_CONTEXT["unsubscribe_url"],
@@ -475,14 +501,15 @@ class TestSnapshotFullHtmlOutput:
 
     def test_contains_hero_section(self, rendered_html: str) -> None:
         """히어로(핵심 요약) 섹션 콘텐츠가 포함되어 있다."""
-        assert SAMPLE_CONTEXT["hero_summary"] in rendered_html
-        assert SAMPLE_CONTEXT["hero_alerts"][0] in rendered_html
+        assert SAMPLE_CONTEXT["hero_verdict"] in rendered_html
+        assert SAMPLE_CONTEXT["hero_reason"] in rendered_html
+        assert SAMPLE_CONTEXT["hero_kospi_impact"] in rendered_html
 
     def test_contains_news_section(self, rendered_html: str) -> None:
         """뉴스 섹션 콘텐츠가 포함되어 있다."""
         news = SAMPLE_CONTEXT["news_items"][0]
         assert news["headline"] in rendered_html
-        assert news["source_name"] in rendered_html
+        assert news["source_label"] in rendered_html
 
     def test_contains_btc_section(self, rendered_html: str) -> None:
         """BTC 섹션 콘텐츠가 포함되어 있다."""
@@ -512,3 +539,5 @@ class TestSnapshotFullHtmlOutput:
     def test_contains_footer_section(self, rendered_html: str) -> None:
         """Footer 섹션 콘텐츠가 포함되어 있다."""
         assert SAMPLE_CONTEXT["github_url"] in rendered_html
+        assert "출처와 데이터" in rendered_html
+        assert SAMPLE_CONTEXT["news_source_items"][0]["source_name"] in rendered_html

@@ -1,10 +1,24 @@
-{# 변수: hero_summary, hero_alerts #}
+{# 변수: hero_verdict, hero_reason, hero_kospi_impact, hero_alerts, hero_tone #}
+{% from "email_macros.html.j2" import section_label %}
 <tr><td style="padding:0 0 24px 0;">
 <table role="presentation" width="100%" class="card" style="width:100%;background:#fff;border:1px solid #e2e8f0;border-top:4px solid #1e40af;border-radius:0 0 16px 16px;">
 <tr><td class="card-pad" style="padding:28px 24px;">
-<div style="border-left:3px solid #1e40af;padding-left:12px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#1e40af;font-size:13px;font-weight:600;">&#9632; 오늘의 핵심</div>
-<div class="hero-box" style="margin-top:16px;background:#f0f4ff;padding:20px;border-radius:8px;">
-<div class="hero-title text-strong" style="font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#0f172a;font-size:32px;line-height:1.5;font-weight:800;letter-spacing:-0.03em;white-space:pre-line;">{{ hero_summary }}</div>
+{{ section_label("오늘의 판단", "#1e40af") }}
+<div class="hero-box" style="margin-top:16px;background:#f8fafc;padding:22px;border-radius:14px;border:1px solid #dbeafe;">
+<div style="display:inline-block;padding:6px 12px;border-radius:999px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;font-size:12px;font-weight:700;letter-spacing:0.02em;{% if hero_tone == 'up' %}background:#dcfce7;color:#166534;{% elif hero_tone == 'down' %}background:#fef2f2;color:#991b1b;{% else %}background:#e0f2fe;color:#1d4ed8;{% endif %}">장전 판단</div>
+<div class="hero-title text-strong" style="margin-top:14px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#0f172a;font-size:30px;line-height:1.45;font-weight:800;letter-spacing:-0.03em;white-space:pre-line;">{{ hero_verdict }}</div>
+{% if hero_reason %}
+<div style="margin-top:16px;padding-top:14px;border-top:1px solid #dbeafe;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;">
+<div style="color:#64748b;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;" class="text-muted">판단 근거</div>
+<div style="padding-top:6px;color:#334155;font-size:15px;line-height:1.8;" class="text-body">{{ hero_reason }}</div>
+</div>
+{% endif %}
+{% if hero_kospi_impact %}
+<div style="margin-top:14px;padding:14px 16px;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;">
+<div style="color:#64748b;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;" class="text-muted">한국장 시사점</div>
+<div style="padding-top:6px;color:#0f172a;font-size:15px;line-height:1.8;" class="text-body">{{ hero_kospi_impact }}</div>
+</div>
+{% endif %}
 </div>
 {% if hero_alerts %}
 <div style="padding-top:16px;">

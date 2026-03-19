@@ -106,12 +106,18 @@ EXPECTED_KEYS = {
     "snapshot_badges",
     "hero_summary",
     "hero_alerts",
+    "hero_verdict",
+    "hero_reason",
+    "hero_kospi_impact",
+    "hero_tone",
     "macro_indicators",
     "stock_indices",
     "stock_tech",
     "btc_data",
     "issue_briefings",
     "news_items",
+    "news_source_items",
+    "market_source_lines",
     "sector_mapping",
     "weekly_context",
     "sonar_analyses",
@@ -169,8 +175,27 @@ def test_build_email_context_v2_parses_news_items() -> None:
     assert news[0]["headline"] == "엔비디아 AI 칩 발표"
     assert news[0]["source_name"] == "Reuters"
     assert news[0]["source_url"] == "https://reuters.com/example1"
+    assert news[0]["source_label"] == "원문 기사 · Reuters"
     assert news[1]["headline"] == "연준 금리 동결 시사"
     assert news[1]["source_name"] == "Bloomberg"
+
+
+def test_build_email_context_v2_builds_hero_metadata_and_sources() -> None:
+    ctx = _build_email_context_v2("제목", SAMPLE_BODY, _make_packet())
+    assert ctx["hero_verdict"] == "오늘 시장은 혼조세를 보였어요."
+    assert ctx["hero_reason"] == ""
+    assert ctx["hero_kospi_impact"] == ""
+    assert ctx["hero_tone"] == "flat"
+    news_sources = ctx["news_source_items"]
+    assert isinstance(news_sources, list)
+    assert news_sources[0].source_name == "Reuters"
+    assert news_sources[0].source_kind == "원문 기사"
+    assert ctx["market_source_lines"] == [
+        "거시 지표: FRED, yfinance",
+        "미국 지수/기술주: Stooq",
+        "비트코인: CoinGecko",
+        "X 시그널: Grok",
+    ]
 
 
 def test_build_email_context_v2_parses_sector_mapping() -> None:

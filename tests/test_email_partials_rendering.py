@@ -43,6 +43,8 @@ SAMPLE_NEWS_ITEMS = [
         "source_url": "https://reuters.com/example",
         "tldr": "핵심 요약",
         "source_tier": 1,
+        "source_kind": "원문 기사",
+        "source_label": "원문 기사 · Reuters",
     }
 ]
 
@@ -166,10 +168,15 @@ def test_hero_partial_renders_independently() -> None:
     tmpl = env.get_template("email_hero.html.j2")
     html = tmpl.render(
         hero_summary="오늘 시장은 혼조세를 보였어요.",
-        hero_alerts=["VIX 급등 주의"],
+        hero_alerts=["추가 메모"],
+        hero_verdict="오늘은 관망 국면입니다.",
+        hero_reason="변동성은 남아 있지만 추세가 엇갈립니다.",
+        hero_kospi_impact="미국 기술주 흐름이 코스피 대형주에 선별적으로 반영될 수 있습니다.",
+        hero_tone="flat",
     )
-    assert "오늘 시장은 혼조세를 보였어요." in html
-    assert "VIX 급등 주의" in html
+    assert "오늘은 관망 국면입니다." in html
+    assert "변동성은 남아 있지만 추세가 엇갈립니다." in html
+    assert "미국 기술주 흐름이 코스피 대형주에 선별적으로 반영될 수 있습니다." in html
     assert 'role="presentation"' in html
 
 
@@ -184,7 +191,7 @@ def test_news_partial_renders_independently() -> None:
     html = tmpl.render(news_items=SAMPLE_NEWS_ITEMS)
     assert "테스트 뉴스 헤드라인" in html
     assert "뉴스 본문 내용입니다." in html
-    assert "Reuters" in html
+    assert "원문 기사 · Reuters" in html
     assert "핵심 요약" in html
     assert 'role="presentation"' in html
 
@@ -273,6 +280,18 @@ def test_footer_partial_renders_independently() -> None:
     """email_footer.html.j2가 최소 변수로 독립 렌더링 가능한지 확인."""
     tmpl = env.get_template("email_footer.html.j2")
     html = tmpl.render(
+        news_source_items=[
+            {
+                "headline": "테스트 뉴스 헤드라인",
+                "source_name": "Reuters",
+                "source_kind": "원문 기사",
+                "safe_url": "https://reuters.com/example",
+            }
+        ],
+        market_source_lines=[
+            "거시 지표: FRED, yfinance",
+            "미국 지수/기술주: Stooq",
+        ],
         data_quality_status="ok",
         footer_notes=[],
         unsubscribe_url="https://example.com/unsub",
@@ -280,6 +299,8 @@ def test_footer_partial_renders_independently() -> None:
     )
     assert "https://example.com/unsub" in html
     assert "https://github.com/example" in html
+    assert "출처와 데이터" in html
+    assert "Reuters" in html
     assert "FRED" in html or "&#xB370;&#xC774;&#xD130;" in html
 
 
@@ -298,7 +319,25 @@ def _build_full_context() -> dict:
         "snapshot_badges": SAMPLE_SNAPSHOT_BADGES,
         "hero_summary": "오늘 시장은 혼조세를 보였어요.",
         "hero_alerts": [],
+        "hero_verdict": "오늘은 관망 국면입니다.",
+        "hero_reason": "변동성은 남아 있지만 추세가 엇갈립니다.",
+        "hero_kospi_impact": "국내 증시는 종목별 차별화가 커질 수 있습니다.",
+        "hero_tone": "flat",
         "news_items": SAMPLE_NEWS_ITEMS,
+        "news_source_items": [
+            {
+                "headline": "테스트 뉴스 헤드라인",
+                "source_name": "Reuters",
+                "source_kind": "원문 기사",
+                "safe_url": "https://reuters.com/example",
+            }
+        ],
+        "market_source_lines": [
+            "거시 지표: FRED, yfinance",
+            "미국 지수/기술주: Stooq",
+            "비트코인: CoinGecko",
+            "X 시그널: Grok",
+        ],
         "btc_data": SAMPLE_BTC_DATA,
         "stock_indices": SAMPLE_STOCK_INDICES,
         "stock_tech": SAMPLE_STOCK_TECH,
@@ -352,6 +391,10 @@ _V2_PARTIALS = [
         {
             "hero_summary": "테스트 요약",
             "hero_alerts": ["경고 1"],
+            "hero_verdict": "오늘은 관망 국면입니다.",
+            "hero_reason": "변동성은 남아 있지만 추세가 엇갈립니다.",
+            "hero_kospi_impact": "국내 증시는 종목별 차별화가 커질 수 있습니다.",
+            "hero_tone": "flat",
         },
     ),
     (
@@ -389,6 +432,18 @@ _V2_PARTIALS = [
     (
         "email_footer.html.j2",
         {
+            "news_source_items": [
+                {
+                    "headline": "테스트 뉴스 헤드라인",
+                    "source_name": "Reuters",
+                    "source_kind": "원문 기사",
+                    "safe_url": "https://reuters.com/example",
+                }
+            ],
+            "market_source_lines": [
+                "거시 지표: FRED, yfinance",
+                "미국 지수/기술주: Stooq",
+            ],
             "data_quality_status": "ok",
             "footer_notes": [],
             "unsubscribe_url": "https://example.com/unsub",
@@ -415,12 +470,12 @@ def test_partials_no_emoji() -> None:
 
 # 각 파셜별 기대 한국어 라벨 매핑
 _EXPECTED_KOREAN_LABELS: dict[str, list[str]] = {
-    "email_news.html.j2": ["핵심 뉴스", "원문 보기", "핵심 한줄"],
+    "email_news.html.j2": ["주요 뉴스", "시장 의미", "원문 기사"],
     "email_btc.html.j2": ["크립토", "공포탐욕", "가격", "등락", "거래량", "합산 거래량"],
     "email_sector.html.j2": ["오늘 주목 흐름", "수혜 방향", "압력 방향", "중립 / 관망"],
     "email_calendar.html.j2": ["이벤트 캘린더", "시간", "이벤트", "예상", "영향도", "오늘 발표"],
     "email_market.html.j2": ["시장 지표", "빅테크 10종", "거시 지표"],
-    "email_footer.html.j2": ["데이터", "구독 해지"],
+    "email_footer.html.j2": ["출처와 데이터", "뉴스 출처", "시장 데이터", "구독 해지"],
 }
 
 # 파셜 이름 → _V2_PARTIALS 컨텍스트 매핑 (재사용)

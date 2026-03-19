@@ -50,6 +50,8 @@ EMAIL_TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 PROJECT_GITHUB_URL = "https://github.com/froggy-0/news"
 DEFAULT_UNSUBSCRIBE_EMAIL = "unsubscribe@example.com"
 NONE_LIKE_TEXTS = {"", "none", "null", "n/a", "na"}
+_HERO_KOSPI_HINTS = ("코스피", "코스닥", "한국장", "국내 증시")
+_SOURCE_AGG_HINTS = ("집계", "큐레이션", "요약 출처", "aggregated", "summary")
 
 if TYPE_CHECKING:
     from google.oauth2.credentials import Credentials
@@ -87,6 +89,7 @@ class _EmailBriefRow:
 class _EmailSourceItem:
     headline: str
     source_name: str
+    source_kind: str
     safe_url: str | None
 
 
@@ -274,11 +277,83 @@ def _fallback_source_name(hostname: str) -> str | None:
     return hostname or None
 
 
+def _source_kind(raw_source_name: str | None, safe_url: str | None) -> str:
+    if safe_url:
+        hostname = _normalized_hostname(urlparse(safe_url).netloc)
+        if hostname == "x.com":
+            return "공식 X"
+        if hostname == "news.google.com":
+            return "뉴스 큐레이션"
+    raw = _sanitize_optional_text(raw_source_name or "").lower()
+    if any(token in raw for token in _SOURCE_AGG_HINTS):
+        return "집계 참고"
+    return "원문 기사"
+
+
+def _display_source_name(raw_source_name: str | None, safe_url: str | None) -> str | None:
+    derived = _source_name(safe_url)
+    if derived:
+        return derived
+
+    raw = _sanitize_optional_text(raw_source_name or "")
+    if not raw:
+        return None
+    raw = re.sub(r"\([^)]*(?:집계|요약)[^)]*\)", "", raw).strip(" -–—")
+    raw = raw.replace("NASDAQ.com", "Nasdaq")
+    return raw or None
+
+
+def _news_source_label(raw_source_name: str | None, safe_url: str | None) -> str | None:
+    source_name = _display_source_name(raw_source_name, safe_url)
+    if not source_name:
+        return None
+    return f"{_source_kind(raw_source_name, safe_url)} · {source_name}"
+
+
 def _sanitize_optional_text(value: str) -> str:
     normalized = " ".join(value.split()).strip()
     if normalized.lower() in NONE_LIKE_TEXTS:
         return ""
     return normalized
+
+
+def _build_hero_context(raw: str) -> dict[str, object]:
+    summary, alerts = _split_hero(raw)
+    reason = ""
+    kospi_impact = ""
+    secondary_alerts: list[str] = []
+
+    for alert in alerts:
+        normalized = _sanitize_optional_text(alert)
+        if not normalized:
+            continue
+        if not kospi_impact and any(hint in normalized for hint in _HERO_KOSPI_HINTS):
+            kospi_impact = normalized
+            continue
+        if not reason:
+            reason = normalized
+            continue
+        secondary_alerts.append(normalized)
+
+    verdict = _sanitize_optional_text(summary) or "오늘 확인이 필요한 변수가 많습니다."
+    if not reason and secondary_alerts:
+        reason, secondary_alerts = secondary_alerts[0], secondary_alerts[1:]
+
+    if "매수 관심" in verdict:
+        tone = "up"
+    elif "리스크 주의" in verdict:
+        tone = "down"
+    else:
+        tone = "flat"
+
+    return {
+        "hero_summary": verdict,
+        "hero_alerts": secondary_alerts,
+        "hero_verdict": verdict,
+        "hero_reason": reason,
+        "hero_kospi_impact": kospi_impact,
+        "hero_tone": tone,
+    }
 
 
 def _display_percent_token(token: str) -> str:
@@ -661,17 +736,22 @@ def _build_news_source_items(
     reference_items: list[dict[str, str | None]],
 ) -> list[_EmailSourceItem]:
     items: list[_EmailSourceItem] = []
-    seen_source_names: set[str] = set()
+    seen_sources: set[tuple[str, str]] = set()
 
     for item in news_items:
-        source_name = item.source_name or _source_name(item.safe_url)
-        if not source_name or source_name in seen_source_names:
+        source_name = _display_source_name(item.source_name, item.safe_url)
+        if not source_name:
             continue
-        seen_source_names.add(source_name)
+        source_kind = _source_kind(item.source_name, item.safe_url)
+        key = (source_kind, source_name)
+        if key in seen_sources:
+            continue
+        seen_sources.add(key)
         items.append(
             _EmailSourceItem(
                 headline=item.headline,
                 source_name=source_name,
+                source_kind=source_kind,
                 safe_url=item.safe_url,
             )
         )
@@ -680,14 +760,19 @@ def _build_news_source_items(
         safe_url = reference_item.get("safe_url")
         if not isinstance(safe_url, str) or not safe_url:
             continue
-        source_name = _source_name(safe_url)
-        if not source_name or source_name in seen_source_names:
+        source_name = _display_source_name(str(reference_item.get("label") or ""), safe_url)
+        if not source_name:
             continue
-        seen_source_names.add(source_name)
+        source_kind = _source_kind(str(reference_item.get("label") or ""), safe_url)
+        key = (source_kind, source_name)
+        if key in seen_sources:
+            continue
+        seen_sources.add(key)
         items.append(
             _EmailSourceItem(
                 headline=str(reference_item.get("label") or source_name),
                 source_name=source_name,
+                source_kind=source_kind,
                 safe_url=safe_url,
             )
         )
@@ -1159,6 +1244,22 @@ def _macro_indicators_from_packet(packet: dict) -> list[MacroIndicator]:
     return items
 
 
+def _prepare_v2_news_items(section_4_2: str) -> list[dict[str, object]]:
+    prepared: list[dict[str, object]] = []
+    for item in parse_news_items(section_4_2):
+        safe_url = _safe_link(item.get("source_url") or "")
+        prepared.append(
+            {
+                **item,
+                "source_url": safe_url,
+                "source_name": _display_source_name(item.get("source_name"), safe_url),
+                "source_kind": _source_kind(item.get("source_name"), safe_url),
+                "source_label": _news_source_label(item.get("source_name"), safe_url),
+            }
+        )
+    return prepared
+
+
 def _build_email_context_v2(
     subject: str,
     body: str,
@@ -1170,7 +1271,7 @@ def _build_email_context_v2(
     section_map = extract_sections(body)
 
     snapshot_badges = _build_snapshot_badges(packet)
-    news_items = parse_news_items(section_map.get("section_4_2", ""))
+    news_items = _prepare_v2_news_items(section_map.get("section_4_2", ""))
     sector_mapping = parse_sector_mapping(section_map.get("section_4_3", ""))
     btc_data = _build_btc_data(packet, section_map.get("section_3", ""))
     events = parse_event_calendar(section_map.get("section_6", ""))
@@ -1192,9 +1293,23 @@ def _build_email_context_v2(
 
     final_subject = _build_subject_line(section_map, packet) if not subject else subject
 
-    # hero: 첫 문장만 큰 글씨, 나머지는 보조 알림으로 분리
-    raw_hero = section_map.get("section_0", "")
-    hero_summary, hero_alerts = _split_hero(raw_hero)
+    hero_context = _build_hero_context(section_map.get("section_0", ""))
+    news_source_items = _build_news_source_items(
+        [
+            _EmailNewsItem(
+                headline=str(item["headline"]),
+                market_meaning=str(item.get("body") or ""),
+                korea_takeaway=str(item.get("tldr") or ""),
+                url=str(item.get("source_url") or ""),
+                safe_url=item["source_url"] if isinstance(item.get("source_url"), str) else None,
+                source_name=item["source_name"]
+                if isinstance(item.get("source_name"), str)
+                else None,
+            )
+            for item in news_items
+        ],
+        [],
+    )
 
     return {
         "subject": final_subject,
@@ -1202,14 +1317,15 @@ def _build_email_context_v2(
         "display_date": _format_display_date_v2(packet),
         "read_time": "3분 읽기",
         "snapshot_badges": snapshot_badges,
-        "hero_summary": hero_summary,
-        "hero_alerts": hero_alerts,
+        **hero_context,
         "macro_indicators": macro_indicators,
         "stock_indices": stock_indices,
         "stock_tech": stock_tech,
         "btc_data": btc_data,
         "issue_briefings": _parse_issue_briefings(section_map.get("section_4_1", "")),
         "news_items": news_items,
+        "news_source_items": news_source_items,
+        "market_source_lines": _market_source_lines(),
         "sector_mapping": sector_mapping,
         "weekly_context": section_map.get("section_5_1", ""),
         "sonar_analyses": _parse_sonar(section_map.get("section_5_2", "")),
