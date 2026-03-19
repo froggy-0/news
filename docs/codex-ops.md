@@ -14,6 +14,7 @@
 - project-level 기본값은 `.codex/config.toml`에서 관리합니다.
 - 메인 모델은 `gpt-5.4`, read-heavy helper는 `gpt-5.4-mini`로 나눕니다.
 - 이 저장소는 write 충돌을 줄이기 위해 `max_threads = 4`, `max_depth = 1`을 기본으로 둡니다.
+- `Context7` MCP는 project config에 remote HTTP server로 등록했습니다. 첫 사용 시 OAuth 로그인이 필요할 수 있습니다.
 - 공통 탐색은 repo root `AGENTS.md`와 `docs/development-standards.md`를 먼저 따릅니다.
 
 ## 2. Custom subagents
@@ -46,7 +47,8 @@
 - ChatGPT Apps SDK를 붙일 때는 `apps/brief-ops/server`와 `apps/brief-ops/web`를 기본 구조로 잡습니다.
 - tool은 한 intent당 하나씩 나누고, run summary 같은 작은 데이터만 `structuredContent`에 둡니다.
 - 큰 observability payload, raw mail, audit detail은 `_meta`로 분리합니다.
-- Apps SDK 작업은 global `openai-docs`와 `chatgpt-apps` skill을 먼저 사용한 뒤 진행합니다.
+- Apps SDK 작업은 global `openai-docs`, `chatgpt-apps`, `frontend-design` skill을 먼저 사용한 뒤 진행합니다.
+- `frontend-design` skill은 user-level 경로 `~/.codex/skills/frontend-design`에 설치되어 있고, repo의 `brief-ops-app` skill과 함께 쓰는 것을 기본으로 봅니다.
 
 ## 5. 권장 사용 순서
 

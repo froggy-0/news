@@ -191,6 +191,7 @@ make validate-pre-commit
 - `.agents/skills/`: 반복 작업용 repo skill을 자동 발견합니다.
 - `agents/*.toml`: `explorer`, `pipeline_investigator`, `docs_researcher`, `brief_reviewer`, `provider_auditor`, `workflow_run_auditor`, `apps_operator` 역할별 기본 설정입니다.
 - 상세 운영 기준은 `docs/codex-ops.md`를 따릅니다.
+- `Context7` MCP는 project config에 등록되어 있고, 첫 사용 시 OAuth 로그인이 필요할 수 있습니다.
 
 참고:
 - Codex 공식 규칙 파일명은 `AGENTS.md`입니다.
