@@ -83,3 +83,7 @@ def validation_bounds_for(canonical_key: str) -> tuple[float, float] | None:
 
 def is_rate_canonical_key(canonical_key: str) -> bool:
     return canonical_key.strip().lower() in RATE_CANONICAL_KEYS
+
+
+def normalize_change_bps(change_bps: float) -> float:
+    return float(int(round(change_bps)))

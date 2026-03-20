@@ -6,6 +6,7 @@ from morning_brief.data.market_policy import (
     canonical_key_for,
     canonical_label_for,
     is_rate_canonical_key,
+    normalize_change_bps,
 )
 from morning_brief.data.sources.http_client import HttpFetchError, get_json_with_retry
 from morning_brief.models import MarketPoint
@@ -79,7 +80,7 @@ def fetch_macro_points_from_fred(api_key: str) -> list[MarketPoint]:
         change_pct: float | None = None
         change_bps: float | None = None
         if is_rate_canonical_key(normalized_key):
-            change_bps = round((latest - previous) * 100, 2)
+            change_bps = normalize_change_bps((latest - previous) * 100)
         elif previous == 0:
             change_pct = 0.0
         else:

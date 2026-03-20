@@ -52,6 +52,11 @@ def test_render_brief_prompts_contains_contract_and_packet(monkeypatch):
     assert "원/달러" in instructions
     assert "나스닥 선물" in instructions
     assert "상관관계" in instructions
+    assert "장단기 스프레드는 별도 계산 수치라 이번 브리핑에서는 적지 않아요." in user_prompt
+    assert (
+        "BTC 현물 절대값은 `market_data_json.bitcoin.spot.price` 숫자 그대로만 사용해요."
+        in user_prompt
+    )
     assert "Prompt Version: market_brief_test" in instructions
     assert "<market_data_json>" in user_prompt
     assert "<news_focus_json>" in user_prompt

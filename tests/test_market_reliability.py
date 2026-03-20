@@ -10,6 +10,7 @@ from morning_brief.data.market import (
     fetch_macro_points,
 )
 from morning_brief.data.market_policy import CANONICAL_KEY_BY_SOURCE
+from morning_brief.data.sources.fred import fetch_macro_points_from_fred
 from morning_brief.models import BitcoinSnapshot, MarketPoint
 
 
@@ -220,6 +221,26 @@ def test_fetch_macro_points_uses_yfinance_for_dxy_even_when_fred_is_available(mo
     assert by_key["vix"].ticker == "VIXCLS"
     assert by_key["dxy"].ticker == "DX=F"
     assert by_key["dxy"].price == 104.3
+
+
+def test_fetch_macro_points_from_fred_rounds_rate_change_to_integer_bps(monkeypatch):
+    values = {
+        "DGS10": (4.26, 4.20),
+        "DGS2": (3.76, 3.68),
+        "VIXCLS": (25.09, 22.37),
+    }
+
+    monkeypatch.setattr(
+        "morning_brief.data.sources.fred._latest_two_values",
+        lambda series_id, api_key: values[series_id],
+    )
+
+    points = fetch_macro_points_from_fred("fred-key")
+    by_key = {point.canonical_key: point for point in points}
+
+    assert by_key["us10y"].change_bps == 6.0
+    assert by_key["us2y"].change_bps == 8.0
+    assert by_key["vix"].change_pct == 12.16
 
 
 def test_market_policy_excludes_fred_broad_dollar_index_from_dxy_mapping():

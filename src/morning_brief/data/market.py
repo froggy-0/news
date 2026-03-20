@@ -12,6 +12,7 @@ from morning_brief.data.market_policy import (
     canonical_key_for,
     canonical_label_for,
     is_rate_canonical_key,
+    normalize_change_bps,
     validation_bounds_for,
 )
 from morning_brief.data.sources.btc_etf_official import (
@@ -88,7 +89,7 @@ def _point_changes(
     previous_value: float,
 ) -> tuple[float | None, float | None]:
     if is_rate_canonical_key(canonical_key):
-        return None, round((latest_value - previous_value) * 100, 2)
+        return None, normalize_change_bps((latest_value - previous_value) * 100)
 
     if previous_value == 0:
         return 0.0, None
@@ -186,12 +187,19 @@ def _market_point(
     canonical_key: str,
     change_bps: float | None = None,
 ) -> MarketPoint:
+    normalized_change_bps = None
+    if change_bps is not None:
+        normalized_change_bps = (
+            normalize_change_bps(change_bps)
+            if is_rate_canonical_key(canonical_key)
+            else round(change_bps, 2)
+        )
     return MarketPoint(
         label=label,
         ticker=ticker,
         price=round(close, 4) if close is not None else None,
         change_pct=round(change_pct, 2) if change_pct is not None else None,
-        change_bps=round(change_bps, 2) if change_bps is not None else None,
+        change_bps=normalized_change_bps,
         canonical_key=canonical_key,
         raw_value=round(close, 4) if close is not None else None,
         resolved_value=round(close, 4) if close is not None else None,
