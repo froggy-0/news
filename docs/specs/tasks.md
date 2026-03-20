@@ -2,7 +2,7 @@
 
 ## 개요
 
-이 문서는 `docs/specs/requirements.md` 와 `docs/specs/design.md` 를 기준으로, 현재 저장소를 **Vite 프로토타입 + Python 파이프라인** 상태에서 **Next.js 기반 공개 브리핑 프론트 + JSON 계약 + 배포 워크플로우** 상태로 옮기기 위한 구현 체크리스트다.
+이 문서는 `docs/specs/requirements.md` 와 `docs/specs/design.md` 를 기준으로, 현재 저장소의 **Next.js 정적 export 프론트 + Python 파이프라인** 상태를 기준으로 남은 배포/검증 작업을 정리한 체크리스트다.
 
 문서만 읽고 바로 구현할 수 있도록, 단계별 작업 대상과 완료 기준을 고정한다.
 
@@ -139,7 +139,7 @@
 
 - [x] 12. Stage 6 체크포인트
   - 다운로드, RSS, `llms.txt`, 메타데이터가 모두 정적으로 동작해야 한다
-  - _검증: route 출력 및 메타데이터 테스트_
+  - _검증: 정적 파일 출력 및 메타데이터 테스트_
 
 - [ ] 13. Stage 7: `sovereign-brief-terminal` 디자인 이식
   - [x] 13.1 원본 디자인 구조 감사
@@ -218,7 +218,7 @@
     - _Requirements: REQ-013, REQ-015_
   - [ ] 15.2 프론트 배포 워크플로우 추가
     - `frontend.yml` 작성
-    - JSON fetch → 정적 빌드 → Cloudflare Pages 배포 순서 구성
+    - JSON fetch → 정적 export 빌드 → `frontend/out` 기준 Cloudflare Pages 배포 순서 구성
     - _Requirements: REQ-015_
   - [ ] 15.3 `morning-brief.yml` 과 프론트 배포 연결
     - 게시 완료 후 프론트 배포를 트리거하도록 연결
@@ -237,7 +237,7 @@
     - 메인, 아카이브, 품질 배너, null/cached 상태, optional 섹션 숨김 검증
     - _Requirements: REQ-001 ~ REQ-012_
   - [ ] 17.3 빌드 테스트
-    - Next.js 정적 빌드와 RSS/`llms.txt` 산출 검증
+    - Next.js 정적 export 빌드와 RSS/`llms.txt` 산출 검증
     - _Requirements: REQ-010, REQ-015_
   - [ ] 17.4 디자인 회귀 테스트
     - `sovereign-brief-terminal` 과 비교할 핵심 화면 스냅샷을 고정한다

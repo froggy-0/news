@@ -7,7 +7,7 @@
 
 ## 요약
 
-이 설계는 현재 저장소의 **Python 브리핑 파이프라인**과 **Vite 기반 프론트 프로토타입**을 기준으로, 목표 상태인 **Next.js App Router + R2 JSON + Cloudflare Pages** 구조를 정의한다.
+이 설계는 현재 저장소의 **Python 브리핑 파이프라인**과 **Next.js 정적 export 프론트**를 기준으로, 공개 브리핑을 **R2 JSON + Cloudflare Pages** 에 맞게 유지·확장하는 구조를 정의한다.
 
 핵심 원칙은 세 가지다.
 
@@ -23,18 +23,15 @@
 
 - 파이프라인 서브시스템은 `src/morning_brief` 에 있다.
 - GitHub Actions 공개 워크플로우는 현재 `.github/workflows/morning-brief.yml` 이다.
-- `frontend/` 는 Vite + React 기반의 AI Studio 프로토타입이다.
-  - `frontend/src/App.tsx`
-  - `frontend/src/main.tsx`
-  - `frontend/src/index.css`
-  - `frontend/package.json`
-- 아직 `schema/brief.types.ts` 는 없다.
-- 아직 프론트 전용 배포 워크플로우와 R2 fetch 계층도 없다.
+- `frontend/` 는 Next.js App Router 기반의 정적 export 프론트다.
+- `schema/brief.types.ts` 가 프론트 계약의 기준 파일로 존재한다.
+- `frontend/lib/r2.ts` 가 fixture 또는 R2 JSON 을 읽는 fetch 계층을 담당한다.
+- `frontend/out/` 이 Cloudflare Pages 업로드 대상 산출물이다.
 
 ### 목표 상태
 
 - 파이프라인은 계속 `src/morning_brief` 를 사용한다.
-- 프론트는 `frontend/` 아래 Next.js App Router 구조로 교체한다.
+- 프론트는 `frontend/` 아래 Next.js App Router + `output: "export"` 구조를 유지한다.
 - JSON 계약은 `schema/brief.types.ts` 로 고정한다.
 - 파이프라인은 날짜별 JSON과 최신 JSON을 게시하고, 프론트는 그것을 읽어 정적 페이지를 빌드한다.
 
@@ -47,7 +44,7 @@
 | 서브시스템 | 실제 위치 | 역할 |
 | --- | --- | --- |
 | Pipeline | `src/morning_brief/` | 데이터 수집, 브리핑 생성, 품질 상태 생성, JSON 게시 |
-| Frontend | `frontend/` | Next.js SSG 렌더링, 아카이브, RSS, `llms.txt` |
+| Frontend | `frontend/` | Next.js 정적 export 렌더링, 아카이브, RSS, `llms.txt` |
 | Schema | `schema/` | 파이프라인과 프론트가 공유하는 JSON 계약 |
 
 ### 게시 흐름
@@ -87,10 +84,6 @@ frontend/
       page.tsx
       [date]/
         page.tsx
-    rss.xml/
-      route.ts
-    llms.txt/
-      route.ts
     globals.css
   components/
     layout/
@@ -105,6 +98,10 @@ frontend/
     brief-schema.ts
     format.ts
   public/
+    rss.xml
+    llms.txt
+  scripts/
+    generate-static-assets.mjs
   next.config.ts
   package.json
   tsconfig.json
@@ -115,7 +112,7 @@ schema/
 
 ### 마이그레이션 원칙
 
-- 현재 `frontend/src/*` 와 Vite 진입점은 교체 대상이다.
+- 기존 `frontend/src/*` 기반 Vite 진입점은 교체 완료 상태로 간주한다.
 - 기존 프로토타입의 시각 요소는 필요할 때만 이식한다.
 - Gemini, Express, dotenv 같은 프로토타입 전용 의존성은 목표 구조에 포함하지 않는다.
 
@@ -284,8 +281,8 @@ export interface BTCEtfIssuer {
 | `/` | 최신 브리핑 랜딩 | `briefs/latest.json` |
 | `/archive` | 날짜 목록 | `index.json` |
 | `/archive/[date]` | 날짜별 상세 | `briefs/YYYY-MM-DD.json` |
-| `/rss.xml` | RSS 피드 | `index.json` + 날짜별 JSON |
-| `/llms.txt` | AI 친화 텍스트 | 정적 또는 생성형 텍스트 |
+| `/rss.xml` | RSS 피드 | build 시 생성되는 정적 파일 |
+| `/llms.txt` | AI 친화 텍스트 | build 시 생성되는 정적 파일 |
 
 ### 핵심 블록
 
@@ -359,7 +356,7 @@ export async function fetchIndex(): Promise<BriefIndex>
 
 - `frontend.yml`
   - R2 최신 JSON 및 인덱스 fetch
-  - Next.js 정적 빌드
+  - Next.js 정적 export 빌드
   - Cloudflare Pages 배포
 
 ### 운영 기준
@@ -388,7 +385,7 @@ export async function fetchIndex(): Promise<BriefIndex>
 - `frontend` 빌드 성공
 - RSS 생성
 - `llms.txt` 제공
-- Cloudflare Pages 대상 산출 성공
+- `frontend/out` 기준 Cloudflare Pages 대상 산출 성공
 
 ---
 
@@ -396,8 +393,7 @@ export async function fetchIndex(): Promise<BriefIndex>
 
 현재 구현자는 아래 차이를 항상 의식해야 한다.
 
-1. `frontend/` 는 아직 Vite 프로토타입이며, 목표는 Next.js 다.
-2. `schema/brief.types.ts` 는 아직 없고 새로 도입해야 한다.
-3. 현재 공개 워크플로우는 `morning-brief.yml` 하나이며, 프론트 배포 워크플로우는 새로 추가해야 한다.
+1. `frontend/` 는 이미 Next.js 정적 export 구조로 전환되었다.
+2. 프론트 계약과 파이프라인 게시 JSON 의 1:1 정렬은 후속 Stage 에서 더 다듬는다.
+3. 현재 공개 워크플로우는 `morning-brief.yml` 하나이며, 프론트 배포 워크플로우는 아직 추가되지 않았다.
 4. 구독/수신거부는 이번 범위에 포함되지 않는다.
-
