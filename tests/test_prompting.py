@@ -148,6 +148,8 @@ def test_render_brief_validator_prompts_contains_draft_and_packet(monkeypatch):
     assert "한국어 헤드라인" in instructions
     assert "None" in instructions
     assert "수혜" in instructions
+    assert "금리 변화가 0bp일 때는 `+0bp`" in instructions
+    assert "BTC 기사 요약에 `$69K`, `$70K`" in instructions
     assert "Prompt Version: market_brief_test" in instructions
     assert "<brief_text>" in user_prompt
     assert '"macro":[{"label":"US10Y"}]' in user_prompt
