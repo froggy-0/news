@@ -1,6 +1,6 @@
 {# 컬러 배지 매크로 — 모든 파셜에서 import하여 사용 #}
 {% macro badge(value, direction) %}
-<span style="display:inline-block;background:{% if direction == 'up' %}#123526{% elif direction == 'down' %}#3c1b25{% else %}#18253a{% endif %};border:1px solid {% if direction == 'up' %}#1d5a41{% elif direction == 'down' %}#5b2533{% else %}#233652{% endif %};color:{% if direction == 'up' %}#86e1ad{% elif direction == 'down' %}#f0a8b0{% else %}#9cb0cb{% endif %};padding:3px 8px;border-radius:999px;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;" class="{% if direction == 'up' %}badge-up{% elif direction == 'down' %}badge-down{% else %}badge-flat{% endif %}">{% if direction == 'up' %}&#9650;{% elif direction == 'down' %}&#9660;{% else %}&#8212;{% endif %} {{ value }}</span>
+<span style="display:inline-block;background:{% if direction == 'up' %}#142313{% elif direction == 'down' %}#2a1717{% else %}#151515{% endif %};border:1px solid {% if direction == 'up' %}#244322{% elif direction == 'down' %}#4d2626{% else %}#2b2b2b{% endif %};color:{% if direction == 'up' %}#7ef466{% elif direction == 'down' %}#f4a4a4{% else %}#b1b1b1{% endif %};padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;letter-spacing:0.02em;" class="{% if direction == 'up' %}badge-up{% elif direction == 'down' %}badge-down{% else %}badge-flat{% endif %}">{% if direction == 'up' %}&#9650;{% elif direction == 'down' %}&#9660;{% else %}&#8212;{% endif %} {{ value }}</span>
 {% endmacro %}
 
 {# KR 라벨 매크로 #}
@@ -10,7 +10,7 @@
 
 {# 섹션 라벨 매크로 #}
 {% macro section_label(text, color) %}
-<div style="font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:{{ color }};font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;">{{ text }}</div>
+<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:{{ color }};font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;">{{ text }}</div>
 {% endmacro %}
 
 {# 데이터 품질 인라인 마크 #}
@@ -19,15 +19,15 @@
 {% endmacro %}
 
 {% macro delta_text(value, direction) %}
-<span style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;font-size:11px;font-weight:700;color:{% if direction == 'up' %}#86e1ad{% elif direction == 'down' %}#f0a8b0{% else %}#95a7c0{% endif %};">
+<span style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;font-size:11px;font-weight:700;color:{% if direction == 'up' %}#7ef466{% elif direction == 'down' %}#f4a4a4{% else %}#b1b1b1{% endif %};letter-spacing:0.02em;">
 {% if direction == 'up' %}&#9650;{% elif direction == 'down' %}&#9660;{% else %}&#8212;{% endif %} {{ value }}
 </span>
 {% endmacro %}
 
 {% macro pill(text, tone='flat', href=None) %}
 {% if href %}
-<a href="{{ href }}" style="display:inline-block;padding:6px 10px;border-radius:999px;border:1px solid {% if tone == 'up' %}#1d5a41{% elif tone == 'down' %}#5b2533{% else %}#2a3f5d{% endif %};background:{% if tone == 'up' %}#123526{% elif tone == 'down' %}#3c1b25{% else %}#132136{% endif %};color:{% if tone == 'up' %}#86e1ad{% elif tone == 'down' %}#f0a8b0{% else %}#cfd9e7{% endif %};font-size:11px;font-weight:700;text-decoration:none;letter-spacing:0.04em;">{{ text }}</a>
+<a href="{{ href }}" style="display:inline-block;padding:5px 9px;border-radius:999px;border:1px solid {% if tone == 'up' %}#244322{% elif tone == 'down' %}#4d2626{% else %}#2b2b2b{% endif %};background:{% if tone == 'up' %}#142313{% elif tone == 'down' %}#2a1717{% else %}#151515{% endif %};color:{% if tone == 'up' %}#7ef466{% elif tone == 'down' %}#f4a4a4{% else %}#d9d9d9{% endif %};font-size:10px;font-weight:700;text-decoration:none;letter-spacing:0.12em;text-transform:uppercase;">{{ text }}</a>
 {% else %}
-<span style="display:inline-block;padding:6px 10px;border-radius:999px;border:1px solid {% if tone == 'up' %}#1d5a41{% elif tone == 'down' %}#5b2533{% else %}#2a3f5d{% endif %};background:{% if tone == 'up' %}#123526{% elif tone == 'down' %}#3c1b25{% else %}#132136{% endif %};color:{% if tone == 'up' %}#86e1ad{% elif tone == 'down' %}#f0a8b0{% else %}#cfd9e7{% endif %};font-size:11px;font-weight:700;letter-spacing:0.04em;">{{ text }}</span>
+<span style="display:inline-block;padding:5px 9px;border-radius:999px;border:1px solid {% if tone == 'up' %}#244322{% elif tone == 'down' %}#4d2626{% else %}#2b2b2b{% endif %};background:{% if tone == 'up' %}#142313{% elif tone == 'down' %}#2a1717{% else %}#151515{% endif %};color:{% if tone == 'up' %}#7ef466{% elif tone == 'down' %}#f4a4a4{% else %}#d9d9d9{% endif %};font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;">{{ text }}</span>
 {% endif %}
 {% endmacro %}

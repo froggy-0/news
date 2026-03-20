@@ -310,7 +310,7 @@ def validate_brief_quality(brief_path: Path) -> tuple[list[BriefQualityCheck], s
 
 
 def _passing_brief_text() -> str:
-    return """Morning Market Brief (2026-03-14)
+    return """SOVEREIGN BRIEF (2026-03-14)
 
 0. 오늘의 핵심
 오늘은 관망 국면입니다.
@@ -369,7 +369,7 @@ AI 투자 기대를 자극했습니다.
 
 
 def _failing_brief_text() -> str:
-    return """Morning Market Brief (2026-03-14)
+    return """SOVEREIGN BRIEF (2026-03-14)
 
 0. 오늘의 핵심
 미국 시장은 여러 자산이 혼재했습니다.

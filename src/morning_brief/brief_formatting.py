@@ -203,7 +203,7 @@ def improve_readability_spacing(text: str) -> str:
 
 def extract_brief_structure(body: str) -> tuple[str, str, list[tuple[str, str]]]:
     lines = [line.rstrip() for line in body.replace("\r\n", "\n").split("\n")]
-    title = lines[0].strip() if lines else "Morning Market Brief"
+    title = lines[0].strip() if lines else "SOVEREIGN BRIEF"
 
     notice = ""
     start_index = 1
@@ -350,7 +350,7 @@ def extract_sections(body: str) -> SectionMap:
         pass
 
     lines = body.replace("\r\n", "\n").split("\n")
-    title = lines[0].strip() if lines else "Morning Market Brief"
+    title = lines[0].strip() if lines else "SOVEREIGN BRIEF"
 
     section_map = SectionMap(title=title)
     current_key: str | None = None
@@ -375,7 +375,7 @@ def extract_sections(body: str) -> SectionMap:
 
 def serialize_sections(section_map: SectionMap) -> str:
     """SectionMap을 LLM 출력 형식 텍스트로 직렬화."""
-    parts = [section_map.get("title", "Morning Market Brief")]
+    parts = [section_map.get("title", "SOVEREIGN BRIEF")]
     for key, heading in SECTION_TITLES.items():
         content = section_map.get(key, "")
         if content:

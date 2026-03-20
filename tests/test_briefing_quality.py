@@ -28,7 +28,7 @@ def _complete_layered_brief(
         "- NVDA | +1.20% | 데이터센터 투자 기대가 이어졌습니다. | [출처: Stooq]\n"
         "- AMD | -0.80% | 반도체 종목 안에서도 차이가 있었습니다. | [출처: Stooq]\n"
     )
-    return f"""Morning Market Brief ({title_date})
+    return f"""SOVEREIGN BRIEF ({title_date})
 
 0. 오늘의 핵심
 {layer_one_body}
@@ -83,13 +83,13 @@ def test_inject_quality_notice_under_title():
             "warnings": ["가격 데이터 부족", "뉴스 부족"],
         }
     }
-    text = "Morning Market Brief (2026-03-12)\n\n1. 거시 환경\n본문"
+    text = "SOVEREIGN BRIEF (2026-03-12)\n\n1. 거시 환경\n본문"
 
     updated = _inject_quality_notice(text, packet)
 
     assert "[데이터 품질 알림]" in updated
     lines = updated.splitlines()
-    assert lines[0].startswith("Morning Market Brief")
+    assert lines[0].startswith("SOVEREIGN BRIEF")
     assert lines[1].startswith("[데이터 품질 알림]")
 
 
@@ -119,7 +119,7 @@ def test_generate_briefing_raises_when_prompt_rendering_fails(monkeypatch):
 
 
 def test_improve_readability_spacing_breaks_sentences():
-    text = "Morning Market Brief (2026-03-12)\n\n1. 거시 환경\n금리는 올랐어요. 달러도 강했어요."
+    text = "SOVEREIGN BRIEF (2026-03-12)\n\n1. 거시 환경\n금리는 올랐어요. 달러도 강했어요."
 
     updated = _improve_readability_spacing(text)
 
@@ -181,7 +181,7 @@ def test_fallback_brief_mentions_official_btc_etf_holdings_when_available():
 
 
 def test_brief_structure_issues_accepts_layer_two_bullets_outside_metrics_label():
-    brief = """Morning Market Brief (2026-03-14)
+    brief = """SOVEREIGN BRIEF (2026-03-14)
 
 1. LAYER 1 | 오늘 한줄 판단
 한줄 결론
@@ -204,7 +204,7 @@ def test_brief_structure_issues_accepts_layer_two_bullets_outside_metrics_label(
 
 
 def test_brief_structure_issues_does_not_fail_only_for_missing_macro_subheading():
-    brief = """Morning Market Brief (2026-03-14)
+    brief = """SOVEREIGN BRIEF (2026-03-14)
 
 1. LAYER 1 | 오늘 한줄 판단
 핵심 판단
@@ -362,7 +362,7 @@ def test_fallback_brief_includes_korean_investor_signals():
 
 
 def test_append_reference_block_includes_news_item_urls():
-    text = "Morning Market Brief (2026-03-14)\n\n1. LAYER 1 | 오늘 한줄 판단\n본문"
+    text = "SOVEREIGN BRIEF (2026-03-14)\n\n1. LAYER 1 | 오늘 한줄 판단\n본문"
     packet = {
         "news": [
             {
@@ -484,7 +484,7 @@ def test_generate_briefing_falls_back_when_draft_structure_is_incomplete(monkeyp
         ],
         "data_quality": {"status": "ok", "warnings": []},
     }
-    truncated_draft = """Morning Market Brief (2026-03-13)
+    truncated_draft = """SOVEREIGN BRIEF (2026-03-13)
 
 0. 오늘의 핵심
 - 금리와 기술주 흐름이 함께 관찰됐습니다.
@@ -598,7 +598,7 @@ def test_generate_briefing_records_cached_input_tokens_in_observer(monkeypatch, 
     }
     response = SimpleNamespace(
         output_text=(
-            "Morning Market Brief (2026-03-14)\n\n"
+            "SOVEREIGN BRIEF (2026-03-14)\n\n"
             "0. 오늘의 핵심\n"
             "미국 시장은 혼조 흐름을 보였어요. [출처: test]\n\n"
             "1. 거시 지표 Dashboard\n"
@@ -724,7 +724,7 @@ def test_generate_briefing_keeps_draft_when_validator_json_is_invalid(monkeypatc
 
 
 def test_brief_structure_issues_flags_partially_truncated_news_section():
-    brief = """Morning Market Brief (2026-03-19)
+    brief = """SOVEREIGN BRIEF (2026-03-19)
 
 0. 오늘의 핵심
 핵심 요약입니다.
@@ -802,7 +802,7 @@ def test_fallback_if_incomplete_replaces_truncated_news_section():
         ],
         "data_quality": {"status": "ok", "warnings": []},
     }
-    truncated = """Morning Market Brief (2026-03-19)
+    truncated = """SOVEREIGN BRIEF (2026-03-19)
 
 0. 오늘의 핵심
 핵심 요약입니다.
@@ -875,7 +875,7 @@ def test_generate_briefing_skips_review_when_generation_response_is_incomplete(
         ],
         "data_quality": {"status": "ok", "warnings": []},
     }
-    truncated_draft = """Morning Market Brief (2026-03-19)
+    truncated_draft = """SOVEREIGN BRIEF (2026-03-19)
 
 0. 오늘의 핵심
 오늘은 관망 국면입니다.
@@ -932,7 +932,7 @@ def test_generate_briefing_skips_validator_when_disabled(monkeypatch):
     calls: list[dict] = []
     responses = [
         SimpleNamespace(
-            output_text="Morning Market Brief (2026-03-13)\n\n1. 거시 환경\n해석\n조용했어요.\n\n2. 미국 증시 흐름\n해석\n조용했어요.\n\n3. AI / 빅테크 동향\n해석\n조용했어요.\n\n4. 비트코인 시장\n해석\n조용했어요.\n\n5. 중요한 뉴스\n핵심 내용\n- 없음\n\n6. 시장 해석\n해석\n조용했어요.",
+            output_text="SOVEREIGN BRIEF (2026-03-13)\n\n1. 거시 환경\n해석\n조용했어요.\n\n2. 미국 증시 흐름\n해석\n조용했어요.\n\n3. AI / 빅테크 동향\n해석\n조용했어요.\n\n4. 비트코인 시장\n해석\n조용했어요.\n\n5. 중요한 뉴스\n핵심 내용\n- 없음\n\n6. 시장 해석\n해석\n조용했어요.",
             usage=None,
         )
     ]
@@ -979,7 +979,7 @@ def test_generate_briefing_retries_once_when_max_output_tokens_is_too_low(monkey
     calls: list[dict] = []
     responses = [
         SimpleNamespace(
-            output_text="Morning Market Brief (2026-03-19)\n\n0. 오늘의 핵심\n잘린 응답",
+            output_text="SOVEREIGN BRIEF (2026-03-19)\n\n0. 오늘의 핵심\n잘린 응답",
             usage=None,
             status="incomplete",
             incomplete_details=SimpleNamespace(reason="max_output_tokens"),

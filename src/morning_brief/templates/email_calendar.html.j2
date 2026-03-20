@@ -1,20 +1,21 @@
 {# 변수: event_calendar (list[EventItem]) #}
 {% from "email_macros.html.j2" import section_label %}
-<tr><td style="padding:0 0 24px 0;">
-<table role="presentation" width="100%" class="card" style="width:100%;background:#10192b;border:1px solid #22324d;border-radius:20px;">
-<tr><td class="card-pad" style="padding:24px;">
-{{ section_label("이번 주 일정", "#cdd8ea") }}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:14px;">
+<tr><td style="padding:0;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+<td class="section-pad" style="padding:34px 40px 36px 40px;border-bottom:1px solid #1c1b1b;">
+{{ section_label("이번 주 일정", "#02e600") }}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:10px;">
 {% for evt in event_calendar %}
 <tr>
-<td style="padding:12px 0;border-top:1px solid #22324d;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#8b9bb3;font-size:12px;font-weight:700;white-space:nowrap;" class="text-muted">{% if evt.is_today %}오늘{% else %}{{ evt.time or evt.date }}{% endif %}</td>
-<td style="padding:12px 12px;border-top:1px solid #22324d;">
-<div style="font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#f4f7fb;font-size:14px;line-height:1.7;font-weight:{% if evt.impact >= 4 %}700{% else %}600{% endif %};" class="text-strong">{{ evt.name }}</div>
+<td style="padding:12px 0;border-top:1px solid #1c1b1b;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#888888;font-size:11px;font-weight:700;white-space:nowrap;letter-spacing:0.08em;text-transform:uppercase;" class="text-muted">{% if evt.is_today %}Today{% else %}{{ evt.time or evt.date }}{% endif %}</td>
+<td style="padding:12px 12px;border-top:1px solid #1c1b1b;">
+<div style="font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#ffffff;font-size:14px;line-height:1.7;font-weight:{% if evt.impact >= 4 %}700{% else %}600{% endif %};" class="text-strong">{{ evt.name }}</div>
 {% if evt.expected %}
-<div style="padding-top:4px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#8b9bb3;font-size:13px;line-height:1.6;" class="text-muted">예상치 {{ evt.expected }}</div>
+<div style="padding-top:4px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#888888;font-size:13px;line-height:1.7;" class="text-muted">예상치 {{ evt.expected }}</div>
 {% endif %}
 </td>
-<td align="right" style="padding:12px 0;border-top:1px solid #22324d;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#d7e1ef;font-size:12px;letter-spacing:1px;" class="text-body">{% for i in range(evt.impact) %}&#9632;{% endfor %}{% for i in range(5 - evt.impact) %}&#9633;{% endfor %}</td>
+<td align="right" style="padding:12px 0;border-top:1px solid #1c1b1b;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#c6c6c6;font-size:12px;letter-spacing:1px;" class="text-body">{% for i in range(evt.impact) %}&#9632;{% endfor %}{% for i in range(5 - evt.impact) %}&#9633;{% endfor %}</td>
 </tr>
 {% endfor %}
 </table>

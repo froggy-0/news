@@ -11,7 +11,7 @@ if str(SRC_PATH) not in sys.path:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Daily Morning Market Brief runner")
+    parser = argparse.ArgumentParser(description="Daily SOVEREIGN BRIEF runner")
     parser.add_argument(
         "mode",
         choices=["once", "schedule"],

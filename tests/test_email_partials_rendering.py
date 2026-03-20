@@ -176,7 +176,9 @@ def test_header_partial_renders_independently() -> None:
         header_signal_label="관망",
         header_signal_tone="flat",
     )
-    assert "미국 기술주&#183;비트코인 시장 브리핑" in html
+    assert "SOVEREIGN BRIEF" in html
+    assert "미국 기술주·비트코인" in html
+    assert "시장 브리핑" in html
     assert "뉴욕 마감 기준" in html
     assert "2026년 3월 18일 화요일" in html
     assert "3분 읽기" in html
@@ -221,7 +223,8 @@ def test_news_partial_renders_independently() -> None:
     html = tmpl.render(news_items=SAMPLE_NEWS_ITEMS, news_status_text="")
     assert "테스트 뉴스 헤드라인" in html
     assert "뉴스 본문 내용입니다." in html
-    assert "원문 기사 · Reuters" in html
+    assert "원문 기사" in html
+    assert "Reuters" in html
     assert "핵심 요약" in html
     assert 'role="presentation"' in html
 
@@ -333,6 +336,7 @@ def test_footer_partial_renders_independently() -> None:
     assert "https://github.com/example" in html
     assert "출처와 데이터" in html
     assert "Reuters" in html
+    assert "시장 데이터" in html
     assert "FRED" in html or "&#xB370;&#xC774;&#xD130;" in html
 
 

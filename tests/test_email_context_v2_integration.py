@@ -12,7 +12,7 @@ from morning_brief.emailer import _build_email_context_v2
 # ---------------------------------------------------------------------------
 
 SAMPLE_BODY = """\
-Morning Market Brief (2026-03-18)
+SOVEREIGN BRIEF (2026-03-18)
 0. 오늘의 핵심
 오늘 시장은 혼조세를 보였어요.
 

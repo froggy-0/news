@@ -1,0 +1,63 @@
+{
+  "meta": {
+    "date": "2026-03-21",
+    "generatedAt": "2026-03-21T08:01:10+09:00",
+    "dataQuality": "ok",
+    "qualityNotes": []
+  },
+  "marketSnapshot": {
+    "items": [
+      { "symbol": "US10Y", "label": "미국 10년물", "value": "4.25%", "change": "+6bp", "trend": "up", "isCached": false, "history": [4.11, 4.15, 4.18, 4.21, 4.23, 4.25] },
+      { "symbol": "DXY", "label": "달러 인덱스", "value": "100.42", "change": "+0.31%", "trend": "up", "isCached": false, "history": [99.7, 99.9, 100.0, 100.1, 100.2, 100.42] },
+      { "symbol": "VIX", "label": "VIX", "value": "17.84", "change": "-2.11%", "trend": "down", "isCached": false, "history": [19.9, 19.1, 18.7, 18.3, 18.0, 17.84] },
+      { "symbol": "KRW", "label": "원/달러 환율", "value": "1,336.20", "change": "+0.48%", "trend": "up", "isCached": false, "history": [1327, 1329, 1331, 1332, 1334, 1336.2] },
+      { "symbol": "NQ1!", "label": "나스닥 선물", "value": "20,406.50", "change": "+0.72%", "trend": "up", "isCached": false, "history": [20120, 20190, 20240, 20295, 20370, 20406.5] },
+      { "symbol": "SPX", "label": "S&P 500", "value": "5,238.34", "change": "+0.61%", "trend": "up", "isCached": false, "history": [5180, 5191, 5202, 5210, 5220, 5238.34] },
+      { "symbol": "QQQ", "label": "나스닥 100", "value": "448.61", "change": "+0.89%", "trend": "up", "isCached": false, "history": [440.1, 441.2, 442.0, 444.3, 446.2, 448.61] },
+      { "symbol": "SOXX", "label": "반도체 ETF", "value": "238.43", "change": "+1.27%", "trend": "up", "isCached": false, "history": [229.8, 231.3, 233.2, 235.4, 237.0, 238.43] },
+      { "symbol": "BTC", "label": "비트코인 현물", "value": "$71,282", "change": "-0.16%", "trend": "down", "isCached": false, "history": [72300, 72190, 72020, 71870, 71520, 71282] }
+    ]
+  },
+  "aiJudgment": {
+    "headline": "오늘은 관망 국면입니다.",
+    "body": "## 오늘의 판단\n\n장기 금리가 다시 올라 위험자산의 밸류에이션 부담이 커졌지만, 나스닥 선물과 반도체 강세가 이를 일부 상쇄하고 있습니다.\n\n오늘 미국 증시 흐름이 코스피에 미치는 영향: 반도체와 대형 기술주 중심으로 선별적 강세가 이어질 수 있습니다.\n\n## 브리핑\n\n연준 경계감이 남아 있는 구간이지만, AI 인프라 관련 수급은 여전히 견조합니다. 달러와 금리가 같이 높아진 날에는 지수 전반보다 업종 간 차이가 더 크게 벌어질 가능성이 높습니다."
+  },
+  "topicSummaries": [
+    { "topic": "macro", "label": "거시경제", "summary": "장기 금리 반등이 기술주 멀티플에 부담을 주고 있습니다.", "keyMetric": "미국 10년물 4.25%", "relatedStocks": null },
+    { "topic": "us-stocks", "label": "미국 주식", "summary": "지수 전반보다 반도체와 대형 기술주 중심의 선별 강세가 두드러졌습니다.", "keyMetric": "QQQ +0.89%", "relatedStocks": ["QQQ", "SOXX"] },
+    { "topic": "bigtech", "label": "빅테크·AI", "summary": "AI 투자 모멘텀이 실적과 CAPEX 기대를 계속 지지하고 있습니다.", "keyMetric": "SOXX +1.27%", "relatedStocks": ["NVDA", "AVGO", "AMD"] },
+    { "topic": "bitcoin", "label": "비트코인", "summary": "BTC는 숨 고르기지만 기관 보유 기반은 유지되고 있습니다.", "keyMetric": "Fear & Greed 58", "relatedStocks": ["BTC"] }
+  ],
+  "techStocks": [
+    { "symbol": "NVDA", "name": "엔비디아", "price": "$944.31", "change": "+2.42%", "trend": "up", "absChangeNum": 2.42, "isCached": false },
+    { "symbol": "AMD", "name": "AMD", "price": "$188.24", "change": "+1.74%", "trend": "up", "absChangeNum": 1.74, "isCached": false },
+    { "symbol": "AVGO", "name": "브로드컴", "price": "$1,336.19", "change": "+1.32%", "trend": "up", "absChangeNum": 1.32, "isCached": false },
+    { "symbol": "MSFT", "name": "마이크로소프트", "price": "$428.61", "change": "+0.44%", "trend": "up", "absChangeNum": 0.44, "isCached": false },
+    { "symbol": "AAPL", "name": "애플", "price": "$214.82", "change": "-0.27%", "trend": "down", "absChangeNum": 0.27, "isCached": false }
+  ],
+  "bitcoin": {
+    "price": "$71,282",
+    "change": "-0.16%",
+    "trend": "down",
+    "fearGreedIndex": {
+      "value": 58,
+      "label": "탐욕"
+    },
+    "etf": {
+      "totalHolding": "983,240.13 BTC",
+      "totalAum": "$98,422,000,000",
+      "issuers": [
+        { "name": "IBIT", "holding": "573,110.20 BTC", "aum": "$57,148,000,000", "sourceUrl": "https://www.ishares.com/us/products/333011/ishares-bitcoin-trust" },
+        { "name": "BITB", "holding": "37,820.41 BTC", "aum": "$4,311,000,000", "sourceUrl": "https://www.bitbetf.com/" }
+      ]
+    }
+  },
+  "xSignals": [
+    { "id": "x-1", "postedAt": "2026-03-21T06:41:00+09:00", "impact": "AMD의 AI 가속기 공급 기대가 반도체 투자심리를 지지했습니다.", "sentiment": "bullish", "content": "AMD가 차세대 AI 서버 수요 확대에 맞춰 공급 일정을 강조했습니다." }
+  ],
+  "news": [
+    { "id": "news-1", "publishedAt": "2026-03-21T05:50:00+09:00", "category": "macro", "title": "미국 장기 금리 재상승, 기술주 밸류에이션 부담 확대", "interpretation": "고금리 환경이 성장주 할인율 부담을 키웁니다.", "source": "Reuters", "sourceTier": "tier1", "url": "https://www.reuters.com/", "urgency": "high", "tags": ["거시경제", "미국금리"] },
+    { "id": "news-2", "publishedAt": "2026-03-21T06:05:00+09:00", "category": "bigtech", "title": "엔비디아와 브로드컴, AI 인프라 투자 기대 속 동반 강세", "interpretation": "반도체 업종이 지수보다 강한 상대 모멘텀을 보입니다.", "source": "Bloomberg", "sourceTier": "tier1", "url": "https://www.bloomberg.com/", "urgency": "high", "tags": ["빅테크", "AI", "반도체"] },
+    { "id": "news-3", "publishedAt": "2026-03-21T06:25:00+09:00", "category": "bitcoin", "title": "비트코인 ETF 보유 기반 유지, 현물 가격은 단기 숨 고르기", "interpretation": "가격 조정보다 기관 보유 흐름 유지 여부가 더 중요합니다.", "source": "CoinDesk", "sourceTier": "standard", "url": "https://www.coindesk.com/", "urgency": "medium", "tags": ["비트코인", "ETF"] }
+  ]
+}

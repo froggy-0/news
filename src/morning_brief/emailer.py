@@ -800,7 +800,7 @@ def _market_source_lines() -> list[str]:
 
 def _unsubscribe_url(sender: str) -> str:
     target = sender.strip() or DEFAULT_UNSUBSCRIBE_EMAIL
-    subject = quote("Morning Market Brief 구독 해지")
+    subject = quote("SOVEREIGN BRIEF 구독 해지")
     body = quote("구독 해지를 요청합니다.")
     return f"mailto:{target}?subject={subject}&body={body}"
 

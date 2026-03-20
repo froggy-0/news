@@ -1,6 +1,6 @@
 # Codex Ops Setup
 
-이 문서는 Morning Market Brief 저장소에서 Codex의 project config, subagent, repo skill을 어떻게 쓰는지 정리합니다. 기준은 OpenAI 공식 문서의 project `.codex/config.toml`, `AGENTS.md`, subagent, Apps SDK 운영 모델입니다.
+이 문서는 SOVEREIGN BRIEF 저장소에서 Codex의 project config, subagent, repo skill을 어떻게 쓰는지 정리합니다. 기준은 OpenAI 공식 문서의 project `.codex/config.toml`, `AGENTS.md`, subagent, Apps SDK 운영 모델입니다.
 
 참고:
 - <https://developers.openai.com/codex/config-basic>
@@ -39,7 +39,7 @@
 | `workflow-run-audit` | `.agents/skills/workflow-run-audit/` | GitHub run artifact, observability, 메일 원문 대조 |
 | `news-source-quality` | `.agents/skills/news-source-quality/` | Perplexity/Sonar/Grok/RSS 뉴스 품질과 필터 drift 분석 |
 | `email-render-audit` | `.agents/skills/email-render-audit/` | markdown, email context, template, MIME 결과 비교 |
-| `brief-ops-app` | `.agents/skills/brief-ops-app/` | Morning Market Brief 전용 Apps SDK 운영 UI 설계 |
+| `brief-ops-app` | `.agents/skills/brief-ops-app/` | SOVEREIGN BRIEF 전용 Apps SDK 운영 UI 설계 |
 
 ## 4. Frontend / Apps SDK 원칙
 

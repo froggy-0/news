@@ -1,39 +1,34 @@
 {# 변수: sector_mapping (SectorMapping) #}
 {% from "email_macros.html.j2" import section_label %}
-<tr><td style="padding:0 0 24px 0;">
-<table role="presentation" width="100%" class="card" style="width:100%;background:#10192b;border:1px solid #22324d;border-radius:20px;">
-<tr><td class="card-pad" style="padding:24px;">
-{{ section_label("오늘 주목 흐름", "#cdd8ea") }}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:16px;">
+<tr><td style="padding:0;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr>
-<td class="stack-col" valign="top" style="width:33.333%;padding-right:8px;">
-<div style="padding:14px 14px 12px 14px;background:#123526;border:1px solid #1d5a41;border-radius:16px;">
-<div style="color:#86e1ad;font-size:12px;font-weight:700;">상단 수혜</div>
+<td class="section-pad" style="padding:34px 40px 36px 40px;border-bottom:1px solid #1c1b1b;">
+{{ section_label("오늘 주목 흐름", "#02e600") }}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:10px;">
+<tr>
+<td class="stack-col stack-col-left" valign="top" style="width:33.333%;padding:0 14px 0 0;">
+<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#7ef466;font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;">상단 수혜</div>
 {% for item in sector_mapping.positive %}
-<div style="padding-top:8px;font-size:13px;color:#e7f6ee;line-height:1.7;"><span style="font-weight:700;">{{ item.ticker }}</span> {{ item.reason }}</div>
+<div style="padding-top:10px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#c6c6c6;font-size:13px;line-height:1.8;" class="text-body"><span style="color:#ffffff;font-weight:700;" class="text-strong">{{ item.ticker }}</span> {{ item.reason }}</div>
 {% endfor %}
-</div>
 </td>
-<td class="stack-col" valign="top" style="width:33.333%;padding:0 4px;">
-<div style="padding:14px 14px 12px 14px;background:#3c1b25;border:1px solid #5b2533;border-radius:16px;">
-<div style="color:#f0a8b0;font-size:12px;font-weight:700;">하단 압력</div>
+<td class="stack-col" valign="top" style="width:33.333%;padding:0 14px;border-left:1px solid #1c1b1b;">
+<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#f4a4a4;font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;">하단 압력</div>
 {% for item in sector_mapping.negative %}
-<div style="padding-top:8px;font-size:13px;color:#fdecef;line-height:1.7;"><span style="font-weight:700;">{{ item.ticker }}</span> {{ item.reason }}</div>
+<div style="padding-top:10px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#c6c6c6;font-size:13px;line-height:1.8;" class="text-body"><span style="color:#ffffff;font-weight:700;" class="text-strong">{{ item.ticker }}</span> {{ item.reason }}</div>
 {% endfor %}
-</div>
 </td>
-<td class="stack-col" valign="top" style="width:33.333%;padding-left:8px;">
-<div style="padding:14px 14px 12px 14px;background:#0d1626;border:1px solid #243654;border-radius:16px;">
-<div style="color:#9cb0cb;font-size:12px;font-weight:700;">중립 관망</div>
+<td class="stack-col stack-col-right" valign="top" style="width:33.333%;padding:0 0 0 14px;border-left:1px solid #1c1b1b;">
+<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#b1b1b1;font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;">중립 관망</div>
 {% for item in sector_mapping.neutral %}
-<div style="padding-top:8px;font-size:13px;color:#d7e1ef;line-height:1.7;"><span style="font-weight:700;">{{ item.ticker }}</span> {{ item.reason }}</div>
+<div style="padding-top:10px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#c6c6c6;font-size:13px;line-height:1.8;" class="text-body"><span style="color:#ffffff;font-weight:700;" class="text-strong">{{ item.ticker }}</span> {{ item.reason }}</div>
 {% endfor %}
-</div>
 </td>
 </tr>
 </table>
 {% if sector_mapping.commentary %}
-<div style="margin-top:14px;padding:14px 16px;background:#0b1423;border:1px solid #1f2f4b;border-radius:16px;font-size:14px;color:#d7e1ef;line-height:1.8;" class="text-body">{{ sector_mapping.commentary }}</div>
+<div style="padding-top:18px;border-top:1px solid #1c1b1b;margin-top:18px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#888888;font-size:13px;line-height:1.8;" class="text-muted">{{ sector_mapping.commentary }}</div>
 {% endif %}
 </td></tr>
 </table>

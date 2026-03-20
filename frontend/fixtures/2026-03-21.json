@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "date": "2026-03-21",
+    "generatedAt": "2026-03-21T08:01:10+09:00",
+    "dataQuality": "ok",
+    "qualityNotes": []
+  },
+  "marketSnapshot": {
+    "items": [
+      { "symbol": "US10Y", "label": "미국 10년물", "value": "4.25%", "change": "+6bp", "trend": "up", "isCached": false, "history": [4.11, 4.15, 4.18, 4.21, 4.23, 4.25] },
+      { "symbol": "DXY", "label": "달러 인덱스", "value": "100.42", "change": "+0.31%", "trend": "up", "isCached": false, "history": [99.7, 99.9, 100.0, 100.1, 100.2, 100.42] },
+      { "symbol": "VIX", "label": "VIX", "value": "17.84", "change": "-2.11%", "trend": "down", "isCached": false, "history": [19.9, 19.1, 18.7, 18.3, 18.0, 17.84] },
+      { "symbol": "KRW", "label": "원/달러 환율", "value": "1,336.20", "change": "+0.48%", "trend": "up", "isCached": false, "history": [1327, 1329, 1331, 1332, 1334, 1336.2] },
+      { "symbol": "NQ1!", "label": "나스닥 선물", "value": "20,406.50", "change": "+0.72%", "trend": "up", "isCached": false, "history": [20120, 20190, 20240, 20295, 20370, 20406.5] },
+      { "symbol": "BTC", "label": "비트코인 현물", "value": "$71,282", "change": "-0.16%", "trend": "down", "isCached": false, "history": [72300, 72190, 72020, 71870, 71520, 71282] }
+    ]
+  },
+  "aiJudgment": {
+    "headline": "오늘은 관망 국면입니다.",
+    "body": "## 오늘의 판단\n\n장기 금리 반등과 달러 강세가 동시에 나타나며 지수 전반에는 부담이 남아 있습니다.\n\n오늘 미국 증시 흐름이 코스피에 미치는 영향: 반도체와 AI 관련 종목은 선별적으로 강세를 이어갈 수 있습니다."
+  },
+  "topicSummaries": [],
+  "techStocks": [],
+  "bitcoin": {
+    "price": "$71,282",
+    "change": "-0.16%",
+    "trend": "down",
+    "fearGreedIndex": {
+      "value": 58,
+      "label": "탐욕"
+    },
+    "etf": null
+  },
+  "xSignals": null,
+  "news": []
+}

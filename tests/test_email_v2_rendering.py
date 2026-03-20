@@ -371,20 +371,20 @@ def test_direction_symbols_accompany_colors() -> None:
     assert "&#9660;" in html, "하락 방향 기호(▼, &#9660;) 누락"
     assert "&#8212;" in html, "보합 방향 기호(—, &#8212;) 누락"
 
-    # 상승 배경색(#dcfce7) 근처에 ▲ 기호가 있는지 확인
-    up_badge_pattern = re.compile(r"#123526.*?&#9650;|&#9650;.*?#123526", re.DOTALL)
+    # 상승 배경색 근처에 ▲ 기호가 있는지 확인
+    up_badge_pattern = re.compile(r"#142313.*?&#9650;|&#9650;.*?#142313", re.DOTALL)
     assert up_badge_pattern.search(html), (
         "상승 배지: 녹색 배경(#123526)과 ▲ 기호가 함께 사용되지 않음"
     )
 
-    # 하락 배경색(#fef2f2) 근처에 ▼ 기호가 있는지 확인
-    down_badge_pattern = re.compile(r"#3c1b25.*?&#9660;|&#9660;.*?#3c1b25", re.DOTALL)
+    # 하락 배경색 근처에 ▼ 기호가 있는지 확인
+    down_badge_pattern = re.compile(r"#2a1717.*?&#9660;|&#9660;.*?#2a1717", re.DOTALL)
     assert down_badge_pattern.search(html), (
         "하락 배지: 적색 배경(#3c1b25)과 ▼ 기호가 함께 사용되지 않음"
     )
 
-    # 보합 배경색(#f3f4f6) 근처에 — 기호가 있는지 확인
-    flat_badge_pattern = re.compile(r"#18253a.*?&#8212;|&#8212;.*?#18253a", re.DOTALL)
+    # 보합 배경색 근처에 — 기호가 있는지 확인
+    flat_badge_pattern = re.compile(r"#151515.*?&#8212;|&#8212;.*?#151515", re.DOTALL)
     assert flat_badge_pattern.search(html), (
         "보합 배지: 회색 배경(#18253a)과 — 기호가 함께 사용되지 않음"
     )
@@ -488,9 +488,9 @@ class TestSnapshotFullHtmlOutput:
     @pytest.mark.parametrize(
         "dark_color,description",
         [
-            ("#123526", "다크 모드 상승 배경색"),
-            ("#3c1b25", "다크 모드 하락 배경색"),
-            ("#18253a", "다크 모드 보합 배경색"),
+            ("#142313", "다크 모드 상승 배경색"),
+            ("#2a1717", "다크 모드 하락 배경색"),
+            ("#151515", "다크 모드 보합 배경색"),
         ],
     )
     def test_dark_mode_color_overrides(
@@ -534,7 +534,9 @@ class TestSnapshotFullHtmlOutput:
 
     def test_contains_header_section(self, rendered_html: str) -> None:
         """헤더 섹션 콘텐츠가 포함되어 있다."""
-        assert "미국 기술주&#183;비트코인 시장 브리핑" in rendered_html
+        assert "SOVEREIGN BRIEF" in rendered_html
+        assert "미국 기술주·비트코인" in rendered_html
+        assert "시장 브리핑" in rendered_html
         assert "뉴욕 마감 기준" in rendered_html
         assert SAMPLE_CONTEXT["display_date"] in rendered_html
         assert SAMPLE_CONTEXT["read_time"] in rendered_html
@@ -550,7 +552,8 @@ class TestSnapshotFullHtmlOutput:
         """뉴스 섹션 콘텐츠가 포함되어 있다."""
         news = SAMPLE_CONTEXT["news_items"][0]
         assert news["headline"] in rendered_html
-        assert news["source_label"] in rendered_html
+        assert news["source_kind"] in rendered_html
+        assert news["source_name"] in rendered_html
 
     def test_contains_btc_section(self, rendered_html: str) -> None:
         """BTC 섹션 콘텐츠가 포함되어 있다."""
@@ -582,3 +585,10 @@ class TestSnapshotFullHtmlOutput:
         assert SAMPLE_CONTEXT["github_url"] in rendered_html
         assert "출처와 데이터" in rendered_html
         assert SAMPLE_CONTEXT["news_source_items"][0]["source_name"] in rendered_html
+
+    def test_no_external_fonts_or_javascript(self, rendered_html: str) -> None:
+        """이메일 안전 HTML 원칙상 외부 웹폰트와 자바스크립트가 없어야 한다."""
+        lower_html = rendered_html.lower()
+        assert "fonts.googleapis.com" not in lower_html
+        assert "<script" not in lower_html
+        assert "display:flex" not in lower_html

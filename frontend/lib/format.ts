@@ -1,0 +1,47 @@
+const dateFormatter = new Intl.DateTimeFormat("ko-KR", {
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+  weekday: "short",
+});
+
+const timeFormatter = new Intl.DateTimeFormat("ko-KR", {
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+export function formatIssueDate(value: string): string {
+  return dateFormatter.format(new Date(value));
+}
+
+export function formatIssueTime(value: string): string {
+  return timeFormatter.format(new Date(value));
+}
+
+export function formatRelativeTime(value: string): string {
+  const target = new Date(value).getTime();
+  const diffMinutes = Math.round((Date.now() - target) / 60000);
+
+  if (diffMinutes < 60) {
+    return `${Math.max(diffMinutes, 0)}분 전`;
+  }
+  if (diffMinutes < 24 * 60) {
+    return `${Math.floor(diffMinutes / 60)}시간 전`;
+  }
+  return `${Math.floor(diffMinutes / (24 * 60))}일 전`;
+}
+
+export function trendTone(trend: "up" | "down" | "neutral" | null): "up" | "down" | "neutral" {
+  return trend ?? "neutral";
+}
+
+export function qualityLabel(value: "ok" | "degraded" | "critical"): string {
+  if (value === "degraded") {
+    return "일부 데이터 누락";
+  }
+  if (value === "critical") {
+    return "신뢰도 낮음";
+  }
+  return "정상 수집";
+}

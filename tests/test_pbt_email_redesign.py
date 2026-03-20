@@ -56,7 +56,7 @@ _SECTION_KEYS = [v for v in SECTION_KEY_MAP.values()]
 def _section_map_strategy() -> st.SearchStrategy[SectionMap]:
     """Generate valid SectionMap dicts with random content."""
     return st.fixed_dictionaries(
-        {"title": st.just("Morning Market Brief")},
+        {"title": st.just("SOVEREIGN BRIEF")},
         optional={k: _section_content for k in _SECTION_KEYS},
     )
 
@@ -258,7 +258,7 @@ def test_p6_data_quality_consistency(status: str) -> None:
         "bitcoin": {"spot": {"price": 67000, "change_pct": 1.0}},
         "macro": [{"label": "VIX", "canonical_key": "vix", "price": 15}],
     }
-    body = "Morning Market Brief\n0. 오늘의 핵심\n테스트 요약"
+    body = "SOVEREIGN BRIEF\n0. 오늘의 핵심\n테스트 요약"
 
     ctx = _build_email_context_v2("", body, packet)
 

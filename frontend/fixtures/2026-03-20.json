@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "date": "2026-03-20",
+    "generatedAt": "2026-03-20T08:03:42+09:00",
+    "dataQuality": "degraded",
+    "qualityNotes": ["일부 X 시그널과 ETF 발행사 세부 현황이 누락됐습니다."]
+  },
+  "marketSnapshot": {
+    "items": [
+      { "symbol": "US10Y", "label": "미국 10년물", "value": "4.19%", "change": "+4bp", "trend": "up", "isCached": false, "history": [4.02, 4.07, 4.11, 4.14, 4.17, 4.19] },
+      { "symbol": "VIX", "label": "VIX", "value": "18.94", "change": "+1.40%", "trend": "up", "isCached": false, "history": [16.8, 17.2, 17.8, 18.1, 18.4, 18.94] },
+      { "symbol": "BTC", "label": "비트코인 현물", "value": "$70,981", "change": "-0.87%", "trend": "down", "isCached": false, "history": [71700, 71420, 71210, 71120, 70990, 70981] }
+    ]
+  },
+  "aiJudgment": {
+    "headline": "오늘은 리스크 주의 국면입니다.",
+    "body": "## 오늘의 판단\n\n금리와 변동성이 동시에 올라 성장주와 고변동 자산 모두 변동성이 커질 수 있습니다."
+  },
+  "topicSummaries": [
+    { "topic": "macro", "label": "거시경제", "summary": "채권 시장 부담이 다시 커졌습니다.", "keyMetric": "VIX 18.94", "relatedStocks": null }
+  ],
+  "techStocks": [
+    { "symbol": "NVDA", "name": "엔비디아", "price": "$932.10", "change": "-1.14%", "trend": "down", "absChangeNum": 1.14, "isCached": false }
+  ],
+  "bitcoin": {
+    "price": "$70,981",
+    "change": "-0.87%",
+    "trend": "down",
+    "fearGreedIndex": {
+      "value": 48,
+      "label": "중립"
+    },
+    "etf": null
+  },
+  "xSignals": null,
+  "news": [
+    { "id": "news-20-1", "publishedAt": "2026-03-20T06:20:00+09:00", "category": "macro", "title": "미국 장기 금리 상승, 기술주 단기 부담 확대", "interpretation": "지수보다 업종별 차별화가 커질 수 있습니다.", "source": "WSJ", "sourceTier": "tier1", "url": "https://www.wsj.com/", "urgency": "medium", "tags": ["금리", "기술주"] }
+  ]
+}

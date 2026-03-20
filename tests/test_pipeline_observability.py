@@ -129,7 +129,7 @@ def test_run_pipeline_writes_observability_and_perplexity_audit(monkeypatch, tmp
     monkeypatch.setattr("morning_brief.pipeline.build_news_packet", fake_build_news_packet)
     monkeypatch.setattr(
         "morning_brief.pipeline.generate_briefing",
-        lambda **_: "Morning Market Brief (2026-03-14)\n\n1. 거시 환경\n본문",
+        lambda **_: "SOVEREIGN BRIEF (2026-03-14)\n\n1. 거시 환경\n본문",
     )
     monkeypatch.setattr(
         "morning_brief.pipeline.GmailSender",
@@ -138,7 +138,7 @@ def test_run_pipeline_writes_observability_and_perplexity_audit(monkeypatch, tmp
 
     briefing = run_pipeline(settings=settings)
 
-    assert briefing.startswith("Morning Market Brief")
+    assert briefing.startswith("SOVEREIGN BRIEF")
     run_files = list((settings.output_dir / "observability").glob("pipeline-run-*.json"))
     audit_files = list((settings.output_dir / "observability").glob("perplexity-audit-*.json"))
     assert len(run_files) == 1
@@ -170,7 +170,7 @@ def test_run_pipeline_marks_brief_fallback_status_when_safe_brief_is_used(monkey
             reason="incomplete_structure",
             issues=["LAYER 2 bullet 수가 부족해요."],
         )
-        return "Morning Market Brief (2026-03-14)\n\n기본 브리핑"
+        return "SOVEREIGN BRIEF (2026-03-14)\n\n기본 브리핑"
 
     monkeypatch.setattr("morning_brief.pipeline.build_market_packet", lambda **_: _market_packet())
     monkeypatch.setattr("morning_brief.pipeline.build_news_packet", lambda **_: ([], {}, []))
@@ -261,9 +261,9 @@ def test_run_pipeline_uses_openai_backfill_only_when_quality_is_degraded(monkeyp
     monkeypatch.setattr(
         "morning_brief.pipeline.generate_briefing",
         lambda packet, **_: (
-            "Morning Market Brief (2026-03-14)\n\n참고 출처\n- https://www.reuters.com/world/us/fed-keeps-options-open"
+            "SOVEREIGN BRIEF (2026-03-14)\n\n참고 출처\n- https://www.reuters.com/world/us/fed-keeps-options-open"
             if packet.get("web_search_references")
-            else "Morning Market Brief (2026-03-14)"
+            else "SOVEREIGN BRIEF (2026-03-14)"
         ),
     )
     monkeypatch.setattr(

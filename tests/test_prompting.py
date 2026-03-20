@@ -40,7 +40,7 @@ def test_render_brief_prompts_contains_contract_and_packet(monkeypatch):
 
     instructions, user_prompt = render_brief_prompts(packet=packet, settings=settings)
 
-    assert "Morning Market Brief" in instructions
+    assert "SOVEREIGN BRIEF" in instructions
     # V2 Section 구조 검증
     assert "오늘의 핵심" in instructions
     assert "핵심 뉴스 5선" in instructions
@@ -139,7 +139,7 @@ def test_render_brief_validator_prompts_contains_draft_and_packet(monkeypatch):
 
     instructions, user_prompt = render_brief_validator_prompts(
         packet_json='{"macro":[{"label":"US10Y"}]}',
-        draft_text="Morning Market Brief (2026-03-13)\n\n1. 거시 환경\n...",
+        draft_text="SOVEREIGN BRIEF (2026-03-13)\n\n1. 거시 환경\n...",
         settings=settings,
     )
 
@@ -161,7 +161,7 @@ def test_render_brief_rewrite_prompts_contains_review_feedback(monkeypatch):
 
     instructions, user_prompt = render_brief_rewrite_prompts(
         packet_json='{"macro":[]}',
-        draft_text="Morning Market Brief (2026-03-13)\n\n1. 거시 환경\n...",
+        draft_text="SOVEREIGN BRIEF (2026-03-13)\n\n1. 거시 환경\n...",
         review_json='{"pass":false,"rewrite_guidance":["쉬운 말로 바꾸기"]}',
         settings=settings,
     )

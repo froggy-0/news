@@ -164,7 +164,7 @@ def run_pipeline(settings: Settings) -> str:
         output_path.write_text(briefing, encoding="utf-8")
         logger.info("브리핑을 저장했어요: %s", output_path)
 
-        subject = f"미국 기술주·비트코인 시장 브리핑 ({now.strftime('%Y-%m-%d')})"
+        subject = f"SOVEREIGN BRIEF ({now.strftime('%Y-%m-%d')})"
         if quality["status"] == "critical":
             subject = f"[데이터 부족] {subject}"
 

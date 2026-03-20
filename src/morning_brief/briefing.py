@@ -152,7 +152,7 @@ def _inject_quality_notice(text: str, packet: dict) -> str:
     if not lines:
         return notice
 
-    if lines[0].startswith("Morning Market Brief"):
+    if lines[0].startswith("SOVEREIGN BRIEF"):
         return "\n".join([lines[0], notice, *lines[1:]]).strip()
 
     return f"{notice}\n\n{text}".strip()
@@ -341,7 +341,7 @@ def _fallback_if_incomplete(
     fallback_map = extract_sections(fallback_raw)
 
     merged_raw: dict[str, str] = {
-        "title": str(llm_map.get("title") or fallback_map.get("title", "Morning Market Brief"))
+        "title": str(llm_map.get("title") or fallback_map.get("title", "SOVEREIGN BRIEF"))
     }
     for key in SECTION_TITLES:
         llm_content = str(llm_map.get(key, ""))
@@ -900,7 +900,7 @@ def _fallback_brief_raw(packet: dict, timezone: str) -> str:
         layer2_why_block = ""
         layer2_checkpoints = _bullet_lines(["장중 주요 매체에서 새로운 재료가 나오는지"])  # noqa: F841
 
-    body = f"""Morning Market Brief ({date_str})
+    body = f"""SOVEREIGN BRIEF ({date_str})
 
 0. 오늘의 핵심
 오늘은 {judgement} 국면입니다.

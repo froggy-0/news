@@ -1,6 +1,7 @@
-미국 기술주·비트코인 시장 브리핑
+SOVEREIGN BRIEF
 {{ display_date }} · {{ read_time }}
-{% if header_signal_label %}시장 신호: {{ header_signal_label }}{% endif %}
+뉴욕 마감 기준
+{% if header_signal_label %}상태: {{ header_signal_label }}{% endif %}
 ─────────────────────────────────────────
 
 {% if hero_verdict -%}
@@ -22,7 +23,7 @@
 {% if snapshot_badges -%}
 핵심 수치
 {% for b in snapshot_badges -%}
-· {{ b.label }}: {{ b.value }}{% if b.change %} ({{ b.change }}){% elif b.status_text %} ({{ b.status_text }}){% endif %}
+· {{ b.label }}  {{ b.value }}{% if b.change %}  {{ b.change }}{% elif b.status_text %}  {{ b.status_text }}{% endif %}
 {% endfor %}
 
 {% endif -%}
@@ -30,7 +31,7 @@
 {% if news_items -%}
 {% for item in news_items -%}
 {{ item.number }} {{ item.headline }}
-{% if item.source_label %}출처: {{ item.source_label }}{% endif %}
+{% if item.source_label %}{{ item.source_label }}{% endif %}
 {% if item.body %}{{ item.body }}{% endif %}
 {% if item.tldr %}시장 의미: {{ item.tldr }}{% endif %}
 
@@ -46,19 +47,19 @@
 {% if stock_indices -%}
 주요 지수
 {% for s in stock_indices -%}
-· {{ s.ticker }} {{ s.name }} {{ s.price }} {{ s.change_pct }}
+· {{ s.ticker }} {{ s.name }}  {{ s.price }}  {{ s.change_pct }}
 {% endfor %}
 {% endif -%}
 {% if stock_tech -%}
 주요 기술주
 {% for s in stock_tech -%}
-· {{ s.ticker }} {{ s.change_pct }}
+· {{ s.ticker }}  {{ s.change_pct }}
 {% endfor %}
 {% endif -%}
 {% if macro_indicators -%}
 거시 환경
 {% for m in macro_indicators -%}
-· {{ m.label }}: {% if m.is_anomaly %}{{ m.status_text or "이번 집계에서는 확인되지 않았어요." }}{% else %}{{ m.value }}{% if m.change %} ({{ m.change }}){% endif %}{% endif %}{% if m.is_previous %} (전일){% endif %}
+· {{ m.label }}  {% if m.is_anomaly %}{{ m.status_text or "이번 집계에서는 확인되지 않았어요." }}{% else %}{{ m.value }}{% if m.change %}  {{ m.change }}{% endif %}{% endif %}{% if m.is_previous %}  (전일){% endif %}
 {% endfor %}
 {% endif %}
 
@@ -116,7 +117,7 @@
 {% if news_source_items -%}
 뉴스 출처
 {% for item in news_source_items -%}
-· {{ item.source_kind }} · {{ item.source_name }}
+· {{ item.source_kind }}  {{ item.source_name }}
 {% endfor %}
 
 {% endif -%}

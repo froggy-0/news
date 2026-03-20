@@ -1,0 +1,28 @@
+{
+  "meta": {
+    "date": "2026-03-20",
+    "generatedAt": "2026-03-20T08:03:42+09:00",
+    "dataQuality": "degraded",
+    "qualityNotes": ["달러 인덱스와 X 시그널 일부가 누락됐습니다."]
+  },
+  "marketSnapshot": {
+    "items": [
+      { "symbol": "DXY", "label": "달러 인덱스", "value": null, "change": null, "trend": null, "isCached": false, "history": [] }
+    ]
+  },
+  "aiJudgment": {
+    "headline": "오늘은 관망 국면입니다.",
+    "body": "## 오늘의 판단\n\n일부 데이터가 누락돼 방향성 확인이 제한됩니다."
+  },
+  "topicSummaries": [],
+  "techStocks": [],
+  "bitcoin": {
+    "price": "$70,981",
+    "change": "-0.87%",
+    "trend": "down",
+    "fearGreedIndex": null,
+    "etf": null
+  },
+  "xSignals": null,
+  "news": []
+}
