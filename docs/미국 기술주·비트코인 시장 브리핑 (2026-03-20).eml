@@ -1,0 +1,903 @@
+ARC-Seal: i=2; a=rsa-sha256; d=naver.com; s=arc-20180730; t=1773933729;
+	cv=pass; b=C4A7txnH9xpR4CoOkwZesWa5piYYQeenHJ24zL1jEjGFBOiuH+nhPes4Knez
+	 YxyT7K0UEO0d84xP7Z2yVjESBf7yTK/i0NnT6+TmzLMAh3ei2n4H0kSaxGqlUmyhbrqYVk
+	 al1WR8jUj0NmfrQ5brL10qNkfc56sLNmxg2JvByqfzAyMgEFdP13cxlNxBeXeE6I05Ebq4
+	 ilp3AYLOFswWSRrlnLTeFEmaEDHx8QnHFc0zltxow3rwgI9BwTXoz0ZfdorsnhNQKUolUO
+	 k4fLK0Q7iadM2org8OUQc8cG+sGKNsUCWUi4Ha6O6zC6JscCyt+/PKr0IfXkf1gkNLJ43G
+	 Bw==
+ARC-Message-Signature: i=2; a=rsa-sha256; d=naver.com; s=arc-20180730;
+	t=1773933729; c=relaxed/relaxed;
+	bh=LxxfgdyrV2q0WbgbV9x5YZT4FwKRATdUViTEhTjZHpU=;
+	h=dkim-signature:from:date:message-id:subject:to; b=gWkdX8k2QXlWm8324kh
+	 UQl19qpCMwp1Y4ynP1ltsKQarrRwF9Btfj1G9bXPINU0XI9CMSy8SgRblhpjdzkpJzpTj3
+	 ERfI2YAWf018EtrSCnfZpAeUk42dwC23THqbud3K4pEVWhWzps2u+yjHjdKRA0mX/JroIJ
+	 k4e4ZhG0IEUUgPC3kPAVXRK9Gxxky++PjTV+VhXpSqRpt4hhoMMk1Lh8rRBEb6jHqZ26bd
+	 wKwh4aZxWoeQWu4TinycpkhtKnNbQAmiZxTURuY7ViDBrmEOmxGQ6BWmDpPcUBma02gSPn
+	 wmp/K7GqB86XAYOfoQneb0rVbHhr1zoBA43KKJP7SWA==
+ARC-Authentication-Results: i=2; mx.naver.com; 
+  arc=pass (i=1);
+  spf=pass (mx.naver.com: domain of rldnjsdlsi@gmail.com designates 74.125.224.47 as permitted sender) smtp.mailfrom=rldnjsdlsi@gmail.com;
+  dkim=pass header.i=@gmail.com;
+  dmarc=pass (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com
+Return-Path: <rldnjsdlsi@gmail.com>
+Received-SPF: pass (mx.naver.com: domain of rldnjsdlsi@gmail.com designates 74.125.224.47 as permitted sender)
+  client-ip=74.125.224.47; x-iptype=default;
+Authentication-Results: mx.naver.com;
+  arc=pass (i=1);
+  spf=pass (mx.naver.com: domain of rldnjsdlsi@gmail.com designates 74.125.224.47 as permitted sender) smtp.mailfrom=rldnjsdlsi@gmail.com;
+  dkim=pass header.i=@gmail.com;
+  dmarc=pass (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com
+X-Naver-ESV: wY+n+6J4p63CbHmqKBwdbXFYKxEZKogljJ+YKHm=
+X-Session-IP: 74.125.224.47
+Received: from mail-yx1-f47.google.com (mail-yx1-f47.google.com [74.125.224.47])
+  by crcvmail101.nm.naver.com with ESMTP id BoMcYQdVQiaMenZFvaEo8g
+  for <qkrrldnjs7@naver.com>
+  (version=TLSv1.3 cipher=TLS_AES_128_GCM_SHA256);
+  Thu, 19 Mar 2026 15:22:09 -0000
+Received: by mail-yx1-f47.google.com with SMTP id 956f58d0204a3-64ca6595c8aso1110956d50.0
+        for <qkrrldnjs7@naver.com>; Thu, 19 Mar 2026 08:22:08 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1773933728; cv=none;
+        d=google.com; s=arc-20240605;
+        b=hg+d0TZMBEidWlFvxZMx2Z4Ij1hDhWTfZLKV075rOoMBCv5HpV3fSKOA0O6WDr9NhS
+         K8kUXtbuhcUqLYu7XCScFkGZVP4WvQ6s5fhGp4Ck7aZbT8i+DfLXe/fCkUdByFUY7Iz0
+         so/8BEjidKp3qz25QC1qog1YbggUB0wrLs1ySEgg4s7MSBZwCZD5l8LSVLTvR3vTl10J
+         WjJY/qRbmfTu4PImfSRp2pjL6kVIhDkx25Ko91tZSPxa4YOsYHStYqrYGVEfIMzpNiBj
+         FTMkmnDM/kOPnUq2z85UDJPkECdMmtY5oVYa1fWwiw5ivxsLo/uDV+9/U+JAZJcBPn8g
+         x/zA==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=to:subject:message-id:date:list-unsubscribe-post:list-unsubscribe
+         :from:mime-version:dkim-signature;
+        bh=LxxfgdyrV2q0WbgbV9x5YZT4FwKRATdUViTEhTjZHpU=;
+        fh=23z4+gPwS1DST8hvY9HCUSt+2MOjnu8fwSDupN0eaOI=;
+        b=f16ESgaJVR9n5cHhHlCHfea2K399QQKEKuhwq7/cccF5mAQWqnHjWdZHRUjRGQE7Ej
+         ei8QcY7bDR3108qdDMNS/c2OmocYrW63163RMge0o6n+Md5Ci7PUqXckszwGX0oQJ9kz
+         rSst6zSCSHvPYiMvGWTtucFSYbilM3vaYaO9vN3CeBQul8FyUYo2pafBsUDoTGlI1uN4
+         VmVTgh2q/Idd97SrViQGrx0DaUsgldAF/VClx1QbVgXW6KFcc2P7jvdbYRRMFXEtaLgn
+         4OUIyNrdSjCSZeQbWP1YvMuRYxnTr+wNahXpA/DUMr2Zw5avlMPXNjpdY/QZ4GH9GCqK
+         vIag==;
+        darn=naver.com
+ARC-Authentication-Results: i=1; mx.google.com; arc=none
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20230601; t=1773933728; x=1774538528; darn=naver.com;
+        h=to:subject:message-id:date:list-unsubscribe-post:list-unsubscribe
+         :from:mime-version:from:to:cc:subject:date:message-id:reply-to;
+        bh=LxxfgdyrV2q0WbgbV9x5YZT4FwKRATdUViTEhTjZHpU=;
+        b=Fk7JzK0w3uw49RPrXKU+zEiK2YOteB2lkK1a3J8TEN/I2nUYCNb32+NFOw5UC/HH+H
+         J7FqgWlIxM1zuR67UUaSHGcS6rGT/LNsGFhBn2hJdxY9KDMmBadEJhonTvhZeoPNqqvh
+         WcerTzAjE/iKgac8fS2XkZuK1AUAliIZSNRMojJLi0/iQzPP5cZujV3oOLhkbe05qe6Z
+         aszNCXdRG3kDJTHzutsOqKiG+kexLGf+GYwFzX1mdxpvgsayUuw7TgjMGeTCvgG5h1Dr
+         SmToF9anEPYydX5rvGBFuYrAqobnSssxmkkHOjNUZDLkaOIfNb5qJu4WA5acH6J8zNhH
+         grrQ==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20251104; t=1773933728; x=1774538528;
+        h=to:subject:message-id:date:list-unsubscribe-post:list-unsubscribe
+         :from:mime-version:x-gm-gg:x-gm-message-state:from:to:cc:subject
+         :date:message-id:reply-to;
+        bh=LxxfgdyrV2q0WbgbV9x5YZT4FwKRATdUViTEhTjZHpU=;
+        b=lpZ1QRXoJE2A8mRnySP0QkNgTRmE74XiRVNXpCCsrKo3GWZ+LBsnavgr67q1kYC5Uw
+         OrD2oPqyyhaseR0cwnoLrjkusY01Bz8V4r/qfkb4jfpvGLwBOfKELQOvZcjdxK8kgb3k
+         oQuEM1ZumGlWOR0xE7audONgmRMwPyxyCqAhBmC56K75nEGjhebKpgtvK+ZKtpEF8tk1
+         XDJ7tdLhu/Gh1vDZ6ROIqQiZ7VQmEGNFoQMdZ9I9SjAlBTsNP0uwl8IYKslaaTwVQb0q
+         gpW6x1BcSISmHQXgpzI7sPOUtyusCyfZPRy4nKuBgjv3ivLPDl2FXt76r2fKwUeL+tM3
+         T2mA==
+X-Gm-Message-State: AOJu0Yw0qz2da/NuRv2EwcXPS8Zn5cBSqDuT+21BDelOt7OyDpQmIR3/
+	UkDaU/LrJz9FRRbbhyUunqypPD6PZCap0mTJK6DhH4TYWGWjkKAsl3MKiBVAj+IFC7tQvTputYw
+	z8izWrzt1QWTi/BslFMgOsTOiGNT9grNuU7vR
+X-Gm-Gg: ATEYQzw/tSFDCnRML7DG0lFx3j8CfI7onH+vrNICoDuPjl5ipXedpS3LMk7xWLNP9rA
+	+2QJXJ7O2VhHMkyyMykSQTd/e5NRBM+zqzxhNOumGezVu8J0glfAO9BBttXB5NsppOTkz+LeAQ6
+	gt3HiAERgNue8XlJzuEaZrWW7CFue93uTVOPIs/xPVCNNviqli5f+8Dc0CCl668gGBkvPbEgTm0
+	D/sagw3TtVauDkcHm8HOYq3xEGisawVfnsb+2HwRI3ulVHwigOtl7ME7emb+Izj8duZsc19m0Dw
+	Te7j7sO71uH5ZfrZ9o8=
+X-Received: by 2002:a05:690e:128d:b0:64e:a530:e4b8 with SMTP id
+ 956f58d0204a3-64ea530ec65mr1577748d50.35.1773933727682; Thu, 19 Mar 2026
+ 08:22:07 -0700 (PDT)
+Received: from 454570829001 named unknown by gmailapi.google.com with
+ HTTPREST; Thu, 19 Mar 2026 10:22:06 -0500
+Received: from 454570829001 named unknown by gmailapi.google.com with
+ HTTPREST; Thu, 19 Mar 2026 10:22:06 -0500
+MIME-Version: 1.0
+from: rldnjsdlsi@gmail.com
+List-Unsubscribe: <mailto:rldnjsdlsi@gmail.com?subject=Morning%20Market%20Brief%20%EA%B5%AC%EB%8F%85%20%ED%95%B4%EC%A7%80&body=%EA%B5%AC%EB%8F%85%20%ED%95%B4%EC%A7%80%EB%A5%BC%20%EC%9A%94%EC%B2%AD%ED%95%A9%EB%8B%88%EB%8B%A4.>
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+Date: Thu, 19 Mar 2026 10:22:06 -0500
+X-Gm-Features: AaiRm52gY_yjpxnxp9usp6qFjRdGFTAWWrMr2qmcnzuqnCshRelBw2Rur9ZPYxs
+Message-ID: <CAG9iYpfwEHw8RhszcBMibK1XABwXEtp2mQkqvE-b=3AKdMpQWw@mail.gmail.com>
+Subject: =?UTF-8?B?66+46rWtIOq4sOyIoOyjvMK367mE7Yq47L2U7J24IOyLnOyepSDruIzrpqztlZEgKDIwMg==?=
+	=?UTF-8?B?Ni0wMy0yMCk=?=
+To: qkrrldnjs7@naver.com
+Content-Type: multipart/alternative; boundary="000000000000b194e0064d62214e"
+
+--000000000000b194e0064d62214e
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: base64
+
+IOuvuOq1rSDquLDsiKDso7zCt+u5hO2KuOy9lOyduCDsi5zsnqUg67iM66as7ZWRICgyMDI2LTAz
+LTIwKQ0KUyZQIDUwMCAtMC42JSDCtyDrgpjsiqTri6UgLTAuNyUgwrcgQlRDIC0yLjElDQpNT1JO
+SU5HIE1BUktFVCBCUklFRg0KMjAyNuuFhCAz7JuUIDIw7J28IOq4iOyalOydvCDCtyAz67aEIOyd
+veq4sA0KUyZQIDUwMA0K4pa8IC0wLjYlDQrrgpjsiqTri6UNCuKWvCAtMC43JQ0KQlRDDQrilrwg
+LTIuMSUNClZJWA0K4payIDI1LjENCuKWoCDsmKTripjsnZgg7ZW17IusDQotIOyXsOykgOydmCDq
+uIjrpqwg67O066WY7JmAIO2MjOyblCDrsJzslrgg7J207ZuEIOychO2XmOyekOyCsOydtCDslb3s
+hLjrpbwg67O07JiA7Ja07JqULg0K4pePIC0gQUnCt+uwmOuPhOyytCDqtIDroKgg6riw7JeF65Ok
+7J2AIOyLpOyggcK37KCE6561IOyGjOyLneycvOuhnCDsg4HrjIDsoIEg6rCV7IS4IOyLoO2YuOqw
+gCDsnojslrTsmpQuDQrilqAg7ZW17IusIOuJtOyKpA0K4pGgIOyXlOu5hOuUlOyVhCwg7JeQ7J20
+7KCE7Yq4wrfroZzrs7Tti7HsiqTsmqkg64yA6rec66qoIOqzteqwnCDrjbDsnbTthLDshLjtirgg
+6rO16rCcIOKAlCBAbnZpZGlhDQrsl5TruYTrlJTslYTripQg7JeQ7J207KCE7Yq47ZiVIEFJ7JmA
+IOuhnOuztO2LseyKpCwg7J6Q7Jyo7KO87ZaJIOqwnOuwnOydhCDrj5XquLAg7JyE7ZW0IDEw7KGw
+IO2GoO2BsOyXkCDri6ztlZjripQg7Ja47Ja0IOuNsOydtO2EsOyZgCA1MOunjCDqsbTsnZgg66Gc
+67O07Yux7IqkIOqyveuhnCwNCjEwMFRC7J2YIOywqOufiSDshLzshJwg642w7J207YSw66W8IOyY
+pO2UiOyGjOyKpOuhnCDqs7XqsJztlojslrTsmpQuIOydtCDsobDsuZjripQg6rCc67Cc7J6Q7JmA
+IOq4sOyXheydtCDtirntmZTrkJwgQUkg66qo64247J2EIOu5oOultOqyjCDrp4zrk6Qg7IiYIOye
+iOqyjCDrj5Xqs6AsDQrsl5TruYTrlJTslYTsnZgg7IOd7YOc6rOEIOyYge2WpeugpeydhCDqsJXt
+mZTtlZjripQg7KCE65617KCBIOqxuOydjOycvOuhnCDrs7TsnbTrhKTsmpQuIOKGkiBodHRwczov
+L3guY29tL252aWRpYQ0K4pePIO2VteyLrCDtlZzspIQ6IOyXlOu5hOuUlOyVhOydmCDrjIDqt5zr
+qqgg7Jik7ZSIIOuNsOydtO2EsCDqs7XqsJzripQgQUnCt+uhnOuztO2LseyKpCDsg53tg5zqs4Qg
+7ZmV7IKw6rO8IOyekOyCrCDtlIzrnqvtj7wg6rCV7ZmU7JeQIOq4sOyXrO2WiOuEpOyalC4NCuKR
+oSBBTUTCt+yCvOyEsSwg7LCo7IS464yAIEFJIOyduO2UhOudvOyaqSDrqZTrqqjrpqwg7ZiR66Cl
+IOqwle2ZlCDigJQgQEFNRA0KQU1E7JmAIOyCvOyEseydgCBIQk007JeQ7IScIEREUjXquYzsp4Ag
+66mU66qo66asIOyGlOujqOyFmOydhCDstZzsoIHtmZTtlbQgQU1EIEluc3RpbmN0IEdQVeyZgCBF
+UFlDIENQVSwgSGVsaW9zDQrtlIzrnqvtj7zsnZgg7ISx64ql6rO8IO2aqOycqOydhCDrgYzslrTs
+mKzrpqzquLDroZwg7ZaI7Ja07JqULiDrqZTrqqjrpqzripQg64yA6rec66qoIEFJIOybjO2BrOuh
+nOuTnOyXkOyEnCDrs5HrqqnsnbQg65CgIOyImCDsnojslrTshJwsIOyWkeyCrOydmCDtmJHroKXs
+nYAg642w7J207YSw7IS87YSwIO2ZleyepSDsi5wNCuqzteq4iSDslYjsoJXshLHsl5Ag64+E7JuA
+7J20IOuQoCDsiJgg7J6I6rKg64Sk7JqULiDihpIgaHR0cHM6Ly94LmNvbS9BTUQNCuKXjyDtlbXs
+i6wg7ZWc7KSEOiBBTUTsmYAg7IK87ISx7J2YIO2YkeugpeydgCBBSSDsnbjtlITrnbwg7ZmV7J6l
+7JeQIO2VhOyalO2VnCDrqZTrqqjrpqwg7ISx64qlwrfqs7XquIkg6rCc7ISg7JeQIOyngeygkeyg
+geyduCDrj4Tsm4DsnYQg7KSEIOunjO2VtOyalC4NCuKRoiDruYXthYztgawg7Iuk7KCBwrdNJkEg
+7IaM7Iud65Ok66GcIEFJIOqyveyfgSDsnqzsoJDtmZQg4oCUIGludGVsbGVjdGlhLmFpDQrsl6zr
+n6wg67mF7YWM7YGs7J2YIOyLpOyggcK3TSZBwrftiKzsnpAg7IaM7Iud7J20IOydtOyWtOyngOup
+sCBBSSDqsr3sn4Eg6rWs64+E6rCAIOyerOygkO2ZlOuQmOqzoCDsnojslrTsmpQuIOq1rOq4gOyd
+mCDrjIDtmJUg7J247IiYLCBNU8K37JWE66eI7KG07J2YIOyghOuetSDqsJXtmZQg65Ox7J20DQrq
+sbDroaDrkJjrqbAg7Yis7J6Q7J6Q65Ok7J20IOq4sOyXheuzhCDsnbTsnbXqs7wg67C466WY7JeQ
+7J207IWYIOyYge2WpeydhCDsnqztj4nqsIDtlZjripQg7Z2Q66aE7J20IOq0gOywsOuPvOyalC4g
+4oaSDQpodHRwczovL2ludGVsbGVjdGlhLmFpL25ld3Mvc3RvY2sva2V5LXN0b2NrLW1hcmtldC1t
+b3ZlcnMtbWljcm9zb2Z0LW1ldGEtdGVzbGEtaWJtLXNhcC1hcHBsZS1hbmQtb3RoZXJzDQril48g
+7ZW17IusIO2VnOykhDog67mF7YWM7YGs7J2YIOyduOyImMK37Yis7J6QIOyGjOyLneydtCBBSSDq
+sr3sn4HsnYQg7J6s7KCQ7ZmU7ZWY66mwIOyLnOyepSDquLDrjIDrpbwg7J6s7Y647ZWY6rOgIOye
+iOyWtOyalC4NCuKRoyDrp4jsnbTtgazroZzshoztlITtirjsnZgg7JeU7YSw7ZSE65287J207KaI
+IOqwgOqyqeygleyxheqzvCDsnbjtlITrnbwg7Yis7J6QIOu2gOuLtCDigJQgTkFTREFRLmNvbSjs
+mpTslb0g7Lac7LKYIOynkeqzhCkNCuuztOqzoOuQnCDrsJTsl5Ag65Sw66W066m0IE1T64qUIE1p
+Y3Jvc29mdCAzNjUgRTcg7ZSM656c7J2EIOyblCAkOTnroZwg7J247IOB7ZWY64qUIOuTsSDqsIDq
+sqkg7KCV7LGF7J2EIO2Gte2VtCDsnbjtlITrnbwg7Yis7J6QIOu2gOuLtOydhCDsnbzrtoANCuuz
+tOyZhO2VmOugpOuKlCDsm4Dsp4HsnoTsnbQg7J6I7Ja07JqULiDtgbTrnbzsmrDrk5wg66ek7Lac
+7J2AIOuKmOyngOunjCDsg4Hsmqkg7KKM7ISdIOymneqwgOuKlCDsoJztlZzsoIHsnbTrnbwsIOqw
+gOqyqSDsnbjsg4HsnbQg7Iuk7KCBIOq1rOyhsOyXkCDslrTrlqQg7JiB7Zal7J2EIOuvuOy5oOyn
+gOuKlCDstpTqsIANCu2ZleyduOydtCDtlYTsmpTtlbTsmpQuIOKGkiAo7JuQ66y4IOynkeqzhCDr
+p4Htgaw6IGludGVsbGVjdGlhLmFpIOuCtCDsnbjsmqkg7J6Q66OMIOuTsSkNCuKXjyDtlbXsi6wg
+7ZWc7KSEOiBNU+ydmCDqsIDqsqkg7J247IOB7J2AIOyduO2UhOudvOu5hOyaqSDrtoDri7TsnYQg
+7J2867aAIOuztOyZhO2VoCDsiJgg7J6I7KeA66eMLCDqs6DqsJ0g7ZmV64yA6rCAIOq0gOqxtOyd
+tOyXkOyalC4NCuKRpCDsl7DspIAg67O066WYIO2bhCDsi5zsnqUg67CY7J2RIOyalOyVvSDigJQg
+KOyihe2VqSDstpzsspjrk6QpDQrsl7DspIDsnZgg6riI66asIOuztOulmOyZgCDtjIzsm5TsnZgg
+67Cc7Ja4KOusvOqwgCDsp4TsoIQg7JeG7J2064qUIOq4iOumrCDsnbjtlZgg7JeG7J2MKSDsnbTt
+m4QgUyZQNTAw6rO8IOuCmOyKpOuLpeydtCDtlZjrnb3tlojqs6AsIFZJWOuKlCDtgazqsowg7Jis
+656Q7Ja07JqULg0K7J2066GcIOyduO2VtCDquIjrpqzsl5Ag66+86rCQ7ZWcIOyEseyepcK36riw
+7Iig7KO864qUIOuLqOq4sOyggeycvOuhnCDtlZjrsKkg7JWV66Cl7J2EIOuwm+ydgCDrqqjsirXs
+nbTsl5DsmpQuIOKGkiAo7Jew6rSAIOq4sOyCrDogRmVkIOuztOuPhOyekOujjMK3Q0JTLCBGb3gN
+CkJ1c2luZXNzIOuTsSDsp5Hqs4QpDQril48g7ZW17IusIO2VnOykhDog7Jew7KSA7J2YIOyLoOyk
+ke2VnCDsiqTtg6DsiqTqsIAg7JyE7ZeY7ISg7Zi466W8IOykhOydtOqzoCDrs4Drj5nshLHsnYQg
+7YKk7Jq0IOqyg+ycvOuhnCDrs7TsnbTrhKTsmpQuDQrilqAgQlRDICYg7YGs66a97YagDQpCVEMg
+JDY5LDczOSDilrwgLTIuMSUg6rO17Y+s7YOQ7JqVIDIzIC8gMTAwIEV4dHJlbWUgRmVhcg0KRVRG
+IOqwgOqyqSDrk7Hrnb0g6rGw656Y65+JDQpJQklUICQzOS40NyDilrwgLTIuMCUgJDANCkZCVEMg
+JDYwLjYzIOKWvCAtMi4wJSAkMA0KQVJLQiAkMjMuMDkg4pa8IC0yLjElICQwDQpCSVRCICQzNy44
+MSDilrwgLTIuMCUgJDANCkdCVEMgJDU0LjIzIOKWvCAtMi4wJSAkMA0K7ZWp7IKwIOqxsOuemOuf
+iSAkMTguNk0NCuq4sOq0gCDrs7TsnKAg7ZiE7ZmpDQpCaXR3aXNlIEJJVEIg4oCUIDM4LDkyMSBC
+VEMgwrcgQVVNICQyLDc2NCwyNDEsMTUyDQppU2hhcmVzIElCSVQg4oCUIDc4NiwxMDUgQlRDIMK3
+IEFVTSAkNTUsOTg2LDk5Nyw1NjANCuKWoCDsi5zsnqUg7KeA7ZGcDQpTUFkgUyZQIDUwMCA2NTcu
+NjEg4pa8IC0wLjYlDQpRUVEg64KY7Iqk64ulIDU5MC45MSDilrwgLTAuNyUNCuu5he2FjO2BrCAx
+MOyihQ0KVFNNIOKWvCAtMS42JQ0KTlZEQSDilrwgLTEuMyUNCk1FVEEg4pa8IC0xLjIlDQpBTVpO
+IOKWvCAtMS4xJQ0KR09PR0wg4pa8IC0wLjglDQpBU01MIOKWvCAtMC42JQ0KTVNGVCDilrwgLTAu
+NSUNCkFNRCDilrwgLTAuMyUNCkFBUEwg4pa8IC0wLjElDQpBVkdPIOKWvCAtMC4wJQ0K6rGw7Iuc
+IOyngO2RnA0K66+46rWtIDEw64WE66y8IOq1reyxhOq4iOumrCAoREdTMTApIDQuMjAlICjsoITs
+nbwpIOKAlCDsoITsnbwg64yA67mEIC0wLjcxJSwgc291cmNlIGZpZWxkOiB1czEweQ0K66+46rWt
+IDLrhYTrrLwg6rWt7LGE6riI66asIChER1MyKSAzLjY4JSDigJQg67OA64+ZIOyXhuydjCwgc291
+cmNlIGZpZWxkOiB1czJ5DQrsnqXri6jquLAg7Iqk7ZSE66CI65OcICgxMHkg4oiSIDJ5KSAwLjUy
+IHBlcmNlbnRhZ2UgcG9pbnRzIOKAlCA0LjIwJSDiiJIgMy42OCUNCuuvuOq1rSAz6rCc7JuU66y8
+IOuLqOq4sOq4iOumrCAoXklSWCkgMy42MSUg4oCUIOuzgOuPmSDsl4bsnYwsIHNvdXJjZSBmaWVs
+ZDogdXMzbQ0K64us65+sIOyduOuNseyKpCAoRFhZKSA5OS44NzMg4payICswLjU1JSwgc291cmNl
+IGZpZWxkOiBkeHkNClZJWCAoVklYQ0xTKSAyNS4wOSDilrIgKzEyLjE2JSwgc291cmNlIGZpZWxk
+OiB2aXgNCuybkC/ri6zrn6wgKEtSVz1YKSAxLDQ5My45OOybkCDilrIgKzAuNjElLCBzb3VyY2Ug
+ZmllbGQ6IHVzZGtydw0K64KY7Iqk64ulIOyEoOusvCAoTlE9RikgMjQsNTQ3Ljc1IOKWsiArMC40
+NiUsIHNvdXJjZSBmaWVsZDogbnFfZnV0dXJlcw0K642w7J207YSwOiBGUkVEIMK3IFN0b29xIMK3
+IENvaW5HZWNrbyDCtyBQZXJwbGV4aXR5IMK3IEdyb2sgWCBTZWFyY2gNCuuzuCDrqZTsnbzsnYAg
+6rO16rCcIOyLnOyepSDrjbDsnbTthLAg6riw67CYIOygleuztOyEsSDruIzrpqztlZHsnbTrqbAg
+7Yis7J6QIOq2jOycoOqwgCDslYTri5nri4jri6QuDQrqtazrj4Ug7ZW07KeADQo8cmxkbmpzZGxz
+aUBnbWFpbC5jb20/c3ViamVjdD1Nb3JuaW5nJTIwTWFya2V0JTIwQnJpZWYlMjAlRUElQjUlQUMl
+RUIlOEYlODUlMjAlRUQlOTUlQjQlRUMlQTclODAmYm9keT0lRUElQjUlQUMlRUIlOEYlODUlMjAl
+RUQlOTUlQjQlRUMlQTclODAlRUIlQTUlQkMlMjAlRUMlOUElOTQlRUMlQjIlQUQlRUQlOTUlQTkl
+RUIlOEIlODglRUIlOEIlQTQuPg0KwrcNCkdpdEh1YiA8aHR0cHM6Ly9naXRodWIuY29tL2Zyb2dn
+eS0wL25ld3M+DQo=
+--000000000000b194e0064d62214e
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+
+<html lang=3D"ko">
+<head>
+<meta charset=3D"utf-8">
+<meta name=3D"viewport" content=3D"width=3Ddevice-width,initial-scale=3D1.0=
+">
+<meta name=3D"color-scheme" content=3D"light dark">
+<title>=EB=AF=B8=EA=B5=AD =EA=B8=B0=EC=88=A0=EC=A3=BC=C2=B7=EB=B9=84=ED=8A=
+=B8=EC=BD=94=EC=9D=B8 =EC=8B=9C=EC=9E=A5 =EB=B8=8C=EB=A6=AC=ED=95=91 (2026-=
+03-20)</title>
+
+<style>
+:root{color-scheme:light dark}
+@media(prefers-color-scheme:dark){
+body,.shell{background:#111!important}
+.card{background:#1a1a1a!important;border-color:#2a2a2a!important}
+.text-strong{color:#e8e8e3!important}
+.text-body{color:#d1d5db!important}
+.text-muted{color:#9ca3af!important}
+.badge-up{background:#14532d!important;color:#4ade80!important}
+.badge-down{background:#450a0a!important;color:#fca5a5!important}
+.badge-flat{background:#1f2937!important;color:#9ca3af!important}
+.hero-box{background:#1a2332!important}
+.kr-label{border-color:#4ade80!important;color:#4ade80!important}
+a{color:#93c5fd!important}
+}
+@media screen and (max-width:600px){
+.shell-pad{padding:12px 8px!important}
+.card-pad{padding:16px!important}
+.hero-title{font-size:28px!important}
+.text-body{font-size:15px!important}
+.snapshot-badge{display:block!important;margin-bottom:8px!important}
+a{min-height:44px;display:inline-block;line-height:44px}
+}
+</style>
+</head>
+<body style=3D"margin:0;padding:0;background:#f5f5f0">
+<div style=3D"display:none;max-height:0;overflow:hidden">S&amp;P 500 -0.6% =
+=C2=B7 =EB=82=98=EC=8A=A4=EB=8B=A5 -0.7% =C2=B7 BTC -2.1%</div>
+<table role=3D"presentation" width=3D"100%" cellpadding=3D"0" cellspacing=
+=3D"0" border=3D"0" class=3D"shell" style=3D"width:100%;background:#f5f5f0"=
+>
+<tr><td align=3D"center" class=3D"shell-pad" style=3D"padding:24px 14px">
+<table role=3D"presentation" width=3D"100%" cellpadding=3D"0" cellspacing=
+=3D"0" border=3D"0" style=3D"max-width:640px">
+<tr><td style=3D"padding:0 0 24px 0">
+<table role=3D"presentation" width=3D"100%" class=3D"card" style=3D"width:1=
+00%;background:#fff;border:1px solid #e2e8f0;border-radius:16px">
+<tr><td class=3D"card-pad" style=3D"padding:32px 24px 20px 24px">
+<div style=3D"font-family:&#39;Apple SD Gothic Neo&#39;,&#39;Noto Sans KR&#=
+39;,sans-serif;color:#0f172a;font-size:15px;font-weight:600;letter-spacing:=
+0.08em;text-transform:uppercase" class=3D"text-strong">MORNING MARKET BRIEF=
+</div>
+<div style=3D"padding-top:6px;font-family:&#39;Apple SD Gothic Neo&#39;,&#3=
+9;Noto Sans KR&#39;,sans-serif;color:#94a3b8;font-size:13px" class=3D"text-=
+muted">2026=EB=85=84 3=EC=9B=94 20=EC=9D=BC =EA=B8=88=EC=9A=94=EC=9D=BC =C2=
+=B7 3=EB=B6=84 =EC=9D=BD=EA=B8=B0</div>
+<div class=3D"gradient-line" style=3D"margin-top:20px;height:2px;background=
+:linear-gradient(90deg,#cbd5e1,#3b82f6,#cbd5e1)"></div>
+<table role=3D"presentation" width=3D"100%" cellpadding=3D"0" cellspacing=
+=3D"0" border=3D"0" style=3D"padding-top:16px">
+<tr>
+<td class=3D"snapshot-badge" style=3D"text-align:center;padding:4px">
+<div style=3D"font-size:11px;color:#94a3b8;font-weight:600" class=3D"text-m=
+uted">S&amp;P 500</div>
+<div style=3D"padding-top:2px"><span style=3D"display:inline-block;backgrou=
+nd:#fef2f2;color:#991b1b;padding:2px 8px;border-radius:4px;font-size:13px;f=
+ont-weight:700;font-variant-numeric:tabular-nums" class=3D"badge-down">=E2=
+=96=BC -0.6%</span>
+</div>
+</td>
+<td class=3D"snapshot-badge" style=3D"text-align:center;padding:4px">
+<div style=3D"font-size:11px;color:#94a3b8;font-weight:600" class=3D"text-m=
+uted">=EB=82=98=EC=8A=A4=EB=8B=A5</div>
+<div style=3D"padding-top:2px"><span style=3D"display:inline-block;backgrou=
+nd:#fef2f2;color:#991b1b;padding:2px 8px;border-radius:4px;font-size:13px;f=
+ont-weight:700;font-variant-numeric:tabular-nums" class=3D"badge-down">=E2=
+=96=BC -0.7%</span>
+</div>
+</td>
+<td class=3D"snapshot-badge" style=3D"text-align:center;padding:4px">
+<div style=3D"font-size:11px;color:#94a3b8;font-weight:600" class=3D"text-m=
+uted">BTC</div>
+<div style=3D"padding-top:2px"><span style=3D"display:inline-block;backgrou=
+nd:#fef2f2;color:#991b1b;padding:2px 8px;border-radius:4px;font-size:13px;f=
+ont-weight:700;font-variant-numeric:tabular-nums" class=3D"badge-down">=E2=
+=96=BC -2.1%</span>
+</div>
+</td>
+<td class=3D"snapshot-badge" style=3D"text-align:center;padding:4px">
+<div style=3D"font-size:11px;color:#94a3b8;font-weight:600" class=3D"text-m=
+uted">VIX</div>
+<div style=3D"padding-top:2px"><span style=3D"display:inline-block;backgrou=
+nd:#dcfce7;color:#166534;padding:2px 8px;border-radius:4px;font-size:13px;f=
+ont-weight:700;font-variant-numeric:tabular-nums" class=3D"badge-up">=E2=96=
+=B2 25.1</span>
+</div>
+</td>
+</tr>
+</table>
+</td></tr>
+</table>
+</td></tr><tr><td style=3D"padding:0 0 24px 0">
+<table role=3D"presentation" width=3D"100%" class=3D"card" style=3D"width:1=
+00%;background:#fff;border:1px solid #e2e8f0;border-top:4px solid #1e40af;b=
+order-radius:0 0 16px 16px">
+<tr><td class=3D"card-pad" style=3D"padding:28px 24px">
+<div style=3D"border-left:3px solid #1e40af;padding-left:12px;font-family:&=
+#39;Apple SD Gothic Neo&#39;,&#39;Noto Sans KR&#39;,sans-serif;color:#1e40a=
+f;font-size:13px;font-weight:600">=E2=96=A0 =EC=98=A4=EB=8A=98=EC=9D=98 =ED=
+=95=B5=EC=8B=AC</div>
+<div class=3D"hero-box" style=3D"margin-top:16px;background:#f0f4ff;padding=
+:20px;border-radius:8px">
+<div class=3D"hero-title text-strong" style=3D"font-family:&#39;Apple SD Go=
+thic Neo&#39;,&#39;Noto Sans KR&#39;,sans-serif;color:#0f172a;font-size:32p=
+x;line-height:1.5;font-weight:800;letter-spacing:-0.03em;white-space:pre-li=
+ne">- =EC=97=B0=EC=A4=80=EC=9D=98 =EA=B8=88=EB=A6=AC =EB=B3=B4=EB=A5=98=EC=
+=99=80 =ED=8C=8C=EC=9B=94 =EB=B0=9C=EC=96=B8 =EC=9D=B4=ED=9B=84 =EC=9C=84=
+=ED=97=98=EC=9E=90=EC=82=B0=EC=9D=B4 =EC=95=BD=EC=84=B8=EB=A5=BC =EB=B3=B4=
+=EC=98=80=EC=96=B4=EC=9A=94.</div>
+</div>
+<div style=3D"padding-top:16px">
+<div style=3D"padding-top:8px;font-family:&#39;Apple SD Gothic Neo&#39;,&#3=
+9;Noto Sans KR&#39;,sans-serif;color:#475569;font-size:14px;line-height:1.8=
+" class=3D"text-body">=E2=97=8F - AI=C2=B7=EB=B0=98=EB=8F=84=EC=B2=B4 =EA=
+=B4=80=EB=A0=A8 =EA=B8=B0=EC=97=85=EB=93=A4=EC=9D=80 =EC=8B=A4=EC=A0=81=C2=
+=B7=EC=A0=84=EB=9E=B5 =EC=86=8C=EC=8B=9D=EC=9C=BC=EB=A1=9C =EC=83=81=EB=8C=
+=80=EC=A0=81 =EA=B0=95=EC=84=B8 =EC=8B=A0=ED=98=B8=EA=B0=80 =EC=9E=88=EC=96=
+=B4=EC=9A=94.</div>
+</div>
+</td></tr>
+</table>
+</td></tr><tr><td style=3D"padding:0 0 24px 0">
+<table role=3D"presentation" width=3D"100%" class=3D"card" style=3D"width:1=
+00%;background:#fff;border:1px solid #e2e8f0;border-radius:16px">
+<tr><td class=3D"card-pad" style=3D"padding:28px 24px">
+<div style=3D"border-left:3px solid #1e40af;padding-left:12px;font-family:&=
+#39;Apple SD Gothic Neo&#39;,&#39;Noto Sans KR&#39;,sans-serif;color:#1e40a=
+f;font-size:13px;font-weight:600">=E2=96=A0 =ED=95=B5=EC=8B=AC =EB=89=B4=EC=
+=8A=A4</div>
+<div style=3D"padding:20px 0 0 0">
+<div style=3D"font-family:&#39;Apple SD Gothic Neo&#39;,&#39;Noto Sans KR&#=
+39;,sans-serif;color:#0f172a;font-size:20px;line-height:1.6;font-weight:800=
+" class=3D"text-strong">=E2=91=A0 =EC=97=94=EB=B9=84=EB=94=94=EC=95=84, =EC=
+=97=90=EC=9D=B4=EC=A0=84=ED=8A=B8=C2=B7=EB=A1=9C=EB=B3=B4=ED=8B=B1=EC=8A=A4=
+=EC=9A=A9 =EB=8C=80=EA=B7=9C=EB=AA=A8 =EA=B3=B5=EA=B0=9C =EB=8D=B0=EC=9D=B4=
+=ED=84=B0=EC=84=B8=ED=8A=B8 =EA=B3=B5=EA=B0=9C <span style=3D"font-size:13p=
+x;font-weight:400;color:#64748b" class=3D"text-muted">=E2=80=94 @nvidia</sp=
+an></div>
+<div style=3D"margin-top:12px;border-left:3px solid #3b82f6;padding:12px 16=
+px;background:#f8fafc;font-family:&#39;Apple SD Gothic Neo&#39;,&#39;Noto S=
+ans KR&#39;,sans-serif;color:#334155;font-size:15px;line-height:1.9;white-s=
+pace:pre-line" class=3D"text-body">=EC=97=94=EB=B9=84=EB=94=94=EC=95=84=EB=
+=8A=94 =EC=97=90=EC=9D=B4=EC=A0=84=ED=8A=B8=ED=98=95 AI=EC=99=80 =EB=A1=9C=
+=EB=B3=B4=ED=8B=B1=EC=8A=A4, =EC=9E=90=EC=9C=A8=EC=A3=BC=ED=96=89 =EA=B0=9C=
+=EB=B0=9C=EC=9D=84 =EB=8F=95=EA=B8=B0 =EC=9C=84=ED=95=B4 10=EC=A1=B0 =ED=86=
+=A0=ED=81=B0=EC=97=90 =EB=8B=AC=ED=95=98=EB=8A=94 =EC=96=B8=EC=96=B4 =EB=8D=
+=B0=EC=9D=B4=ED=84=B0=EC=99=80 50=EB=A7=8C =EA=B1=B4=EC=9D=98 =EB=A1=9C=EB=
+=B3=B4=ED=8B=B1=EC=8A=A4 =EA=B2=BD=EB=A1=9C, 100TB=EC=9D=98 =EC=B0=A8=EB=9F=
+=89 =EC=84=BC=EC=84=9C =EB=8D=B0=EC=9D=B4=ED=84=B0=EB=A5=BC =EC=98=A4=ED=94=
+=88=EC=86=8C=EC=8A=A4=EB=A1=9C =EA=B3=B5=EA=B0=9C=ED=96=88=EC=96=B4=EC=9A=
+=94.
+
+=EC=9D=B4 =EC=A1=B0=EC=B9=98=EB=8A=94 =EA=B0=9C=EB=B0=9C=EC=9E=90=EC=99=80 =
+=EA=B8=B0=EC=97=85=EC=9D=B4 =ED=8A=B9=ED=99=94=EB=90=9C AI =EB=AA=A8=EB=8D=
+=B8=EC=9D=84 =EB=B9=A0=EB=A5=B4=EA=B2=8C =EB=A7=8C=EB=93=A4 =EC=88=98 =EC=
+=9E=88=EA=B2=8C =EB=8F=95=EA=B3=A0, =EC=97=94=EB=B9=84=EB=94=94=EC=95=84=EC=
+=9D=98 =EC=83=9D=ED=83=9C=EA=B3=84 =EC=98=81=ED=96=A5=EB=A0=A5=EC=9D=84 =EA=
+=B0=95=ED=99=94=ED=95=98=EB=8A=94 =EC=A0=84=EB=9E=B5=EC=A0=81 =EA=B1=B8=EC=
+=9D=8C=EC=9C=BC=EB=A1=9C =EB=B3=B4=EC=9D=B4=EB=84=A4=EC=9A=94.
+=E2=86=92 <a href=3D"https://x.com/nvidia">https://x.com/nvidia</a></div>
+<div style=3D"margin-top:12px;padding:10px 14px;background:#f0fdf4;border-r=
+adius:6px;font-family:&#39;Apple SD Gothic Neo&#39;,&#39;Noto Sans KR&#39;,=
+sans-serif;color:#166534;font-size:14px;line-height:1.6;font-weight:600">=
+=E2=97=8F =ED=95=B5=EC=8B=AC =ED=95=9C=EC=A4=84: =EC=97=94=EB=B9=84=EB=94=
+=94=EC=95=84=EC=9D=98 =EB=8C=80=EA=B7=9C=EB=AA=A8 =EC=98=A4=ED=94=88 =EB=8D=
+=B0=EC=9D=B4=ED=84=B0 =EA=B3=B5=EA=B0=9C=EB=8A=94 AI=C2=B7=EB=A1=9C=EB=B3=
+=B4=ED=8B=B1=EC=8A=A4 =EC=83=9D=ED=83=9C=EA=B3=84 =ED=99=95=EC=82=B0=EA=B3=
+=BC =EC=9E=90=EC=82=AC =ED=94=8C=EB=9E=AB=ED=8F=BC =EA=B0=95=ED=99=94=EC=97=
+=90 =EA=B8=B0=EC=97=AC=ED=96=88=EB=84=A4=EC=9A=94.</div>
+</div>
+<div style=3D"padding:20px 0 0 0;border-top:1px solid #e2e8f0;margin-top:16=
+px">
+<div style=3D"font-family:&#39;Apple SD Gothic Neo&#39;,&#39;Noto Sans KR&#=
+39;,sans-serif;color:#0f172a;font-size:20px;line-height:1.6;font-weight:800=
+" class=3D"text-strong">=E2=91=A1 AMD=C2=B7=EC=82=BC=EC=84=B1, =EC=B0=A8=EC=
+=84=B8=EB=8C=80 AI =EC=9D=B8=ED=94=84=EB=9D=BC=EC=9A=A9 =EB=A9=94=EB=AA=A8=
+=EB=A6=AC =ED=98=91=EB=A0=A5 =EA=B0=95=ED=99=94 <span style=3D"font-size:13=
+px;font-weight:400;color:#64748b" class=3D"text-muted">=E2=80=94 @AMD</span=
+></div>
+<div style=3D"margin-top:12px;border-left:3px solid #3b82f6;padding:12px 16=
+px;background:#f8fafc;font-family:&#39;Apple SD Gothic Neo&#39;,&#39;Noto S=
+ans KR&#39;,sans-serif;color:#334155;font-size:15px;line-height:1.9;white-s=
+pace:pre-line" class=3D"text-body">AMD=EC=99=80 =EC=82=BC=EC=84=B1=EC=9D=80=
+ HBM4=EC=97=90=EC=84=9C DDR5=EA=B9=8C=EC=A7=80 =EB=A9=94=EB=AA=A8=EB=A6=AC =
+=EC=86=94=EB=A3=A8=EC=85=98=EC=9D=84 =EC=B5=9C=EC=A0=81=ED=99=94=ED=95=B4 A=
+MD Instinct GPU=EC=99=80 EPYC CPU, Helios =ED=94=8C=EB=9E=AB=ED=8F=BC=EC=9D=
+=98 =EC=84=B1=EB=8A=A5=EA=B3=BC =ED=9A=A8=EC=9C=A8=EC=9D=84 =EB=81=8C=EC=96=
+=B4=EC=98=AC=EB=A6=AC=EA=B8=B0=EB=A1=9C =ED=96=88=EC=96=B4=EC=9A=94.
+
+=EB=A9=94=EB=AA=A8=EB=A6=AC=EB=8A=94 =EB=8C=80=EA=B7=9C=EB=AA=A8 AI =EC=9B=
+=8C=ED=81=AC=EB=A1=9C=EB=93=9C=EC=97=90=EC=84=9C =EB=B3=91=EB=AA=A9=EC=9D=
+=B4 =EB=90=A0 =EC=88=98 =EC=9E=88=EC=96=B4=EC=84=9C, =EC=96=91=EC=82=AC=EC=
+=9D=98 =ED=98=91=EB=A0=A5=EC=9D=80 =EB=8D=B0=EC=9D=B4=ED=84=B0=EC=84=BC=ED=
+=84=B0 =ED=99=95=EC=9E=A5 =EC=8B=9C =EA=B3=B5=EA=B8=89 =EC=95=88=EC=A0=95=
+=EC=84=B1=EC=97=90 =EB=8F=84=EC=9B=80=EC=9D=B4 =EB=90=A0 =EC=88=98 =EC=9E=
+=88=EA=B2=A0=EB=84=A4=EC=9A=94.
+=E2=86=92 <a href=3D"https://x.com/AMD">https://x.com/AMD</a></div>
+<div style=3D"margin-top:12px;padding:10px 14px;background:#f0fdf4;border-r=
+adius:6px;font-family:&#39;Apple SD Gothic Neo&#39;,&#39;Noto Sans KR&#39;,=
+sans-serif;color:#166534;font-size:14px;line-height:1.6;font-weight:600">=
+=E2=97=8F =ED=95=B5=EC=8B=AC =ED=95=9C=EC=A4=84: AMD=EC=99=80 =EC=82=BC=EC=
+=84=B1=EC=9D=98 =ED=98=91=EB=A0=A5=EC=9D=80 AI =EC=9D=B8=ED=94=84=EB=9D=BC =
+=ED=99=95=EC=9E=A5=EC=97=90 =ED=95=84=EC=9A=94=ED=95=9C =EB=A9=94=EB=AA=A8=
+=EB=A6=AC =EC=84=B1=EB=8A=A5=C2=B7=EA=B3=B5=EA=B8=89 =EA=B0=9C=EC=84=A0=EC=
+=97=90 =EC=A7=81=EC=A0=91=EC=A0=81=EC=9D=B8 =EB=8F=84=EC=9B=80=EC=9D=84 =EC=
+=A4=84 =EB=A7=8C=ED=95=B4=EC=9A=94.</div>
+</div>
+<div style=3D"padding:20px 0 0 0;border-top:1px solid #e2e8f0;margin-top:16=
+px">
+<div style=3D"font-family:&#39;Apple SD Gothic Neo&#39;,&#39;Noto Sans KR&#=
+39;,sans-serif;color:#0f172a;font-size:20px;line-height:1.6;font-weight:800=
+" class=3D"text-strong">=E2=91=A2 =EB=B9=85=ED=85=8C=ED=81=AC =EC=8B=A4=EC=
+=A0=81=C2=B7M&amp;A =EC=86=8C=EC=8B=9D=EB=93=A4=EB=A1=9C AI =EA=B2=BD=EC=9F=
+=81 =EC=9E=AC=EC=A0=90=ED=99=94 <span style=3D"font-size:13px;font-weight:4=
+00;color:#64748b" class=3D"text-muted">=E2=80=94 <a href=3D"http://intellec=
+tia.ai">intellectia.ai</a></span></div>
+<div style=3D"margin-top:12px;border-left:3px solid #3b82f6;padding:12px 16=
+px;background:#f8fafc;font-family:&#39;Apple SD Gothic Neo&#39;,&#39;Noto S=
+ans KR&#39;,sans-serif;color:#334155;font-size:15px;line-height:1.9;white-s=
+pace:pre-line" class=3D"text-body">=EC=97=AC=EB=9F=AC =EB=B9=85=ED=85=8C=ED=
+=81=AC=EC=9D=98 =EC=8B=A4=EC=A0=81=C2=B7M&amp;A=C2=B7=ED=88=AC=EC=9E=90 =EC=
+=86=8C=EC=8B=9D=EC=9D=B4 =EC=9D=B4=EC=96=B4=EC=A7=80=EB=A9=B0 AI =EA=B2=BD=
+=EC=9F=81 =EA=B5=AC=EB=8F=84=EA=B0=80 =EC=9E=AC=EC=A0=90=ED=99=94=EB=90=98=
+=EA=B3=A0 =EC=9E=88=EC=96=B4=EC=9A=94.
+
+=EA=B5=AC=EA=B8=80=EC=9D=98 =EB=8C=80=ED=98=95 =EC=9D=B8=EC=88=98, MS=C2=B7=
+=EC=95=84=EB=A7=88=EC=A1=B4=EC=9D=98 =EC=A0=84=EB=9E=B5 =EA=B0=95=ED=99=94 =
+=EB=93=B1=EC=9D=B4 =EA=B1=B0=EB=A1=A0=EB=90=98=EB=A9=B0 =ED=88=AC=EC=9E=90=
+=EC=9E=90=EB=93=A4=EC=9D=B4 =EA=B8=B0=EC=97=85=EB=B3=84 =EC=9D=B4=EC=9D=B5=
+=EA=B3=BC =EB=B0=B8=EB=A5=98=EC=97=90=EC=9D=B4=EC=85=98 =EC=98=81=ED=96=A5=
+=EC=9D=84 =EC=9E=AC=ED=8F=89=EA=B0=80=ED=95=98=EB=8A=94 =ED=9D=90=EB=A6=84=
+=EC=9D=B4 =EA=B4=80=EC=B0=B0=EB=8F=BC=EC=9A=94.
+=E2=86=92 <a href=3D"https://intellectia.ai/news/stock/key-stock-market-mov=
+ers-microsoft-meta-tesla-ibm-sap-apple-and-others">https://intellectia.ai/n=
+ews/stock/key-stock-market-movers-microsoft-meta-tesla-ibm-sap-apple-and-ot=
+hers</a></div>
+<div style=3D"margin-top:12px;padding:10px 14px;background:#f0fdf4;border-r=
+adius:6px;font-family:&#39;Apple SD Gothic Neo&#39;,&#39;Noto Sans KR&#39;,=
+sans-serif;color:#166534;font-size:14px;line-height:1.6;font-weight:600">=
+=E2=97=8F =ED=95=B5=EC=8B=AC =ED=95=9C=EC=A4=84: =EB=B9=85=ED=85=8C=ED=81=
+=AC=EC=9D=98 =EC=9D=B8=EC=88=98=C2=B7=ED=88=AC=EC=9E=90 =EC=86=8C=EC=8B=9D=
+=EC=9D=B4 AI =EA=B2=BD=EC=9F=81=EC=9D=84 =EC=9E=AC=EC=A0=90=ED=99=94=ED=95=
+=98=EB=A9=B0 =EC=8B=9C=EC=9E=A5 =EA=B8=B0=EB=8C=80=EB=A5=BC =EC=9E=AC=ED=8E=
+=B8=ED=95=98=EA=B3=A0 =EC=9E=88=EC=96=B4=EC=9A=94.</div>
+</div>
+<div style=3D"padding:20px 0 0 0;border-top:1px solid #e2e8f0;margin-top:16=
+px">
+<div style=3D"font-family:&#39;Apple SD Gothic Neo&#39;,&#39;Noto Sans KR&#=
+39;,sans-serif;color:#0f172a;font-size:20px;line-height:1.6;font-weight:800=
+" class=3D"text-strong">=E2=91=A3 =EB=A7=88=EC=9D=B4=ED=81=AC=EB=A1=9C=EC=
+=86=8C=ED=94=84=ED=8A=B8=EC=9D=98 =EC=97=94=ED=84=B0=ED=94=84=EB=9D=BC=EC=
+=9D=B4=EC=A6=88 =EA=B0=80=EA=B2=A9=EC=A0=95=EC=B1=85=EA=B3=BC =EC=9D=B8=ED=
+=94=84=EB=9D=BC =ED=88=AC=EC=9E=90 =EB=B6=80=EB=8B=B4 <span style=3D"font-s=
+ize:13px;font-weight:400;color:#64748b" class=3D"text-muted">=E2=80=94 NASD=
+AQ.com(=EC=9A=94=EC=95=BD =EC=B6=9C=EC=B2=98 =EC=A7=91=EA=B3=84)</span></di=
+v>
+<div style=3D"margin-top:12px;border-left:3px solid #3b82f6;padding:12px 16=
+px;background:#f8fafc;font-family:&#39;Apple SD Gothic Neo&#39;,&#39;Noto S=
+ans KR&#39;,sans-serif;color:#334155;font-size:15px;line-height:1.9;white-s=
+pace:pre-line" class=3D"text-body">=EB=B3=B4=EA=B3=A0=EB=90=9C =EB=B0=94=EC=
+=97=90 =EB=94=B0=EB=A5=B4=EB=A9=B4 MS=EB=8A=94 Microsoft 365 E7 =ED=94=8C=
+=EB=9E=9C=EC=9D=84 =EC=9B=94 $99=EB=A1=9C =EC=9D=B8=EC=83=81=ED=95=98=EB=8A=
+=94 =EB=93=B1 =EA=B0=80=EA=B2=A9 =EC=A0=95=EC=B1=85=EC=9D=84 =ED=86=B5=ED=
+=95=B4 =EC=9D=B8=ED=94=84=EB=9D=BC =ED=88=AC=EC=9E=90 =EB=B6=80=EB=8B=B4=EC=
+=9D=84 =EC=9D=BC=EB=B6=80 =EB=B3=B4=EC=99=84=ED=95=98=EB=A0=A4=EB=8A=94 =EC=
+=9B=80=EC=A7=81=EC=9E=84=EC=9D=B4 =EC=9E=88=EC=96=B4=EC=9A=94.
+
+=ED=81=B4=EB=9D=BC=EC=9A=B0=EB=93=9C =EB=A7=A4=EC=B6=9C=EC=9D=80 =EB=8A=98=
+=EC=A7=80=EB=A7=8C =EC=83=81=EC=9A=A9 =EC=A2=8C=EC=84=9D =EC=A6=9D=EA=B0=80=
+=EB=8A=94 =EC=A0=9C=ED=95=9C=EC=A0=81=EC=9D=B4=EB=9D=BC, =EA=B0=80=EA=B2=A9=
+ =EC=9D=B8=EC=83=81=EC=9D=B4 =EC=8B=A4=EC=A0=81 =EA=B5=AC=EC=A1=B0=EC=97=90=
+ =EC=96=B4=EB=96=A4 =EC=98=81=ED=96=A5=EC=9D=84 =EB=AF=B8=EC=B9=A0=EC=A7=80=
+=EB=8A=94 =EC=B6=94=EA=B0=80 =ED=99=95=EC=9D=B8=EC=9D=B4 =ED=95=84=EC=9A=94=
+=ED=95=B4=EC=9A=94.
+=E2=86=92 (=EC=9B=90=EB=AC=B8 =EC=A7=91=EA=B3=84 =EB=A7=81=ED=81=AC: <a hre=
+f=3D"http://intellectia.ai">intellectia.ai</a> =EB=82=B4 =EC=9D=B8=EC=9A=A9=
+ =EC=9E=90=EB=A3=8C =EB=93=B1)</div>
+<div style=3D"margin-top:12px;padding:10px 14px;background:#f0fdf4;border-r=
+adius:6px;font-family:&#39;Apple SD Gothic Neo&#39;,&#39;Noto Sans KR&#39;,=
+sans-serif;color:#166534;font-size:14px;line-height:1.6;font-weight:600">=
+=E2=97=8F =ED=95=B5=EC=8B=AC =ED=95=9C=EC=A4=84: MS=EC=9D=98 =EA=B0=80=EA=
+=B2=A9 =EC=9D=B8=EC=83=81=EC=9D=80 =EC=9D=B8=ED=94=84=EB=9D=BC=EB=B9=84=EC=
+=9A=A9 =EB=B6=80=EB=8B=B4=EC=9D=84 =EC=9D=BC=EB=B6=80 =EB=B3=B4=EC=99=84=ED=
+=95=A0 =EC=88=98 =EC=9E=88=EC=A7=80=EB=A7=8C, =EA=B3=A0=EA=B0=9D =ED=99=95=
+=EB=8C=80=EA=B0=80 =EA=B4=80=EA=B1=B4=EC=9D=B4=EC=97=90=EC=9A=94.</div>
+</div>
+<div style=3D"padding:20px 0 0 0;border-top:1px solid #e2e8f0;margin-top:16=
+px">
+<div style=3D"font-family:&#39;Apple SD Gothic Neo&#39;,&#39;Noto Sans KR&#=
+39;,sans-serif;color:#0f172a;font-size:20px;line-height:1.6;font-weight:800=
+" class=3D"text-strong">=E2=91=A4 =EC=97=B0=EC=A4=80 =EB=B3=B4=EB=A5=98 =ED=
+=9B=84 =EC=8B=9C=EC=9E=A5 =EB=B0=98=EC=9D=91 =EC=9A=94=EC=95=BD <span style=
+=3D"font-size:13px;font-weight:400;color:#64748b" class=3D"text-muted">=E2=
+=80=94 (=EC=A2=85=ED=95=A9 =EC=B6=9C=EC=B2=98=EB=93=A4)</span></div>
+<div style=3D"margin-top:12px;border-left:3px solid #3b82f6;padding:12px 16=
+px;background:#f8fafc;font-family:&#39;Apple SD Gothic Neo&#39;,&#39;Noto S=
+ans KR&#39;,sans-serif;color:#334155;font-size:15px;line-height:1.9;white-s=
+pace:pre-line" class=3D"text-body">=EC=97=B0=EC=A4=80=EC=9D=98 =EA=B8=88=EB=
+=A6=AC =EB=B3=B4=EB=A5=98=EC=99=80 =ED=8C=8C=EC=9B=94=EC=9D=98 =EB=B0=9C=EC=
+=96=B8(=EB=AC=BC=EA=B0=80 =EC=A7=84=EC=A0=84 =EC=97=86=EC=9D=B4=EB=8A=94 =
+=EA=B8=88=EB=A6=AC =EC=9D=B8=ED=95=98 =EC=97=86=EC=9D=8C) =EC=9D=B4=ED=9B=
+=84 S&amp;P500=EA=B3=BC =EB=82=98=EC=8A=A4=EB=8B=A5=EC=9D=B4 =ED=95=98=EB=
+=9D=BD=ED=96=88=EA=B3=A0, VIX=EB=8A=94 =ED=81=AC=EA=B2=8C =EC=98=AC=EB=9E=
+=90=EC=96=B4=EC=9A=94.
+
+=EC=9D=B4=EB=A1=9C =EC=9D=B8=ED=95=B4 =EA=B8=88=EB=A6=AC=EC=97=90 =EB=AF=BC=
+=EA=B0=90=ED=95=9C =EC=84=B1=EC=9E=A5=C2=B7=EA=B8=B0=EC=88=A0=EC=A3=BC=EB=
+=8A=94 =EB=8B=A8=EA=B8=B0=EC=A0=81=EC=9C=BC=EB=A1=9C =ED=95=98=EB=B0=A9 =EC=
+=95=95=EB=A0=A5=EC=9D=84 =EB=B0=9B=EC=9D=80 =EB=AA=A8=EC=8A=B5=EC=9D=B4=EC=
+=97=90=EC=9A=94.
+=E2=86=92 (=EC=97=B0=EA=B4=80 =EA=B8=B0=EC=82=AC: Fed =EB=B3=B4=EB=8F=84=EC=
+=9E=90=EB=A3=8C=C2=B7CBS, Fox Business =EB=93=B1 =EC=A7=91=EA=B3=84)</div>
+<div style=3D"margin-top:12px;padding:10px 14px;background:#f0fdf4;border-r=
+adius:6px;font-family:&#39;Apple SD Gothic Neo&#39;,&#39;Noto Sans KR&#39;,=
+sans-serif;color:#166534;font-size:14px;line-height:1.6;font-weight:600">=
+=E2=97=8F =ED=95=B5=EC=8B=AC =ED=95=9C=EC=A4=84: =EC=97=B0=EC=A4=80=EC=9D=
+=98 =EC=8B=A0=EC=A4=91=ED=95=9C =EC=8A=A4=ED=83=A0=EC=8A=A4=EA=B0=80 =EC=9C=
+=84=ED=97=98=EC=84=A0=ED=98=B8=EB=A5=BC =EC=A4=84=EC=9D=B4=EA=B3=A0 =EB=B3=
+=80=EB=8F=99=EC=84=B1=EC=9D=84 =ED=82=A4=EC=9A=B4 =EA=B2=83=EC=9C=BC=EB=A1=
+=9C =EB=B3=B4=EC=9D=B4=EB=84=A4=EC=9A=94.</div>
+</div>
+</td></tr>
+</table>
+</td></tr><tr><td style=3D"padding:0 0 24px 0">
+<table role=3D"presentation" width=3D"100%" class=3D"card" style=3D"width:1=
+00%;background:#fff;border:1px solid #e2e8f0;border-radius:16px">
+<tr><td class=3D"card-pad" style=3D"padding:24px">
+<div style=3D"border-left:3px solid #f59e0b;padding-left:12px;font-family:&=
+#39;Apple SD Gothic Neo&#39;,&#39;Noto Sans KR&#39;,sans-serif;color:#92400=
+e;font-size:13px;font-weight:600">=E2=96=A0 BTC &amp; =ED=81=AC=EB=A6=BD=ED=
+=86=A0</div>
+<table role=3D"presentation" width=3D"100%" style=3D"padding-top:16px">
+<tr>
+<td style=3D"font-family:&#39;Apple SD Gothic Neo&#39;,&#39;Noto Sans KR&#3=
+9;,sans-serif;color:#0f172a;font-size:18px;font-weight:800" class=3D"text-s=
+trong">BTC $69,739 <span style=3D"display:inline-block;background:#fef2f2;c=
+olor:#991b1b;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:7=
+00;font-variant-numeric:tabular-nums" class=3D"badge-down">=E2=96=BC -2.1%<=
+/span>
+</td>
+<td align=3D"right" style=3D"font-family:&#39;Apple SD Gothic Neo&#39;,&#39=
+;Noto Sans KR&#39;,sans-serif;color:#475569;font-size:14px" class=3D"text-b=
+ody">=EA=B3=B5=ED=8F=AC=ED=83=90=EC=9A=95 23 / 100 <span style=3D"font-weig=
+ht:600">Extreme Fear</span></td>
+</tr>
+</table>
+<table role=3D"presentation" width=3D"100%" style=3D"padding-top:12px;font-=
+size:13px">
+<tr style=3D"color:#94a3b8;font-weight:600"><td>ETF</td><td align=3D"right"=
+>=EA=B0=80=EA=B2=A9</td><td align=3D"right">=EB=93=B1=EB=9D=BD</td><td alig=
+n=3D"right">=EA=B1=B0=EB=9E=98=EB=9F=89</td></tr>
+<tr style=3D"border-top:1px solid #e2e8f0;color:#334155" class=3D"text-body=
+">
+<td style=3D"padding:6px 0;font-weight:600">IBIT</td>
+<td align=3D"right">$39.47</td>
+<td align=3D"right"><span style=3D"display:inline-block;background:#fef2f2;=
+color:#991b1b;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-down">=E2=96=BC -2.0%=
+</span>
+</td>
+<td align=3D"right" style=3D"color:#94a3b8">$0</td>
+</tr>
+<tr style=3D"border-top:1px solid #e2e8f0;color:#334155" class=3D"text-body=
+">
+<td style=3D"padding:6px 0;font-weight:600">FBTC</td>
+<td align=3D"right">$60.63</td>
+<td align=3D"right"><span style=3D"display:inline-block;background:#fef2f2;=
+color:#991b1b;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-down">=E2=96=BC -2.0%=
+</span>
+</td>
+<td align=3D"right" style=3D"color:#94a3b8">$0</td>
+</tr>
+<tr style=3D"border-top:1px solid #e2e8f0;color:#334155" class=3D"text-body=
+">
+<td style=3D"padding:6px 0;font-weight:600">ARKB</td>
+<td align=3D"right">$23.09</td>
+<td align=3D"right"><span style=3D"display:inline-block;background:#fef2f2;=
+color:#991b1b;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-down">=E2=96=BC -2.1%=
+</span>
+</td>
+<td align=3D"right" style=3D"color:#94a3b8">$0</td>
+</tr>
+<tr style=3D"border-top:1px solid #e2e8f0;color:#334155" class=3D"text-body=
+">
+<td style=3D"padding:6px 0;font-weight:600">BITB</td>
+<td align=3D"right">$37.81</td>
+<td align=3D"right"><span style=3D"display:inline-block;background:#fef2f2;=
+color:#991b1b;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-down">=E2=96=BC -2.0%=
+</span>
+</td>
+<td align=3D"right" style=3D"color:#94a3b8">$0</td>
+</tr>
+<tr style=3D"border-top:1px solid #e2e8f0;color:#334155" class=3D"text-body=
+">
+<td style=3D"padding:6px 0;font-weight:600">GBTC</td>
+<td align=3D"right">$54.23</td>
+<td align=3D"right"><span style=3D"display:inline-block;background:#fef2f2;=
+color:#991b1b;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-down">=E2=96=BC -2.0%=
+</span>
+</td>
+<td align=3D"right" style=3D"color:#94a3b8">$0</td>
+</tr>
+<tr style=3D"border-top:1px solid #e2e8f0;color:#475569;font-weight:600"><t=
+d style=3D"padding:6px 0">=ED=95=A9=EC=82=B0 =EA=B1=B0=EB=9E=98=EB=9F=89</t=
+d><td colspan=3D"3" align=3D"right">$18.6M</td></tr>
+</table>
+<div style=3D"padding-top:12px;border-top:1px solid #e2e8f0;margin-top:12px=
+">
+<div style=3D"font-size:12px;color:#94a3b8;font-weight:600" class=3D"text-m=
+uted">=EA=B8=B0=EA=B4=80 =EB=B3=B4=EC=9C=A0 =ED=98=84=ED=99=A9</div>
+<div style=3D"padding-top:6px;font-size:13px;color:#334155" class=3D"text-b=
+ody">Bitwise BITB =E2=80=94 38,921 BTC =C2=B7 AUM $2,764,241,152</div>
+<div style=3D"padding-top:6px;font-size:13px;color:#334155" class=3D"text-b=
+ody">iShares IBIT =E2=80=94 786,105 BTC =C2=B7 AUM $55,986,997,560</div>
+</div>
+</td></tr>
+</table>
+</td></tr><tr><td style=3D"padding:0 0 24px 0">
+<table role=3D"presentation" width=3D"100%" class=3D"card" style=3D"width:1=
+00%;background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px">
+<tr><td class=3D"card-pad" style=3D"padding:20px 24px">
+<div style=3D"border-left:3px solid #0f766e;padding-left:12px;font-family:&=
+#39;Apple SD Gothic Neo&#39;,&#39;Noto Sans KR&#39;,sans-serif;color:#0f766=
+e;font-size:13px;font-weight:600">=E2=96=A0 =EC=8B=9C=EC=9E=A5 =EC=A7=80=ED=
+=91=9C</div>
+<table role=3D"presentation" width=3D"100%" style=3D"padding-top:10px;font-=
+size:13px">
+<tr style=3D"border-top:1px solid #e2e8f0">
+<td style=3D"padding:6px 0;font-weight:600;color:#0f172a" class=3D"text-str=
+ong">SPY</td>
+<td style=3D"color:#64748b" class=3D"text-muted">S&amp;P 500</td>
+<td align=3D"right" class=3D"text-body">657.61</td>
+<td align=3D"right"><span style=3D"display:inline-block;background:#fef2f2;=
+color:#991b1b;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-down">=E2=96=BC -0.6%=
+</span>
+</td>
+</tr>
+<tr style=3D"border-top:1px solid #e2e8f0">
+<td style=3D"padding:6px 0;font-weight:600;color:#0f172a" class=3D"text-str=
+ong">QQQ</td>
+<td style=3D"color:#64748b" class=3D"text-muted">=EB=82=98=EC=8A=A4=EB=8B=
+=A5</td>
+<td align=3D"right" class=3D"text-body">590.91</td>
+<td align=3D"right"><span style=3D"display:inline-block;background:#fef2f2;=
+color:#991b1b;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-down">=E2=96=BC -0.7%=
+</span>
+</td>
+</tr>
+</table>
+<div style=3D"padding-top:12px;font-size:12px;color:#94a3b8;font-weight:600=
+" class=3D"text-muted">=EB=B9=85=ED=85=8C=ED=81=AC 10=EC=A2=85</div>
+<table role=3D"presentation" width=3D"100%" style=3D"padding-top:6px;font-s=
+ize:13px">
+<tr>
+<td style=3D"padding:4px 0;font-weight:600;color:#0f172a" class=3D"text-str=
+ong">TSM</td>
+<td align=3D"right"><span style=3D"display:inline-block;background:#fef2f2;=
+color:#991b1b;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-down">=E2=96=BC -1.6%=
+</span>
+</td>
+</tr>
+<tr>
+<td style=3D"padding:4px 0;font-weight:600;color:#0f172a" class=3D"text-str=
+ong">NVDA</td>
+<td align=3D"right"><span style=3D"display:inline-block;background:#fef2f2;=
+color:#991b1b;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-down">=E2=96=BC -1.3%=
+</span>
+</td>
+</tr>
+<tr>
+<td style=3D"padding:4px 0;font-weight:600;color:#0f172a" class=3D"text-str=
+ong">META</td>
+<td align=3D"right"><span style=3D"display:inline-block;background:#fef2f2;=
+color:#991b1b;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-down">=E2=96=BC -1.2%=
+</span>
+</td>
+</tr>
+<tr>
+<td style=3D"padding:4px 0;font-weight:600;color:#0f172a" class=3D"text-str=
+ong">AMZN</td>
+<td align=3D"right"><span style=3D"display:inline-block;background:#fef2f2;=
+color:#991b1b;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-down">=E2=96=BC -1.1%=
+</span>
+</td>
+</tr>
+<tr>
+<td style=3D"padding:4px 0;font-weight:600;color:#0f172a" class=3D"text-str=
+ong">GOOGL</td>
+<td align=3D"right"><span style=3D"display:inline-block;background:#fef2f2;=
+color:#991b1b;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-down">=E2=96=BC -0.8%=
+</span>
+</td>
+</tr>
+<tr>
+<td style=3D"padding:4px 0;font-weight:600;color:#0f172a" class=3D"text-str=
+ong">ASML</td>
+<td align=3D"right"><span style=3D"display:inline-block;background:#fef2f2;=
+color:#991b1b;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-down">=E2=96=BC -0.6%=
+</span>
+</td>
+</tr>
+<tr>
+<td style=3D"padding:4px 0;font-weight:600;color:#0f172a" class=3D"text-str=
+ong">MSFT</td>
+<td align=3D"right"><span style=3D"display:inline-block;background:#fef2f2;=
+color:#991b1b;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-down">=E2=96=BC -0.5%=
+</span>
+</td>
+</tr>
+<tr>
+<td style=3D"padding:4px 0;font-weight:600;color:#0f172a" class=3D"text-str=
+ong">AMD</td>
+<td align=3D"right"><span style=3D"display:inline-block;background:#fef2f2;=
+color:#991b1b;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-down">=E2=96=BC -0.3%=
+</span>
+</td>
+</tr>
+<tr>
+<td style=3D"padding:4px 0;font-weight:600;color:#0f172a" class=3D"text-str=
+ong">AAPL</td>
+<td align=3D"right"><span style=3D"display:inline-block;background:#fef2f2;=
+color:#991b1b;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-down">=E2=96=BC -0.1%=
+</span>
+</td>
+</tr>
+<tr>
+<td style=3D"padding:4px 0;font-weight:600;color:#0f172a" class=3D"text-str=
+ong">AVGO</td>
+<td align=3D"right"><span style=3D"display:inline-block;background:#fef2f2;=
+color:#991b1b;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-down">=E2=96=BC -0.0%=
+</span>
+</td>
+</tr>
+</table>
+<div style=3D"padding-top:12px;border-top:1px solid #e2e8f0;margin-top:8px"=
+>
+<div style=3D"font-size:12px;color:#94a3b8;font-weight:600" class=3D"text-m=
+uted">=EA=B1=B0=EC=8B=9C =EC=A7=80=ED=91=9C</div>
+<table role=3D"presentation" width=3D"100%" style=3D"padding-top:6px;font-s=
+ize:13px">
+<tr>
+<td style=3D"padding:4px 0;color:#475569;font-weight:600" class=3D"text-bod=
+y">=EB=AF=B8=EA=B5=AD 10=EB=85=84=EB=AC=BC =EA=B5=AD=EC=B1=84=EA=B8=88=EB=
+=A6=AC (DGS10)</td>
+<td align=3D"right" style=3D"color:#0f172a" class=3D"text-strong">4.20% <sp=
+an style=3D"font-size:11px;color:#94a3b8">(=EC=A0=84=EC=9D=BC)</span>
+</td>
+<td align=3D"right"><span style=3D"display:inline-block;background:#f3f4f6;=
+color:#4b5563;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-flat">=E2=80=94 =EC=
+=A0=84=EC=9D=BC =EB=8C=80=EB=B9=84 -0.71%, source field: us10y</span>
+</td>
+</tr>
+<tr>
+<td style=3D"padding:4px 0;color:#475569;font-weight:600" class=3D"text-bod=
+y">=EB=AF=B8=EA=B5=AD 2=EB=85=84=EB=AC=BC =EA=B5=AD=EC=B1=84=EA=B8=88=EB=A6=
+=AC (DGS2)</td>
+<td align=3D"right" style=3D"color:#0f172a" class=3D"text-strong">3.68%</td=
+>
+<td align=3D"right"><span style=3D"display:inline-block;background:#f3f4f6;=
+color:#4b5563;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-flat">=E2=80=94 =EB=
+=B3=80=EB=8F=99 =EC=97=86=EC=9D=8C, source field: us2y</span>
+</td>
+</tr>
+<tr>
+<td style=3D"padding:4px 0;color:#475569;font-weight:600" class=3D"text-bod=
+y">=EC=9E=A5=EB=8B=A8=EA=B8=B0 =EC=8A=A4=ED=94=84=EB=A0=88=EB=93=9C (10y =
+=E2=88=92 2y)</td>
+<td align=3D"right" style=3D"color:#0f172a" class=3D"text-strong">0.52 perc=
+entage points</td>
+<td align=3D"right"><span style=3D"display:inline-block;background:#f3f4f6;=
+color:#4b5563;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-flat">=E2=80=94 4.20%=
+ =E2=88=92 3.68%</span>
+</td>
+</tr>
+<tr>
+<td style=3D"padding:4px 0;color:#475569;font-weight:600" class=3D"text-bod=
+y">=EB=AF=B8=EA=B5=AD 3=EA=B0=9C=EC=9B=94=EB=AC=BC =EB=8B=A8=EA=B8=B0=EA=B8=
+=88=EB=A6=AC (^IRX)</td>
+<td align=3D"right" style=3D"color:#0f172a" class=3D"text-strong">3.61%</td=
+>
+<td align=3D"right"><span style=3D"display:inline-block;background:#f3f4f6;=
+color:#4b5563;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-flat">=E2=80=94 =EB=
+=B3=80=EB=8F=99 =EC=97=86=EC=9D=8C, source field: us3m</span>
+</td>
+</tr>
+<tr>
+<td style=3D"padding:4px 0;color:#475569;font-weight:600" class=3D"text-bod=
+y">=EB=8B=AC=EB=9F=AC =EC=9D=B8=EB=8D=B1=EC=8A=A4 (DXY)</td>
+<td align=3D"right" style=3D"color:#0f172a" class=3D"text-strong">99.873</t=
+d>
+<td align=3D"right"><span style=3D"display:inline-block;background:#dcfce7;=
+color:#166534;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-up">=E2=96=B2 +0.55%,=
+ source field: dxy</span>
+</td>
+</tr>
+<tr>
+<td style=3D"padding:4px 0;color:#475569;font-weight:600" class=3D"text-bod=
+y">VIX (VIXCLS)</td>
+<td align=3D"right" style=3D"color:#0f172a" class=3D"text-strong">25.09</td=
+>
+<td align=3D"right"><span style=3D"display:inline-block;background:#dcfce7;=
+color:#166534;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-up">=E2=96=B2 +12.16%=
+, source field: vix</span>
+</td>
+</tr>
+<tr>
+<td style=3D"padding:4px 0;color:#475569;font-weight:600" class=3D"text-bod=
+y">=EC=9B=90/=EB=8B=AC=EB=9F=AC (KRW=3DX)</td>
+<td align=3D"right" style=3D"color:#0f172a" class=3D"text-strong">1,493.98=
+=EC=9B=90</td>
+<td align=3D"right"><span style=3D"display:inline-block;background:#dcfce7;=
+color:#166534;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-up">=E2=96=B2 +0.61%,=
+ source field: usdkrw</span>
+</td>
+</tr>
+<tr>
+<td style=3D"padding:4px 0;color:#475569;font-weight:600" class=3D"text-bod=
+y">=EB=82=98=EC=8A=A4=EB=8B=A5 =EC=84=A0=EB=AC=BC (NQ=3DF)</td>
+<td align=3D"right" style=3D"color:#0f172a" class=3D"text-strong">24,547.75=
+</td>
+<td align=3D"right"><span style=3D"display:inline-block;background:#dcfce7;=
+color:#166534;padding:2px 8px;border-radius:4px;font-size:13px;font-weight:=
+700;font-variant-numeric:tabular-nums" class=3D"badge-up">=E2=96=B2 +0.46%,=
+ source field: nq_futures</span>
+</td>
+</tr>
+</table>
+</div>
+</td></tr>
+</table>
+</td></tr><tr><td style=3D"padding:12px 8px 0 8px;text-align:center;font-fa=
+mily:&#39;Apple SD Gothic Neo&#39;,&#39;Noto Sans KR&#39;,sans-serif">
+<div class=3D"text-muted" style=3D"color:#94a3b8;font-size:11px;line-height=
+:1.8">=EB=8D=B0=EC=9D=B4=ED=84=B0: FRED =C2=B7 Stooq =C2=B7 CoinGecko =C2=
+=B7 Perplexity =C2=B7 Grok X Search</div>
+<div class=3D"text-muted" style=3D"color:#94a3b8;font-size:11px;line-height=
+:1.8;padding-top:4px">=EB=B3=B8 =EB=A9=94=EC=9D=BC=EC=9D=80 =EA=B3=B5=EA=B0=
+=9C =EC=8B=9C=EC=9E=A5 =EB=8D=B0=EC=9D=B4=ED=84=B0 =EA=B8=B0=EB=B0=98 =EC=
+=A0=95=EB=B3=B4=EC=84=B1 =EB=B8=8C=EB=A6=AC=ED=95=91=EC=9D=B4=EB=A9=B0 =ED=
+=88=AC=EC=9E=90 =EA=B6=8C=EC=9C=A0=EA=B0=80 =EC=95=84=EB=8B=99=EB=8B=88=EB=
+=8B=A4.</div>
+<div style=3D"padding-top:4px">
+<a href=3D"mailto:rldnjsdlsi@gmail.com?subject=3DMorning%20Market%20Brief%2=
+0%EA%B5%AC%EB%8F%85%20%ED%95%B4%EC%A7%80&amp;body=3D%EA%B5%AC%EB%8F%85%20%E=
+D%95%B4%EC%A7%80%EB%A5%BC%20%EC%9A%94%EC%B2%AD%ED%95%A9%EB%8B%88%EB%8B%A4."=
+ style=3D"color:#94a3b8;font-size:11px;text-decoration:underline">=EA=B5=AC=
+=EB=8F=85 =ED=95=B4=EC=A7=80</a>
+<span style=3D"color:#94a3b8;font-size:11px"> =C2=B7 </span>
+<a href=3D"https://github.com/froggy-0/news" style=3D"color:#94a3b8;font-si=
+ze:11px;text-decoration:underline">GitHub</a>
+</div>
+</td></tr></table>
+</td></tr>
+</table>
+</body>
+</html>
+
+--000000000000b194e0064d62214e--
