@@ -1,22 +1,40 @@
-{# 변수: display_date, read_time, snapshot_badges #}
-{% from "email_macros.html.j2" import badge %}
+{# 변수: display_date, read_time, snapshot_badges, header_signal_label, header_signal_tone #}
+{% from "email_macros.html.j2" import delta_text, pill %}
 <tr><td style="padding:0 0 24px 0;">
-<table role="presentation" width="100%" class="card" style="width:100%;background:#fff;border:1px solid #e2e8f0;border-radius:16px;">
-<tr><td class="card-pad" style="padding:32px 24px 20px 24px;">
-<div style="font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#1e40af;font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;" class="text-muted">뉴욕 마감 브리핑</div>
-<div style="padding-top:10px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#0f172a;font-size:26px;line-height:1.35;font-weight:800;letter-spacing:-0.03em;" class="text-strong">미국 기술주&#183;비트코인 시장 브리핑</div>
-<div style="padding-top:8px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#64748b;font-size:13px;line-height:1.6;" class="text-muted">{{ display_date }} &#183; {{ read_time }}</div>
-<div class="gradient-line" style="margin-top:18px;height:1px;background:linear-gradient(90deg,#cbd5e1,#1e40af,#cbd5e1);"></div>
+<table role="presentation" width="100%" class="card" style="width:100%;background:#10192b;border:1px solid #22324d;border-radius:20px;">
+<tr><td class="card-pad" style="padding:30px 24px 24px 24px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+<td class="meta-stack" valign="top" style="padding:0 12px 0 0;">
+<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#8b9bb3;font-size:11px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;" class="text-muted">뉴욕 마감 기준</div>
+<div style="padding-top:10px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#f4f7fb;font-size:29px;line-height:1.35;font-weight:800;letter-spacing:-0.04em;" class="text-strong">미국 기술주&#183;비트코인 시장 브리핑</div>
+<div style="padding-top:8px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#8b9bb3;font-size:13px;line-height:1.7;" class="text-muted">{{ display_date }} &#183; {{ read_time }}</div>
+</td>
+<td class="meta-stack" valign="top" align="right" style="padding:0 0 0 12px;white-space:nowrap;">
+{{ pill(header_signal_label or "시장 점검", header_signal_tone or "flat") }}
+</td>
+</tr>
+</table>
+<div class="section-divider" style="margin-top:20px;height:1px;background:linear-gradient(90deg,rgba(66,93,130,0),rgba(66,93,130,0.85),rgba(66,93,130,0));"></div>
 {% if snapshot_badges %}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:18px;">
-<tr>
 {% for b in snapshot_badges %}
-<td class="snapshot-badge" style="text-align:center;padding:4px;">
-<div style="font-size:11px;color:#94a3b8;font-weight:700;letter-spacing:0.04em;" class="text-muted">{{ b.label }}</div>
-<div style="padding-top:4px;">{{ badge(b.value, b.direction) }}</div>
+{% if loop.index0 % 3 == 0 %}<tr class="metric-stack">{% endif %}
+<td class="metric-cell" valign="top" style="width:33.333%;padding:0 8px 14px 0;">
+<div style="background:#0b1423;border:1px solid #1f2f4b;border-radius:14px;padding:14px 14px 12px 14px;">
+<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#7b90ac;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;" class="text-muted">{{ b.label }}</div>
+<div style="padding-top:8px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#f4f7fb;font-size:20px;line-height:1.3;font-weight:800;letter-spacing:-0.03em;font-variant-numeric:tabular-nums;" class="text-strong">{{ b.value }}</div>
+{% if b.change %}
+<div style="padding-top:6px;">{{ delta_text(b.change, b.direction) }}</div>
+{% elif b.status_text %}
+<div style="padding-top:7px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#8b9bb3;font-size:12px;line-height:1.6;" class="text-muted">{{ b.status_text }}</div>
+{% else %}
+<div style="padding-top:6px;">{{ delta_text("보합", "flat") }}</div>
+{% endif %}
+</div>
 </td>
+{% if loop.index0 % 3 == 2 or loop.last %}</tr>{% endif %}
 {% endfor %}
-</tr>
 </table>
 {% endif %}
 </td></tr>

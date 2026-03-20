@@ -1,44 +1,44 @@
 {# 변수: news_source_items, market_source_lines, data_quality_status, footer_notes, unsubscribe_url, github_url #}
 {% from "email_macros.html.j2" import section_label %}
 <tr><td style="padding:0 0 12px 0;">
-<table role="presentation" width="100%" class="card" style="width:100%;background:#fff;border:1px solid #e2e8f0;border-radius:16px;">
-<tr><td class="card-pad" style="padding:24px;">
-{{ section_label("출처와 데이터", "#0f172a") }}
+<table role="presentation" width="100%" class="card" style="width:100%;background:#10192b;border:1px solid #22324d;border-radius:20px;">
+<tr><td class="card-pad" style="padding:28px 24px;">
+{{ section_label("출처와 데이터", "#cdd8ea") }}
 {% if news_source_items %}
-<div style="padding-top:16px;">
-<div style="color:#64748b;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;" class="text-muted">뉴스 출처</div>
+<div style="padding-top:16px;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#8b9bb3;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;" class="text-muted">뉴스 출처</div>
 {% for item in news_source_items %}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:10px;">
 <tr>
-<td style="font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#334155;font-size:14px;line-height:1.7;" class="text-body">· {{ item.source_kind }}</td>
-<td align="right" style="font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#0f172a;font-size:13px;line-height:1.7;font-weight:700;" class="text-strong">{% if item.safe_url %}<a href="{{ item.safe_url }}" style="color:#0f172a;text-decoration:none;">{{ item.source_name }}</a>{% else %}{{ item.source_name }}{% endif %}</td>
+<td style="font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#8b9bb3;font-size:13px;line-height:1.7;" class="text-muted">{{ item.source_kind }}</td>
+<td align="right" style="font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#f4f7fb;font-size:14px;line-height:1.7;font-weight:700;" class="text-strong">{% if item.safe_url %}<a href="{{ item.safe_url }}" style="color:#f4f7fb;text-decoration:none;">{{ item.source_name }}</a>{% else %}{{ item.source_name }}{% endif %}</td>
 </tr>
 </table>
 {% endfor %}
-</div>
 {% endif %}
-<div style="padding-top:16px;">
-<div style="color:#64748b;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;" class="text-muted">시장 데이터</div>
+<div style="padding-top:18px;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#8b9bb3;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;" class="text-muted">시장 데이터</div>
 {% for line in market_source_lines %}
-<div style="padding-top:10px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#334155;font-size:14px;line-height:1.7;" class="text-body">· {{ line }}</div>
+<div style="padding-top:10px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#d7e1ef;font-size:14px;line-height:1.7;" class="text-body">· {{ line }}</div>
 {% endfor %}
+<div style="margin-top:18px;padding:16px 18px;background:#0b1423;border:1px solid #1f2f4b;border-radius:16px;">
+<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#8b9bb3;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;" class="text-muted">수집 기준</div>
+<div style="padding-top:8px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#d7e1ef;font-size:14px;line-height:1.8;" class="text-body">뉴욕 마감 이후 공개 시장 데이터와 검증된 뉴스, 공식 X 시그널을 바탕으로 요약했습니다.</div>
 </div>
 {% if data_quality_status != "ok" and footer_notes %}
-<div style="padding-top:16px;border-top:1px solid #e2e8f0;margin-top:16px;">
-<div style="color:#64748b;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;" class="text-muted">데이터 처리 메모</div>
+<div style="padding-top:18px;">
+<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#8b9bb3;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;" class="text-muted">데이터 처리 메모</div>
 {% for note in footer_notes %}
-<div style="padding-top:8px;color:#64748b;font-size:12px;line-height:1.7;" class="text-muted">{{ note }}</div>
+<div style="padding-top:8px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#9fb0c8;font-size:13px;line-height:1.7;" class="text-muted">{{ note }}</div>
 {% endfor %}
 </div>
 {% endif %}
 </td></tr>
 </table>
 </td></tr>
-<tr><td style="padding:0 8px 0 8px;text-align:center;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;">
-<div class="text-muted" style="color:#94a3b8;font-size:11px;line-height:1.8;">본 메일은 공개 시장 데이터 기반 정보성 브리핑이며 투자 권유가 아닙니다.</div>
+<tr><td style="padding:0 8px 0 8px;text-align:center;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;">
+<div class="text-muted" style="color:#7f90a9;font-size:11px;line-height:1.8;">본 메일은 공개 시장 데이터 기반 정보성 브리핑이며 투자 권유가 아닙니다.</div>
 <div style="padding-top:4px;">
-<a href="{{ unsubscribe_url }}" style="color:#94a3b8;font-size:11px;text-decoration:underline;">구독 해지</a>
-<span style="color:#94a3b8;font-size:11px;"> &#183; </span>
-<a href="{{ github_url }}" style="color:#94a3b8;font-size:11px;text-decoration:underline;">GitHub</a>
+<a href="{{ unsubscribe_url }}" style="color:#9fb0c8;font-size:11px;text-decoration:underline;">구독 해지</a>
+<span style="color:#60728f;font-size:11px;"> &#183; </span>
+<a href="{{ github_url }}" style="color:#9fb0c8;font-size:11px;text-decoration:underline;">GitHub</a>
 </div>
 </td></tr>

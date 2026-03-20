@@ -1,55 +1,56 @@
-{# 변수: stock_indices, stock_tech, macro_indicators #}
-{% from "email_macros.html.j2" import badge, quality_mark %}
+{# 변수: stock_indices, stock_tech, macro_indicators, market_status_text #}
+{% from "email_macros.html.j2" import badge, quality_mark, section_label %}
 <tr><td style="padding:0 0 24px 0;">
-<table role="presentation" width="100%" class="card" style="width:100%;background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;">
-<tr><td class="card-pad" style="padding:20px 24px;">
-<div style="border-left:3px solid #0f766e;padding-left:12px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#0f766e;font-size:13px;font-weight:600;">&#9632; 시장 지표</div>
+<table role="presentation" width="100%" class="card" style="width:100%;background:#10192b;border:1px solid #22324d;border-radius:20px;">
+<tr><td class="card-pad" style="padding:28px 24px;">
+{{ section_label("미국 증시 흐름", "#cdd8ea") }}
 {% if not stock_indices and not stock_tech and not macro_indicators %}
-<div style="padding-top:14px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#64748b;font-size:14px;line-height:1.7;" class="text-muted">{{ market_status_text or "이번 집계에서는 시장 지표를 확인하지 못했어요." }}</div>
+<div style="padding-top:16px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#8b9bb3;font-size:15px;line-height:1.8;" class="text-muted">{{ market_status_text or "이번 집계에서는 시장 지표를 확인하지 못했어요." }}</div>
 {% endif %}
 {% if stock_indices %}
-<table role="presentation" width="100%" style="padding-top:10px;font-size:13px;">
+<div style="padding-top:16px;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#8b9bb3;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;" class="text-muted">주요 지수</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:10px;">
 {% for s in stock_indices %}
-<tr style="border-top:1px solid #e2e8f0;">
-<td style="padding:6px 0;font-weight:600;color:#0f172a;" class="text-strong">{{ s.ticker }}</td>
-<td style="color:#64748b;" class="text-muted">{{ s.name }}</td>
-<td align="right" class="text-body">{{ s.price }}</td>
-<td align="right">{{ badge(s.change_pct, s.direction) }}</td>
+<tr>
+<td style="padding:10px 0;border-top:1px solid #22324d;">
+<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#f4f7fb;font-size:13px;font-weight:700;" class="text-strong">{{ s.ticker }}</div>
+<div style="padding-top:4px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#8b9bb3;font-size:13px;line-height:1.6;" class="text-muted">{{ s.name }}</div>
+</td>
+<td align="right" style="padding:10px 0;border-top:1px solid #22324d;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#d7e1ef;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;" class="text-body">{{ s.price }}</td>
+<td align="right" style="padding:10px 0 10px 12px;border-top:1px solid #22324d;">{{ badge(s.change_pct, s.direction) }}</td>
 </tr>
 {% endfor %}
 </table>
 {% endif %}
 {% if stock_tech %}
-<div style="padding-top:12px;font-size:12px;color:#94a3b8;font-weight:600;" class="text-muted">빅테크 10종</div>
-<table role="presentation" width="100%" style="padding-top:6px;font-size:13px;">
+<div style="padding-top:18px;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#8b9bb3;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;" class="text-muted">주요 기술주</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:10px;">
 {% for s in stock_tech %}
 <tr>
-<td style="padding:4px 0;font-weight:600;color:#0f172a;" class="text-strong">{{ s.ticker }}</td>
-<td align="right">{{ badge(s.change_pct, s.direction) }}</td>
+<td style="padding:9px 0;border-top:1px solid #22324d;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#f4f7fb;font-size:13px;font-weight:700;" class="text-strong">{{ s.ticker }}</td>
+<td align="right" style="padding:9px 0;border-top:1px solid #22324d;">{{ badge(s.change_pct, s.direction) }}</td>
 </tr>
 {% endfor %}
 </table>
 {% endif %}
 {% if macro_indicators %}
-<div style="padding-top:12px;border-top:1px solid #e2e8f0;margin-top:8px;">
-<div style="font-size:12px;color:#94a3b8;font-weight:600;" class="text-muted">거시 지표</div>
-<table role="presentation" width="100%" style="padding-top:6px;font-size:13px;">
+<div style="padding-top:18px;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#8b9bb3;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;" class="text-muted">거시 환경</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:10px;">
 {% for m in macro_indicators %}
 <tr>
-<td style="padding:4px 0;color:#475569;font-weight:600;" class="text-body">{{ m.label }}</td>
-<td align="right" style="color:#0f172a;" class="text-strong">
+<td style="padding:10px 0;border-top:1px solid #22324d;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#d7e1ef;font-size:14px;font-weight:600;" class="text-body">{{ m.label }}</td>
+<td align="right" style="padding:10px 0;border-top:1px solid #22324d;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#f4f7fb;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;" class="text-strong">
 {% if m.is_anomaly %}
-<span class="text-muted" style="color:#64748b;">{{ m.status_text or "이번 집계에서는 확인되지 않았어요." }}</span>
+<span class="text-muted" style="color:#8b9bb3;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;font-size:13px;line-height:1.7;">{{ m.status_text or "이번 집계에서는 확인되지 않았어요." }}</span>
 {% else %}
 {{ m.value }}
 {% if m.is_previous %} {{ quality_mark("전일") }}{% endif %}
 {% endif %}
 </td>
-<td align="right">{% if not m.is_anomaly and m.change %}{{ badge(m.change, m.direction) }}{% endif %}</td>
+<td align="right" style="padding:10px 0 10px 12px;border-top:1px solid #22324d;">{% if not m.is_anomaly and m.change %}{{ badge(m.change, m.direction) }}{% endif %}</td>
 </tr>
 {% endfor %}
 </table>
-</div>
 {% endif %}
 </td></tr>
 </table>

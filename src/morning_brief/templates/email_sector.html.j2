@@ -1,28 +1,39 @@
 {# 변수: sector_mapping (SectorMapping) #}
+{% from "email_macros.html.j2" import section_label %}
 <tr><td style="padding:0 0 24px 0;">
-<table role="presentation" width="100%" class="card" style="width:100%;background:#fff;border:1px solid #e2e8f0;border-radius:16px;">
-<tr><td class="card-pad" style="padding:20px 24px;">
-<div style="border-left:3px solid #7c3aed;padding-left:12px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#7c3aed;font-size:13px;font-weight:600;">&#9632; 오늘 주목 흐름</div>
-<div style="padding-top:12px;">
-<div style="color:#166534;font-size:12px;font-weight:700;">&#9650; 수혜 방향</div>
+<table role="presentation" width="100%" class="card" style="width:100%;background:#10192b;border:1px solid #22324d;border-radius:20px;">
+<tr><td class="card-pad" style="padding:24px;">
+{{ section_label("오늘 주목 흐름", "#cdd8ea") }}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:16px;">
+<tr>
+<td class="stack-col" valign="top" style="width:33.333%;padding-right:8px;">
+<div style="padding:14px 14px 12px 14px;background:#123526;border:1px solid #1d5a41;border-radius:16px;">
+<div style="color:#86e1ad;font-size:12px;font-weight:700;">상단 수혜</div>
 {% for item in sector_mapping.positive %}
-<div style="padding:4px 0 4px 16px;font-size:13px;color:#334155;" class="text-body"><span style="font-weight:600;">{{ item.ticker }}</span> {{ item.reason }}</div>
+<div style="padding-top:8px;font-size:13px;color:#e7f6ee;line-height:1.7;"><span style="font-weight:700;">{{ item.ticker }}</span> {{ item.reason }}</div>
 {% endfor %}
 </div>
-<div style="padding-top:8px;">
-<div style="color:#991b1b;font-size:12px;font-weight:700;">&#9660; 압력 방향</div>
+</td>
+<td class="stack-col" valign="top" style="width:33.333%;padding:0 4px;">
+<div style="padding:14px 14px 12px 14px;background:#3c1b25;border:1px solid #5b2533;border-radius:16px;">
+<div style="color:#f0a8b0;font-size:12px;font-weight:700;">하단 압력</div>
 {% for item in sector_mapping.negative %}
-<div style="padding:4px 0 4px 16px;font-size:13px;color:#334155;" class="text-body"><span style="font-weight:600;">{{ item.ticker }}</span> {{ item.reason }}</div>
+<div style="padding-top:8px;font-size:13px;color:#fdecef;line-height:1.7;"><span style="font-weight:700;">{{ item.ticker }}</span> {{ item.reason }}</div>
 {% endfor %}
 </div>
-<div style="padding-top:8px;">
-<div style="color:#4b5563;font-size:12px;font-weight:700;">&#8212; 중립 / 관망</div>
+</td>
+<td class="stack-col" valign="top" style="width:33.333%;padding-left:8px;">
+<div style="padding:14px 14px 12px 14px;background:#0d1626;border:1px solid #243654;border-radius:16px;">
+<div style="color:#9cb0cb;font-size:12px;font-weight:700;">중립 관망</div>
 {% for item in sector_mapping.neutral %}
-<div style="padding:4px 0 4px 16px;font-size:13px;color:#334155;" class="text-body"><span style="font-weight:600;">{{ item.ticker }}</span> {{ item.reason }}</div>
+<div style="padding-top:8px;font-size:13px;color:#d7e1ef;line-height:1.7;"><span style="font-weight:700;">{{ item.ticker }}</span> {{ item.reason }}</div>
 {% endfor %}
 </div>
+</td>
+</tr>
+</table>
 {% if sector_mapping.commentary %}
-<div style="padding-top:12px;border-top:1px solid #e2e8f0;margin-top:8px;font-size:14px;color:#475569;line-height:1.8;" class="text-body">{{ sector_mapping.commentary }}</div>
+<div style="margin-top:14px;padding:14px 16px;background:#0b1423;border:1px solid #1f2f4b;border-radius:16px;font-size:14px;color:#d7e1ef;line-height:1.8;" class="text-body">{{ sector_mapping.commentary }}</div>
 {% endif %}
 </td></tr>
 </table>

@@ -1,5 +1,6 @@
 미국 기술주·비트코인 시장 브리핑
 {{ display_date }} · {{ read_time }}
+{% if header_signal_label %}시장 신호: {{ header_signal_label }}{% endif %}
 ─────────────────────────────────────────
 
 {% if hero_verdict -%}
@@ -16,43 +17,64 @@
 · 참고: {{ alert }}
 {% endfor %}
 {% endif %}
-{% endif -%}
 
+{% endif -%}
 {% if snapshot_badges -%}
-스냅샷
+핵심 수치
 {% for b in snapshot_badges -%}
-· {{ b.label }}: {{ b.value }}
+· {{ b.label }}: {{ b.value }}{% if b.change %} ({{ b.change }}){% elif b.status_text %} ({{ b.status_text }}){% endif %}
 {% endfor %}
 
 {% endif -%}
-{% if news_items -%}
 주요 뉴스
+{% if news_items -%}
 {% for item in news_items -%}
 {{ item.number }} {{ item.headline }}
-
-{{ item.body }}
-{% if item.tldr %}시장 의미: {{ item.tldr }}{% endif %}
 {% if item.source_label %}출처: {{ item.source_label }}{% endif %}
+{% if item.body %}{{ item.body }}{% endif %}
+{% if item.tldr %}시장 의미: {{ item.tldr }}{% endif %}
 
 {% endfor %}
 {% else -%}
-주요 뉴스
 {{ news_status_text or "이번 집계에서는 주요 뉴스를 확인하지 못했어요." }}
 
 {% endif -%}
-{% if btc_data -%}
-BTC & 크립토
+미국 증시 흐름
+{% if not stock_indices and not stock_tech and not macro_indicators -%}
+{{ market_status_text or "이번 집계에서는 시장 지표를 확인하지 못했어요." }}
+{% endif -%}
+{% if stock_indices -%}
+주요 지수
+{% for s in stock_indices -%}
+· {{ s.ticker }} {{ s.name }} {{ s.price }} {{ s.change_pct }}
+{% endfor %}
+{% endif -%}
+{% if stock_tech -%}
+주요 기술주
+{% for s in stock_tech -%}
+· {{ s.ticker }} {{ s.change_pct }}
+{% endfor %}
+{% endif -%}
+{% if macro_indicators -%}
+거시 환경
+{% for m in macro_indicators -%}
+· {{ m.label }}: {% if m.is_anomaly %}{{ m.status_text or "이번 집계에서는 확인되지 않았어요." }}{% else %}{{ m.value }}{% if m.change %} ({{ m.change }}){% endif %}{% endif %}{% if m.is_previous %} (전일){% endif %}
+{% endfor %}
+{% endif %}
+
+비트코인과 ETF
 {% if btc_data.status_text -%}
 {{ btc_data.status_text }}
 {% endif -%}
-· BTC {{ btc_data.spot_price }} ({{ btc_data.spot_change }})
-· 공포탐욕 {{ btc_data.fear_greed_value }}/100 {{ btc_data.fear_greed_label }}
+· BTC 현물 {{ btc_data.spot_price }}{% if btc_data.spot_change %} ({{ btc_data.spot_change }}){% endif %}
+· 공포탐욕지수 {{ btc_data.fear_greed_value }}/100 {{ btc_data.fear_greed_label }}
 
 {% if btc_data.etf_items -%}
+주요 현물 ETF
 {% for etf in btc_data.etf_items -%}
-· {{ etf.ticker }} ${{ etf.price }} {{ etf.change_pct }}  거래량 {{ etf.volume }}
+· {{ etf.ticker }} ${{ etf.price }} {{ etf.change_pct }}
 {% endfor %}
-{% endif %}
+{% endif -%}
 {% if btc_data.official_snapshots -%}
 기관 보유 현황
 {% if btc_data.official_total_btc -%}
@@ -65,44 +87,18 @@ BTC & 크립토
 · {{ snap.issuer }} {{ snap.ticker }} {{ snap.btc_held }} BTC · AUM {{ snap.aum }}
 {% endfor %}
 {% endif %}
-{% endif -%}
-{% if stock_indices or stock_tech or macro_indicators or market_status_text -%}
-시장 지표
-{% if not stock_indices and not stock_tech and not macro_indicators -%}
-{{ market_status_text or "이번 집계에서는 시장 지표를 확인하지 못했어요." }}
-{% endif -%}
-{% if stock_indices or stock_tech or macro_indicators -%}
-{% if stock_indices -%}
-{% for s in stock_indices -%}
-· {{ s.ticker }} {{ s.name }} {{ s.price }} {{ s.change_pct }}
-{% endfor %}
-{% endif -%}
-{% if stock_tech -%}
-빅테크 10종
-{% for s in stock_tech -%}
-· {{ s.ticker }} {{ s.change_pct }}
-{% endfor %}
-{% endif -%}
-{% if macro_indicators -%}
-거시 지표
-{% for m in macro_indicators -%}
-· {{ m.label }}: {% if m.is_anomaly %}{{ m.status_text or "이번 집계에서는 확인되지 않았어요." }}{% else %}{{ m.value }}{% if m.change %} ({{ m.change }}){% endif %}{% endif %}{% if m.is_previous %} (전일){% endif %}
 
-{% endfor %}
-{% endif %}
-{% endif -%}
-{% endif -%}
 {% if sector_mapping -%}
 오늘 주목 흐름
-▲ 수혜 방향
+상단 수혜
 {% for item in sector_mapping.positive -%}
 · {{ item.ticker }} {{ item.reason }}
 {% endfor %}
-▼ 압력 방향
+하단 압력
 {% for item in sector_mapping.negative -%}
 · {{ item.ticker }} {{ item.reason }}
 {% endfor %}
-— 중립 / 관망
+중립 관망
 {% for item in sector_mapping.neutral -%}
 · {{ item.ticker }} {{ item.reason }}
 {% endfor %}
@@ -110,16 +106,9 @@ BTC & 크립토
 
 {% endif -%}
 {% if event_calendar -%}
-이벤트 캘린더
+이번 주 일정
 {% for evt in event_calendar -%}
-{% if evt.is_today %}[오늘] {% endif %}{{ evt.time or evt.date }} {{ evt.name }} {{ evt.expected }} 영향도 {{ evt.impact }}/5
-{% endfor %}
-
-{% endif -%}
-{% if footer_notes -%}
-[데이터 처리 메모]
-{% for note in footer_notes -%}
-· {{ note }}
+{% if evt.is_today %}[오늘] {% endif %}{{ evt.time or evt.date }} {{ evt.name }}{% if evt.expected %} · 예상 {{ evt.expected }}{% endif %} · 영향도 {{ evt.impact }}/5
 {% endfor %}
 
 {% endif -%}
@@ -136,6 +125,13 @@ BTC & 크립토
 · {{ line }}
 {% endfor %}
 
+{% if footer_notes -%}
+데이터 처리 메모
+{% for note in footer_notes -%}
+· {{ note }}
+{% endfor %}
+
+{% endif -%}
 ─────────────────────────────────────────
 본 메일은 공개 시장 데이터 기반 정보성 브리핑이며 투자 권유가 아닙니다.
 구독 해지: {{ unsubscribe_url }}

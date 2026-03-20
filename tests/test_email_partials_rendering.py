@@ -28,10 +28,36 @@ env = Environment(
 # ---------------------------------------------------------------------------
 
 SAMPLE_SNAPSHOT_BADGES = [
-    {"label": "S&P 500", "value": "+0.5%", "direction": "up"},
-    {"label": "나스닥", "value": "-0.3%", "direction": "down"},
-    {"label": "BTC", "value": "+1.2%", "direction": "up"},
-    {"label": "VIX", "value": "18.5", "direction": "flat"},
+    {
+        "label": "미국 10년물",
+        "value": "4.20%",
+        "change": "+8bp",
+        "direction": "up",
+        "status_text": "",
+    },
+    {"label": "DXY", "value": "103.50", "change": "-0.3%", "direction": "down", "status_text": ""},
+    {"label": "VIX", "value": "18.5", "change": "", "direction": "flat", "status_text": ""},
+    {
+        "label": "원/달러",
+        "value": "1,330.00",
+        "change": "+0.2%",
+        "direction": "up",
+        "status_text": "",
+    },
+    {
+        "label": "나스닥 선물",
+        "value": "20,150",
+        "change": "-0.4%",
+        "direction": "down",
+        "status_text": "",
+    },
+    {
+        "label": "BTC 현물",
+        "value": "$87,200",
+        "change": "+1.2%",
+        "direction": "up",
+        "status_text": "",
+    },
 ]
 
 SAMPLE_NEWS_ITEMS = [
@@ -147,14 +173,17 @@ def test_header_partial_renders_independently() -> None:
         display_date="2026년 3월 18일 화요일",
         read_time="3분 읽기",
         snapshot_badges=SAMPLE_SNAPSHOT_BADGES,
+        header_signal_label="관망",
+        header_signal_tone="flat",
     )
     assert "미국 기술주&#183;비트코인 시장 브리핑" in html
-    assert "뉴욕 마감 브리핑" in html
+    assert "뉴욕 마감 기준" in html
     assert "2026년 3월 18일 화요일" in html
     assert "3분 읽기" in html
-    assert "S&P 500" in html or "S&amp;P 500" in html
-    assert "나스닥" in html
-    assert "BTC" in html
+    assert "미국 10년물" in html
+    assert "원/달러" in html
+    assert "나스닥 선물" in html
+    assert "BTC 현물" in html
     assert "VIX" in html
     assert 'role="presentation"' in html
 
@@ -209,6 +238,7 @@ def test_btc_partial_renders_independently() -> None:
     assert "$87,200" in html
     assert "탐욕" in html
     assert "IBIT" in html
+    assert "비트코인과 ETF" in html
     assert 'role="presentation"' in html
 
 
@@ -226,6 +256,7 @@ def test_market_partial_renders_independently() -> None:
         macro_indicators=SAMPLE_MACRO_INDICATORS,
         market_status_text="",
     )
+    assert "미국 증시 흐름" in html
     assert "SPY" in html
     assert "S&P 500" in html or "S&amp;P 500" in html
     assert "510.25" in html
@@ -318,6 +349,8 @@ def _build_full_context() -> dict:
         "display_date": "2026년 3월 18일 화요일",
         "read_time": "3분 읽기",
         "snapshot_badges": SAMPLE_SNAPSHOT_BADGES,
+        "header_signal_label": "관망",
+        "header_signal_tone": "flat",
         "hero_summary": "오늘 시장은 혼조세를 보였어요.",
         "hero_alerts": [],
         "hero_verdict": "오늘은 관망 국면입니다.",
@@ -387,6 +420,8 @@ _V2_PARTIALS = [
             "display_date": "2026년 3월 18일",
             "read_time": "3분 읽기",
             "snapshot_badges": SAMPLE_SNAPSHOT_BADGES,
+            "header_signal_label": "관망",
+            "header_signal_tone": "flat",
         },
     ),
     (
@@ -476,10 +511,10 @@ def test_partials_no_emoji() -> None:
 # 각 파셜별 기대 한국어 라벨 매핑
 _EXPECTED_KOREAN_LABELS: dict[str, list[str]] = {
     "email_news.html.j2": ["주요 뉴스", "시장 의미", "원문 기사"],
-    "email_btc.html.j2": ["크립토", "공포탐욕", "가격", "등락", "거래량"],
-    "email_sector.html.j2": ["오늘 주목 흐름", "수혜 방향", "압력 방향", "중립 / 관망"],
-    "email_calendar.html.j2": ["이벤트 캘린더", "시간", "이벤트", "예상", "영향도", "오늘 발표"],
-    "email_market.html.j2": ["시장 지표", "빅테크 10종", "거시 지표"],
+    "email_btc.html.j2": ["비트코인과 ETF", "공포탐욕지수", "주요 현물 ETF"],
+    "email_sector.html.j2": ["오늘 주목 흐름", "상단 수혜", "하단 압력", "중립 관망"],
+    "email_calendar.html.j2": ["이번 주 일정", "예상치"],
+    "email_market.html.j2": ["미국 증시 흐름", "주요 기술주", "거시 환경"],
     "email_footer.html.j2": ["출처와 데이터", "뉴스 출처", "시장 데이터", "구독 해지"],
 }
 

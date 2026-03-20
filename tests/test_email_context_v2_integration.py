@@ -76,6 +76,20 @@ def _make_packet(
             {"ticker": "SPY", "change_pct": 0.5},
             {"ticker": "QQQ", "change_pct": -0.3},
         ],
+        "korea_watch": [
+            {
+                "canonical_key": "usdkrw",
+                "label": "원/달러 환율",
+                "price": 1330.0,
+                "change_pct": 0.2,
+            },
+            {
+                "canonical_key": "nq_futures",
+                "label": "나스닥 선물",
+                "price": 20150.0,
+                "change_pct": -0.4,
+            },
+        ],
         "bitcoin": {
             "spot": {"price": 87200, "change_pct": 1.2},
             "fear_greed_value": 65,
@@ -84,12 +98,26 @@ def _make_packet(
         },
         "macro": [
             {
+                "label": "미국 10년물",
+                "canonical_key": "us10y",
+                "ticker": "DGS10",
+                "price": 4.2,
+                "change_bps": 8,
+            },
+            {
+                "label": "달러 인덱스",
+                "canonical_key": "dxy",
+                "ticker": "DX-Y.NYB",
+                "price": 103.5,
+                "change_pct": -0.3,
+            },
+            {
                 "label": "VIX",
                 "canonical_key": "vix",
                 "ticker": "VIX",
                 "price": 18.5,
                 "change_pct": None,
-            }
+            },
         ],
     }
 
@@ -104,6 +132,8 @@ EXPECTED_KEYS = {
     "display_date",
     "read_time",
     "snapshot_badges",
+    "header_signal_label",
+    "header_signal_tone",
     "hero_summary",
     "hero_alerts",
     "hero_verdict",
@@ -194,6 +224,8 @@ def test_build_email_context_v2_builds_hero_metadata_and_sources() -> None:
     assert ctx["hero_reason"] == ""
     assert ctx["hero_kospi_impact"] == ""
     assert ctx["hero_tone"] == "flat"
+    assert ctx["header_signal_label"] == "시장 점검"
+    assert ctx["header_signal_tone"] == "flat"
     news_sources = ctx["news_source_items"]
     assert isinstance(news_sources, list)
     assert news_sources[0].source_name == "Reuters"
@@ -221,15 +253,19 @@ def test_build_email_context_v2_snapshot_badges() -> None:
     ctx = _build_email_context_v2("제목", SAMPLE_BODY, _make_packet())
     badges = ctx["snapshot_badges"]
     assert isinstance(badges, list)
-    assert len(badges) <= 4
+    assert len(badges) == 6
 
     labels = [b["label"] for b in badges]
-    assert "S&P 500" in labels
-    assert "BTC" in labels
+    assert "미국 10년물" in labels
+    assert "원/달러" in labels
+    assert "나스닥 선물" in labels
+    assert "BTC 현물" in labels
     assert "VIX" in labels
 
     for badge in badges:
         assert "label" in badge
         assert "value" in badge
+        assert "change" in badge
         assert "direction" in badge
+        assert "status_text" in badge
         assert badge["direction"] in ("up", "down", "flat")

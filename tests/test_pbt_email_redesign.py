@@ -164,21 +164,25 @@ def test_p1_section_roundtrip(data: dict) -> None:
 @settings(max_examples=100, deadline=2000)
 @given(change=st.floats(min_value=-50, max_value=50, allow_nan=False, allow_infinity=False))
 def test_p2_badge_direction_consistency(change: float) -> None:
-    """Badge direction matches sign of change value."""
+    """핵심 수치 배지의 방향은 대응하는 등락 부호와 일치해야 한다."""
     packet = {
-        "us_indices": [{"ticker": "SPY", "change_pct": change}],
-        "bitcoin": {"spot": {"change_pct": 0}},
-        "macro": [{"label": "VIX", "canonical_key": "vix", "price": 15}],
+        "macro": [
+            {"label": "미국 10년물", "canonical_key": "us10y", "price": 4.2, "change_bps": 8},
+            {"label": "달러 인덱스", "canonical_key": "dxy", "price": 103.5, "change_pct": change},
+            {"label": "VIX", "canonical_key": "vix", "price": 15},
+        ],
+        "korea_watch": [],
+        "bitcoin": {"spot": {"price": 67000, "change_pct": 0}},
     }
     badges = _build_snapshot_badges(packet)
-    spy_badge = badges[0]
+    dxy_badge = next(b for b in badges if b["label"] == "DXY")
 
     if change > 0:
-        assert spy_badge["direction"] == "up"
+        assert dxy_badge["direction"] == "up"
     elif change < 0:
-        assert spy_badge["direction"] == "down"
+        assert dxy_badge["direction"] == "down"
     else:
-        assert spy_badge["direction"] == "flat"
+        assert dxy_badge["direction"] == "flat"
 
 
 # ---------------------------------------------------------------------------
@@ -279,20 +283,36 @@ def test_p6_data_quality_consistency(status: str) -> None:
 def test_p7_snapshot_badge_count(
     spy_pct: float, qqq_pct: float, btc_pct: float, vix_val: float
 ) -> None:
-    """Snapshot badges: <= 4, each has required keys, valid direction."""
+    """핵심 수치 배지는 6개 고정이며 상태 메타데이터를 함께 가진다."""
     packet = {
-        "us_indices": [
-            {"ticker": "SPY", "change_pct": spy_pct},
-            {"ticker": "QQQ", "change_pct": qqq_pct},
+        "macro": [
+            {"label": "미국 10년물", "canonical_key": "us10y", "price": 4.2, "change_bps": spy_pct},
+            {"label": "달러 인덱스", "canonical_key": "dxy", "price": 103.5, "change_pct": qqq_pct},
+            {"label": "VIX", "canonical_key": "vix", "price": vix_val},
         ],
-        "bitcoin": {"spot": {"change_pct": btc_pct}},
-        "macro": [{"label": "VIX", "canonical_key": "vix", "price": vix_val}],
+        "korea_watch": [
+            {
+                "canonical_key": "usdkrw",
+                "label": "원/달러 환율",
+                "price": 1330.0,
+                "change_pct": 0.2,
+            },
+            {
+                "canonical_key": "nq_futures",
+                "label": "나스닥 선물",
+                "price": 20150.0,
+                "change_pct": -0.4,
+            },
+        ],
+        "bitcoin": {"spot": {"price": 67000, "change_pct": btc_pct}},
     }
     badges = _build_snapshot_badges(packet)
 
-    assert len(badges) <= 4
+    assert len(badges) == 6
     for badge in badges:
         assert "label" in badge
         assert "value" in badge
+        assert "change" in badge
         assert "direction" in badge
+        assert "status_text" in badge
         assert badge["direction"] in ("up", "down", "flat")

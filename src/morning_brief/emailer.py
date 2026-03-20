@@ -53,6 +53,14 @@ DEFAULT_UNSUBSCRIBE_EMAIL = "unsubscribe@example.com"
 NONE_LIKE_TEXTS = {"", "none", "null", "n/a", "na"}
 _HERO_KOSPI_HINTS = ("코스피", "코스닥", "한국장", "국내 증시")
 _SOURCE_AGG_HINTS = ("집계", "큐레이션", "요약 출처", "aggregated", "summary")
+_SNAPSHOT_LABELS = {
+    "us10y": "미국 10년물",
+    "dxy": "DXY",
+    "vix": "VIX",
+    "usdkrw": "원/달러",
+    "nq_futures": "나스닥 선물",
+    "btc": "BTC 현물",
+}
 
 if TYPE_CHECKING:
     from google.oauth2.credentials import Credentials
@@ -821,51 +829,42 @@ _DAY_NAMES = ["월", "화", "수", "목", "금", "토", "일"]
 
 
 def _build_snapshot_badges(packet: dict) -> list[dict]:
-    """S&P 500, 나스닥, BTC, VIX 4개 배지 생성."""
-    badges: list[dict] = []
-
-    for idx in packet.get("us_indices", []):
-        ticker = idx.get("ticker", "")
-        if ticker in ("SPY", "QQQ"):
-            label = "S&P 500" if ticker == "SPY" else "나스닥"
-            change = idx.get("change_pct", 0)
-            badges.append(
-                {
-                    "label": label,
-                    "value": f"{change:+.1f}%",
-                    "direction": "up" if change > 0 else "down" if change < 0 else "flat",
-                }
-            )
-
-    btc = packet.get("bitcoin", {})
-    btc_change = btc.get("spot", {}).get("change_pct", 0)
-    badges.append(
-        {
-            "label": "BTC",
-            "value": f"{btc_change:+.1f}%",
-            "direction": "up" if btc_change > 0 else "down" if btc_change < 0 else "flat",
-        }
+    """상단 핵심 수치 6개를 이메일용 배지로 정리."""
+    macro_points = packet.get("macro", []) if isinstance(packet.get("macro", []), list) else []
+    korea_points = (
+        packet.get("korea_watch", []) if isinstance(packet.get("korea_watch", []), list) else []
     )
+    btc_spot = packet.get("bitcoin", {}).get("spot", {}) or {}
 
-    macro_list = packet.get("macro", [])
-    vix_entry: dict = {}
-    if isinstance(macro_list, list):
-        vix_entry = next(
-            (m for m in macro_list if m.get("canonical_key") == "vix" or m.get("label") == "VIX"),
-            {},
+    ordered_points: list[dict[str, Any]] = [
+        _find_point_by_key(macro_points, "us10y"),
+        _find_point_by_key(macro_points, "dxy"),
+        _find_point_by_key(macro_points, "vix"),
+        _find_point_by_key(korea_points, "usdkrw"),
+        _find_point_by_key(korea_points, "nq_futures"),
+        {
+            **btc_spot,
+            "canonical_key": "btc",
+            "label": "BTC 현물",
+            "resolution_reason": btc_spot.get("resolution_reason", ""),
+        },
+    ]
+
+    badges: list[dict[str, str]] = []
+    for point in ordered_points:
+        canonical_key = str(point.get("canonical_key", "")).strip().lower()
+        label = _SNAPSHOT_LABELS.get(canonical_key, str(point.get("label", "")) or "시장 지표")
+        badges.append(
+            {
+                "label": label,
+                "value": _snapshot_value_text(point),
+                "change": _snapshot_change_text(point),
+                "direction": _snapshot_direction(point),
+                "status_text": _snapshot_status_text(point),
+            }
         )
-    elif isinstance(macro_list, dict):
-        vix_entry = macro_list.get("VIX", {})
-    vix_val = vix_entry.get("price", 0) or 0
-    badges.append(
-        {
-            "label": "VIX",
-            "value": f"{vix_val:.1f}",
-            "direction": "up" if vix_val >= 25 else "flat",
-        }
-    )
 
-    return badges[:4]
+    return badges
 
 
 def _format_volume(volume: float) -> str:
@@ -885,6 +884,92 @@ def _format_pct_badge(value: float | None) -> tuple[str, str]:
         f"{pct:+.1f}%",
         "up" if pct > 0 else "down" if pct < 0 else "flat",
     )
+
+
+def _find_point_by_key(points: list[dict[str, Any]], canonical_key: str) -> dict[str, Any]:
+    normalized = canonical_key.strip().lower()
+    return next(
+        (
+            point
+            for point in points
+            if str(point.get("canonical_key", "")).strip().lower() == normalized
+        ),
+        {},
+    )
+
+
+def _snapshot_value_text(point: dict[str, Any]) -> str:
+    price = point.get("price")
+    if price is None:
+        return "확인 중"
+
+    canonical_key = str(point.get("canonical_key", "")).strip().lower()
+    numeric_price = float(price)
+    if canonical_key == "btc":
+        return f"${numeric_price:,.0f}"
+    if canonical_key == "vix":
+        return f"{numeric_price:.1f}"
+    if canonical_key == "usdkrw":
+        return f"{numeric_price:,.2f}"
+    if canonical_key == "nq_futures":
+        return f"{numeric_price:,.0f}"
+    if is_rate_canonical_key(canonical_key):
+        return f"{numeric_price:.2f}%"
+    return f"{numeric_price:,.2f}"
+
+
+def _snapshot_change_text(point: dict[str, Any]) -> str:
+    canonical_key = str(point.get("canonical_key", "")).strip().lower()
+    if point.get("price") is None:
+        return ""
+    if is_rate_canonical_key(canonical_key):
+        change_bps = point.get("change_bps")
+        if change_bps is None:
+            return ""
+        return f"{float(change_bps):+.0f}bp"
+
+    change_pct = point.get("change_pct")
+    if change_pct is None:
+        return ""
+    return f"{float(change_pct):+.1f}%"
+
+
+def _snapshot_direction(point: dict[str, Any]) -> str:
+    canonical_key = str(point.get("canonical_key", "")).strip().lower()
+    if is_rate_canonical_key(canonical_key):
+        change = point.get("change_bps")
+    else:
+        change = point.get("change_pct")
+    if change is None:
+        return "flat"
+    numeric = float(change)
+    if numeric > 0:
+        return "up"
+    if numeric < 0:
+        return "down"
+    return "flat"
+
+
+def _snapshot_status_text(point: dict[str, Any]) -> str:
+    if point.get("price") is None:
+        return str(point.get("resolution_reason") or "이번 집계에서는 확인되지 않았어요.")
+    if point.get("is_previous_value"):
+        return "전일 값"
+    return ""
+
+
+def _header_signal(hero_verdict: str, hero_tone: str, data_quality_status: str) -> tuple[str, str]:
+    if data_quality_status == "critical":
+        return "데이터 참고", "down"
+    if data_quality_status == "degraded":
+        return "신호 점검 중", "flat"
+    if "매수 관심" in hero_verdict:
+        return "매수 관심", "up"
+    if "리스크 주의" in hero_verdict:
+        return "리스크 주의", "down"
+    if "관망" in hero_verdict:
+        return "관망", "flat"
+    return "시장 점검", hero_tone
 
 
 def _format_macro_value(item: dict[str, Any]) -> str:
@@ -1048,7 +1133,12 @@ def _build_subject_line(section_map: SectionMap, packet: dict) -> str:
 
 def _build_preheader(badges: list[dict], section_map: SectionMap) -> str:
     """preheader 텍스트 생성."""
-    parts = [f"{b['label']} {b['value']}" for b in badges[:3]]
+    parts = [
+        f"{badge['label']} {badge['value']}"
+        if badge.get("value") != "확인 중"
+        else f"{badge['label']} 확인 중"
+        for badge in badges[:3]
+    ]
     return " · ".join(parts)[:140]
 
 
@@ -1343,6 +1433,11 @@ def _build_email_context_v2(
     final_subject = _build_subject_line(section_map, packet) if not subject else subject
 
     hero_context = _build_hero_context(section_map.get("section_0", ""))
+    header_signal_label, header_signal_tone = _header_signal(
+        str(hero_context["hero_verdict"]),
+        str(hero_context["hero_tone"]),
+        str(data_quality_status),
+    )
     news_source_items = _build_news_source_items(
         [_to_email_news_item(item) for item in news_items],
         [],
@@ -1354,6 +1449,8 @@ def _build_email_context_v2(
         "display_date": _format_display_date_v2(packet),
         "read_time": "3분 읽기",
         "snapshot_badges": snapshot_badges,
+        "header_signal_label": header_signal_label,
+        "header_signal_tone": header_signal_tone,
         **hero_context,
         "macro_indicators": macro_indicators,
         "stock_indices": stock_indices,

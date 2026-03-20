@@ -7,43 +7,65 @@
 <title>{{ subject }}</title>
 <!--[if mso]><style>
 .card{border-radius:0!important}
-.gradient-line{background:#3b82f6!important}
+.shell{background:#0b1220!important}
 </style><![endif]-->
 <style>
-:root{color-scheme:light dark}
+body,.shell{background:#0b1220!important}
+.card{background:#10192b!important;border-color:#22324d!important}
+.text-strong{color:#f4f7fb!important}
+.text-body{color:#ccd6e5!important}
+.text-muted{color:#8b9bb3!important}
+.badge-up{background:#123526!important;color:#86e1ad!important}
+.badge-down{background:#3c1b25!important;color:#f0a8b0!important}
+.badge-flat{background:#18253a!important;color:#9cb0cb!important}
+.section-divider{border-color:#22324d!important}
+a{color:#dbe7ff!important}
 @media(prefers-color-scheme:dark){
-body,.shell{background:#111!important}
-.card{background:#1a1a1a!important;border-color:#2a2a2a!important}
-.text-strong{color:#e8e8e3!important}
-.text-body{color:#d1d5db!important}
-.text-muted{color:#9ca3af!important}
-.badge-up{background:#14532d!important;color:#4ade80!important}
-.badge-down{background:#450a0a!important;color:#fca5a5!important}
-.badge-flat{background:#1f2937!important;color:#9ca3af!important}
-.hero-box{background:#1a2332!important}
-.kr-label{border-color:#4ade80!important;color:#4ade80!important}
-a{color:#93c5fd!important}
+body,.shell{background:#0b1220!important}
+.card{background:#10192b!important;border-color:#22324d!important}
+.text-strong{color:#f4f7fb!important}
+.text-body{color:#ccd6e5!important}
+.text-muted{color:#8b9bb3!important}
+.badge-up{background:#123526!important;color:#86e1ad!important}
+.badge-down{background:#3c1b25!important;color:#f0a8b0!important}
+.badge-flat{background:#18253a!important;color:#9cb0cb!important}
+.section-divider{border-color:#22324d!important}
+a{color:#dbe7ff!important}
+}
+@media(prefers-color-scheme:light){
+body,.shell{background:#0b1220!important}
+.card{background:#10192b!important;border-color:#22324d!important}
+.text-strong{color:#f4f7fb!important}
+.text-body{color:#ccd6e5!important}
+.text-muted{color:#8b9bb3!important}
+.badge-up{background:#123526!important;color:#86e1ad!important}
+.badge-down{background:#3c1b25!important;color:#f0a8b0!important}
+.badge-flat{background:#18253a!important;color:#9cb0cb!important}
+.section-divider{border-color:#22324d!important}
+a{color:#dbe7ff!important}
 }
 @media screen and (max-width:600px){
-.shell-pad{padding:12px 8px!important}
-.card-pad{padding:16px!important}
-.hero-title{font-size:28px!important}
-.text-body{font-size:15px!important}
-.snapshot-badge{display:block!important;margin-bottom:8px!important}
+.shell-pad{padding:14px 10px!important}
+.card-pad{padding:18px!important}
+.hero-title{font-size:26px!important}
+.meta-stack{display:block!important;width:100%!important}
+.metric-cell{display:block!important;width:100%!important;padding-right:0!important;padding-left:0!important}
+.metric-stack{display:block!important}
+.stack-col{display:block!important;width:100%!important}
 a{min-height:44px;display:inline-block;line-height:44px}
 }
 </style>
 </head>
-<body style="margin:0;padding:0;background:#f5f5f0;">
+<body style="margin:0;padding:0;background:#0b1220;">
 <div style="display:none;max-height:0;overflow:hidden;">{{ preheader }}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="shell" style="width:100%;background:#f5f5f0;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="shell" style="width:100%;background:#0b1220;">
 <tr><td align="center" class="shell-pad" style="padding:24px 14px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:640px;">
 {% include "email_header.html.j2" %}
 {% include "email_hero.html.j2" %}
 {% include "email_news.html.j2" %}
-{% include "email_btc.html.j2" %}
 {% include "email_market.html.j2" %}
+{% include "email_btc.html.j2" %}
 {% if sector_mapping %}{% include "email_sector.html.j2" %}{% endif %}
 {% if event_calendar %}{% include "email_calendar.html.j2" %}{% endif %}
 {% include "email_footer.html.j2" %}

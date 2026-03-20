@@ -1,35 +1,38 @@
-{# 변수: news_items #}
-{% from "email_macros.html.j2" import section_label %}
+{# 변수: news_items, news_status_text #}
+{% from "email_macros.html.j2" import pill, section_label %}
 <tr><td style="padding:0 0 24px 0;">
-<table role="presentation" width="100%" class="card" style="width:100%;background:#fff;border:1px solid #e2e8f0;border-radius:16px;">
+<table role="presentation" width="100%" class="card" style="width:100%;background:#10192b;border:1px solid #22324d;border-radius:20px;">
 <tr><td class="card-pad" style="padding:28px 24px;">
-{{ section_label("주요 뉴스", "#1e40af") }}
+{{ section_label("주요 뉴스", "#cdd8ea") }}
 {% if not news_items %}
-<div style="padding-top:14px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#64748b;font-size:14px;line-height:1.7;" class="text-muted">{{ news_status_text or "이번 집계에서는 주요 뉴스를 확인하지 못했어요." }}</div>
+<div style="padding-top:16px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#8b9bb3;font-size:15px;line-height:1.8;" class="text-muted">{{ news_status_text or "이번 집계에서는 주요 뉴스를 확인하지 못했어요." }}</div>
 {% endif %}
 {% for item in news_items %}
-<div style="padding:20px 0 0 0;{% if not loop.first %}border-top:1px solid #e2e8f0;margin-top:18px;{% endif %}">
+<div style="padding:{% if loop.first %}18px{% else %}22px{% endif %} 0 0 0;{% if not loop.first %}margin-top:18px;border-top:1px solid #22324d;{% endif %}">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr>
-<td valign="top" style="width:40px;padding-right:12px;">
-<div style="display:inline-block;min-width:32px;padding:6px 0;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;font-size:13px;font-weight:800;line-height:1;text-align:center;">{{ item.number }}</div>
+<td valign="top" style="padding:0 12px 0 0;">
+<div style="display:inline-block;min-width:34px;padding:5px 0;border-radius:999px;background:#0d1626;border:1px solid #22324d;color:#9fb0c8;font-family:'SFMono-Regular','Menlo','Consolas',monospace;font-size:12px;font-weight:700;line-height:1;text-align:center;">{{ item.number }}</div>
 </td>
 <td valign="top">
-{% if item.source_label %}
 <div style="padding-bottom:10px;">
+{% if item.source_label %}
 {% if item.source_url %}
-<a href="{{ item.source_url }}" style="display:inline-block;padding:6px 10px;border:1px solid #dbeafe;border-radius:999px;color:#1d4ed8;font-size:12px;font-weight:700;text-decoration:none;background:#f8fbff;">{{ item.source_label }}</a>
+{{ pill(item.source_label, item.source_kind == "공식 X" and "flat" or "up", item.source_url) }}
 {% else %}
-<span style="display:inline-block;padding:6px 10px;border:1px solid #e2e8f0;border-radius:999px;color:#64748b;font-size:12px;font-weight:700;background:#f8fafc;" class="text-muted">{{ item.source_label }}</span>
+{{ pill(item.source_label, item.source_kind == "공식 X" and "flat" or "up") }}
+{% endif %}
 {% endif %}
 </div>
-{% endif %}
-<div style="font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#0f172a;font-size:21px;line-height:1.6;font-weight:800;letter-spacing:-0.02em;" class="text-strong">{{ item.headline }}</div>
+<div style="font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#f4f7fb;font-size:23px;line-height:1.55;font-weight:800;letter-spacing:-0.03em;" class="text-strong">{{ item.headline }}</div>
 {% if item.body %}
-<div style="margin-top:14px;padding:14px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#334155;font-size:15px;line-height:1.9;white-space:pre-line;" class="text-body">{{ item.body }}</div>
+<div style="margin-top:14px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#d7e1ef;font-size:15px;line-height:1.95;white-space:pre-line;" class="text-body">{{ item.body }}</div>
 {% endif %}
 {% if item.tldr %}
-<div style="margin-top:12px;padding:12px 14px;background:#f0fdf4;border:1px solid #dcfce7;border-radius:12px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#166534;font-size:14px;line-height:1.7;font-weight:600;">시장 의미 · {{ item.tldr }}</div>
+<div style="margin-top:14px;padding:14px 16px;background:#0d1626;border:1px solid #243654;border-radius:16px;">
+<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#8b9bb3;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;" class="text-muted">시장 의미</div>
+<div style="padding-top:7px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#dbe5f2;font-size:14px;line-height:1.8;font-weight:600;" class="text-body">{{ item.tldr }}</div>
+</div>
 {% endif %}
 </td>
 </tr>

@@ -1,19 +1,20 @@
 {# 변수: event_calendar (list[EventItem]) #}
+{% from "email_macros.html.j2" import section_label %}
 <tr><td style="padding:0 0 24px 0;">
-<table role="presentation" width="100%" class="card" style="width:100%;background:#fff;border:1px solid #e2e8f0;border-radius:16px;">
-<tr><td class="card-pad" style="padding:20px 24px;">
-<div style="border-left:3px solid #0369a1;padding-left:12px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#0369a1;font-size:13px;font-weight:600;">&#9632; 이벤트 캘린더</div>
-<table role="presentation" width="100%" style="padding-top:10px;font-size:13px;">
-<tr style="color:#94a3b8;font-weight:600;"><td>시간</td><td>이벤트</td><td align="right">예상</td><td align="right">영향도</td></tr>
+<table role="presentation" width="100%" class="card" style="width:100%;background:#10192b;border:1px solid #22324d;border-radius:20px;">
+<tr><td class="card-pad" style="padding:24px;">
+{{ section_label("이번 주 일정", "#cdd8ea") }}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:14px;">
 {% for evt in event_calendar %}
-{% if evt.is_today and loop.first %}
-<tr><td colspan="4" style="padding:8px 0 4px;color:#0369a1;font-weight:700;font-size:12px;">오늘 발표</td></tr>
+<tr>
+<td style="padding:12px 0;border-top:1px solid #22324d;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#8b9bb3;font-size:12px;font-weight:700;white-space:nowrap;" class="text-muted">{% if evt.is_today %}오늘{% else %}{{ evt.time or evt.date }}{% endif %}</td>
+<td style="padding:12px 12px;border-top:1px solid #22324d;">
+<div style="font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#f4f7fb;font-size:14px;line-height:1.7;font-weight:{% if evt.impact >= 4 %}700{% else %}600{% endif %};" class="text-strong">{{ evt.name }}</div>
+{% if evt.expected %}
+<div style="padding-top:4px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#8b9bb3;font-size:13px;line-height:1.6;" class="text-muted">예상치 {{ evt.expected }}</div>
 {% endif %}
-<tr style="border-top:1px solid #e2e8f0;{% if evt.is_today %}background:#f0f9ff;{% endif %}">
-<td style="padding:6px 0;color:#475569;" class="text-body">{{ evt.time or evt.date }}</td>
-<td style="color:#0f172a;font-weight:{% if evt.impact >= 4 %}700{% else %}400{% endif %};" class="text-strong">{{ evt.name }}</td>
-<td align="right" style="color:#64748b;" class="text-muted">{{ evt.expected }}</td>
-<td align="right" style="color:#0f172a;letter-spacing:1px;" class="text-strong">{% for i in range(evt.impact) %}&#9632;{% endfor %}{% for i in range(5 - evt.impact) %}&#9633;{% endfor %}</td>
+</td>
+<td align="right" style="padding:12px 0;border-top:1px solid #22324d;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#d7e1ef;font-size:12px;letter-spacing:1px;" class="text-body">{% for i in range(evt.impact) %}&#9632;{% endfor %}{% for i in range(5 - evt.impact) %}&#9633;{% endfor %}</td>
 </tr>
 {% endfor %}
 </table>

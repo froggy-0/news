@@ -30,15 +30,49 @@ env = Environment(
 
 SAMPLE_CONTEXT = {
     "subject": "테스트 브리핑",
-    "preheader": "테스트 프리헤더",
+    "preheader": "미국 10년물 4.20% · DXY 103.50 · VIX 18.5",
     "display_date": "2026년 3월 18일 수요일",
     "read_time": "3분 읽기",
     "snapshot_badges": [
-        {"label": "S&P 500", "value": "+0.5%", "direction": "up"},
-        {"label": "나스닥", "value": "-0.3%", "direction": "down"},
-        {"label": "BTC", "value": "+1.2%", "direction": "up"},
-        {"label": "VIX", "value": "18.5", "direction": "flat"},
+        {
+            "label": "미국 10년물",
+            "value": "4.20%",
+            "change": "+8bp",
+            "direction": "up",
+            "status_text": "",
+        },
+        {
+            "label": "DXY",
+            "value": "103.50",
+            "change": "-0.3%",
+            "direction": "down",
+            "status_text": "",
+        },
+        {"label": "VIX", "value": "18.5", "change": "", "direction": "flat", "status_text": ""},
+        {
+            "label": "원/달러",
+            "value": "1,330.00",
+            "change": "+0.2%",
+            "direction": "up",
+            "status_text": "",
+        },
+        {
+            "label": "나스닥 선물",
+            "value": "20,150",
+            "change": "-0.4%",
+            "direction": "down",
+            "status_text": "",
+        },
+        {
+            "label": "BTC 현물",
+            "value": "$87,200",
+            "change": "+1.2%",
+            "direction": "up",
+            "status_text": "",
+        },
     ],
+    "header_signal_label": "관망",
+    "header_signal_tone": "flat",
     "hero_summary": "오늘 시장은 혼조세를 보였어요.",
     "hero_alerts": ["VIX가 평소보다 높아요"],
     "hero_verdict": "오늘은 관망 국면입니다.",
@@ -178,6 +212,8 @@ PARTIAL_CONFIGS = [
             "display_date": SAMPLE_CONTEXT["display_date"],
             "read_time": SAMPLE_CONTEXT["read_time"],
             "snapshot_badges": SAMPLE_CONTEXT["snapshot_badges"],
+            "header_signal_label": SAMPLE_CONTEXT["header_signal_label"],
+            "header_signal_tone": SAMPLE_CONTEXT["header_signal_tone"],
         },
     ),
     (
@@ -336,21 +372,21 @@ def test_direction_symbols_accompany_colors() -> None:
     assert "&#8212;" in html, "보합 방향 기호(—, &#8212;) 누락"
 
     # 상승 배경색(#dcfce7) 근처에 ▲ 기호가 있는지 확인
-    up_badge_pattern = re.compile(r"#dcfce7.*?&#9650;|&#9650;.*?#dcfce7", re.DOTALL)
+    up_badge_pattern = re.compile(r"#123526.*?&#9650;|&#9650;.*?#123526", re.DOTALL)
     assert up_badge_pattern.search(html), (
-        "상승 배지: 녹색 배경(#dcfce7)과 ▲ 기호가 함께 사용되지 않음"
+        "상승 배지: 녹색 배경(#123526)과 ▲ 기호가 함께 사용되지 않음"
     )
 
     # 하락 배경색(#fef2f2) 근처에 ▼ 기호가 있는지 확인
-    down_badge_pattern = re.compile(r"#fef2f2.*?&#9660;|&#9660;.*?#fef2f2", re.DOTALL)
+    down_badge_pattern = re.compile(r"#3c1b25.*?&#9660;|&#9660;.*?#3c1b25", re.DOTALL)
     assert down_badge_pattern.search(html), (
-        "하락 배지: 적색 배경(#fef2f2)과 ▼ 기호가 함께 사용되지 않음"
+        "하락 배지: 적색 배경(#3c1b25)과 ▼ 기호가 함께 사용되지 않음"
     )
 
     # 보합 배경색(#f3f4f6) 근처에 — 기호가 있는지 확인
-    flat_badge_pattern = re.compile(r"#f3f4f6.*?&#8212;|&#8212;.*?#f3f4f6", re.DOTALL)
+    flat_badge_pattern = re.compile(r"#18253a.*?&#8212;|&#8212;.*?#18253a", re.DOTALL)
     assert flat_badge_pattern.search(html), (
-        "보합 배지: 회색 배경(#f3f4f6)과 — 기호가 함께 사용되지 않음"
+        "보합 배지: 회색 배경(#18253a)과 — 기호가 함께 사용되지 않음"
     )
 
 
@@ -452,9 +488,9 @@ class TestSnapshotFullHtmlOutput:
     @pytest.mark.parametrize(
         "dark_color,description",
         [
-            ("#14532d", "다크 모드 상승 배경색"),
-            ("#450a0a", "다크 모드 하락 배경색"),
-            ("#1f2937", "다크 모드 보합 배경색"),
+            ("#123526", "다크 모드 상승 배경색"),
+            ("#3c1b25", "다크 모드 하락 배경색"),
+            ("#18253a", "다크 모드 보합 배경색"),
         ],
     )
     def test_dark_mode_color_overrides(
@@ -499,9 +535,10 @@ class TestSnapshotFullHtmlOutput:
     def test_contains_header_section(self, rendered_html: str) -> None:
         """헤더 섹션 콘텐츠가 포함되어 있다."""
         assert "미국 기술주&#183;비트코인 시장 브리핑" in rendered_html
-        assert "뉴욕 마감 브리핑" in rendered_html
+        assert "뉴욕 마감 기준" in rendered_html
         assert SAMPLE_CONTEXT["display_date"] in rendered_html
         assert SAMPLE_CONTEXT["read_time"] in rendered_html
+        assert SAMPLE_CONTEXT["header_signal_label"] in rendered_html
 
     def test_contains_hero_section(self, rendered_html: str) -> None:
         """히어로(핵심 요약) 섹션 콘텐츠가 포함되어 있다."""
