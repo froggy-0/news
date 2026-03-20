@@ -37,6 +37,7 @@ from morning_brief.brief_formatting import (
     split_section_groups as _split_section_groups,
 )
 from morning_brief.config import Settings
+from morning_brief.data.market_policy import is_rate_canonical_key
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
 
@@ -816,13 +817,6 @@ def _primary_cta(reference_items: list[dict[str, str | None]]) -> dict[str, str]
 # V2 이메일 빌더 함수들
 # ---------------------------------------------------------------------------
 
-FEAR_GREED_LABELS: dict[tuple[int, int], str] = {
-    (0, 24): "Extreme Fear",
-    (25, 49): "Fear",
-    (50, 74): "Greed",
-    (75, 100): "Extreme Greed",
-}
-
 _DAY_NAMES = ["월", "화", "수", "목", "금", "토", "일"]
 
 
@@ -885,21 +879,56 @@ def _format_volume(volume: float) -> str:
     return f"${volume:.0f}"
 
 
+def _format_pct_badge(value: float | None) -> tuple[str, str]:
+    pct = value or 0.0
+    return (
+        f"{pct:+.1f}%",
+        "up" if pct > 0 else "down" if pct < 0 else "flat",
+    )
+
+
+def _format_macro_value(item: dict[str, Any]) -> str:
+    price = item.get("price")
+    if price is None:
+        return ""
+    try:
+        numeric_price = float(price)
+    except (TypeError, ValueError):
+        return str(price)
+    if is_rate_canonical_key(str(item.get("canonical_key", ""))):
+        return f"{numeric_price:.2f}%"
+    return f"{numeric_price:,.2f}"
+
+
+def _format_macro_change(item: dict[str, Any]) -> tuple[str, str]:
+    canonical_key = str(item.get("canonical_key", ""))
+    if is_rate_canonical_key(canonical_key):
+        change_bps = item.get("change_bps")
+        if change_bps is None:
+            return "", "flat"
+        numeric = float(change_bps)
+        return (
+            f"{numeric:+.0f}bp",
+            "up" if numeric > 0 else "down" if numeric < 0 else "flat",
+        )
+
+    change_pct = item.get("change_pct")
+    if change_pct is None:
+        return "", "flat"
+    numeric = float(change_pct)
+    return (
+        f"{numeric:+.1f}%",
+        "up" if numeric > 0 else "down" if numeric < 0 else "flat",
+    )
+
+
 def _build_btc_data(packet: dict, section_3: str) -> BTCData:
     """packet의 bitcoin 데이터로 BTCData 구성."""
     btc = packet.get("bitcoin", {})
     spot = btc.get("spot", {})
-    fg_value = btc.get("fear_greed_value", 50)
-
-    fg_label = "Greed"
-    for (lo, hi), label in FEAR_GREED_LABELS.items():
-        if lo <= fg_value <= hi:
-            fg_label = label
-            break
-
-    flow_btc = btc.get("official_etf_daily_flow_btc", 0)
-    flow_label = "기관 순매수" if flow_btc > 0 else "기관 순매도" if flow_btc < 0 else ""
-    spot_price = spot.get("price", 0)
+    fg_value = btc.get("fear_greed_value")
+    fg_label = btc.get("fear_greed_label") or ""
+    spot_price = spot.get("price")
 
     # ETF 포인트를 템플릿용 dict로 변환 (direction, change_pct 포맷팅)
     etf_items: list[dict] = []
@@ -915,11 +944,6 @@ def _build_btc_data(packet: dict, section_3: str) -> BTCData:
             }
         )
 
-    # 합산 거래량: packet에 이미 계산된 값 우선, 없으면 개별 합산
-    raw_total_vol = btc.get("etf_total_volume") or 0
-    if not raw_total_vol:
-        raw_total_vol = sum(e.get("daily_volume", 0) or 0 for e in btc.get("etf_points", []))
-
     # 기관 보유 현황: 모델 필드명 → 템플릿 필드명 매핑
     official_snapshots: list[dict] = []
     for snap in btc.get("official_etf_snapshots", []):
@@ -932,23 +956,36 @@ def _build_btc_data(packet: dict, section_3: str) -> BTCData:
             }
         )
 
+    spot_change, spot_direction = _format_pct_badge(spot.get("change_pct"))
+    status_text = ""
+    if spot_price is None and fg_value is None:
+        status_text = "이번 집계에서는 BTC 핵심값을 확인하지 못했어요."
+    elif spot_price is None:
+        status_text = "BTC 현물가는 이번 집계에서는 확인되지 않았어요."
+    elif fg_value is None:
+        status_text = "공포탐욕지수는 이번 집계에서는 확인되지 않았어요."
+
     return BTCData(
-        spot_price=f"${spot_price:,.0f}",
-        spot_change=f"{spot.get('change_pct', 0):+.1f}%",
-        spot_direction="up"
-        if spot.get("change_pct", 0) > 0
-        else "down"
-        if spot.get("change_pct", 0) < 0
-        else "flat",
-        fear_greed_value=fg_value,
-        fear_greed_label=fg_label,
-        fear_greed_warning="과열 경계" if fg_value >= 75 else "",
+        spot_price=f"${float(spot_price):,.0f}"
+        if spot_price is not None
+        else "이번 집계에서는 확인되지 않았어요",
+        spot_change=spot_change if spot_price is not None else "",
+        spot_direction=spot_direction,
+        fear_greed_value=int(fg_value) if fg_value is not None else 0,
+        fear_greed_label=fg_label or "이번 집계에서는 확인되지 않았어요",
         etf_items=etf_items,
-        etf_total_volume=_format_volume(raw_total_vol),
         official_snapshots=official_snapshots,
-        daily_flow_btc=flow_btc,
-        daily_flow_usd=f"${abs(flow_btc) * spot_price:,.0f}",
-        flow_label=flow_label,
+        official_total_btc=(
+            f"{float(btc.get('official_etf_total_btc')):,.2f} BTC"
+            if btc.get("official_etf_total_btc") is not None
+            else ""
+        ),
+        official_total_aum=(
+            f"${float(btc.get('official_etf_total_aum_usd')):,.0f}"
+            if btc.get("official_etf_total_aum_usd") is not None
+            else ""
+        ),
+        status_text=status_text,
     )
 
 
@@ -1072,6 +1109,7 @@ def _parse_macro_indicators(section_1: str) -> list[MacroIndicator]:
                     direction=direction,
                     is_previous=is_prev,
                     is_anomaly=is_anom,
+                    status_text=None,
                 )
             )
     return indicators
@@ -1223,22 +1261,18 @@ def _macro_indicators_from_packet(packet: dict) -> list[MacroIndicator]:
         return items
     for m in macro_list:
         label = m.get("label", "")
-        price = m.get("price")
-        pct = m.get("change_pct")
-        if price is None:
+        if m.get("price") is None and m.get("validation_status") != "anomaly":
             continue
-        change_str = f"{pct:+.1f}%" if pct is not None else ""
-        direction = "flat"
-        if pct is not None:
-            direction = "up" if pct > 0 else "down" if pct < 0 else "flat"
+        change_str, direction = _format_macro_change(m)
         items.append(
             MacroIndicator(
                 label=label,
-                value=f"{price:,.2f}" if isinstance(price, float) else str(price),
+                value=_format_macro_value(m),
                 change=change_str,
                 direction=direction,
                 is_previous=m.get("is_previous_value", False),
                 is_anomaly=m.get("validation_status", "ok") != "ok",
+                status_text=str(m.get("resolution_reason", "") or ""),
             )
         )
     return items
@@ -1258,6 +1292,21 @@ def _prepare_v2_news_items(section_4_2: str) -> list[dict[str, object]]:
             }
         )
     return prepared
+
+
+def _to_email_news_item(item: dict[str, object]) -> _EmailNewsItem:
+    safe_url_value = item.get("source_url")
+    source_name_value = item.get("source_name")
+    safe_url = safe_url_value if isinstance(safe_url_value, str) else None
+    source_name = source_name_value if isinstance(source_name_value, str) else None
+    return _EmailNewsItem(
+        headline=str(item["headline"]),
+        market_meaning=str(item.get("body") or ""),
+        korea_takeaway=str(item.get("tldr") or ""),
+        url=str(item.get("source_url") or ""),
+        safe_url=safe_url,
+        source_name=source_name,
+    )
 
 
 def _build_email_context_v2(
@@ -1295,19 +1344,7 @@ def _build_email_context_v2(
 
     hero_context = _build_hero_context(section_map.get("section_0", ""))
     news_source_items = _build_news_source_items(
-        [
-            _EmailNewsItem(
-                headline=str(item["headline"]),
-                market_meaning=str(item.get("body") or ""),
-                korea_takeaway=str(item.get("tldr") or ""),
-                url=str(item.get("source_url") or ""),
-                safe_url=item["source_url"] if isinstance(item.get("source_url"), str) else None,
-                source_name=item["source_name"]
-                if isinstance(item.get("source_name"), str)
-                else None,
-            )
-            for item in news_items
-        ],
+        [_to_email_news_item(item) for item in news_items],
         [],
     )
 
@@ -1322,6 +1359,14 @@ def _build_email_context_v2(
         "stock_indices": stock_indices,
         "stock_tech": stock_tech,
         "btc_data": btc_data,
+        "news_status_text": "이번 집계에서는 주요 뉴스를 확인하지 못했어요."
+        if not news_items
+        else "",
+        "market_status_text": (
+            "이번 집계에서는 시장 지표를 확인하지 못했어요."
+            if not stock_indices and not stock_tech and not macro_indicators
+            else ""
+        ),
         "issue_briefings": _parse_issue_briefings(section_map.get("section_4_1", "")),
         "news_items": news_items,
         "news_source_items": news_source_items,

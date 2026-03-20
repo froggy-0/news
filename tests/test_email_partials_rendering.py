@@ -53,8 +53,7 @@ SAMPLE_BTC_DATA = {
     "spot_change": "+1.2%",
     "spot_direction": "up",
     "fear_greed_value": 65,
-    "fear_greed_label": "Greed",
-    "fear_greed_warning": "",
+    "fear_greed_label": "탐욕",
     "etf_items": [
         {
             "ticker": "IBIT",
@@ -64,11 +63,10 @@ SAMPLE_BTC_DATA = {
             "volume": "12.5M",
         }
     ],
-    "etf_total_volume": "45.2M",
     "official_snapshots": [],
-    "daily_flow_btc": 150,
-    "daily_flow_usd": "$13,080,000",
-    "flow_label": "기관 순매수",
+    "official_total_btc": "",
+    "official_total_aum": "",
+    "status_text": "",
 }
 
 SAMPLE_SECTOR_MAPPING = {
@@ -123,10 +121,11 @@ SAMPLE_MACRO_INDICATORS = [
     {
         "label": "10년물",
         "value": "4.20%",
-        "change": "+0.08%p",
+        "change": "+8bp",
         "direction": "up",
         "is_previous": False,
         "is_anomaly": False,
+        "status_text": None,
     }
 ]
 
@@ -190,7 +189,7 @@ def test_hero_partial_renders_independently() -> None:
 def test_news_partial_renders_independently() -> None:
     """email_news.html.j2가 샘플 뉴스 아이템으로 독립 렌더링 가능한지 확인."""
     tmpl = env.get_template("email_news.html.j2")
-    html = tmpl.render(news_items=SAMPLE_NEWS_ITEMS)
+    html = tmpl.render(news_items=SAMPLE_NEWS_ITEMS, news_status_text="")
     assert "테스트 뉴스 헤드라인" in html
     assert "뉴스 본문 내용입니다." in html
     assert "원문 기사 · Reuters" in html
@@ -208,9 +207,8 @@ def test_btc_partial_renders_independently() -> None:
     tmpl = env.get_template("email_btc.html.j2")
     html = tmpl.render(btc_data=SAMPLE_BTC_DATA)
     assert "$87,200" in html
-    assert "Greed" in html
+    assert "탐욕" in html
     assert "IBIT" in html
-    assert "45.2M" in html
     assert 'role="presentation"' in html
 
 
@@ -226,6 +224,7 @@ def test_market_partial_renders_independently() -> None:
         stock_indices=SAMPLE_STOCK_INDICES,
         stock_tech=SAMPLE_STOCK_TECH,
         macro_indicators=SAMPLE_MACRO_INDICATORS,
+        market_status_text="",
     )
     assert "SPY" in html
     assert "S&P 500" in html or "S&amp;P 500" in html
@@ -326,6 +325,7 @@ def _build_full_context() -> dict:
         "hero_kospi_impact": "국내 증시는 종목별 차별화가 커질 수 있습니다.",
         "hero_tone": "flat",
         "news_items": SAMPLE_NEWS_ITEMS,
+        "news_status_text": "",
         "news_source_items": [
             {
                 "headline": "테스트 뉴스 헤드라인",
@@ -344,6 +344,7 @@ def _build_full_context() -> dict:
         "stock_indices": SAMPLE_STOCK_INDICES,
         "stock_tech": SAMPLE_STOCK_TECH,
         "macro_indicators": SAMPLE_MACRO_INDICATORS,
+        "market_status_text": "",
         "sector_mapping": SAMPLE_SECTOR_MAPPING,
         "event_calendar": SAMPLE_EVENTS,
         "data_quality_status": "ok",
@@ -403,6 +404,7 @@ _V2_PARTIALS = [
         "email_news.html.j2",
         {
             "news_items": SAMPLE_NEWS_ITEMS,
+            "news_status_text": "",
         },
     ),
     (
@@ -417,6 +419,7 @@ _V2_PARTIALS = [
             "stock_indices": SAMPLE_STOCK_INDICES,
             "stock_tech": SAMPLE_STOCK_TECH,
             "macro_indicators": SAMPLE_MACRO_INDICATORS,
+            "market_status_text": "",
         },
     ),
     (
@@ -473,7 +476,7 @@ def test_partials_no_emoji() -> None:
 # 각 파셜별 기대 한국어 라벨 매핑
 _EXPECTED_KOREAN_LABELS: dict[str, list[str]] = {
     "email_news.html.j2": ["주요 뉴스", "시장 의미", "원문 기사"],
-    "email_btc.html.j2": ["크립토", "공포탐욕", "가격", "등락", "거래량", "합산 거래량"],
+    "email_btc.html.j2": ["크립토", "공포탐욕", "가격", "등락", "거래량"],
     "email_sector.html.j2": ["오늘 주목 흐름", "수혜 방향", "압력 방향", "중립 / 관망"],
     "email_calendar.html.j2": ["이벤트 캘린더", "시간", "이벤트", "예상", "영향도", "오늘 발표"],
     "email_market.html.j2": ["시장 지표", "빅테크 10종", "거시 지표"],

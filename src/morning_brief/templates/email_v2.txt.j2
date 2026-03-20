@@ -35,21 +35,43 @@
 {% if item.source_label %}출처: {{ item.source_label }}{% endif %}
 
 {% endfor %}
+{% else -%}
+주요 뉴스
+{{ news_status_text or "이번 집계에서는 주요 뉴스를 확인하지 못했어요." }}
+
 {% endif -%}
 {% if btc_data -%}
 BTC & 크립토
+{% if btc_data.status_text -%}
+{{ btc_data.status_text }}
+{% endif -%}
 · BTC {{ btc_data.spot_price }} ({{ btc_data.spot_change }})
-· 공포탐욕 {{ btc_data.fear_greed_value }}/100 {{ btc_data.fear_greed_label }}{% if btc_data.fear_greed_warning %} ⚠ {{ btc_data.fear_greed_warning }}{% endif %}
+· 공포탐욕 {{ btc_data.fear_greed_value }}/100 {{ btc_data.fear_greed_label }}
 
 {% if btc_data.etf_items -%}
 {% for etf in btc_data.etf_items -%}
 · {{ etf.ticker }} ${{ etf.price }} {{ etf.change_pct }}  거래량 {{ etf.volume }}
 {% endfor %}
-· 합산 거래량 {{ btc_data.etf_total_volume }}
+{% endif %}
+{% if btc_data.official_snapshots -%}
+기관 보유 현황
+{% if btc_data.official_total_btc -%}
+· 총 BTC 보유량 {{ btc_data.official_total_btc }}
+{% endif -%}
+{% if btc_data.official_total_aum -%}
+· 총 AUM {{ btc_data.official_total_aum }}
+{% endif -%}
+{% for snap in btc_data.official_snapshots -%}
+· {{ snap.issuer }} {{ snap.ticker }} {{ snap.btc_held }} BTC · AUM {{ snap.aum }}
+{% endfor %}
 {% endif %}
 {% endif -%}
-{% if stock_indices or stock_tech -%}
+{% if stock_indices or stock_tech or macro_indicators or market_status_text -%}
 시장 지표
+{% if not stock_indices and not stock_tech and not macro_indicators -%}
+{{ market_status_text or "이번 집계에서는 시장 지표를 확인하지 못했어요." }}
+{% endif -%}
+{% if stock_indices or stock_tech or macro_indicators -%}
 {% if stock_indices -%}
 {% for s in stock_indices -%}
 · {{ s.ticker }} {{ s.name }} {{ s.price }} {{ s.change_pct }}
@@ -64,10 +86,11 @@ BTC & 크립토
 {% if macro_indicators -%}
 거시 지표
 {% for m in macro_indicators -%}
-· {{ m.label }}: {% if m.is_anomaly %}—{% else %}{{ m.value }} ({{ m.change }}){% endif %}{% if m.is_previous %} (전일){% endif %}
+· {{ m.label }}: {% if m.is_anomaly %}{{ m.status_text or "이번 집계에서는 확인되지 않았어요." }}{% else %}{{ m.value }}{% if m.change %} ({{ m.change }}){% endif %}{% endif %}{% if m.is_previous %} (전일){% endif %}
 
 {% endfor %}
 {% endif %}
+{% endif -%}
 {% endif -%}
 {% if sector_mapping -%}
 오늘 주목 흐름

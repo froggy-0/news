@@ -45,6 +45,8 @@ MARKET_VALIDATION_BOUNDS = {
     "spy": (300.0, 700.0),
 }
 
+RATE_CANONICAL_KEYS = frozenset({"us10y", "us2y", "us3m"})
+
 
 def _normalize_identifier(value: str) -> str:
     return value.strip()
@@ -77,3 +79,7 @@ def canonical_keys_for_identifiers(identifiers: Iterable[str]) -> list[str]:
 
 def validation_bounds_for(canonical_key: str) -> tuple[float, float] | None:
     return MARKET_VALIDATION_BOUNDS.get(canonical_key.strip().lower())
+
+
+def is_rate_canonical_key(canonical_key: str) -> bool:
+    return canonical_key.strip().lower() in RATE_CANONICAL_KEYS

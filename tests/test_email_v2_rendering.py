@@ -49,10 +49,11 @@ SAMPLE_CONTEXT = {
         {
             "label": "10년물",
             "value": "4.20%",
-            "change": "+0.08%p",
+            "change": "+8bp",
             "direction": "up",
             "is_previous": False,
             "is_anomaly": False,
+            "status_text": None,
         },
     ],
     "stock_indices": [
@@ -80,8 +81,7 @@ SAMPLE_CONTEXT = {
         "spot_change": "+1.2%",
         "spot_direction": "up",
         "fear_greed_value": 65,
-        "fear_greed_label": "Greed",
-        "fear_greed_warning": "",
+        "fear_greed_label": "탐욕",
         "etf_items": [
             {
                 "ticker": "IBIT",
@@ -91,11 +91,10 @@ SAMPLE_CONTEXT = {
                 "volume": "25M",
             }
         ],
-        "etf_total_volume": "100M",
         "official_snapshots": [],
-        "daily_flow_btc": 150,
-        "daily_flow_usd": "$13,080,000",
-        "flow_label": "기관 순매수",
+        "official_total_btc": "",
+        "official_total_aum": "",
+        "status_text": "",
     },
     "issue_briefings": [{"topic": "AI 투자", "body": "엔비디아가 새 칩을 발표했어요."}],
     "news_items": [
@@ -134,6 +133,8 @@ SAMPLE_CONTEXT = {
     "weekly_context": "이번 주는 FOMC 회의가 핵심이에요.",
     "sonar_analyses": None,
     "x_reactions": None,
+    "news_status_text": "",
+    "market_status_text": "",
     "event_calendar": [
         {
             "date": "3/18",
@@ -194,6 +195,7 @@ PARTIAL_CONFIGS = [
         "email_news.html.j2",
         {
             "news_items": SAMPLE_CONTEXT["news_items"],
+            "news_status_text": SAMPLE_CONTEXT["news_status_text"],
         },
     ),
     (
@@ -208,6 +210,7 @@ PARTIAL_CONFIGS = [
             "stock_indices": SAMPLE_CONTEXT["stock_indices"],
             "stock_tech": SAMPLE_CONTEXT["stock_tech"],
             "macro_indicators": SAMPLE_CONTEXT["macro_indicators"],
+            "market_status_text": SAMPLE_CONTEXT["market_status_text"],
         },
     ),
     (

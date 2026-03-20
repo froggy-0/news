@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import logging
 
-from morning_brief.data.market_policy import canonical_key_for, canonical_label_for
+from morning_brief.data.market_policy import (
+    canonical_key_for,
+    canonical_label_for,
+    is_rate_canonical_key,
+)
 from morning_brief.data.sources.http_client import HttpFetchError, get_json_with_retry
 from morning_brief.models import MarketPoint
 
@@ -71,7 +75,12 @@ def fetch_macro_points_from_fred(api_key: str) -> list[MarketPoint]:
     points: list[MarketPoint] = []
     for canonical_key, series_id in SERIES_MAP:
         latest, previous = _latest_two_values(series_id=series_id, api_key=api_key)
-        if previous == 0:
+        normalized_key = canonical_key_for(series_id, canonical_key)
+        change_pct: float | None = None
+        change_bps: float | None = None
+        if is_rate_canonical_key(normalized_key):
+            change_bps = round((latest - previous) * 100, 2)
+        elif previous == 0:
             change_pct = 0.0
         else:
             change_pct = ((latest - previous) / previous) * 100
@@ -81,8 +90,9 @@ def fetch_macro_points_from_fred(api_key: str) -> list[MarketPoint]:
                 label=canonical_label_for(canonical_key),
                 ticker=series_id,
                 price=round(latest, 4),
-                change_pct=round(change_pct, 2),
-                canonical_key=canonical_key_for(series_id, canonical_key),
+                change_pct=round(change_pct, 2) if change_pct is not None else None,
+                change_bps=change_bps,
+                canonical_key=normalized_key,
                 raw_value=round(latest, 4),
                 resolved_value=round(latest, 4),
             )

@@ -41,8 +41,8 @@ a{min-height:44px;display:inline-block;line-height:44px}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:640px;">
 {% include "email_header.html.j2" %}
 {% include "email_hero.html.j2" %}
-{% if news_items %}{% include "email_news.html.j2" %}{% endif %}
-{% if btc_data %}{% include "email_btc.html.j2" %}{% endif %}
+{% include "email_news.html.j2" %}
+{% include "email_btc.html.j2" %}
 {% include "email_market.html.j2" %}
 {% if sector_mapping %}{% include "email_sector.html.j2" %}{% endif %}
 {% if event_calendar %}{% include "email_calendar.html.j2" %}{% endif %}

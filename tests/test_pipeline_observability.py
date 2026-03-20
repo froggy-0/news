@@ -11,23 +11,18 @@ from morning_brief.pipeline import run_pipeline
 def _market_packet() -> dict:
     return {
         "generated_at_utc": "2026-03-14T00:00:00+00:00",
-        "macro": [{"label": "US10Y", "price": 4.25, "change_pct": -0.02}],
+        "macro": [{"label": "US10Y", "price": 4.25, "change_pct": None, "change_bps": -2.0}],
         "us_indices": [{"label": "SPY", "price": 520.0, "change_pct": 0.5}],
         "tech_stocks": [{"label": "NVDA", "price": 950.0, "change_pct": 1.2}],
         "data_footer_notes": [],
         "bitcoin": {
             "spot": {"label": "BTC", "price": 85000.0, "change_pct": 0.3},
             "etf_points": [{"label": "IBIT", "price": 52.0, "change_pct": 0.1}],
-            "etf_total_volume": None,
             "fear_greed_value": None,
             "fear_greed_label": None,
             "official_etf_snapshots": [],
             "official_etf_total_btc": None,
             "official_etf_total_aum_usd": None,
-            "official_etf_daily_flow_btc": None,
-            "official_etf_daily_flow_usd": None,
-            "official_etf_supported_tickers": [],
-            "official_etf_compared_tickers": [],
         },
     }
 

@@ -14,7 +14,7 @@ def test_render_brief_prompts_contains_contract_and_packet(monkeypatch):
     monkeypatch.setenv("PROMPT_TEMPLATE_VERSION", "market_brief_test")
     settings = load_settings()
     packet = {
-        "macro": [{"label": "US2Y", "price": 4.12, "change_pct": 0.11}],
+        "macro": [{"label": "US2Y", "price": 4.12, "change_pct": None, "change_bps": 11.0}],
         "news": [
             {
                 "title": "Example",
@@ -55,7 +55,9 @@ def test_render_brief_prompts_contains_contract_and_packet(monkeypatch):
     assert "Prompt Version: market_brief_test" in instructions
     assert "<market_data_json>" in user_prompt
     assert "<news_focus_json>" in user_prompt
-    assert '"macro":[{"label":"US2Y","price":4.12,"change_pct":0.11}]' in user_prompt
+    assert (
+        '"macro":[{"label":"US2Y","price":4.12,"change_pct":null,"change_bps":11.0}]' in user_prompt
+    )
     assert '"topic":"macro"' in user_prompt
     assert '"why_it_matters":"금리 흐름을 읽는 데 도움이 되는 기사예요."' in user_prompt
     assert '"official_signals"' in user_prompt

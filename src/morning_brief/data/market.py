@@ -11,11 +11,11 @@ import yfinance as yf
 from morning_brief.data.market_policy import (
     canonical_key_for,
     canonical_label_for,
+    is_rate_canonical_key,
     validation_bounds_for,
 )
 from morning_brief.data.sources.btc_etf_official import (
     fetch_official_btc_etf_snapshots,
-    load_official_btc_etf_cache,
     save_official_btc_etf_cache,
     save_official_btc_etf_cache_state,
 )
@@ -37,6 +37,7 @@ FEAR_GREED_TIMEOUT = 10
 YAHOO_FINANCE_HOST = "query2.finance.yahoo.com"
 BTC_ETF_OFFICIAL_CACHE_RELATIVE_PATH = Path("btc_etf/official_snapshots.json")
 MARKET_POINT_CACHE_RELATIVE_PATH = Path("market/last_success_points.json")
+# 운영용 cache state는 유지하지만, stale snapshot을 사용자-facing 값에는 재사용하지 않는다.
 BTC_ETF_CACHE_MAX_AGE_HOURS = 48
 MACRO_FALLBACK_TARGETS = [
     ("us10y", "^TNX", 0.1),
@@ -78,6 +79,21 @@ except Exception:
     pass
 
 _provider_warned: set[str] = set()
+
+
+def _point_changes(
+    *,
+    canonical_key: str,
+    latest_value: float,
+    previous_value: float,
+) -> tuple[float | None, float | None]:
+    if is_rate_canonical_key(canonical_key):
+        return None, round((latest_value - previous_value) * 100, 2)
+
+    if previous_value == 0:
+        return 0.0, None
+
+    return round(((latest_value - previous_value) / previous_value) * 100, 2), None
 
 
 def reset_market_warned_state() -> None:
@@ -143,16 +159,18 @@ def _latest_price_point_from_yfinance(
 
     latest_close = float(history["Close"].iloc[-1]) * price_scale
     previous_close = float(history["Close"].iloc[-2]) * price_scale
-    if previous_close == 0:
-        change_pct = 0.0
-    else:
-        change_pct = ((latest_close - previous_close) / previous_close) * 100
+    change_pct, change_bps = _point_changes(
+        canonical_key=canonical_key,
+        latest_value=latest_close,
+        previous_value=previous_close,
+    )
 
     return MarketPoint(
         label=label,
         ticker=ticker,
         price=round(latest_close, 4),
-        change_pct=round(change_pct, 2),
+        change_pct=change_pct,
+        change_bps=change_bps,
         canonical_key=canonical_key,
         raw_value=round(latest_close, 4),
         resolved_value=round(latest_close, 4),
@@ -166,12 +184,14 @@ def _market_point(
     change_pct: float | None,
     *,
     canonical_key: str,
+    change_bps: float | None = None,
 ) -> MarketPoint:
     return MarketPoint(
         label=label,
         ticker=ticker,
         price=round(close, 4) if close is not None else None,
         change_pct=round(change_pct, 2) if change_pct is not None else None,
+        change_bps=round(change_bps, 2) if change_bps is not None else None,
         canonical_key=canonical_key,
         raw_value=round(close, 4) if close is not None else None,
         resolved_value=round(close, 4) if close is not None else None,
@@ -220,6 +240,7 @@ def _safe_yfinance_point(
             ticker=ticker,
             price=None,
             change_pct=None,
+            change_bps=None,
             canonical_key=canonical_key,
             validation_status="missing",
             resolution_reason="원본 데이터를 가져오지 못했어요.",
@@ -507,6 +528,7 @@ def _normalize_point_state(point: MarketPoint) -> MarketPoint:
         return replace(
             point,
             change_pct=point.change_pct if point.change_pct is not None else None,
+            change_bps=point.change_bps if point.change_bps is not None else None,
             raw_value=point.raw_value,
             resolved_value=None,
             validation_status=point.validation_status or "missing",
@@ -589,6 +611,7 @@ def _resolve_point_from_cache(
         normalized,
         price=restored.price,
         change_pct=restored.change_pct,
+        change_bps=restored.change_bps,
         is_previous_value=True,
         validation_status="previous_value",
         raw_value=None,
@@ -602,13 +625,6 @@ def _resolve_points_from_cache(
     previous_by_key: dict[str, MarketPoint],
 ) -> list[MarketPoint]:
     return [_resolve_point_from_cache(point, previous_by_key) for point in points]
-
-
-def _sum_available_volumes(volumes: list[int | None]) -> int | None:
-    available = [volume for volume in volumes if volume is not None]
-    if not available:
-        return None
-    return sum(available)
 
 
 def _point_is_within_expected_range(point: MarketPoint) -> bool:
@@ -662,6 +678,7 @@ def _validate_market_point(point: MarketPoint) -> tuple[MarketPoint, str | None]
             normalized,
             price=None,
             change_pct=None,
+            change_bps=None,
             validation_status="anomaly",
             raw_value=raw_value,
             resolved_value=None,
@@ -704,51 +721,26 @@ def _validate_market_points(points: list[MarketPoint]) -> tuple[list[MarketPoint
 
 def _summarize_official_btc_etf_snapshots(
     snapshots: list[BitcoinEtfIssuerSnapshot],
-    previous_by_ticker: dict[str, BitcoinEtfIssuerSnapshot],
-    spot_price_usd: float,
-) -> tuple[float | None, float | None, float | None, float | None, list[str]]:
+) -> tuple[float | None, float | None]:
     if not snapshots:
-        return None, None, None, None, []
+        return None, None
 
     total_btc = sum(snapshot.total_btc for snapshot in snapshots)
     total_aum_usd = sum(snapshot.aum_usd for snapshot in snapshots)
-    compared_tickers: list[str] = []
-    flow_btc = 0.0
-
-    for snapshot in snapshots:
-        previous = previous_by_ticker.get(snapshot.ticker)
-        if previous is None:
-            continue
-        compared_tickers.append(snapshot.ticker)
-        flow_btc += snapshot.total_btc - previous.total_btc
-
-    flow_usd = flow_btc * spot_price_usd if compared_tickers else None
-    return (
-        round(total_btc, 8),
-        round(total_aum_usd, 2),
-        round(flow_btc, 8) if compared_tickers else None,
-        round(flow_usd, 2) if flow_usd is not None else None,
-        compared_tickers,
-    )
+    return round(total_btc, 8), round(total_aum_usd, 2)
 
 
 def _fetch_official_btc_etf_data(
     *,
     cache_dir: Path,
-    spot_price_usd: float,
     perplexity_api_key: str = "",
     observer: PipelineObserver | None = None,
 ) -> tuple[
     list[BitcoinEtfIssuerSnapshot],
     float | None,
     float | None,
-    float | None,
-    float | None,
-    list[str],
 ]:
     cache_file = _official_btc_etf_cache_file(cache_dir)
-    previous_by_ticker = load_official_btc_etf_cache(cache_file)
-    previous_snapshots = [previous_by_ticker[ticker] for ticker in sorted(previous_by_ticker)]
     empty_reason = "empty_snapshots"
 
     try:
@@ -766,61 +758,6 @@ def _fetch_official_btc_etf_data(
         empty_reason = f"fetch_error:{type(exc).__name__}"
 
     if not snapshots:
-        if previous_snapshots:
-            cache_age_hours: float | None = None
-            if cache_file.exists():
-                cache_mtime = datetime.fromtimestamp(cache_file.stat().st_mtime, tz=timezone.utc)
-                cache_age_hours = (
-                    datetime.now(tz=timezone.utc) - cache_mtime
-                ).total_seconds() / 3600
-            if cache_age_hours is not None and cache_age_hours > BTC_ETF_CACHE_MAX_AGE_HOURS:
-                logger.warning(
-                    "BTC ETF 캐시가 %.1f시간 지나 TTL(%d시간)을 초과했어요. stale 캐시를 버릴게요.",
-                    cache_age_hours,
-                    BTC_ETF_CACHE_MAX_AGE_HOURS,
-                )
-                if observer is not None:
-                    observer.log_event(
-                        "btc_etf_cache_expired",
-                        cache_age_hours=round(cache_age_hours, 1),
-                        ttl_hours=BTC_ETF_CACHE_MAX_AGE_HOURS,
-                        reason=empty_reason,
-                    )
-                save_official_btc_etf_cache_state(
-                    cache_file.parent,
-                    snapshot_count=0,
-                    reason=f"{empty_reason}:cache_expired",
-                )
-                return [], None, None, None, None, []
-            save_official_btc_etf_cache_state(
-                cache_file.parent,
-                snapshot_count=len(previous_snapshots),
-                reason=f"{empty_reason}:stale_cache",
-            )
-            logger.info(
-                "BTC ETF 공식 스냅샷을 새로 가져오지 못해 직전 공식 스냅샷 %s건을 이어서 쓸게요. reason=%s age=%.1fh",
-                len(previous_snapshots),
-                empty_reason,
-                cache_age_hours if cache_age_hours is not None else -1,
-            )
-            if observer is not None:
-                observer.log_event(
-                    "btc_etf_reference_stale_fallback",
-                    cache_dir=str(cache_file.parent),
-                    previous_snapshot_count=len(previous_snapshots),
-                    reason=empty_reason,
-                    cache_age_hours=round(cache_age_hours, 1)
-                    if cache_age_hours is not None
-                    else None,
-                )
-            return (
-                previous_snapshots,
-                *_summarize_official_btc_etf_snapshots(
-                    snapshots=previous_snapshots,
-                    previous_by_ticker={},
-                    spot_price_usd=spot_price_usd,
-                ),
-            )
         save_official_btc_etf_cache_state(
             cache_file.parent,
             snapshot_count=0,
@@ -836,16 +773,12 @@ def _fetch_official_btc_etf_data(
                 cache_dir=str(cache_file.parent),
                 reason=empty_reason,
             )
-        return [], None, None, None, None, []
+        return [], None, None
 
     save_official_btc_etf_cache(cache_file, snapshots)
     return (
         snapshots,
-        *_summarize_official_btc_etf_snapshots(
-            snapshots=snapshots,
-            previous_by_ticker=previous_by_ticker,
-            spot_price_usd=spot_price_usd,
-        ),
+        *_summarize_official_btc_etf_snapshots(snapshots=snapshots),
     )
 
 
@@ -855,28 +788,22 @@ def fetch_bitcoin_snapshot(
     observer: PipelineObserver | None = None,
 ) -> BitcoinSnapshot:
     spot = _fetch_btc_spot_point()
-    volumes: list[int | None] = []
 
     etf_points = []
     for ticker in BTC_ETF_TICKERS:
-        point, volume = _safe_stooq_point_and_volume(
+        point, _ = _safe_stooq_point_and_volume(
             label=ticker,
             ticker=ticker,
         )
         etf_points.append(point)
-        volumes.append(volume)
 
     fear_greed_value, fear_greed_label = _fetch_fear_greed()
     (
         official_snapshots,
         official_total_btc,
         official_total_aum_usd,
-        official_daily_flow_btc,
-        official_daily_flow_usd,
-        official_compared_tickers,
     ) = _fetch_official_btc_etf_data(
         cache_dir=cache_dir or Path(".cache").resolve(),
-        spot_price_usd=spot.price or 0.0,
         perplexity_api_key=perplexity_api_key,
         observer=observer,
     )
@@ -884,16 +811,11 @@ def fetch_bitcoin_snapshot(
     return BitcoinSnapshot(
         spot=spot,
         etf_points=etf_points,
-        etf_total_volume=_sum_available_volumes(volumes),
         fear_greed_value=fear_greed_value,
         fear_greed_label=fear_greed_label,
         official_etf_snapshots=official_snapshots,
         official_etf_total_btc=official_total_btc,
         official_etf_total_aum_usd=official_total_aum_usd,
-        official_etf_daily_flow_btc=official_daily_flow_btc,
-        official_etf_daily_flow_usd=official_daily_flow_usd,
-        official_etf_supported_tickers=[snapshot.ticker for snapshot in official_snapshots],
-        official_etf_compared_tickers=official_compared_tickers,
     )
 
 
@@ -946,6 +868,8 @@ def build_market_packet(
         *([spot_note] if spot_note else []),
         *etf_notes,
     ]
+    if perplexity_api_key and not btc_snapshot.official_etf_snapshots:
+        data_footer_notes.append("BTC ETF 공식 보유 현황은 이번 집계에서는 확인되지 않았어요.")
     packet = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "macro": [point.__dict__ for point in macro_points],
@@ -956,7 +880,6 @@ def build_market_packet(
         "bitcoin": {
             "spot": btc_snapshot.spot.__dict__,
             "etf_points": [point.__dict__ for point in btc_snapshot.etf_points],
-            "etf_total_volume": btc_snapshot.etf_total_volume,
             "fear_greed_value": btc_snapshot.fear_greed_value,
             "fear_greed_label": btc_snapshot.fear_greed_label,
             "official_etf_snapshots": [
@@ -964,10 +887,6 @@ def build_market_packet(
             ],
             "official_etf_total_btc": btc_snapshot.official_etf_total_btc,
             "official_etf_total_aum_usd": btc_snapshot.official_etf_total_aum_usd,
-            "official_etf_daily_flow_btc": btc_snapshot.official_etf_daily_flow_btc,
-            "official_etf_daily_flow_usd": btc_snapshot.official_etf_daily_flow_usd,
-            "official_etf_supported_tickers": btc_snapshot.official_etf_supported_tickers,
-            "official_etf_compared_tickers": btc_snapshot.official_etf_compared_tickers,
         },
     }
     if observer is not None:

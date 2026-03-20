@@ -146,9 +146,6 @@ def _build_search_context(packet: dict, quality: dict, max_results: int) -> dict
         "bitcoin": {
             "spot": packet.get("bitcoin", {}).get("spot", {}),
             "official_etf_total_btc": packet.get("bitcoin", {}).get("official_etf_total_btc"),
-            "official_etf_daily_flow_btc": packet.get("bitcoin", {}).get(
-                "official_etf_daily_flow_btc"
-            ),
         },
     }
 

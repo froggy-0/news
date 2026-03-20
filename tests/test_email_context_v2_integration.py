@@ -17,7 +17,7 @@ Morning Market Brief (2026-03-18)
 오늘 시장은 혼조세를 보였어요.
 
 1. 거시 지표 Dashboard
-- 10년물: 4.20% (+0.08%p)
+- 10년물: 4.20% (전일 대비 +8bp)
 - DXY: 103.5 (-0.3%)
 
 2. 미국 증시
@@ -79,8 +79,8 @@ def _make_packet(
         "bitcoin": {
             "spot": {"price": 87200, "change_pct": 1.2},
             "fear_greed_value": 65,
+            "fear_greed_label": "탐욕",
             "etf_points": [],
-            "official_etf_daily_flow_btc": 150,
         },
         "macro": [
             {
@@ -114,6 +114,8 @@ EXPECTED_KEYS = {
     "stock_indices",
     "stock_tech",
     "btc_data",
+    "news_status_text",
+    "market_status_text",
     "issue_briefings",
     "news_items",
     "news_source_items",
@@ -178,6 +180,12 @@ def test_build_email_context_v2_parses_news_items() -> None:
     assert news[0]["source_label"] == "원문 기사 · Reuters"
     assert news[1]["headline"] == "연준 금리 동결 시사"
     assert news[1]["source_name"] == "Bloomberg"
+
+
+def test_build_email_context_v2_core_status_messages_are_empty_when_data_exists() -> None:
+    ctx = _build_email_context_v2("제목", SAMPLE_BODY, _make_packet())
+    assert ctx["news_status_text"] == ""
+    assert ctx["market_status_text"] == ""
 
 
 def test_build_email_context_v2_builds_hero_metadata_and_sources() -> None:

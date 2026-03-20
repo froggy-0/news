@@ -4,6 +4,7 @@ import logging
 import re
 import time
 from datetime import datetime
+from typing import cast
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
@@ -19,6 +20,7 @@ from morning_brief.brief_formatting import (
 )
 from morning_brief.brief_review import validate_and_rewrite_briefing
 from morning_brief.config import Settings
+from morning_brief.data.market_policy import is_rate_canonical_key
 from morning_brief.llm_errors import BriefGenerationError
 from morning_brief.observability import PipelineObserver
 from morning_brief.openai_utils import (
@@ -72,6 +74,13 @@ def _point_change_pct(point: dict) -> float | None:
     return float(raw_change)
 
 
+def _point_change_bps(point: dict) -> float | None:
+    raw_change = point.get("change_bps")
+    if raw_change is None:
+        return None
+    return float(raw_change)
+
+
 def _point_suffix(point: dict) -> str:
     if (
         bool(point.get("is_previous_value"))
@@ -83,8 +92,18 @@ def _point_suffix(point: dict) -> str:
 
 def _fmt_point(point: dict) -> str:
     price = _point_price(point)
+    if price is None:
+        return ""
+    canonical_key = str(point.get("canonical_key", "")).strip()
+    if is_rate_canonical_key(canonical_key):
+        change_bps = _point_change_bps(point)
+        if change_bps is None:
+            return ""
+        sign = "+" if change_bps >= 0 else ""
+        return f"{point['label']} {price:.2f}% (전일 대비 {sign}{change_bps:.0f}bp){_point_suffix(point)}"
+
     change_pct = _point_change_pct(point)
-    if price is None or change_pct is None:
+    if change_pct is None:
         return ""
     sign = "+" if change_pct >= 0 else ""
     return f"{point['label']} {price:.2f} ({sign}{change_pct:.2f}%){_point_suffix(point)}"
@@ -321,14 +340,16 @@ def _fallback_if_incomplete(
     fallback_raw = _fallback_brief_raw(packet=packet, timezone=settings.timezone)
     fallback_map = extract_sections(fallback_raw)
 
-    merged = SectionMap(
-        title=llm_map.get("title") or fallback_map.get("title", "Morning Market Brief")
-    )
+    merged_raw: dict[str, str] = {
+        "title": str(llm_map.get("title") or fallback_map.get("title", "Morning Market Brief"))
+    }
     for key in SECTION_TITLES:
         llm_content = str(llm_map.get(key, ""))
         fb_content = str(fallback_map.get(key, ""))
         use_fallback = key in replacement_keys or not llm_content.strip()
-        merged[key] = fb_content if use_fallback else llm_content
+        merged_raw[key] = fb_content if use_fallback else llm_content
+
+    merged = cast(SectionMap, merged_raw)
 
     merged_text = serialize_sections(merged)
 
@@ -674,7 +695,7 @@ def _judgement_and_reason(
     vix = _point_price(_point_by_key(macro, "vix"))
     us10y_point = _point_by_key(macro, "us10y")
     us10y = _point_price(us10y_point)
-    us10y_change = _point_change_pct(us10y_point)
+    us10y_change_bps = _point_change_bps(us10y_point)
     spy_change = _point_change_pct(_point_by_key(indices, "spy"))
     nq_change = _point_change_pct(_point_by_key(korea_watch, "nq_futures"))
     usdkrw_change = _point_change_pct(_point_by_key(korea_watch, "usdkrw"))
@@ -715,10 +736,11 @@ def _judgement_and_reason(
             f"VIX가 {vix:.2f}로 안정적이고 나스닥 선물과 S&P500 흐름이 함께 강합니다.",
         )
 
-    if us10y is not None and us10y_change is not None:
+    if us10y is not None and us10y_change_bps is not None:
+        sign = "+" if us10y_change_bps >= 0 else ""
         return (
             "관망",
-            f"미국 10년물 금리가 {us10y:.2f}%로 높고 전일 대비 {us10y_change:+.2f}% 움직여 금리 부담을 더 확인할 필요가 있습니다.",
+            f"미국 10년물 금리가 {us10y:.2f}%로 높고 전일 대비 {sign}{us10y_change_bps:.0f}bp 움직여 금리 부담을 더 확인할 필요가 있습니다.",
         )
     if nq_change is not None:
         return (
@@ -805,21 +827,20 @@ def _fallback_stock_lines(
         stock_lines.append(
             f"비트코인은 {cause} {_abs_change_text(btc_spot_change)} {_change_direction(btc_spot_change)}했고, 현재 {btc_spot_price:,.2f}달러입니다{_point_suffix(btc_spot)}. [출처: CoinGecko]"
         )
-    official_flow_btc = btc.get("official_etf_daily_flow_btc")
-    official_supported = btc.get("official_etf_supported_tickers", [])
     official_total_btc = btc.get("official_etf_total_btc")
-    if official_flow_btc is not None:
+    official_total_aum_usd = btc.get("official_etf_total_aum_usd")
+    official_snapshots = btc.get("official_etf_snapshots", [])
+    if official_snapshots and official_total_btc is not None:
         stock_lines.append(
-            f"BTC ETF는 직전 스냅샷 대비 {'순유입' if official_flow_btc >= 0 else '순유출'} {abs(official_flow_btc):,.2f} BTC가 확인됐습니다. [출처: Perplexity structured response]"
+            f"BTC ETF 보유량은 공식 발행사 기준 총 {official_total_btc:,.2f} BTC입니다. [출처: Perplexity structured response]"
         )
-    if official_supported and official_total_btc:
+    elif not official_snapshots:
         stock_lines.append(
-            f"BTC ETF 보유량은 공식 발행사 기준 {', '.join(official_supported)} 합산 보유량 {official_total_btc:,.2f} BTC입니다. [출처: Perplexity structured response]"
+            "BTC ETF 공식 보유 현황은 이번 집계에서는 확인되지 않았어요. [출처: Perplexity structured response]"
         )
-    etf_total_volume = btc.get("etf_total_volume")
-    if etf_total_volume is not None:
+    if official_snapshots and official_total_aum_usd is not None:
         stock_lines.append(
-            f"BTC ETF 거래량은 주요 ETF 합산 {etf_total_volume:,}주입니다. [출처: Stooq/yfinance]"
+            f"BTC ETF 총 AUM은 {official_total_aum_usd:,.0f}달러입니다. [출처: Perplexity structured response]"
         )
     return stock_lines
 

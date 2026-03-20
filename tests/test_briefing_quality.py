@@ -126,7 +126,32 @@ def test_improve_readability_spacing_breaks_sentences():
     assert "금리는 올랐어요.\n\n달러도 강했어요." in updated
 
 
-def test_fallback_brief_mentions_official_btc_etf_flow_when_available():
+def test_fallback_brief_renders_rate_changes_in_basis_points():
+    packet = {
+        "macro": [
+            {
+                "label": "미국 10년물 국채금리",
+                "canonical_key": "us10y",
+                "price": 4.25,
+                "change_pct": None,
+                "change_bps": 4.0,
+            }
+        ],
+        "korea_watch": [],
+        "us_indices": [],
+        "tech_stocks": [],
+        "bitcoin": {"spot": {}, "etf_points": [], "official_etf_snapshots": []},
+        "news": [],
+        "data_quality": {"status": "ok", "warnings": []},
+    }
+
+    briefing = _fallback_brief(packet=packet, timezone="Asia/Seoul")
+
+    assert "전일 대비 +4bp" in briefing
+    assert "+4.00%" not in briefing
+
+
+def test_fallback_brief_mentions_official_btc_etf_holdings_when_available():
     packet = {
         "macro": [],
         "us_indices": [],
@@ -134,12 +159,11 @@ def test_fallback_brief_mentions_official_btc_etf_flow_when_available():
         "bitcoin": {
             "spot": {"price": 80_000.0, "change_pct": 1.5},
             "etf_points": [],
-            "etf_total_volume": 123_456,
-            "official_etf_supported_tickers": ["IBIT", "BITB", "GBTC"],
-            "official_etf_compared_tickers": ["IBIT", "BITB", "GBTC"],
+            "official_etf_snapshots": [
+                {"issuer": "BlackRock", "ticker": "IBIT", "total_btc": 300_000.0, "aum_usd": 10.0}
+            ],
             "official_etf_total_btc": 981_234.56,
-            "official_etf_daily_flow_btc": 1_234.56,
-            "official_etf_daily_flow_usd": 98_764_800.0,
+            "official_etf_total_aum_usd": 98_764_800.0,
         },
         "news": [],
         "data_quality": {"status": "ok", "warnings": []},
@@ -151,9 +175,9 @@ def test_fallback_brief_mentions_official_btc_etf_flow_when_available():
     assert "1. 거시 지표 Dashboard" in briefing
     assert "2. 미국 증시" in briefing
     assert "981,234.56 BTC" in briefing
-    assert "IBIT, BITB, GBTC 합산 보유량" in briefing
-    assert "1,234.56 BTC" in briefing
-    assert "직전 스냅샷 대비 순유입" in briefing
+    assert "공식 발행사 기준 총 981,234.56 BTC" in briefing
+    assert "98,764,800달러" in briefing
+    assert "순유입" not in briefing
 
 
 def test_brief_structure_issues_accepts_layer_two_bullets_outside_metrics_label():

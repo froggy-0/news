@@ -74,6 +74,7 @@ class MacroIndicator(TypedDict):
     direction: str  # up / down / flat
     is_previous: bool
     is_anomaly: bool
+    status_text: str | None
 
 
 class StockItem(TypedDict):
@@ -95,13 +96,11 @@ class BTCData(TypedDict, total=False):
     spot_direction: str
     fear_greed_value: int
     fear_greed_label: str
-    fear_greed_warning: str
     etf_items: list[dict]
-    etf_total_volume: str
     official_snapshots: list[dict]
-    daily_flow_btc: float
-    daily_flow_usd: str
-    flow_label: str
+    official_total_btc: str
+    official_total_aum: str
+    status_text: str
 
 
 # ---------------------------------------------------------------------------

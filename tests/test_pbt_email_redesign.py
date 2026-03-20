@@ -28,8 +28,8 @@ from morning_brief.brief_formatting import (
     parse_sector_mapping,
     serialize_sections,
 )
+from morning_brief.data.market import _fear_greed_level_label
 from morning_brief.emailer import (
-    FEAR_GREED_LABELS,
     _build_btc_data,
     _build_email_context_v2,
     _build_snapshot_badges,
@@ -224,30 +224,18 @@ def test_p4_sector_mapping_validity(text: str) -> None:
 @settings(max_examples=101, deadline=2000)
 @given(value=st.integers(min_value=0, max_value=100))
 def test_p5_fear_greed_label_consistency(value: int) -> None:
-    """Fear/greed label matches value range, warning at >= 75."""
+    """packet 레이블이 있으면 그대로 유지한다."""
     packet = {
         "bitcoin": {
             "spot": {"price": 67000, "change_pct": 0},
             "fear_greed_value": value,
+            "fear_greed_label": _fear_greed_level_label(value),
             "etf_points": [],
-            "official_etf_daily_flow_btc": 0,
         },
     }
     btc_data = _build_btc_data(packet, "")
 
-    # Check label
-    expected_label = "Greed"  # default
-    for (lo, hi), label in FEAR_GREED_LABELS.items():
-        if lo <= value <= hi:
-            expected_label = label
-            break
-    assert btc_data["fear_greed_label"] == expected_label
-
-    # Check warning
-    if value >= 75:
-        assert btc_data.get("fear_greed_warning") == "과열 경계"
-    else:
-        assert btc_data.get("fear_greed_warning", "") == ""
+    assert btc_data["fear_greed_label"] == _fear_greed_level_label(value)
 
 
 # ---------------------------------------------------------------------------

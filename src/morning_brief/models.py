@@ -10,6 +10,7 @@ class MarketPoint:
     ticker: str
     price: float | None
     change_pct: float | None
+    change_bps: float | None = None
     canonical_key: str = ""
     is_previous_value: bool = False
     validation_status: str = "ok"
@@ -48,13 +49,8 @@ class BitcoinEtfIssuerSnapshot:
 class BitcoinSnapshot:
     spot: MarketPoint
     etf_points: list[MarketPoint]
-    etf_total_volume: int | None
     fear_greed_value: int | None
     fear_greed_label: str | None
     official_etf_snapshots: list[BitcoinEtfIssuerSnapshot]
     official_etf_total_btc: float | None
     official_etf_total_aum_usd: float | None
-    official_etf_daily_flow_btc: float | None
-    official_etf_daily_flow_usd: float | None
-    official_etf_supported_tickers: list[str]
-    official_etf_compared_tickers: list[str]

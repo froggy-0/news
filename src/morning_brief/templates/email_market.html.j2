@@ -4,6 +4,9 @@
 <table role="presentation" width="100%" class="card" style="width:100%;background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;">
 <tr><td class="card-pad" style="padding:20px 24px;">
 <div style="border-left:3px solid #0f766e;padding-left:12px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#0f766e;font-size:13px;font-weight:600;">&#9632; 시장 지표</div>
+{% if not stock_indices and not stock_tech and not macro_indicators %}
+<div style="padding-top:14px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#64748b;font-size:14px;line-height:1.7;" class="text-muted">{{ market_status_text or "이번 집계에서는 시장 지표를 확인하지 못했어요." }}</div>
+{% endif %}
 {% if stock_indices %}
 <table role="presentation" width="100%" style="padding-top:10px;font-size:13px;">
 {% for s in stock_indices %}
@@ -34,8 +37,15 @@
 {% for m in macro_indicators %}
 <tr>
 <td style="padding:4px 0;color:#475569;font-weight:600;" class="text-body">{{ m.label }}</td>
-<td align="right" style="color:#0f172a;" class="text-strong">{% if m.is_anomaly %}&#8212;{% else %}{{ m.value }}{% endif %}{% if m.is_previous %} {{ quality_mark("전일") }}{% endif %}</td>
-<td align="right">{% if not m.is_anomaly %}{{ badge(m.change, m.direction) }}{% endif %}</td>
+<td align="right" style="color:#0f172a;" class="text-strong">
+{% if m.is_anomaly %}
+<span class="text-muted" style="color:#64748b;">{{ m.status_text or "이번 집계에서는 확인되지 않았어요." }}</span>
+{% else %}
+{{ m.value }}
+{% if m.is_previous %} {{ quality_mark("전일") }}{% endif %}
+{% endif %}
+</td>
+<td align="right">{% if not m.is_anomaly and m.change %}{{ badge(m.change, m.direction) }}{% endif %}</td>
 </tr>
 {% endfor %}
 </table>

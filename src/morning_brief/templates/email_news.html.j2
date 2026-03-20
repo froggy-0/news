@@ -4,6 +4,9 @@
 <table role="presentation" width="100%" class="card" style="width:100%;background:#fff;border:1px solid #e2e8f0;border-radius:16px;">
 <tr><td class="card-pad" style="padding:28px 24px;">
 {{ section_label("주요 뉴스", "#1e40af") }}
+{% if not news_items %}
+<div style="padding-top:14px;font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:#64748b;font-size:14px;line-height:1.7;" class="text-muted">{{ news_status_text or "이번 집계에서는 주요 뉴스를 확인하지 못했어요." }}</div>
+{% endif %}
 {% for item in news_items %}
 <div style="padding:20px 0 0 0;{% if not loop.first %}border-top:1px solid #e2e8f0;margin-top:18px;{% endif %}">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">

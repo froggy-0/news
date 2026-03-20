@@ -20,12 +20,14 @@ def _point(
     canonical_key: str,
     price: float | None,
     change_pct: float | None,
+    change_bps: float | None = None,
 ) -> MarketPoint:
     return MarketPoint(
         label=label,
         ticker=ticker,
         price=price,
         change_pct=change_pct,
+        change_bps=change_bps,
         canonical_key=canonical_key,
     )
 
@@ -34,16 +36,11 @@ def _btc_snapshot(point: MarketPoint) -> BitcoinSnapshot:
     return BitcoinSnapshot(
         spot=point,
         etf_points=[],
-        etf_total_volume=None,
         fear_greed_value=None,
         fear_greed_label=None,
         official_etf_snapshots=[],
         official_etf_total_btc=None,
         official_etf_total_aum_usd=None,
-        official_etf_daily_flow_btc=None,
-        official_etf_daily_flow_usd=None,
-        official_etf_supported_tickers=[],
-        official_etf_compared_tickers=[],
     )
 
 
