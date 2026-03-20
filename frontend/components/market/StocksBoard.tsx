@@ -160,7 +160,7 @@ export function StocksBoard({
   stocks: TechStock[];
 }) {
   return (
-    <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+    <section className="space-y-6">
       <div className="section-shell rounded-[8px] px-5 py-6 md:px-8 md:py-8">
         <div className="mb-6 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">

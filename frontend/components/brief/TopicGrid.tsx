@@ -16,7 +16,7 @@ export function TopicGrid({ items }: { items: TopicSummary[] }) {
       <div className="mb-7 flex flex-col gap-3 border-b border-white/8 pb-6 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="section-title">브리핑 지도</p>
-          <h2 className="display-headline mt-4 text-3xl md:text-5xl">오늘 브리핑을 움직이는 축을 먼저 잡습니다.</h2>
+          <h2 className="display-headline mt-4 text-[2.15rem] md:text-[3.2rem]">오늘 브리핑을 움직이는 축을 먼저 잡습니다.</h2>
         </div>
         <p className="hero-support max-w-sm">거시, 미국 증시, 빅테크, 비트코인 흐름을 먼저 압축해 읽는 상단 맵입니다.</p>
       </div>

@@ -33,28 +33,30 @@ export default async function HomePage() {
       {brief.meta.dataQuality !== "ok" ? (
         <QualityBanner quality={brief.meta.dataQuality} notes={brief.meta.qualityNotes} />
       ) : null}
-      <section id="brief">
+      <section id="brief" className="space-y-8">
         <JudgmentBlock
           headline={brief.aiJudgment.headline}
           body={brief.aiJudgment.body}
           generatedAt={brief.meta.generatedAt}
         />
-      </section>
-      <BriefBody body={brief.aiJudgment.body} date={brief.meta.date} />
-      <section className="grid gap-8 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.85fr)]">
         <div className="space-y-8">
-          <TopicGrid items={brief.topicSummaries} />
-          <section id="news">
-            <NewsFeed items={brief.news} />
-          </section>
-        </div>
-        <aside className="space-y-8 xl:sticky xl:top-[132px] self-start">
           <section id="market">
             <StocksBoard indices={usIndices} stocks={brief.techStocks} />
           </section>
           <section id="btc">
             <BitcoinPanel bitcoin={brief.bitcoin} />
           </section>
+        </div>
+      </section>
+      <section className="grid gap-8 2xl:grid-cols-[minmax(0,1.12fr)_minmax(320px,0.88fr)]">
+        <div className="space-y-8">
+          <BriefBody body={brief.aiJudgment.body} date={brief.meta.date} />
+          <TopicGrid items={brief.topicSummaries} />
+          <section id="news">
+            <NewsFeed items={brief.news} />
+          </section>
+        </div>
+        <aside className="space-y-8 2xl:sticky 2xl:top-[118px] self-start">
           <XSignals items={brief.xSignals} />
         </aside>
       </section>

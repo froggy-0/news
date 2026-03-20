@@ -25,7 +25,7 @@ export async function generateMetadata({
   const { date } = await params;
   const brief = await fetchBriefByDate(date);
   return {
-    title: `${date} 시장 브리핑`,
+    title: `${date} · SOVEREIGN BRIEF`,
     description: brief.aiJudgment.headline,
   };
 }
@@ -48,20 +48,22 @@ export default async function ArchiveDetailPage({
         {brief.meta.dataQuality !== "ok" ? (
           <QualityBanner quality={brief.meta.dataQuality} notes={brief.meta.qualityNotes} />
         ) : null}
-        <JudgmentBlock
-          headline={brief.aiJudgment.headline}
-          body={brief.aiJudgment.body}
-          generatedAt={brief.meta.generatedAt}
-        />
-        <BriefBody body={brief.aiJudgment.body} date={brief.meta.date} />
-        <section className="grid gap-8 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.85fr)]">
+        <section className="space-y-8">
+          <JudgmentBlock
+            headline={brief.aiJudgment.headline}
+            body={brief.aiJudgment.body}
+            generatedAt={brief.meta.generatedAt}
+          />
+          <StocksBoard indices={usIndices} stocks={brief.techStocks} />
+          <BitcoinPanel bitcoin={brief.bitcoin} />
+        </section>
+        <section className="grid gap-8 2xl:grid-cols-[minmax(0,1.12fr)_minmax(320px,0.88fr)]">
           <div className="space-y-8">
+            <BriefBody body={brief.aiJudgment.body} date={brief.meta.date} />
             <TopicGrid items={brief.topicSummaries} />
             <NewsFeed items={brief.news} />
           </div>
-          <aside className="space-y-8 xl:sticky xl:top-[132px] self-start">
-            <StocksBoard indices={usIndices} stocks={brief.techStocks} />
-            <BitcoinPanel bitcoin={brief.bitcoin} />
+          <aside className="space-y-8 2xl:sticky 2xl:top-[118px] self-start">
             <XSignals items={brief.xSignals} />
           </aside>
         </section>

@@ -113,15 +113,15 @@ a {
     "Newsreader",
     "Noto Serif KR",
     serif;
-  font-size: clamp(3rem, 9vw, 6.75rem);
-  line-height: 0.96;
+  font-size: clamp(2.3rem, 5.4vw, 4.5rem);
+  line-height: 0.98;
   letter-spacing: -0.05em;
   color: var(--text-primary);
   font-style: italic;
 }
 
 .display-headline-sm {
-  font-size: clamp(2.6rem, 7vw, 5.4rem);
+  font-size: clamp(1.9rem, 4.1vw, 3.2rem);
 }
 
 .status-chip {
@@ -190,7 +190,7 @@ a {
 
 .panel-soft {
   border-radius: 8px;
-  padding: 32px;
+  padding: 26px;
 }
 
 .data-state {
@@ -211,6 +211,19 @@ a {
   animation: scanline 15s linear infinite;
   pointer-events: none;
   z-index: 60;
+}
+
+.scroll-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 85;
+  transform-origin: left center;
+  background: linear-gradient(90deg, rgba(2, 230, 0, 0.95), rgba(139, 220, 255, 0.85));
+  box-shadow: 0 0 22px rgba(2, 230, 0, 0.25);
+  pointer-events: none;
 }
 
 .top-ticker-shell {
@@ -238,6 +251,11 @@ a {
   white-space: nowrap;
   animation: marquee 60s linear infinite;
   will-change: transform;
+}
+
+.ticker-track {
+  display: inline-flex;
+  min-width: max-content;
 }
 
 .ticker-pill {
@@ -418,9 +436,9 @@ a {
 }
 
 .hero-shell {
-  margin-bottom: 24px;
+  margin-bottom: 18px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.18);
-  padding-bottom: 28px;
+  padding-bottom: 24px;
 }
 
 .hero-meta-row {
@@ -441,7 +459,7 @@ a {
 }
 
 .hero-copy {
-  max-width: 1080px;
+  max-width: 980px;
 }
 
 .hero-kicker {
@@ -449,7 +467,7 @@ a {
   font-family:
     "Space Grotesk",
     sans-serif;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.28em;
   text-transform: uppercase;
@@ -457,13 +475,13 @@ a {
 }
 
 .hero-support {
-  max-width: 760px;
-  margin: 28px 0 0;
-  padding-left: 24px;
+  max-width: 640px;
+  margin: 24px 0 0;
+  padding-left: 20px;
   border-left: 3px solid rgba(2, 230, 0, 0.45);
   color: var(--text-secondary);
-  font-size: 1.1rem;
-  line-height: 1.9;
+  font-size: 1rem;
+  line-height: 1.85;
 }
 
 .hero-shortcuts {
@@ -504,7 +522,7 @@ a {
 .hero-judgment-shell {
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(19, 19, 19, 0.9);
-  padding: 28px;
+  padding: 26px;
   box-shadow: var(--shadow-panel);
 }
 
@@ -516,12 +534,12 @@ a {
 }
 
 .hero-summary-copy {
-  max-width: 760px;
-  padding-left: 24px;
+  max-width: 720px;
+  padding-left: 20px;
   border-left: 3px solid rgba(2, 230, 0, 0.35);
   color: var(--text-secondary);
-  font-size: 1.08rem;
-  line-height: 1.92;
+  font-size: 1rem;
+  line-height: 1.84;
 }
 
 .hero-support-note {
@@ -594,6 +612,112 @@ a {
   background: linear-gradient(90deg, var(--accent-primary), rgba(2, 230, 0, 0.12));
 }
 
+.news-card-glass {
+  border-left: 1px solid transparent;
+  border-right: 1px solid transparent;
+  transition:
+    background-color 220ms ease,
+    border-color 220ms ease,
+    box-shadow 220ms ease,
+    backdrop-filter 220ms ease,
+    transform 220ms ease;
+}
+
+.news-card-glass:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015));
+  border-color: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.22),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+}
+
+.news-card-glow {
+  position: absolute;
+  inset: 20% -6% auto;
+  height: 55%;
+  opacity: 0;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(2, 230, 0, 0.16), transparent 68%);
+  filter: blur(28px);
+  transition: opacity 220ms ease;
+}
+
+.news-card-glass:hover .news-card-glow {
+  opacity: 0.72;
+}
+
+.site-footer-shell {
+  margin-top: 72px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  padding-top: 28px;
+  padding-bottom: 12px;
+}
+
+.site-footer-grid {
+  display: grid;
+  gap: 28px;
+  grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr));
+}
+
+.site-footer-column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.site-footer-heading {
+  margin: 12px 0 0;
+  font-family: "Newsreader", "Noto Serif KR", serif;
+  font-size: clamp(1.7rem, 2.4vw, 2.5rem);
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  color: var(--text-primary);
+  font-style: italic;
+}
+
+.site-footer-copy {
+  max-width: 38rem;
+  color: var(--text-secondary);
+  line-height: 1.82;
+}
+
+.site-footer-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  line-height: 1.9;
+}
+
+.site-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+.site-footer-links a {
+  font-family: "Space Grotesk", "Noto Sans KR", sans-serif;
+  font-size: 0.92rem;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.site-footer-links a:hover {
+  color: var(--text-primary);
+}
+
+.site-footer-meta {
+  margin-top: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 16px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
 @keyframes marquee {
   0% {
     transform: translateX(0);
@@ -615,6 +739,10 @@ a {
 @media (max-width: 1024px) {
   .hero-judgment-grid {
     grid-template-columns: 1fr;
+  }
+
+  .site-footer-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -642,6 +770,23 @@ a {
   .hero-support,
   .hero-summary-copy {
     padding-left: 18px;
+  }
+
+  .display-headline {
+    font-size: clamp(2rem, 9vw, 3rem);
+  }
+
+  .display-headline-sm {
+    font-size: clamp(1.8rem, 7vw, 2.45rem);
+  }
+
+  .site-footer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .site-footer-meta {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .ticker-marquee {

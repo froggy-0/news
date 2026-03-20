@@ -1,6 +1,4 @@
-"use client";
-
-import { motion } from "motion/react";
+import { Reveal } from "@/components/ui/Reveal";
 
 function summarizeBody(body: string): { lead: string; support: string | null } {
   const lines = body
@@ -53,12 +51,7 @@ export function JudgmentBlock({
   const tone = postureTone(headline);
 
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 24 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-      className="hero-judgment-shell"
-    >
+    <Reveal className="hero-judgment-shell">
       <div className="hero-judgment-grid">
         <div className="space-y-6">
           <div className="space-y-3">
@@ -92,6 +85,6 @@ export function JudgmentBlock({
           </div>
         </div>
       </div>
-    </motion.section>
+    </Reveal>
   );
 }

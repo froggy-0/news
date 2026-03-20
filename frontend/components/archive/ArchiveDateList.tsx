@@ -15,7 +15,7 @@ export function ArchiveDateList({ items }: { items: ArchiveItem[] }) {
       <div className="mb-8 grid gap-5 border-b border-white/8 pb-7 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div>
           <p className="section-title">아카이브</p>
-          <h1 className="display-headline mt-4 text-4xl md:text-6xl">날짜별 브리핑 아카이브</h1>
+          <h1 className="display-headline mt-4 text-[2.5rem] md:text-[4.2rem]">날짜별 브리핑 아카이브</h1>
         </div>
         <p className="hero-support max-w-sm">
           홈 화면의 실시간 티커 없이, 발행일 기준으로 저장된 브리핑을 다시 읽을 수 있는 정적 인덱스입니다.

@@ -1,10 +1,7 @@
-"use client";
-
-import { motion } from "motion/react";
-
 import type { NewsItem } from "@schema/brief.types";
 
 import { DataState } from "@/components/ui/DataState";
+import { Reveal } from "@/components/ui/Reveal";
 import { formatRelativeTime } from "@/lib/format";
 
 function urgencyLabel(value: NewsItem["urgency"]): string {
@@ -26,14 +23,14 @@ function categoryLabel(value: NewsItem["category"]): string {
 
 export function NewsFeed({ items }: { items: NewsItem[] }) {
   return (
-    <section className="section-shell rounded-[8px] px-5 py-6 md:px-8 md:py-8">
+    <Reveal className="section-shell rounded-[8px] px-5 py-6 md:px-8 md:py-8">
       <div className="mb-8 flex flex-col gap-3 border-b border-white/10 pb-6 md:flex-row md:items-end md:justify-between">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-[var(--accent-primary)]" />
             <p className="section-title">핵심 뉴스</p>
           </div>
-          <h3 className="serif-display text-4xl italic tracking-[-0.04em] text-[var(--text-primary)] md:text-5xl">
+          <h3 className="serif-display text-[2.2rem] italic tracking-[-0.04em] text-[var(--text-primary)] md:text-[3.2rem]">
             오늘의 시그널
           </h3>
         </div>
@@ -43,15 +40,9 @@ export function NewsFeed({ items }: { items: NewsItem[] }) {
         <DataState message="이번 집계에서는 주요 뉴스를 확인하지 못했어요." />
       ) : (
         <div className="divide-y divide-white/8">
-          {items.map((item, index) => (
-            <motion.article
-              key={item.id}
-              initial={{ opacity: 0, y: 18 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-60px" }}
-              transition={{ duration: 0.5, delay: index * 0.06 }}
-              className="group px-1 py-8 transition-colors hover:bg-white/[0.02] md:px-3 md:py-10"
-            >
+          {items.map((item) => (
+            <article key={item.id} className="news-card-glass group relative overflow-hidden px-1 py-8 md:px-3 md:py-10">
+              <div className="news-card-glow" aria-hidden="true" />
               <div className="flex flex-col gap-6 md:flex-row md:gap-10">
                 <div className="md:w-32 md:shrink-0">
                   <div className="flex flex-wrap items-center gap-2 md:flex-col md:items-start">
@@ -88,7 +79,7 @@ export function NewsFeed({ items }: { items: NewsItem[] }) {
                   </div>
 
                   <a href={item.url} target="_blank" rel="noreferrer" className="block">
-                    <h4 className="serif-display text-3xl leading-[1.18] tracking-[-0.03em] text-[var(--text-primary)] transition-colors group-hover:text-[var(--accent-primary)] md:text-5xl">
+                    <h4 className="serif-display text-[1.85rem] leading-[1.18] tracking-[-0.03em] text-[var(--text-primary)] transition-colors group-hover:text-[var(--accent-primary)] md:text-[2.65rem]">
                       {item.title}
                     </h4>
                   </a>
@@ -114,10 +105,10 @@ export function NewsFeed({ items }: { items: NewsItem[] }) {
                   </div>
                 </div>
               </div>
-            </motion.article>
+            </article>
           ))}
         </div>
       )}
-    </section>
+    </Reveal>
   );
 }

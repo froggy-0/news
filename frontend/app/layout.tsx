@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 
+import { ScrollProgressBar } from "@/components/layout/ScrollProgressBar";
+import { SiteFooter } from "@/components/layout/SiteFooter";
+
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -15,9 +18,13 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body>
+        <ScrollProgressBar />
         <div className="scanline" />
         <div className="page-shell">
-          <div className="page-inner">{children}</div>
+          <div className="page-inner">
+            {children}
+            <SiteFooter />
+          </div>
         </div>
       </body>
     </html>

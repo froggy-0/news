@@ -1,24 +1,16 @@
-"use client";
-
 import type { BitcoinSection } from "@schema/brief.types";
-import { motion } from "motion/react";
 
 import { DataState } from "@/components/ui/DataState";
+import { Reveal } from "@/components/ui/Reveal";
 
 export function BitcoinPanel({ bitcoin }: { bitcoin: BitcoinSection }) {
   const etf = bitcoin.etf;
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 24 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-60px" }}
-      transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-      className="panel space-y-8 rounded-[32px] px-6 py-7 md:px-8"
-    >
+    <Reveal className="panel space-y-8 rounded-[32px] px-6 py-7 md:px-8">
       <div className="flex flex-col gap-4 border-b border-white/8 pb-6 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="section-title">비트코인과 ETF</p>
-          <h2 className="display-headline mt-4 max-w-4xl text-3xl md:text-5xl">
+          <h2 className="display-headline mt-4 max-w-4xl text-[2.1rem] md:text-[3.2rem]">
             비트코인 현물과 ETF 수급 축을 같은 리듬으로 정리합니다.
           </h2>
         </div>
@@ -42,7 +34,7 @@ export function BitcoinPanel({ bitcoin }: { bitcoin: BitcoinSection }) {
                       : "확인 중"}
               </span>
             </div>
-            <p className="numeric mt-5 text-4xl font-semibold tracking-[-0.04em] text-[var(--text-primary)] md:text-5xl">
+            <p className="numeric mt-5 text-[2.35rem] font-semibold tracking-[-0.04em] text-[var(--text-primary)] md:text-[3.3rem]">
               {bitcoin.price ?? "확인 중"}
             </p>
             <p className="numeric mt-3 text-sm tracking-[0.18em] text-[var(--text-secondary)] uppercase">
@@ -59,7 +51,7 @@ export function BitcoinPanel({ bitcoin }: { bitcoin: BitcoinSection }) {
             {bitcoin.fearGreedIndex ? (
               <>
                 <div className="mt-5 flex items-end gap-3">
-                  <p className="numeric text-5xl font-semibold tracking-[-0.05em] text-[var(--text-primary)]">
+                  <p className="numeric text-[3.1rem] font-semibold tracking-[-0.05em] text-[var(--text-primary)] md:text-[3.55rem]">
                     {bitcoin.fearGreedIndex.value}
                   </p>
                   <span className="numeric pb-2 text-sm tracking-[0.18em] text-[var(--text-muted)] uppercase">/100</span>
@@ -83,7 +75,7 @@ export function BitcoinPanel({ bitcoin }: { bitcoin: BitcoinSection }) {
         </div>
 
         <div className="panel-soft rounded-[26px] px-5 py-6">
-          <div className="flex flex-col gap-3 border-b border-white/8 pb-5 md:flex-row md:items-end md:justify-between">
+          <div className="border-b border-white/8 pb-5">
             <div>
               <p className="section-title">공식 ETF 스냅샷</p>
               <p className="hero-support mt-3 max-w-md">
@@ -91,14 +83,18 @@ export function BitcoinPanel({ bitcoin }: { bitcoin: BitcoinSection }) {
               </p>
             </div>
             {etf ? (
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="mt-5 grid gap-3 lg:grid-cols-2">
                 <div className="rounded-[18px] border border-white/8 bg-black/30 px-4 py-3">
                   <p className="section-title">총 보유량</p>
-                  <p className="numeric mt-3 text-base text-[var(--text-primary)]">{etf.totalHolding ?? "확인 중"}</p>
+                  <p className="numeric mt-3 break-words text-sm leading-6 text-[var(--text-primary)] md:text-base">
+                    {etf.totalHolding ?? "확인 중"}
+                  </p>
                 </div>
                 <div className="rounded-[18px] border border-white/8 bg-black/30 px-4 py-3">
                   <p className="section-title">총 AUM</p>
-                  <p className="numeric mt-3 text-base text-[var(--text-primary)]">{etf.totalAum ?? "확인 중"}</p>
+                  <p className="numeric mt-3 break-words text-sm leading-6 text-[var(--text-primary)] md:text-base">
+                    {etf.totalAum ?? "확인 중"}
+                  </p>
                 </div>
               </div>
             ) : null}
@@ -112,22 +108,18 @@ export function BitcoinPanel({ bitcoin }: { bitcoin: BitcoinSection }) {
                   <p className="section-title">보유량</p>
                   <p className="section-title text-right">AUM</p>
                 </div>
-                {etf.issuers.map((issuer, index) => (
-                  <motion.a
+                {etf.issuers.map((issuer) => (
+                  <a
                     key={issuer.name}
                     href={issuer.sourceUrl}
                     target="_blank"
                     rel="noreferrer"
-                    initial={{ opacity: 0, y: 10 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.3, delay: index * 0.04 }}
                     className="grid grid-cols-[0.75fr_1fr_1fr] gap-3 border-t border-white/8 px-4 py-4 first:border-t-0 transition hover:bg-white/[0.04]"
                   >
                     <p className="font-mono text-[11px] tracking-[0.18em] text-[var(--text-primary)] uppercase">{issuer.name}</p>
                     <p className="numeric text-sm text-[var(--text-secondary)]">{issuer.holding ?? "확인 중"}</p>
                     <p className="numeric text-right text-sm text-[var(--text-secondary)]">{issuer.aum ?? "확인 중"}</p>
-                  </motion.a>
+                  </a>
                 ))}
               </div>
             ) : (
@@ -142,6 +134,6 @@ export function BitcoinPanel({ bitcoin }: { bitcoin: BitcoinSection }) {
           )}
         </div>
       </div>
-    </motion.section>
+    </Reveal>
   );
 }

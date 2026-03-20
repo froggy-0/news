@@ -1,3 +1,6 @@
 .next/
 node_modules/
 tsconfig.tsbuildinfo
+out/
+public/rss.xml
+public/llms.txt
