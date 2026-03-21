@@ -30,27 +30,51 @@ function publicBaseUrl(): string | null {
   return process.env.NEXT_PUBLIC_R2_BASE_URL ?? process.env.R2_BASE_URL ?? null;
 }
 
-export const fetchIndex = cache(async (): Promise<BriefIndex> => {
-  const baseUrl = publicBaseUrl();
-  const payload = baseUrl
-    ? await fetchJson<unknown>(`${baseUrl.replace(/\/$/, "")}/index.json`)
-    : await readFixture<unknown>("index.json");
-  return parseBriefIndex(payload);
-});
+function useFixtureData(): boolean {
+  return process.env.BRIEF_DATA_SOURCE === "fixture";
+}
 
-export const fetchLatest = cache(async (): Promise<BriefData> => {
-  const index = await fetchIndex();
+function requirePublicBaseUrl(): string {
+  const baseUrl = publicBaseUrl();
+  if (!baseUrl) {
+    throw new Error(
+      "NEXT_PUBLIC_R2_BASE_URL is required. Set BRIEF_DATA_SOURCE=fixture only for explicit local fixture mode.",
+    );
+  }
+  return baseUrl.replace(/\/$/, "");
+}
+
+export async function loadIndex(): Promise<BriefIndex> {
+  const payload = useFixtureData()
+    ? await readFixture<unknown>("index.json")
+    : await fetchJson<unknown>(`${requirePublicBaseUrl()}/index.json`);
+  return parseBriefIndex(payload);
+}
+
+export async function loadBriefByDate(date: string): Promise<BriefData> {
+  const payload = useFixtureData()
+    ? await readFixture<unknown>(`${date}.json`)
+    : await fetchJson<unknown>(`${requirePublicBaseUrl()}/briefs/${date}.json`);
+  return parseBriefData(payload);
+}
+
+export async function loadLatest(): Promise<BriefData> {
+  const index = await loadIndex();
   const latestDate = index.dates[0];
   if (!latestDate) {
     throw new Error("index.json must include at least one date");
   }
-  return fetchBriefByDate(latestDate);
+  return loadBriefByDate(latestDate);
+}
+
+export const fetchIndex = cache(async (): Promise<BriefIndex> => {
+  return loadIndex();
+});
+
+export const fetchLatest = cache(async (): Promise<BriefData> => {
+  return loadLatest();
 });
 
 export const fetchBriefByDate = cache(async (date: string): Promise<BriefData> => {
-  const baseUrl = publicBaseUrl();
-  const payload = baseUrl
-    ? await fetchJson<unknown>(`${baseUrl.replace(/\/$/, "")}/briefs/${date}.json`)
-    : await readFixture<unknown>(`${date}.json`);
-  return parseBriefData(payload);
+  return loadBriefByDate(date);
 });

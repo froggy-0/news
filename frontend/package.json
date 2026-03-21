@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0 --port 3000",
+    "dev:fixture": "BRIEF_DATA_SOURCE=fixture next dev --hostname 0.0.0.0 --port 3000",
     "build": "node ./scripts/generate-static-assets.mjs && next build",
+    "build:fixture": "BRIEF_DATA_SOURCE=fixture node ./scripts/generate-static-assets.mjs && next build",
     "start": "npx serve out --listen 3000",
     "lint": "next typegen && tsc --noEmit",
     "test": "node --test --import tsx ./tests/*.test.ts"

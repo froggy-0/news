@@ -6,6 +6,7 @@ const fixtureDir = path.join(frontendDir, "fixtures");
 const publicDir = path.join(frontendDir, "public");
 const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://example.com").replace(/\/$/, "");
 const dataBaseUrl = process.env.NEXT_PUBLIC_R2_BASE_URL ?? process.env.R2_BASE_URL ?? null;
+const useFixtureData = process.env.BRIEF_DATA_SOURCE === "fixture";
 
 async function readLocalJson(name) {
   const raw = await readFile(path.join(fixtureDir, name), "utf8");
@@ -21,15 +22,21 @@ async function readRemoteJson(url) {
 }
 
 async function readIndex() {
-  if (!dataBaseUrl) {
+  if (useFixtureData) {
     return readLocalJson("index.json");
+  }
+  if (!dataBaseUrl) {
+    throw new Error("NEXT_PUBLIC_R2_BASE_URL is required. Set BRIEF_DATA_SOURCE=fixture only for explicit fixture builds.");
   }
   return readRemoteJson(`${dataBaseUrl.replace(/\/$/, "")}/index.json`);
 }
 
 async function readBrief(date) {
-  if (!dataBaseUrl) {
+  if (useFixtureData) {
     return readLocalJson(`${date}.json`);
+  }
+  if (!dataBaseUrl) {
+    throw new Error("NEXT_PUBLIC_R2_BASE_URL is required. Set BRIEF_DATA_SOURCE=fixture only for explicit fixture builds.");
   }
   return readRemoteJson(`${dataBaseUrl.replace(/\/$/, "")}/briefs/${date}.json`);
 }

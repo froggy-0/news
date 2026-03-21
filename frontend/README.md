@@ -19,4 +19,8 @@
 
 - 프론트는 데이터를 다시 계산하지 않습니다.
 - 계약 기준은 `../schema/brief.types.ts` 입니다.
-- 로컬 개발에서는 fixture 로 화면을 먼저 검증할 수 있습니다.
+- 기본 동작은 공개 R2 JSON 기준입니다. `NEXT_PUBLIC_R2_BASE_URL` 없이 앱을 빌드하거나 실행하지 않습니다.
+- fixture 는 테스트/디자인 확인용으로만 남기며, `BRIEF_DATA_SOURCE=fixture` 를 명시했을 때만 사용합니다.
+- 예시:
+  - 실데이터 개발: `NEXT_PUBLIC_R2_BASE_URL='https://pub-...r2.dev' npm run dev`
+  - fixture 개발: `npm run dev:fixture`
