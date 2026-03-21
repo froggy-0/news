@@ -4,6 +4,12 @@ import { DataState } from "@/components/ui/DataState";
 import { Reveal } from "@/components/ui/Reveal";
 import { formatRelativeTime } from "@/lib/format";
 
+const HANGUL_RE = /[가-힣]/;
+
+function containsKorean(text: string | null | undefined): boolean {
+  return Boolean(text && HANGUL_RE.test(text));
+}
+
 function urgencyLabel(value: NewsItem["urgency"]): string {
   if (value === "high") {
     return "높음";
@@ -21,7 +27,35 @@ function categoryLabel(value: NewsItem["category"]): string {
   return "미국 증시";
 }
 
-export function NewsFeed({ items }: { items: NewsItem[] }) {
+function fallbackHeadline(value: NewsItem["category"]): string {
+  if (value === "macro") return "거시 흐름을 읽는 핵심 기사입니다.";
+  if (value === "bigtech") return "빅테크와 AI 투자심리를 읽는 기사입니다.";
+  if (value === "bitcoin") return "비트코인과 ETF 흐름을 읽는 기사입니다.";
+  return "미국 증시 방향을 읽는 핵심 기사입니다.";
+}
+
+function fallbackInterpretation(value: NewsItem["category"]): string {
+  if (value === "macro") return "금리와 달러 흐름이 기술주와 위험 선호에 어떤 부담을 주는지 확인해야 합니다.";
+  if (value === "bigtech") return "빅테크 실적 기대와 AI 투자심리를 같이 읽어야 하는 기사예요.";
+  if (value === "bitcoin") return "비트코인 가격과 ETF 수급 해석에 직접 연결되는 기사예요.";
+  return "미국 증시와 섹터별 투자심리를 같이 읽어야 하는 기사예요.";
+}
+
+function pendingInterpretation(): string {
+  return "한국어 해석을 준비 중이라 원문 제목과 링크를 먼저 제공합니다.";
+}
+
+export function NewsFeed({
+  items,
+  limit,
+  showRawTitle = false,
+}: {
+  items: NewsItem[];
+  limit?: number;
+  showRawTitle?: boolean;
+}) {
+  const visibleItems = typeof limit === "number" ? items.slice(0, limit) : items;
+
   return (
     <Reveal className="section-shell rounded-[8px] px-5 py-6 md:px-8 md:py-8">
       <div className="mb-8 flex flex-col gap-3 border-b border-white/10 pb-6 md:flex-row md:items-end md:justify-between">
@@ -31,82 +65,116 @@ export function NewsFeed({ items }: { items: NewsItem[] }) {
             <p className="section-title">핵심 뉴스</p>
           </div>
           <h3 className="serif-display text-[2.2rem] italic tracking-[-0.04em] text-[var(--text-primary)] md:text-[3.2rem]">
-            오늘의 시그널
+            {typeof limit === "number" ? "오늘의 뉴스 5건" : "전체 뉴스 플로우"}
           </h3>
         </div>
-        <p className="eyebrow">실제 수집한 뉴스만 연결합니다</p>
+        <p className="eyebrow">
+          {typeof limit === "number"
+            ? "홈에서는 핵심 흐름만 먼저 읽을 수 있게 요약해 보여줍니다"
+            : "상세에서는 원문 링크와 함께 전체 뉴스를 다시 확인할 수 있습니다"}
+        </p>
       </div>
-      {items.length === 0 ? (
+      {visibleItems.length === 0 ? (
         <DataState message="이번 집계에서는 주요 뉴스를 확인하지 못했어요." />
       ) : (
         <div className="divide-y divide-white/8">
-          {items.map((item) => (
-            <article key={item.id} className="news-card-glass group relative overflow-hidden px-1 py-8 md:px-3 md:py-10">
-              <div className="news-card-glow" aria-hidden="true" />
-              <div className="flex flex-col gap-6 md:flex-row md:gap-10">
-                <div className="md:w-32 md:shrink-0">
-                  <div className="flex flex-wrap items-center gap-2 md:flex-col md:items-start">
-                    <span className="font-mono text-sm font-semibold text-[var(--accent-primary)]">
-                      {formatRelativeTime(item.publishedAt)}
-                    </span>
-                    <span
-                      className={`rounded-[4px] px-2 py-1 font-mono text-[9px] tracking-[0.18em] ${
-                        item.urgency === "high"
-                          ? "bg-red-500/20 text-[var(--accent-down)]"
-                          : item.urgency === "medium"
-                            ? "bg-[var(--accent-primary)]/12 text-[var(--accent-primary)]"
-                            : "bg-white/6 text-[var(--text-secondary)]"
-                      }`}
-                    >
-                      {urgencyLabel(item.urgency)}
-                    </span>
-                    <span className="font-mono text-[9px] tracking-[0.18em] text-[var(--text-muted)]">
-                      {categoryLabel(item.category)}
-                    </span>
-                  </div>
-                </div>
+          {visibleItems.map((item) => {
+            const usesRawTitle =
+              !containsKorean(item.summaryKo) && !containsKorean(item.title) && Boolean(item.title?.trim());
+            const displayTitle = containsKorean(item.summaryKo)
+              ? item.summaryKo!.trim()
+              : containsKorean(item.title)
+                ? item.title
+                : usesRawTitle
+                  ? item.title.trim()
+                  : fallbackHeadline(item.category);
+            const interpretation =
+              containsKorean(item.interpretation) && item.interpretation!.trim() !== displayTitle.trim()
+                ? item.interpretation
+                : containsKorean(item.summaryKo) && item.summaryKo!.trim() !== displayTitle.trim()
+                  ? item.summaryKo
+                  : usesRawTitle
+                    ? pendingInterpretation()
+                    : fallbackInterpretation(item.category);
+            const rawTitle = item.rawTitle ?? (!containsKorean(item.title) ? item.title : null);
 
-                <div className="flex-1 space-y-4">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span className="font-mono text-[10px] tracking-[0.24em] text-[var(--accent-cyan)]">
-                      {item.source}
-                    </span>
-                    {item.sourceTier === "tier1" ? (
-                      <span className="rounded-[4px] border border-[var(--accent-gold)]/35 px-2 py-1 font-mono text-[9px] tracking-[0.18em] text-[var(--accent-gold)]">
-                        핵심 출처
+            return (
+              <article key={item.id} className="news-card-glass group relative overflow-hidden px-1 py-8 md:px-3 md:py-10">
+                <div className="news-card-glow" aria-hidden="true" />
+                <div className="flex flex-col gap-6 md:flex-row md:gap-10">
+                  <div className="md:w-32 md:shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 md:flex-col md:items-start">
+                      <span className="font-mono text-sm font-semibold text-[var(--accent-primary)]">
+                        {formatRelativeTime(item.publishedAt)}
                       </span>
-                    ) : null}
-                  </div>
-
-                  <a href={item.url} target="_blank" rel="noreferrer" className="block">
-                    <h4 className="serif-display text-[1.85rem] leading-[1.18] tracking-[-0.03em] text-[var(--text-primary)] transition-colors group-hover:text-[var(--accent-primary)] md:text-[2.65rem]">
-                      {item.title}
-                    </h4>
-                  </a>
-
-                  <div className="border-l-2 border-[var(--accent-primary)]/30 bg-[var(--accent-primary)]/6 px-4 py-3">
-                    <p className="font-mono text-[9px] tracking-[0.18em] text-[var(--accent-primary)]">
-                      핵심 해석
-                    </p>
-                    <p className="mt-2 text-sm leading-7 text-[var(--text-secondary)]">
-                      {item.interpretation ?? "이번 기사에서는 별도 시장 해석이 붙지 않았습니다."}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    {item.tags.map((tag) => (
                       <span
-                        key={tag}
-                        className="rounded-[999px] border border-white/8 px-3 py-1 font-mono text-[9px] tracking-[0.16em] text-[var(--text-muted)]"
+                        className={`rounded-[4px] px-2 py-1 font-mono text-[9px] tracking-[0.18em] ${
+                          item.urgency === "high"
+                            ? "bg-red-500/20 text-[var(--accent-down)]"
+                            : item.urgency === "medium"
+                              ? "bg-[var(--accent-primary)]/12 text-[var(--accent-primary)]"
+                              : "bg-white/6 text-[var(--text-secondary)]"
+                        }`}
                       >
-                        {tag}
+                        {urgencyLabel(item.urgency)}
                       </span>
-                    ))}
+                      <span className="font-mono text-[9px] tracking-[0.18em] text-[var(--text-muted)]">
+                        {categoryLabel(item.category)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 space-y-4">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="font-mono text-[10px] tracking-[0.24em] text-[var(--accent-cyan)]">
+                        {item.source}
+                      </span>
+                      {usesRawTitle ? (
+                        <span className="rounded-[4px] border border-white/10 px-2 py-1 font-mono text-[9px] tracking-[0.18em] text-[var(--text-muted)]">
+                          번역 대기
+                        </span>
+                      ) : null}
+                      {item.sourceTier === "tier1" ? (
+                        <span className="rounded-[4px] border border-[var(--accent-gold)]/35 px-2 py-1 font-mono text-[9px] tracking-[0.18em] text-[var(--accent-gold)]">
+                          핵심 출처
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <a href={item.url} target="_blank" rel="noreferrer" className="block">
+                      <h4 className="serif-display text-[1.85rem] leading-[1.18] tracking-[-0.03em] text-[var(--text-primary)] transition-colors group-hover:text-[var(--accent-primary)] md:text-[2.65rem]">
+                        {displayTitle}
+                      </h4>
+                    </a>
+
+                    {showRawTitle && rawTitle && rawTitle !== displayTitle ? (
+                      <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--text-muted)]">
+                        원문 제목 · {rawTitle}
+                      </p>
+                    ) : null}
+
+                    <div className="border-l-2 border-[var(--accent-primary)]/30 bg-[var(--accent-primary)]/6 px-4 py-3">
+                      <p className="font-mono text-[9px] tracking-[0.18em] text-[var(--accent-primary)]">
+                        시장 해석
+                      </p>
+                      <p className="mt-2 text-sm leading-7 text-[var(--text-secondary)]">{interpretation}</p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {item.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="rounded-[999px] border border-white/8 px-3 py-1 font-mono text-[9px] tracking-[0.16em] text-[var(--text-muted)]"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </div>
       )}
     </Reveal>

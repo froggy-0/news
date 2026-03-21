@@ -1,12 +1,13 @@
 import Link from "next/link";
 
-import { qualityLabel } from "@/lib/format";
+import { displayHeadline, formatIssueTime, qualityLabel } from "@/lib/format";
 
 type ArchiveItem = {
   date: string;
   generatedAt?: string;
   quality?: "ok" | "degraded" | "critical";
   headline?: string;
+  displayHeadline?: string;
 };
 
 export function ArchiveDateList({ items }: { items: ArchiveItem[] }) {
@@ -31,11 +32,15 @@ export function ArchiveDateList({ items }: { items: ArchiveItem[] }) {
             <div className="space-y-2">
               <p className="font-mono text-[11px] tracking-[0.22em] text-[var(--accent-primary)] uppercase">{item.date}</p>
               <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--text-muted)] uppercase">
-                {item.generatedAt ? item.generatedAt.slice(11, 16) : "08:00"} KST
+                {item.generatedAt ? formatIssueTime(item.generatedAt) : "08:00"} KST
               </p>
             </div>
             <p className="text-lg leading-8 text-[var(--text-primary)]">
-              {item.headline ?? "브리핑을 열어 상세 내용을 확인하세요."}
+              {item.displayHeadline
+                ? item.displayHeadline
+                : item.headline
+                  ? displayHeadline(item.headline)
+                  : "브리핑을 열어 상세 내용을 확인하세요."}
             </p>
             <div className="md:text-right">
               <span className="inline-flex rounded-full border border-white/10 px-3 py-1 font-mono text-[10px] tracking-[0.18em] text-[var(--text-secondary)] uppercase">

@@ -7,6 +7,7 @@ import type {
   FearGreedIndex,
   MarketSnapshot,
   NewsItem,
+  SourceCounts,
   TechStock,
   TickerItem,
   TopicSummary,
@@ -59,6 +60,39 @@ function asTrend(value: unknown): TickerItem["trend"] {
   throw new Error("trend must be up, down, neutral, or null");
 }
 
+function asTranslationStatus(value: unknown): BriefMeta["translationStatus"] {
+  if (value === "ok" || value === "partial" || value === "failed") {
+    return value;
+  }
+  return "failed";
+}
+
+function parseSourceCounts(value: unknown): SourceCounts {
+  if (!isRecord(value)) {
+    return {
+      newsCandidates: 0,
+      newsRanked: 0,
+      newsFeatured: 0,
+      newsAll: 0,
+      xSignalCandidates: 0,
+      xSignalRanked: 0,
+      xSignalFeatured: 0,
+      xSignalAll: 0,
+    };
+  }
+  const asCount = (item: unknown) => (typeof item === "number" && item >= 0 ? item : 0);
+  return {
+    newsCandidates: asCount(value.newsCandidates),
+    newsRanked: asCount(value.newsRanked),
+    newsFeatured: asCount(value.newsFeatured),
+    newsAll: asCount(value.newsAll),
+    xSignalCandidates: asCount(value.xSignalCandidates),
+    xSignalRanked: asCount(value.xSignalRanked),
+    xSignalFeatured: asCount(value.xSignalFeatured),
+    xSignalAll: asCount(value.xSignalAll),
+  };
+}
+
 function parseMeta(value: unknown): BriefMeta {
   if (!isRecord(value)) {
     throw new Error("meta must be an object");
@@ -68,6 +102,12 @@ function parseMeta(value: unknown): BriefMeta {
     generatedAt: asString(value.generatedAt, "meta.generatedAt"),
     dataQuality: asQuality(value.dataQuality),
     qualityNotes: asStringArray(value.qualityNotes, "meta.qualityNotes"),
+    displayHeadline:
+      typeof value.displayHeadline === "string" && value.displayHeadline.length > 0
+        ? value.displayHeadline
+        : "",
+    sourceCounts: parseSourceCounts(value.sourceCounts),
+    translationStatus: asTranslationStatus(value.translationStatus),
   };
 }
 
@@ -100,9 +140,23 @@ function parseAIJudgment(value: unknown): AIJudgment {
   if (!isRecord(value)) {
     throw new Error("aiJudgment must be an object");
   }
+  const body = asString(value.body, "aiJudgment.body");
+  const summaryLead =
+    typeof value.summaryLead === "string" && value.summaryLead.length > 0
+      ? value.summaryLead
+      : body
+          .split("\n")
+          .map((line) => line.trim())
+          .find((line) => line.length > 0 && !line.startsWith("##"))
+        ?? "";
   return {
     headline: asString(value.headline, "aiJudgment.headline"),
-    body: asString(value.body, "aiJudgment.body"),
+    body,
+    summaryLead,
+    summarySupport:
+      value.summarySupport === undefined
+        ? null
+        : asOptionalString(value.summarySupport, "aiJudgment.summarySupport"),
   };
 }
 
@@ -204,6 +258,8 @@ function parseSignal(value: unknown): XSignal {
     impact: asString(value.impact, "xSignal.impact"),
     sentiment,
     content: asString(value.content, "xSignal.content"),
+    rawContent:
+      value.rawContent === undefined ? null : asOptionalString(value.rawContent, "xSignal.rawContent"),
   };
 }
 
@@ -229,6 +285,8 @@ function parseNewsItem(value: unknown): NewsItem {
     category,
     title: asString(value.title, "news.title"),
     interpretation: asOptionalString(value.interpretation, "news.interpretation"),
+    summaryKo: value.summaryKo === undefined ? null : asOptionalString(value.summaryKo, "news.summaryKo"),
+    rawTitle: value.rawTitle === undefined ? null : asOptionalString(value.rawTitle, "news.rawTitle"),
     source: asString(value.source, "news.source"),
     sourceTier,
     url: asString(value.url, "news.url"),
@@ -251,12 +309,31 @@ export function parseBriefData(value: unknown): BriefData {
   if (!isRecord(value)) {
     throw new Error("brief payload must be an object");
   }
-  const xSignalsValue = value.xSignals;
-  if (xSignalsValue !== null && !Array.isArray(xSignalsValue)) {
-    throw new Error("xSignals must be null or an array");
+  const featuredXSignalsValue =
+    Array.isArray(value.featuredXSignals) || value.featuredXSignals === null
+      ? value.featuredXSignals
+      : value.xSignals;
+  const allXSignalsValue =
+    Array.isArray(value.allXSignals) || value.allXSignals === null ? value.allXSignals : value.xSignals;
+  if (
+    featuredXSignalsValue !== null &&
+    featuredXSignalsValue !== undefined &&
+    !Array.isArray(featuredXSignalsValue)
+  ) {
+    throw new Error("featuredXSignals must be null or an array");
   }
-  if (!Array.isArray(value.topicSummaries) || !Array.isArray(value.techStocks) || !Array.isArray(value.news)) {
-    throw new Error("topicSummaries, techStocks, and news must be arrays");
+  if (allXSignalsValue !== null && allXSignalsValue !== undefined && !Array.isArray(allXSignalsValue)) {
+    throw new Error("allXSignals must be null or an array");
+  }
+  const featuredNewsValue = Array.isArray(value.featuredNews) ? value.featuredNews : value.news;
+  const allNewsValue = Array.isArray(value.allNews) ? value.allNews : value.news;
+  if (
+    !Array.isArray(value.topicSummaries) ||
+    !Array.isArray(value.techStocks) ||
+    !Array.isArray(featuredNewsValue) ||
+    !Array.isArray(allNewsValue)
+  ) {
+    throw new Error("topicSummaries, techStocks, featuredNews, and allNews must be arrays");
   }
   return {
     meta: parseMeta(value.meta),
@@ -265,7 +342,13 @@ export function parseBriefData(value: unknown): BriefData {
     topicSummaries: value.topicSummaries.map(parseTopicSummary),
     techStocks: value.techStocks.map(parseTechStock),
     bitcoin: parseBitcoin(value.bitcoin),
-    xSignals: xSignalsValue === null ? null : xSignalsValue.map(parseSignal),
-    news: value.news.map(parseNewsItem),
+    featuredXSignals:
+      featuredXSignalsValue === null || featuredXSignalsValue === undefined
+        ? null
+        : featuredXSignalsValue.map(parseSignal),
+    allXSignals:
+      allXSignalsValue === null || allXSignalsValue === undefined ? null : allXSignalsValue.map(parseSignal),
+    featuredNews: featuredNewsValue.map(parseNewsItem),
+    allNews: allNewsValue.map(parseNewsItem),
   };
 }

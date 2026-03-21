@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { BitcoinPanel } from "@/components/bitcoin/BitcoinPanel";
-import { BriefBody } from "@/components/brief/BriefBody";
 import { JudgmentBlock } from "@/components/brief/JudgmentBlock";
 import { TopicGrid } from "@/components/brief/TopicGrid";
 import { QualityBanner } from "@/components/layout/QualityBanner";
@@ -35,8 +35,9 @@ export default async function HomePage() {
       ) : null}
       <section id="brief" className="space-y-8">
         <JudgmentBlock
-          headline={brief.aiJudgment.headline}
-          body={brief.aiJudgment.body}
+          headline={brief.meta.displayHeadline || brief.aiJudgment.headline}
+          summaryLead={brief.aiJudgment.summaryLead}
+          summarySupport={brief.aiJudgment.summarySupport}
           generatedAt={brief.meta.generatedAt}
         />
         <div className="space-y-8">
@@ -50,14 +51,29 @@ export default async function HomePage() {
       </section>
       <section className="grid gap-8 2xl:grid-cols-[minmax(0,1.12fr)_minmax(320px,0.88fr)]">
         <div className="space-y-8">
-          <BriefBody body={brief.aiJudgment.body} date={brief.meta.date} />
           <TopicGrid items={brief.topicSummaries} />
+          <section className="panel rounded-[32px] px-6 py-6 md:px-8">
+            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+              <div className="space-y-2">
+                <p className="section-title">전체 발행본</p>
+                <p className="text-base leading-7 text-[var(--text-secondary)] md:text-lg">
+                  홈에서는 판단과 핵심 카드만 먼저 읽고, 전체 발행본은 상세 페이지에서 이어서 볼 수 있습니다.
+                </p>
+              </div>
+              <Link
+                href={`/archive/${brief.meta.date}`}
+                className="inline-flex items-center justify-center rounded-full border border-[var(--accent-primary)]/35 bg-[var(--accent-primary)]/10 px-5 py-3 font-mono text-[11px] tracking-[0.18em] text-[var(--accent-primary)] transition hover:bg-[var(--accent-primary)]/18"
+              >
+                전체 발행본 보기
+              </Link>
+            </div>
+          </section>
           <section id="news">
-            <NewsFeed items={brief.news} />
+            <NewsFeed items={brief.featuredNews} limit={5} />
           </section>
         </div>
         <aside className="space-y-8 2xl:sticky 2xl:top-[118px] self-start">
-          <XSignals items={brief.xSignals} />
+          <XSignals items={brief.featuredXSignals} limit={5} />
         </aside>
       </section>
     </main>

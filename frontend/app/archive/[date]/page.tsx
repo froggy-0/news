@@ -50,8 +50,9 @@ export default async function ArchiveDetailPage({
         ) : null}
         <section className="space-y-8">
           <JudgmentBlock
-            headline={brief.aiJudgment.headline}
-            body={brief.aiJudgment.body}
+            headline={brief.meta.displayHeadline || brief.aiJudgment.headline}
+            summaryLead={brief.aiJudgment.summaryLead}
+            summarySupport={brief.aiJudgment.summarySupport}
             generatedAt={brief.meta.generatedAt}
           />
           <StocksBoard indices={usIndices} stocks={brief.techStocks} />
@@ -61,10 +62,10 @@ export default async function ArchiveDetailPage({
           <div className="space-y-8">
             <BriefBody body={brief.aiJudgment.body} date={brief.meta.date} />
             <TopicGrid items={brief.topicSummaries} />
-            <NewsFeed items={brief.news} />
+            <NewsFeed items={brief.allNews} showRawTitle />
           </div>
           <aside className="space-y-8 2xl:sticky 2xl:top-[118px] self-start">
-            <XSignals items={brief.xSignals} />
+            <XSignals items={brief.allXSignals} showRawToggle />
           </aside>
         </section>
       </main>

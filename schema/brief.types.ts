@@ -10,8 +10,10 @@ export interface BriefData {
   topicSummaries: TopicSummary[];
   techStocks: TechStock[];
   bitcoin: BitcoinSection;
-  xSignals: XSignal[] | null;
-  news: NewsItem[];
+  featuredXSignals: XSignal[] | null;
+  allXSignals: XSignal[] | null;
+  featuredNews: NewsItem[];
+  allNews: NewsItem[];
 }
 
 export interface BriefMeta {
@@ -19,6 +21,20 @@ export interface BriefMeta {
   generatedAt: string;
   dataQuality: "ok" | "degraded" | "critical";
   qualityNotes: string[];
+  displayHeadline: string;
+  sourceCounts: SourceCounts;
+  translationStatus: "ok" | "partial" | "failed";
+}
+
+export interface SourceCounts {
+  newsCandidates: number;
+  newsRanked: number;
+  newsFeatured: number;
+  newsAll: number;
+  xSignalCandidates: number;
+  xSignalRanked: number;
+  xSignalFeatured: number;
+  xSignalAll: number;
 }
 
 export interface MarketSnapshot {
@@ -38,6 +54,8 @@ export interface TickerItem {
 export interface AIJudgment {
   headline: string;
   body: string;
+  summaryLead: string;
+  summarySupport: string | null;
 }
 
 export interface TopicSummary {
@@ -90,6 +108,7 @@ export interface XSignal {
   impact: string;
   sentiment: "bullish" | "bearish" | "neutral";
   content: string;
+  rawContent: string | null;
 }
 
 export interface NewsItem {
@@ -98,6 +117,8 @@ export interface NewsItem {
   category: "macro" | "bigtech" | "bitcoin" | "us-stocks";
   title: string;
   interpretation: string | null;
+  summaryKo: string | null;
+  rawTitle: string | null;
   source: string;
   sourceTier: "tier1" | "standard";
   url: string;

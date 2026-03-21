@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 from morning_brief.config import load_settings
@@ -197,14 +198,185 @@ def test_build_public_brief_matches_frontend_contract_shape() -> None:
     assert payload["meta"]["date"] == "2026-03-21"
     assert payload["meta"]["dataQuality"] == "degraded"
     assert payload["aiJudgment"]["headline"] == "오늘은 관망 국면입니다."
+    assert payload["meta"]["displayHeadline"] == "오늘은 관망 국면입니다."
+    assert payload["meta"]["translationStatus"] == "ok"
+    assert (
+        payload["aiJudgment"]["summaryLead"]
+        == "장기 금리가 다시 올라 위험자산의 밸류에이션 부담이 커졌습니다."
+    )
+    assert (
+        payload["aiJudgment"]["summarySupport"]
+        == "오늘 미국 증시 흐름이 코스피에 미치는 영향: 반도체 중심으로 선별 강세가 이어질 수 있습니다."
+    )
     assert "오늘의 핵심" in payload["aiJudgment"]["body"]
+    assert "4-2. 핵심 뉴스 5선" not in payload["aiJudgment"]["body"]
     symbols = {item["symbol"] for item in payload["marketSnapshot"]["items"]}
     assert {"US10Y", "DXY", "VIX", "KRW", "NQ1!", "SPX", "QQQ", "SOXX", "BTC"} <= symbols
     assert payload["bitcoin"]["fearGreedIndex"]["label"] == "탐욕"
     assert payload["bitcoin"]["etf"]["totalHolding"] == "983,240.13 BTC"
-    assert payload["xSignals"][0]["sentiment"] == "bullish"
-    assert payload["news"][0]["sourceTier"] == "tier1"
-    assert payload["news"][0]["category"] == "macro"
+    assert payload["featuredXSignals"][0]["sentiment"] == "bullish"
+    assert payload["featuredXSignals"][0]["rawContent"] is None
+    assert payload["allNews"][0]["sourceTier"] == "tier1"
+    assert payload["allNews"][0]["category"] == "macro"
+    assert payload["allNews"][0]["summaryKo"] == "고금리 환경이 성장주 할인율 부담을 키웁니다."
+    assert payload["allNews"][0]["rawTitle"] is None
+    assert payload["meta"]["sourceCounts"]["newsAll"] == 1
+    assert payload["meta"]["sourceCounts"]["xSignalAll"] == 1
+
+
+def test_build_public_brief_skips_source_reference_when_deriving_headline() -> None:
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+    payload = build_public_brief(
+        packet=_packet(),
+        briefing="""SOVEREIGN BRIEF
+
+참고 출처 - https://www.reuters.com/world/us/fed-keeps-options-open
+
+오늘 시장은 지정학 리스크와 금리 부담이 동시에 작용하는 국면입니다.
+반도체 중심의 선별 대응이 유효합니다.
+""",
+        run_at=run_at,
+    )
+
+    assert (
+        payload["meta"]["displayHeadline"]
+        == "오늘 시장은 지정학 리스크와 금리 부담이 동시에 작용하는 국면입니다."
+    )
+    assert "https://" not in payload["meta"]["displayHeadline"]
+
+
+def test_build_public_brief_prefers_public_context_for_full_lists() -> None:
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+    public_context = {
+        "all_news": [
+            {
+                "title": "첫 번째 공개 뉴스",
+                "url": "https://example.com/news-1",
+                "source": "Reuters",
+                "published_at": "2026-03-21T07:50:00+09:00",
+                "topic": "macro",
+                "source_tier": 1,
+                "summary": "첫 번째 공개 뉴스 요약",
+                "why_it_matters": "첫 번째 공개 뉴스 해석",
+            },
+            {
+                "title": "두 번째 공개 뉴스",
+                "url": "https://example.com/news-2",
+                "source": "Bloomberg",
+                "published_at": "2026-03-21T07:40:00+09:00",
+                "topic": "ai_bigtech",
+                "source_tier": 1,
+                "summary": "두 번째 공개 뉴스 요약",
+                "why_it_matters": "두 번째 공개 뉴스 해석",
+            },
+        ],
+        "all_x_signals": [
+            {
+                "headline": "첫 번째 공개 시그널",
+                "summary": "첫 번째 공개 시그널 요약",
+                "why_it_matters": "첫 번째 공개 시그널 영향",
+                "sentiment": "bullish",
+                "posted_at": "2026-03-21T07:35:00+09:00",
+            },
+            {
+                "headline": "두 번째 공개 시그널",
+                "summary": "두 번째 공개 시그널 요약",
+                "why_it_matters": "두 번째 공개 시그널 영향",
+                "sentiment": "neutral",
+                "posted_at": "2026-03-21T07:25:00+09:00",
+            },
+        ],
+        "source_counts": {
+            "newsCandidates": 14,
+            "newsRanked": 12,
+            "newsFeatured": 2,
+            "newsAll": 2,
+            "xSignalCandidates": 9,
+            "xSignalRanked": 2,
+            "xSignalFeatured": 2,
+            "xSignalAll": 2,
+        },
+    }
+
+    payload = build_public_brief(
+        packet=_packet(),
+        briefing=_briefing(),
+        run_at=run_at,
+        public_context=public_context,
+    )
+
+    assert len(payload["allNews"]) == 2
+    assert payload["allNews"][1]["title"] == "두 번째 공개 뉴스"
+    assert len(payload["allXSignals"]) == 2
+    assert payload["meta"]["sourceCounts"]["newsCandidates"] == 14
+    assert payload["meta"]["sourceCounts"]["xSignalCandidates"] == 9
+
+
+def test_build_public_brief_translates_selected_public_texts(monkeypatch, tmp_path) -> None:
+    class FakeOpenAI:
+        def __init__(self, *, api_key: str):
+            self.api_key = api_key
+            self.responses = self
+
+        def create(self, **kwargs):
+            payload = json.loads(kwargs["input"])
+            translated = [
+                {"id": item["id"], "translated": f"번역 {index}"}
+                for index, item in enumerate(payload["items"], start=1)
+            ]
+            return SimpleNamespace(
+                output_text=json.dumps({"items": translated}, ensure_ascii=False),
+                usage=SimpleNamespace(
+                    input_tokens=10,
+                    output_tokens=20,
+                    input_tokens_details=SimpleNamespace(cached_tokens=0),
+                    output_tokens_details=SimpleNamespace(reasoning_tokens=0),
+                ),
+            )
+
+    english_packet = _packet()
+    english_packet["topic_summaries"]["macro"]["market_implication"] = "Rates remain elevated."
+    english_packet["x_market_signals"] = [
+        {
+            "headline": "AI server demand is accelerating.",
+            "summary": "AI server demand is accelerating.",
+            "why_it_matters": "It can support chip sentiment.",
+            "sentiment": "bullish",
+            "posted_at": "2026-03-21T06:41:00+09:00",
+        }
+    ]
+    english_packet["news"] = [
+        {
+            "title": "Tech valuations face pressure as yields rise",
+            "url": "https://example.com/english-news",
+            "source": "Reuters",
+            "published_at": "2026-03-21T05:50:00+09:00",
+            "topic": "macro",
+            "source_tier": 1,
+            "summary": "Long-end yields moved higher.",
+            "why_it_matters": "Growth stocks face a higher discount-rate burden.",
+        }
+    ]
+
+    monkeypatch.setattr("morning_brief.public_site.OpenAI", FakeOpenAI)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    settings = load_settings()
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+
+    payload = build_public_brief(
+        packet=english_packet,
+        briefing=_briefing(),
+        run_at=run_at,
+        settings=settings,
+    )
+
+    assert payload["meta"]["translationStatus"] == "ok"
+    assert payload["topicSummaries"][0]["summary"].startswith("번역")
+    assert payload["allNews"][0]["title"].startswith("번역")
+    assert payload["allNews"][0]["rawTitle"] == "Tech valuations face pressure as yields rise"
+    assert payload["allXSignals"][0]["content"].startswith("번역")
+    assert payload["allXSignals"][0]["rawContent"] == "AI server demand is accelerating."
 
 
 def test_publish_public_brief_writes_local_public_bundle(monkeypatch, tmp_path) -> None:

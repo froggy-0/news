@@ -19,6 +19,7 @@ export default async function ArchivePage() {
         generatedAt: brief.meta.generatedAt,
         quality: brief.meta.dataQuality,
         headline: brief.aiJudgment.headline,
+        displayHeadline: brief.meta.displayHeadline,
       };
     }),
   );

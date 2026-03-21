@@ -7,6 +7,8 @@ const publicDir = path.join(frontendDir, "public");
 const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://example.com").replace(/\/$/, "");
 const dataBaseUrl = process.env.NEXT_PUBLIC_R2_BASE_URL ?? process.env.R2_BASE_URL ?? null;
 const useFixtureData = process.env.BRIEF_DATA_SOURCE === "fixture";
+const buildVersion =
+  process.env.BRIEF_DATA_BUILD_ID ?? process.env.GITHUB_SHA ?? `local-${Date.now()}`;
 
 async function readLocalJson(name) {
   const raw = await readFile(path.join(fixtureDir, name), "utf8");
@@ -14,9 +16,11 @@ async function readLocalJson(name) {
 }
 
 async function readRemoteJson(url) {
-  const response = await fetch(url, { cache: "no-store" });
+  const requestUrl = new URL(url);
+  requestUrl.searchParams.set("_build", buildVersion);
+  const response = await fetch(requestUrl, { cache: "no-store" });
   if (!response.ok) {
-    throw new Error(`Failed to fetch ${url}: ${response.status}`);
+    throw new Error(`Failed to fetch ${requestUrl}: ${response.status}`);
   }
   return response.json();
 }

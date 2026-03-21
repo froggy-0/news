@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -9,10 +11,13 @@ from typing import Any
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
-from morning_brief.brief_formatting import extract_sections, parse_news_items
+from openai import OpenAI
+
+from morning_brief.brief_formatting import extract_sections
 from morning_brief.config import Settings
 from morning_brief.data.market_policy import is_rate_canonical_key
 from morning_brief.observability import PipelineObserver
+from morning_brief.openai_utils import usage_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +49,31 @@ _PUBLIC_NEWS_TOPIC_MAP = {
 }
 
 _EMPTY_INDEX = {"dates": [], "updatedAt": ""}
+_SECTION_HEADER_RE = re.compile(r"^(?P<section>\d+(?:-\d+)?)\.\s*")
+_HANGUL_RE = re.compile(r"[가-힣]")
+_DICT_LITERAL_RE = re.compile(r"^\s*[\[{].*[:].*[\]}]\s*$")
+_EXCLUDED_BODY_SECTIONS = {"4-2", "4-3", "5-2", "5-3", "6"}
+_PUBLIC_FEATURED_NEWS_LIMIT = 5
+_PUBLIC_ALL_NEWS_LIMIT = 12
+_PUBLIC_FEATURED_X_LIMIT = 5
+_PUBLIC_ALL_X_LIMIT = 12
+_NEWS_GENERIC_SUMMARY = {
+    "macro": "거시 흐름과 금리 기대를 해석하는 데 참고할 수 있어요.",
+    "bigtech": "빅테크 투자 심리와 AI 기대를 읽는 데 참고할 수 있어요.",
+    "bitcoin": "비트코인 가격과 ETF 흐름을 해석하는 데 참고할 수 있어요.",
+    "us-stocks": "미국 증시 흐름과 섹터 반응을 읽는 데 참고할 수 있어요.",
+}
+_SIGNAL_GENERIC_CONTENT = {
+    "bullish": "공식 채널에서 상방 해석이 가능한 신규 시그널이 포착됐어요.",
+    "bearish": "공식 채널에서 하방 압력을 시사하는 신규 시그널이 포착됐어요.",
+    "neutral": "공식 채널에서 중립 성격의 신규 시그널이 포착됐어요.",
+}
+_SIGNAL_GENERIC_IMPACT = {
+    "bullish": "관련 자산의 투자 심리와 수급 변화를 함께 확인할 필요가 있어요.",
+    "bearish": "단기 변동성과 위험 선호 위축 여부를 함께 봐야 해요.",
+    "neutral": "즉시 방향성보다 맥락 확인이 우선인 신호예요.",
+}
+_TRANSLATION_CACHE_FILE = "public_translation_cache.json"
 
 
 @dataclass(frozen=True)
@@ -61,6 +91,7 @@ def publish_public_brief(
     run_at: datetime,
     settings: Settings,
     observer: PipelineObserver | None = None,
+    public_context: dict[str, Any] | None = None,
 ) -> _PublicBriefArtifacts:
     run_local = run_at.astimezone(ZoneInfo(settings.timezone))
     date_key = run_local.strftime("%Y-%m-%d")
@@ -71,6 +102,9 @@ def publish_public_brief(
         packet=packet,
         briefing=briefing,
         run_at=run_local,
+        settings=settings,
+        observer=observer,
+        public_context=public_context,
     )
 
     _write_json(public_dir / brief_relative_path, brief_payload)
@@ -126,9 +160,49 @@ def build_public_brief(
     packet: dict[str, Any],
     briefing: str,
     run_at: datetime,
+    settings: Settings | None = None,
+    observer: PipelineObserver | None = None,
+    public_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     section_map = extract_sections(briefing)
-    brief_body = _brief_body_without_title(briefing)
+    brief_body = _clean_public_body(_brief_body_without_title(briefing))
+    headline = _headline_from_sections(section_map, brief_body)
+    summary_lead, summary_support = _judgment_summary(
+        section_map=section_map,
+        brief_body=brief_body,
+        headline=headline,
+    )
+    topic_summaries = _topic_summaries(packet)
+    all_news = _news_items(
+        packet,
+        run_at,
+        public_context=public_context,
+        limit=_PUBLIC_ALL_NEWS_LIMIT,
+    )
+    all_x_signals = _x_signals(
+        packet,
+        run_at,
+        public_context=public_context,
+        limit=_PUBLIC_ALL_X_LIMIT,
+    )
+    headline, summary_lead, summary_support, translation_status = _apply_public_translation(
+        headline=headline,
+        summary_lead=summary_lead,
+        summary_support=summary_support,
+        topic_summaries=topic_summaries,
+        news_items=all_news,
+        x_signals=all_x_signals,
+        settings=settings,
+        observer=observer,
+    )
+    display_headline = _display_headline(headline)
+    source_counts = _source_counts(
+        public_context=public_context,
+        all_news=all_news,
+        all_x_signals=all_x_signals,
+    )
+    featured_news = all_news[:_PUBLIC_FEATURED_NEWS_LIMIT]
+    featured_x_signals = all_x_signals[:_PUBLIC_FEATURED_X_LIMIT] or None
 
     return {
         "meta": {
@@ -136,19 +210,28 @@ def build_public_brief(
             "generatedAt": run_at.isoformat(),
             "dataQuality": _data_quality_status(packet),
             "qualityNotes": _quality_notes(packet),
+            "displayHeadline": display_headline,
+            "sourceCounts": source_counts,
+            "translationStatus": translation_status,
         },
         "marketSnapshot": {
             "items": _market_snapshot_items(packet),
         },
         "aiJudgment": {
-            "headline": _headline_from_sections(section_map, brief_body),
+            "headline": headline,
             "body": brief_body,
+            "summaryLead": summary_lead,
+            "summarySupport": summary_support,
         },
-        "topicSummaries": _topic_summaries(packet),
+        "topicSummaries": topic_summaries,
         "techStocks": _tech_stocks(packet),
         "bitcoin": _bitcoin_section(packet),
-        "xSignals": _x_signals(packet, run_at),
-        "news": _news_items(packet, section_map.get("section_4_2", ""), run_at),
+        "featuredXSignals": featured_x_signals,
+        "allXSignals": all_x_signals or None,
+        "featuredNews": featured_news,
+        "allNews": all_news,
+        "xSignals": featured_x_signals,
+        "news": featured_news,
     }
 
 
@@ -165,14 +248,145 @@ def _brief_body_without_title(briefing: str) -> str:
 def _headline_from_sections(section_map: dict[str, str], brief_body: str) -> str:
     section_0 = str(section_map.get("section_0", "")).strip()
     for line in section_0.splitlines():
-        candidate = line.strip()
-        if candidate:
-            return candidate
+        candidate = _normalize_public_text(line)
+        if candidate and _is_public_headline_candidate(candidate):
+            return _headline_excerpt(candidate)
     for paragraph in brief_body.split("\n\n"):
-        candidate = paragraph.strip()
-        if candidate and not candidate.startswith("## "):
-            return candidate
+        candidate = _normalize_public_text(paragraph)
+        if candidate and _is_public_headline_candidate(candidate):
+            return _headline_excerpt(candidate)
     return "오늘 브리핑을 준비했어요."
+
+
+def _display_headline(text: str) -> str:
+    normalized = _normalize_public_text(text)
+    stripped = re.sub(r"^[\s\-–—•●▪◦①-⑳0-9.]+", "", normalized).strip()
+    return stripped or normalized
+
+
+def _headline_excerpt(text: str) -> str:
+    normalized = _normalize_public_text(text)
+    if not normalized:
+        return normalized
+    sentences = re.split(r"(?<=[.!?])\s+", normalized)
+    first_sentence = sentences[0].strip() if sentences else normalized
+    return first_sentence or normalized
+
+
+def _is_public_headline_candidate(text: str) -> bool:
+    normalized = _normalize_public_text(text)
+    if not normalized:
+        return False
+    if normalized.startswith("## "):
+        return False
+    if _SECTION_HEADER_RE.match(normalized):
+        return False
+    if _is_machine_payload(normalized):
+        return False
+    if "http://" in normalized or "https://" in normalized:
+        return False
+    lowered = normalized.lower()
+    if lowered.startswith("참고 출처") or lowered.startswith("source:"):
+        return False
+    return True
+
+
+def _judgment_summary(
+    *,
+    section_map: dict[str, str],
+    brief_body: str,
+    headline: str,
+) -> tuple[str, str | None]:
+    cleaned_headline = _display_headline(headline)
+    section_0 = str(section_map.get("section_0", "")).strip()
+    lines = [
+        _normalize_public_text(line)
+        for line in section_0.splitlines()
+        if _normalize_public_text(line)
+    ]
+    filtered = [
+        line
+        for line in lines
+        if line not in {"0. 오늘의 핵심", "오늘의 핵심"}
+        and _display_headline(line) != cleaned_headline
+    ]
+    if filtered:
+        lead = filtered[0]
+        support = filtered[1] if len(filtered) > 1 else None
+        return lead, support
+
+    paragraphs = _body_paragraphs(brief_body)
+    filtered_paragraphs = [
+        paragraph for paragraph in paragraphs if _display_headline(paragraph) != cleaned_headline
+    ]
+    if not filtered_paragraphs:
+        return "시장 핵심 맥락을 빠르게 읽을 수 있게 정리했어요.", None
+    lead = filtered_paragraphs[0]
+    support = filtered_paragraphs[1] if len(filtered_paragraphs) > 1 else None
+    return lead, support
+
+
+def _clean_public_body(body: str) -> str:
+    lines = body.replace("\r\n", "\n").splitlines()
+    kept: list[str] = []
+    exclude_section = False
+
+    for line in lines:
+        stripped = line.strip()
+        matched = _SECTION_HEADER_RE.match(stripped)
+        if matched:
+            exclude_section = matched.group("section") in _EXCLUDED_BODY_SECTIONS
+            if exclude_section:
+                continue
+
+        if exclude_section:
+            continue
+        if stripped and _is_machine_payload(stripped):
+            continue
+        kept.append(line.rstrip())
+
+    text = "\n".join(kept).strip()
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _body_paragraphs(body: str) -> list[str]:
+    paragraphs: list[str] = []
+    for paragraph in body.split("\n\n"):
+        normalized = _normalize_public_text(paragraph)
+        if not normalized or normalized.startswith("## "):
+            continue
+        if _SECTION_HEADER_RE.match(normalized):
+            continue
+        if not _is_public_headline_candidate(normalized):
+            continue
+        paragraphs.append(normalized)
+    return paragraphs
+
+
+def _normalize_public_text(text: str) -> str:
+    return re.sub(r"\s+", " ", str(text or "").strip()).strip()
+
+
+def _contains_korean(text: str) -> bool:
+    return bool(_HANGUL_RE.search(str(text or "")))
+
+
+def _is_machine_payload(text: str) -> bool:
+    normalized = str(text or "").strip()
+    if not normalized:
+        return False
+    if _DICT_LITERAL_RE.match(normalized):
+        return True
+    return normalized.startswith("{'") or normalized.startswith('{"')
+
+
+def _best_korean_text(*candidates: str) -> str | None:
+    for candidate in candidates:
+        normalized = _normalize_public_text(candidate)
+        if normalized and _contains_korean(normalized) and not _is_machine_payload(normalized):
+            return normalized
+    return None
 
 
 def _data_quality_status(packet: dict[str, Any]) -> str:
@@ -474,10 +688,79 @@ def _bitcoin_section(packet: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _x_signals(packet: dict[str, Any], run_at: datetime) -> list[dict[str, Any]] | None:
+def _public_news_entries(
+    packet: dict[str, Any],
+    public_context: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    if isinstance(public_context, dict):
+        items = public_context.get("all_news")
+        if isinstance(items, list):
+            return [item for item in items if isinstance(item, dict)]
+    packet_news = packet.get("news", [])
+    if isinstance(packet_news, list):
+        return [item for item in packet_news if isinstance(item, dict)]
+    return []
+
+
+def _public_signal_entries(
+    packet: dict[str, Any],
+    public_context: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    if isinstance(public_context, dict):
+        items = public_context.get("all_x_signals")
+        if isinstance(items, list):
+            return [item for item in items if isinstance(item, dict)]
     signals = packet.get("x_market_signals", [])
+    if isinstance(signals, list):
+        return [item for item in signals if isinstance(item, dict)]
+    return []
+
+
+def _source_counts(
+    *,
+    public_context: dict[str, Any] | None,
+    all_news: list[dict[str, Any]],
+    all_x_signals: list[dict[str, Any]],
+) -> dict[str, int]:
+    raw_counts = public_context.get("source_counts") if isinstance(public_context, dict) else None
+    if isinstance(raw_counts, dict):
+        return {
+            "newsCandidates": int(raw_counts.get("newsCandidates", len(all_news)) or 0),
+            "newsRanked": int(raw_counts.get("newsRanked", len(all_news)) or 0),
+            "newsFeatured": int(
+                raw_counts.get("newsFeatured", min(len(all_news), _PUBLIC_FEATURED_NEWS_LIMIT)) or 0
+            ),
+            "newsAll": int(raw_counts.get("newsAll", len(all_news)) or 0),
+            "xSignalCandidates": int(raw_counts.get("xSignalCandidates", len(all_x_signals)) or 0),
+            "xSignalRanked": int(raw_counts.get("xSignalRanked", len(all_x_signals)) or 0),
+            "xSignalFeatured": int(
+                raw_counts.get("xSignalFeatured", min(len(all_x_signals), _PUBLIC_FEATURED_X_LIMIT))
+                or 0
+            ),
+            "xSignalAll": int(raw_counts.get("xSignalAll", len(all_x_signals)) or 0),
+        }
+    return {
+        "newsCandidates": len(all_news),
+        "newsRanked": len(all_news),
+        "newsFeatured": min(len(all_news), _PUBLIC_FEATURED_NEWS_LIMIT),
+        "newsAll": len(all_news),
+        "xSignalCandidates": len(all_x_signals),
+        "xSignalRanked": len(all_x_signals),
+        "xSignalFeatured": min(len(all_x_signals), _PUBLIC_FEATURED_X_LIMIT),
+        "xSignalAll": len(all_x_signals),
+    }
+
+
+def _x_signals(
+    packet: dict[str, Any],
+    run_at: datetime,
+    *,
+    public_context: dict[str, Any] | None = None,
+    limit: int,
+) -> list[dict[str, Any]]:
+    signals = _public_signal_entries(packet, public_context)[:limit]
     if not isinstance(signals, list) or not signals:
-        return None
+        return []
 
     results: list[dict[str, Any]] = []
     for index, signal in enumerate(signals, start=1):
@@ -491,51 +774,71 @@ def _x_signals(packet: dict[str, Any], run_at: datetime) -> list[dict[str, Any]]
         if sentiment not in {"bullish", "bearish", "neutral"}:
             sentiment = "neutral"
         posted_at = str(signal.get("posted_at", "")).strip() or run_at.isoformat()
+        raw_content = content if not _contains_korean(content) else None
+        content_ko = (
+            _best_korean_text(
+                str(signal.get("summary", "")).strip(),
+                str(signal.get("headline", "")).strip(),
+                str(signal.get("why_it_matters", "")).strip(),
+            )
+            or content
+        )
+        impact_ko = (
+            _best_korean_text(
+                str(signal.get("why_it_matters", "")).strip(),
+                str(signal.get("summary", "")).strip(),
+            )
+            or impact
+        )
         results.append(
             {
                 "id": f"x-{index}",
                 "postedAt": posted_at,
-                "impact": impact,
+                "impact": impact_ko,
                 "sentiment": sentiment,
-                "content": content,
+                "content": content_ko,
+                "rawContent": raw_content,
             }
         )
-    return results or None
+    return results
 
 
-def _news_items(packet: dict[str, Any], section_4_2: str, run_at: datetime) -> list[dict[str, Any]]:
-    packet_news = packet.get("news", [])
-    normalized_packet_news = (
-        [item for item in packet_news if isinstance(item, dict)]
-        if isinstance(packet_news, list)
-        else []
-    )
-    parsed_news = parse_news_items(section_4_2)
-    if parsed_news:
-        results = [
-            _news_item_from_brief(parsed, normalized_packet_news, index, run_at)
-            for index, parsed in enumerate(parsed_news, start=1)
-        ]
-        valid_results = [item for item in results if item is not None]
-        if valid_results:
-            return valid_results
-
+def _news_items(
+    packet: dict[str, Any],
+    run_at: datetime,
+    *,
+    public_context: dict[str, Any] | None = None,
+    limit: int,
+) -> list[dict[str, Any]]:
+    normalized_packet_news = _public_news_entries(packet, public_context)[:limit]
     fallback_items: list[dict[str, Any]] = []
-    for index, item in enumerate(normalized_packet_news[:5], start=1):
+    for index, item in enumerate(normalized_packet_news, start=1):
         url = str(item.get("url", "")).strip()
         title = str(item.get("title", "")).strip()
         if not url or not title:
             continue
         topic = _normalize_news_topic(item.get("topic"))
+        summary_source = (
+            str(item.get("why_it_matters", "")).strip()
+            or str(item.get("summary", "")).strip()
+            or _NEWS_GENERIC_SUMMARY[topic]
+        )
+        summary_ko = (
+            _best_korean_text(
+                str(item.get("why_it_matters", "")).strip(),
+                str(item.get("summary", "")).strip(),
+            )
+            or summary_source
+        )
         fallback_items.append(
             {
                 "id": f"news-{index}",
                 "publishedAt": str(item.get("published_at", "")).strip() or run_at.isoformat(),
                 "category": topic,
                 "title": title,
-                "interpretation": str(item.get("why_it_matters", "")).strip()
-                or str(item.get("summary", "")).strip()
-                or None,
+                "interpretation": summary_ko,
+                "summaryKo": summary_ko,
+                "rawTitle": title if not _contains_korean(title) else None,
                 "source": str(item.get("source", "")).strip() or _source_from_url(url),
                 "sourceTier": "tier1" if _source_tier_value(item) == 1 else "standard",
                 "url": url,
@@ -546,79 +849,250 @@ def _news_items(packet: dict[str, Any], section_4_2: str, run_at: datetime) -> l
     return fallback_items
 
 
-def _news_item_from_brief(
-    parsed: dict[str, Any],
-    packet_news: list[dict[str, Any]],
-    index: int,
-    run_at: datetime,
-) -> dict[str, Any] | None:
-    url = str(parsed.get("source_url") or "").strip()
-    headline = str(parsed.get("headline") or "").strip()
-    if not headline:
-        return None
+def _translation_key(text: str) -> str:
+    normalized = _normalize_public_text(text)
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
-    matched = _match_packet_news(parsed, packet_news)
-    matched_url = str(matched.get("url", "")).strip() if matched else ""
-    final_url = url or matched_url
-    if not final_url:
-        return None
 
-    topic = _normalize_news_topic(matched.get("topic") if matched else None)
-    interpretation = str(parsed.get("tldr") or "").strip()
-    if not interpretation and matched:
-        interpretation = (
-            str(matched.get("why_it_matters", "")).strip()
-            or str(matched.get("summary", "")).strip()
-        )
+def _needs_translation(text: str | None) -> bool:
+    normalized = _normalize_public_text(text or "")
+    return (
+        bool(normalized)
+        and not _contains_korean(normalized)
+        and not _is_machine_payload(normalized)
+    )
 
-    source_name = str(parsed.get("source_name") or "").strip()
-    if not source_name and matched:
-        source_name = str(matched.get("source", "")).strip()
-    if not source_name:
-        source_name = _source_from_url(final_url)
 
-    source_tier = "standard"
-    urgency = "medium"
-    if matched and _source_tier_value(matched) == 1:
-        source_tier = "tier1"
-        urgency = "high"
+def _translation_cache_path(settings: Settings) -> Path:
+    return settings.cache_dir / _TRANSLATION_CACHE_FILE
 
-    published_at = (
-        str(matched.get("published_at", "")).strip() if matched is not None else ""
-    ) or run_at.isoformat()
 
+def _load_translation_cache(settings: Settings) -> dict[str, str]:
+    path = _translation_cache_path(settings)
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
     return {
-        "id": f"news-{index}",
-        "publishedAt": published_at,
-        "category": topic,
-        "title": headline,
-        "interpretation": interpretation or None,
-        "source": source_name,
-        "sourceTier": source_tier,
-        "url": final_url,
-        "urgency": urgency,
-        "tags": [_topic_label(topic)],
+        str(key): str(value)
+        for key, value in payload.items()
+        if str(key).strip() and str(value).strip()
     }
 
 
-def _match_packet_news(
-    parsed: dict[str, Any], packet_news: list[dict[str, Any]]
-) -> dict[str, Any] | None:
-    parsed_url = str(parsed.get("source_url") or "").strip()
-    parsed_headline = str(parsed.get("headline") or "").strip().lower()
-    if parsed_url:
-        for item in packet_news:
-            if str(item.get("url", "")).strip() == parsed_url:
-                return item
-    for item in packet_news:
-        title = str(item.get("title", "")).strip().lower()
-        if parsed_headline and title == parsed_headline:
-            return item
-    for item in packet_news:
-        title = str(item.get("title", "")).strip().lower()
-        if parsed_headline and parsed_headline in title:
-            return item
-    return None
+def _save_translation_cache(settings: Settings, cache_map: dict[str, str]) -> None:
+    path = _translation_cache_path(settings)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(cache_map, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _apply_public_translation(
+    *,
+    headline: str,
+    summary_lead: str,
+    summary_support: str | None,
+    topic_summaries: list[dict[str, Any]],
+    news_items: list[dict[str, Any]],
+    x_signals: list[dict[str, Any]],
+    settings: Settings | None,
+    observer: PipelineObserver | None,
+) -> tuple[str, str, str | None, str]:
+    if settings is None:
+        return headline, summary_lead, summary_support, "ok"
+
+    translation_map, status = _translate_public_texts(
+        headline=headline,
+        summary_lead=summary_lead,
+        summary_support=summary_support,
+        topic_summaries=topic_summaries,
+        news_items=news_items,
+        x_signals=x_signals,
+        settings=settings,
+        observer=observer,
+    )
+    translated_headline = translation_map.get(_translation_key(headline), headline)
+    translated_lead = translation_map.get(_translation_key(summary_lead), summary_lead)
+    translated_support = (
+        translation_map.get(_translation_key(summary_support), summary_support)
+        if summary_support
+        else None
+    )
+    if not translation_map:
+        return translated_headline, translated_lead, translated_support, status
+
+    for item in topic_summaries:
+        summary = str(item.get("summary", "")).strip()
+        translated = translation_map.get(_translation_key(summary))
+        if translated:
+            item["summary"] = translated
+
+    for item in news_items:
+        title = str(item.get("title", "")).strip()
+        interpretation = str(item.get("interpretation", "")).strip()
+        summary_ko = str(item.get("summaryKo", "")).strip()
+        translated_title = translation_map.get(_translation_key(title))
+        translated_interpretation = translation_map.get(_translation_key(interpretation))
+        translated_summary = translation_map.get(_translation_key(summary_ko))
+
+        if translated_title:
+            if not item.get("rawTitle") and title and title != translated_title:
+                item["rawTitle"] = title
+            item["title"] = translated_title
+        if translated_summary:
+            item["summaryKo"] = translated_summary
+        if translated_interpretation:
+            item["interpretation"] = translated_interpretation
+        elif translated_summary and not interpretation:
+            item["interpretation"] = translated_summary
+
+    for item in x_signals:
+        content = str(item.get("content", "")).strip()
+        impact = str(item.get("impact", "")).strip()
+        translated_content = translation_map.get(_translation_key(content))
+        translated_impact = translation_map.get(_translation_key(impact))
+        if translated_content:
+            if not item.get("rawContent") and content and content != translated_content:
+                item["rawContent"] = content
+            item["content"] = translated_content
+        if translated_impact:
+            item["impact"] = translated_impact
+
+    return translated_headline, translated_lead, translated_support, status
+
+
+def _translate_public_texts(
+    *,
+    headline: str,
+    summary_lead: str,
+    summary_support: str | None,
+    topic_summaries: list[dict[str, Any]],
+    news_items: list[dict[str, Any]],
+    x_signals: list[dict[str, Any]],
+    settings: Settings,
+    observer: PipelineObserver | None,
+) -> tuple[dict[str, str], str]:
+    cache_map = _load_translation_cache(settings)
+    translatable_texts: dict[str, str] = {}
+
+    for candidate in (headline, summary_lead, summary_support or ""):
+        normalized = _normalize_public_text(candidate)
+        if _needs_translation(normalized):
+            translatable_texts[_translation_key(normalized)] = normalized
+
+    for item in topic_summaries:
+        summary = _normalize_public_text(str(item.get("summary", "")).strip())
+        if _needs_translation(summary):
+            translatable_texts[_translation_key(summary)] = summary
+
+    for item in news_items:
+        for field in ("title", "summaryKo", "interpretation"):
+            value = _normalize_public_text(str(item.get(field, "")).strip())
+            if _needs_translation(value):
+                translatable_texts[_translation_key(value)] = value
+
+    for item in x_signals:
+        for field in ("content", "impact"):
+            value = _normalize_public_text(str(item.get(field, "")).strip())
+            if _needs_translation(value):
+                translatable_texts[_translation_key(value)] = value
+
+    if not translatable_texts:
+        return cache_map, "ok"
+
+    pending = {
+        key: text
+        for key, text in translatable_texts.items()
+        if not _normalize_public_text(cache_map.get(key, ""))
+    }
+    if not pending:
+        return cache_map, "ok"
+
+    if not settings.openai_api_key:
+        return cache_map, "failed"
+
+    client = OpenAI(api_key=settings.openai_api_key)
+    items = [{"id": key, "text": text} for key, text in pending.items()]
+
+    try:
+        response = client.responses.create(
+            model=settings.openai_model,
+            instructions=(
+                "시장 브리프 공개 JSON용 번역기입니다. 입력 문장을 자연스러운 한국어로만 옮기세요. "
+                "숫자, 티커, ETF 이름, URL, 출처명은 보존하세요. 장황하게 늘리지 말고 한두 문장 안에서 끝내세요."
+            ),
+            input=json.dumps({"items": items}, ensure_ascii=False),
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "public_translation_batch",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "items": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {"type": "string"},
+                                        "translated": {"type": "string"},
+                                    },
+                                    "required": ["id", "translated"],
+                                    "additionalProperties": False,
+                                },
+                            }
+                        },
+                        "required": ["items"],
+                        "additionalProperties": False,
+                    },
+                    "strict": True,
+                }
+            },
+            reasoning={"effort": "minimal"},
+            max_output_tokens=2400,
+        )
+    except Exception as exc:
+        if observer is not None:
+            observer.log_event("public_translation_failed", reason=str(exc))
+        logger.warning("공개 JSON 번역 중 오류가 있어 원문을 유지할게요: %s", exc)
+        return cache_map, "failed"
+
+    if observer is not None:
+        observer.record_provider_usage("openai", requests=1, **usage_snapshot(response))
+
+    try:
+        payload = json.loads((response.output_text or "").strip())
+    except json.JSONDecodeError:
+        if observer is not None:
+            observer.log_event(
+                "public_translation_failed",
+                reason="invalid_json",
+                preview=(response.output_text or "")[:200],
+            )
+        return cache_map, "failed"
+
+    translated_items = payload.get("items", []) if isinstance(payload, dict) else []
+    translated_count = 0
+    for item in translated_items:
+        if not isinstance(item, dict):
+            continue
+        key = str(item.get("id", "")).strip()
+        translated = _normalize_public_text(str(item.get("translated", "")).strip())
+        if not key or not translated:
+            continue
+        cache_map[key] = translated
+        translated_count += 1
+
+    _save_translation_cache(settings, cache_map)
+
+    if translated_count == len(pending):
+        return cache_map, "ok"
+    if translated_count > 0:
+        return cache_map, "partial"
+    return cache_map, "failed"
 
 
 def _normalize_news_topic(raw_topic: Any) -> str:

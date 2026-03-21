@@ -15,6 +15,27 @@
 - Cloudflare Pages에는 `out/` 디렉토리만 올리면 됩니다.
 - `rss.xml`, `llms.txt`도 build 시 `public/`에 생성된 뒤 함께 export 됩니다.
 
+## 로컬 배포
+
+- 로컬에서 프론트만 다시 배포할 때는 `npm run deploy:preview` 또는 `npm run deploy:production` 을 사용합니다.
+- 배포 전에 현재 공개 JSON이 R2에 올라가 있어야 합니다.
+
+필수 환경변수:
+- `NEXT_PUBLIC_R2_BASE_URL`
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_PAGES_PROJECT_NAME`
+
+선택 환경변수:
+- `DEPLOY_BRANCH`
+  - preview 배포 branch alias를 강제로 지정할 때만 사용합니다.
+
+예시:
+- preview 배포
+  - `NEXT_PUBLIC_R2_BASE_URL='https://pub-...r2.dev' CLOUDFLARE_API_TOKEN='...' CLOUDFLARE_ACCOUNT_ID='...' CLOUDFLARE_PAGES_PROJECT_NAME='news-amo' npm run deploy:preview`
+- production 배포
+  - `NEXT_PUBLIC_R2_BASE_URL='https://pub-...r2.dev' CLOUDFLARE_API_TOKEN='...' CLOUDFLARE_ACCOUNT_ID='...' CLOUDFLARE_PAGES_PROJECT_NAME='news-amo' npm run deploy:production`
+
 ## 개발 기본 원칙
 
 - 프론트는 데이터를 다시 계산하지 않습니다.

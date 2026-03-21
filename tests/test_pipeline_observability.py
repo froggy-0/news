@@ -37,7 +37,7 @@ def test_run_pipeline_skips_email_when_openai_generation_fails(monkeypatch, tmp_
     sent = {"called": False}
 
     monkeypatch.setattr("morning_brief.pipeline.build_market_packet", lambda **_: _market_packet())
-    monkeypatch.setattr("morning_brief.pipeline.build_news_packet", lambda **_: ([], {}, []))
+    monkeypatch.setattr("morning_brief.pipeline.build_news_packet", lambda **_: ([], {}, [], {}))
     monkeypatch.setattr(
         "morning_brief.pipeline.generate_briefing",
         lambda **_: (_ for _ in ()).throw(BriefGenerationError("openai down")),
@@ -123,7 +123,7 @@ def test_run_pipeline_writes_observability_and_perplexity_audit(monkeypatch, tmp
                 ["https://www.reuters.com/world/us/fed-keeps-options-open"],
             )
             observer.record_perplexity_final_selection(packet)
-        return packet, {}, []
+        return packet, {}, [], {}
 
     monkeypatch.setattr("morning_brief.pipeline.build_market_packet", lambda **_: _market_packet())
     monkeypatch.setattr("morning_brief.pipeline.build_news_packet", fake_build_news_packet)
@@ -173,7 +173,7 @@ def test_run_pipeline_marks_brief_fallback_status_when_safe_brief_is_used(monkey
         return "SOVEREIGN BRIEF (2026-03-14)\n\n기본 브리핑"
 
     monkeypatch.setattr("morning_brief.pipeline.build_market_packet", lambda **_: _market_packet())
-    monkeypatch.setattr("morning_brief.pipeline.build_news_packet", lambda **_: ([], {}, []))
+    monkeypatch.setattr("morning_brief.pipeline.build_news_packet", lambda **_: ([], {}, [], {}))
     monkeypatch.setattr("morning_brief.pipeline.generate_briefing", fake_generate_briefing)
     monkeypatch.setattr(
         "morning_brief.pipeline.GmailSender",
@@ -243,7 +243,7 @@ def test_run_pipeline_uses_openai_backfill_only_when_quality_is_degraded(monkeyp
 
     monkeypatch.setattr("morning_brief.pipeline.build_market_packet", lambda **_: _market_packet())
     monkeypatch.setattr(
-        "morning_brief.pipeline.build_news_packet", lambda **_: (initial_news, {}, [])
+        "morning_brief.pipeline.build_news_packet", lambda **_: (initial_news, {}, [], {})
     )
     monkeypatch.setattr(
         "morning_brief.pipeline.backfill_news_with_web_search",

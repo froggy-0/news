@@ -41,6 +41,11 @@ from morning_brief.observability import PipelineObserver
 
 logger = logging.getLogger(__name__)
 
+PUBLIC_FEATURED_NEWS_ITEMS = 5
+PUBLIC_ALL_NEWS_ITEMS = 12
+PUBLIC_FEATURED_X_SIGNALS = 5
+PUBLIC_ALL_X_SIGNALS = 12
+
 # Re-export ranking helpers for tests and adjacent modules while keeping
 # ranking/selection responsibilities in news_selection.py.
 _dedup_and_rank = news_selection._dedup_and_rank
@@ -227,11 +232,11 @@ def build_news_packet(
     settings: Settings,
     observer: PipelineObserver | None = None,
     keywords_by_topic: dict[str, list[str]] | None = None,
-) -> tuple[list[dict], dict[str, TopicSummary], list[XSignal]]:
+) -> tuple[list[dict], dict[str, TopicSummary], list[XSignal], dict[str, object]]:
     """뉴스 패킷을 구성한다.
 
     Returns:
-        (news_packet, topic_summaries, x_signals) 튜플.
+        (news_packet, topic_summaries, x_signals, public_context) 튜플.
         기존 호출자와의 하위 호환을 위해 news_packet은 list[dict] 유지.
     """
     items: list[NewsItem] = []
@@ -257,9 +262,12 @@ def build_news_packet(
         for sector, kws in grok_keywords.items():
             keywords_by_topic.setdefault(sector, []).extend(kws)
 
+    public_merge_limit = max(PUBLIC_ALL_NEWS_ITEMS * 2, settings.max_news_items * 2)
+    public_fetch_limit = max(PUBLIC_ALL_NEWS_ITEMS, settings.max_news_items)
+
     if settings.research_provider == "perplexity":
         items = fetch_news_from_perplexity(
-            max_items=settings.max_news_items,
+            max_items=public_fetch_limit,
             api_key=settings.perplexity_api_key,
             observer=observer,
             keywords_by_topic=keywords_by_topic,
@@ -301,13 +309,13 @@ def build_news_packet(
 
         # Grok X 키워드 + Web Search 결과 병합
         if x_news:
-            items = _merge_rank(items, x_news, max_items=settings.max_news_items * 2)
+            items = _merge_rank(items, x_news, max_items=public_merge_limit)
         if grok_web_news:
-            items = _merge_rank(items, grok_web_news, max_items=settings.max_news_items * 2)
+            items = _merge_rank(items, grok_web_news, max_items=public_merge_limit)
 
         if official_signal_items:
-            items = _merge_rank(items, official_signal_items, max_items=settings.max_news_items)
-        items = _dedup_and_rank(items, max_items=settings.max_news_items)
+            items = _merge_rank(items, official_signal_items, max_items=public_merge_limit)
+        items = _dedup_and_rank(items, max_items=public_merge_limit)
         packet, _ = _packet_summary(items)
         fallback_review = assess_perplexity_fallback_need(packet)
         assert fallback_review is not None
@@ -334,11 +342,11 @@ def build_news_packet(
                     "최근 Perplexity 결과가 안정적이어서 이번에는 선별된 legacy fallback만 사용할게요."
                 )
             legacy_items = fetch_news(
-                max_items=settings.max_news_items,
+                max_items=PUBLIC_ALL_NEWS_ITEMS,
                 newsapi_key=settings.newsapi_key,
                 allow_broad_fallback=allow_broad_fallback,
             )
-            items = _merge_rank(items, legacy_items, max_items=settings.max_news_items)
+            items = _merge_rank(items, legacy_items, max_items=public_merge_limit)
         elif not items:
             logger.warning(
                 "Perplexity 연구 결과가 없고 legacy 뉴스 폴백도 꺼져 있어서 빈 뉴스 묶음을 그대로 사용할게요."
@@ -352,22 +360,67 @@ def build_news_packet(
             )
     else:
         legacy_items = fetch_news(
-            max_items=settings.max_news_items,
+            max_items=PUBLIC_ALL_NEWS_ITEMS,
             newsapi_key=settings.newsapi_key,
         )
-        items = _merge_rank(legacy_items, official_signal_items, max_items=settings.max_news_items)
+        items = _merge_rank(legacy_items, official_signal_items, max_items=public_merge_limit)
         # Grok 결과도 legacy 모드에서 병합
         if x_news:
-            items = _merge_rank(items, x_news, max_items=settings.max_news_items)
+            items = _merge_rank(items, x_news, max_items=public_merge_limit)
         if grok_web_news:
-            items = _merge_rank(items, grok_web_news, max_items=settings.max_news_items)
+            items = _merge_rank(items, grok_web_news, max_items=public_merge_limit)
 
-    if items:
-        packet, final_summary = _packet_summary(items)
+    public_ranked_items = _dedup_and_rank(items, max_items=PUBLIC_ALL_NEWS_ITEMS)
+    email_ranked_items = _dedup_and_rank(items, max_items=settings.max_news_items)
+    public_ranked_signals = x_signals[:PUBLIC_ALL_X_SIGNALS]
+    featured_public_signals = public_ranked_signals[:PUBLIC_FEATURED_X_SIGNALS]
+    public_context: dict[str, object] = {
+        "featured_news": _news_items_to_packet(public_ranked_items[:PUBLIC_FEATURED_NEWS_ITEMS]),
+        "all_news": _news_items_to_packet(public_ranked_items),
+        "featured_x_signals": [
+            {
+                "headline": signal.headline,
+                "summary": signal.summary,
+                "why_it_matters": signal.why_it_matters,
+                "sentiment": signal.sentiment,
+                "source_handle": signal.source_handle,
+                "posted_at": signal.posted_at.isoformat() if signal.posted_at else None,
+                "topic": signal.topic,
+                "citations": signal.citations,
+            }
+            for signal in featured_public_signals
+        ],
+        "all_x_signals": [
+            {
+                "headline": signal.headline,
+                "summary": signal.summary,
+                "why_it_matters": signal.why_it_matters,
+                "sentiment": signal.sentiment,
+                "source_handle": signal.source_handle,
+                "posted_at": signal.posted_at.isoformat() if signal.posted_at else None,
+                "topic": signal.topic,
+                "citations": signal.citations,
+            }
+            for signal in public_ranked_signals
+        ],
+        "source_counts": {
+            "newsCandidates": len(items),
+            "newsRanked": len(public_ranked_items),
+            "newsFeatured": min(len(public_ranked_items), PUBLIC_FEATURED_NEWS_ITEMS),
+            "newsAll": len(public_ranked_items),
+            "xSignalCandidates": len(x_signals),
+            "xSignalRanked": len(public_ranked_signals),
+            "xSignalFeatured": len(featured_public_signals),
+            "xSignalAll": len(public_ranked_signals),
+        },
+    }
+
+    if email_ranked_items:
+        packet, final_summary = _packet_summary(email_ranked_items)
         if observer is not None:
             observer.record_perplexity_final_selection(packet)
         perplexity_count, official_signal_count, legacy_count, provider_breakdown = (
-            _provider_counts(items)
+            _provider_counts(email_ranked_items)
         )
         logger.info(
             "최종 뉴스 구성은 Perplexity %s건, 공식 시그널 %s건, legacy %s건이었고 도메인 %s개, 토픽 %s개, provider 비중 %s로 정리됐어요.",
@@ -386,6 +439,6 @@ def build_news_packet(
                 allow_broad_fallback=allow_broad_fallback,
                 provider_breakdown=provider_breakdown,
             )
-        return packet, topic_summaries, x_signals
+        return packet, topic_summaries, x_signals, public_context
 
-    return _news_items_to_packet(items), topic_summaries, x_signals
+    return _news_items_to_packet(email_ranked_items), topic_summaries, x_signals, public_context

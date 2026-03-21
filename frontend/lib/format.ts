@@ -45,3 +45,7 @@ export function qualityLabel(value: "ok" | "degraded" | "critical"): string {
   }
   return "정상 수집";
 }
+
+export function displayHeadline(value: string): string {
+  return value.replace(/^[\s\-–—•●▪◦①-⑳0-9.]+/, "").trim();
+}

@@ -63,8 +63,10 @@ https://<R2_PUBLIC_BASE_URL>/briefs/2026-03-21.json
   "topicSummaries": [],
   "techStocks": [],
   "bitcoin": {},
-  "xSignals": [],
-  "news": []
+  "featuredXSignals": [],
+  "allXSignals": [],
+  "featuredNews": [],
+  "allNews": []
 }
 ```
 
@@ -82,7 +84,19 @@ https://<R2_PUBLIC_BASE_URL>/briefs/2026-03-21.json
   "date": "2026-03-21",
   "generatedAt": "2026-03-21T00:18:00Z",
   "dataQuality": "ok",
-  "qualityNotes": []
+  "qualityNotes": [],
+  "displayHeadline": "오늘은 관망 국면입니다.",
+  "sourceCounts": {
+    "newsCandidates": 18,
+    "newsRanked": 12,
+    "newsFeatured": 5,
+    "newsAll": 12,
+    "xSignalCandidates": 8,
+    "xSignalRanked": 8,
+    "xSignalFeatured": 5,
+    "xSignalAll": 8
+  },
+  "translationStatus": "ok"
 }
 ```
 
@@ -92,6 +106,9 @@ https://<R2_PUBLIC_BASE_URL>/briefs/2026-03-21.json
 | `meta.generatedAt` | `string` | 예 | ISO8601 |
 | `meta.dataQuality` | `"ok" \| "degraded" \| "critical"` | 예 | 품질 배지 |
 | `meta.qualityNotes` | `string[]` | 예 | 품질 경고 목록 |
+| `meta.displayHeadline` | `string` | 예 | 목록과 hero용 정리 headline |
+| `meta.sourceCounts` | `object` | 예 | public 후보/featured/full 개수 추적 |
+| `meta.translationStatus` | `"ok" \| "partial" \| "failed"` | 예 | 공개 텍스트 번역 상태 |
 
 ### `marketSnapshot`
 
@@ -168,7 +185,9 @@ https://<R2_PUBLIC_BASE_URL>/briefs/2026-03-21.json
 ```json
 {
   "headline": "오늘은 관망 국면입니다.",
-  "body": "오늘은 관망 국면입니다.\n\n금리 상방 압력이..."
+  "body": "오늘은 관망 국면입니다.\n\n금리 상방 압력이...",
+  "summaryLead": "장기 금리가 다시 올라 위험자산의 밸류에이션 부담이 커졌습니다.",
+  "summarySupport": "반도체 중심으로 선별 강세가 이어질 수 있습니다."
 }
 ```
 
@@ -176,11 +195,14 @@ https://<R2_PUBLIC_BASE_URL>/briefs/2026-03-21.json
 |---|---|---:|---|
 | `headline` | `string` | 예 | hero headline |
 | `body` | `string` | 예 | 본문 markdown |
+| `summaryLead` | `string` | 예 | 홈 판단 카드의 첫 요약 |
+| `summarySupport` | `string \| null` | 예 | 홈 판단 카드의 보조 요약 |
 
 권장:
 
 - `headline`은 한 줄 결론
-- `body`는 최종 브리핑 markdown 전체
+- `body`는 상세에서 읽는 정제된 최종 브리핑 markdown
+- 홈은 `headline + summaryLead + summarySupport`만 사용
 
 ## `topicSummaries`
 
@@ -291,7 +313,7 @@ https://<R2_PUBLIC_BASE_URL>/briefs/2026-03-21.json
 - 현재 공개 프론트는 **총 보유량**과 **총 AUM**만 전면 노출합니다.
 - stale 추정치, 환산치, 순유입 추정값은 공개 JSON에 넣지 않는 편이 맞습니다.
 
-## `xSignals`
+## `featuredXSignals` / `allXSignals`
 
 ```json
 [
@@ -313,18 +335,21 @@ null
 
 | 경로 | 타입 | 필수 | 비고 |
 |---|---|---:|---|
-| `xSignals` | `XSignal[] \| null` | 예 | 없으면 `null` |
+| `featuredXSignals` | `XSignal[] \| null` | 예 | 홈 노출용 최대 5건 |
+| `allXSignals` | `XSignal[] \| null` | 예 | 상세 노출용 최대 12건 |
 | `id` | `string` | 조건부 | 리스트 key |
 | `postedAt` | `string` | 조건부 | ISO8601 |
 | `impact` | `string` | 조건부 | 시장 영향 |
 | `sentiment` | `"bullish" \| "bearish" \| "neutral"` | 조건부 | 톤 |
-| `content` | `string` | 조건부 | 원문 요약 |
+| `content` | `string` | 조건부 | 한국어 우선 공개 요약 |
+| `rawContent` | `string \| null` | 조건부 | 상세에서만 보조 노출할 영어 원문 |
 
 중요:
 
-- 현재 화면은 `xSignals === null` 또는 빈 배열이면 섹션을 숨깁니다.
+- 현재 화면은 `featuredXSignals === null` 또는 빈 배열이면 섹션을 숨깁니다.
+- 홈은 `featuredXSignals`만, 상세는 `allXSignals`를 사용합니다.
 
-## `news`
+## `featuredNews` / `allNews`
 
 ```json
 [
@@ -334,6 +359,8 @@ null
     "category": "macro",
     "title": "연준 위원 발언 이후 금리 경계가 다시 강해졌습니다.",
     "interpretation": "한국 투자자 기준으로 성장주 할인율 부담이 다시 커질 수 있습니다.",
+    "summaryKo": "고금리 환경이 성장주 할인율 부담을 키웁니다.",
+    "rawTitle": null,
     "source": "Reuters",
     "sourceTier": "tier1",
     "url": "https://...",
@@ -345,11 +372,15 @@ null
 
 | 경로 | 타입 | 필수 | 비고 |
 |---|---|---:|---|
+| `featuredNews` | `NewsItem[]` | 예 | 홈 노출용 최대 5건 |
+| `allNews` | `NewsItem[]` | 예 | 상세 노출용 최대 12건 |
 | `id` | `string` | 예 | 리스트 key |
 | `publishedAt` | `string` | 예 | ISO8601 |
 | `category` | `"macro" \| "bigtech" \| "bitcoin" \| "us-stocks"` | 예 | 고정 enum |
-| `title` | `string` | 예 | 한국어 제목 |
-| `interpretation` | `string \| null` | 예 | 시장 의미 |
+| `title` | `string` | 예 | 한국어 우선 headline |
+| `interpretation` | `string \| null` | 예 | 한국어 한 줄 해석 |
+| `summaryKo` | `string \| null` | 예 | 홈/상세 공통 표시용 한국어 제목 |
+| `rawTitle` | `string \| null` | 예 | 영어 원문 제목 보존용 |
 | `source` | `string` | 예 | 브랜드/출처명 |
 | `sourceTier` | `"tier1" \| "standard"` | 예 | 중요도 |
 | `url` | `string` | 예 | 원문 링크 |
@@ -358,9 +389,10 @@ null
 
 권장:
 
-- 최소 3건 이상
-- `title`은 한국어
-- `interpretation`은 가능한 한 채움
+- `featuredNews`는 5건
+- `allNews`는 최대 12건
+- 기본 표시는 `summaryKo` 우선
+- 영어 원문은 `rawTitle`로 분리하고 상세에서만 보조 노출
 
 ## 프론트에서 실제로 안 쓰는 이메일용 값
 
@@ -381,8 +413,10 @@ null
 - `topicSummaries`
 - `techStocks`
 - `bitcoin`
-- `xSignals`
-- `news`
+- `featuredXSignals`
+- `allXSignals`
+- `featuredNews`
+- `allNews`
 
 즉, R2에 올릴 공개 JSON은 **이메일 packet dump**가 아니라 **프론트 계약에 맞춘 별도 산출물**이어야 합니다.
 
@@ -405,9 +439,10 @@ briefs/YYYY-MM-DD.json
 6. `brief.topicSummaries`
 7. `brief.techStocks`
 8. `brief.bitcoin`
-9. `brief.news`
+9. `brief.featuredNews`
+10. `brief.allNews`
 
-`xSignals`는 `null` 허용입니다.
+`featuredXSignals`, `allXSignals`는 `null` 허용입니다.
 
 ## 실제 검증 기준
 

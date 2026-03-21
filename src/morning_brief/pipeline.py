@@ -41,6 +41,7 @@ def run_pipeline(settings: Settings) -> str:
     pipeline_started_at = time.perf_counter()
     market_packet: dict = {}
     news_packet: list[dict] = []
+    public_context: dict = {}
     packet: dict = {}
     briefing = ""
     output_path = None
@@ -65,7 +66,7 @@ def run_pipeline(settings: Settings) -> str:
                     "market_keywords_extracted",
                     keywords=market_keywords,
                 )
-            news_packet, topic_summaries, x_signals = build_news_packet(
+            news_packet, topic_summaries, x_signals, public_context = build_news_packet(
                 settings=settings,
                 observer=observer,
                 keywords_by_topic=keywords_by_topic,
@@ -170,6 +171,7 @@ def run_pipeline(settings: Settings) -> str:
             run_at=now,
             settings=settings,
             observer=observer,
+            public_context=public_context,
         )
 
         subject = f"SOVEREIGN BRIEF ({now.strftime('%Y-%m-%d')})"

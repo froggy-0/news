@@ -1,16 +1,5 @@
 import { Reveal } from "@/components/ui/Reveal";
-
-function summarizeBody(body: string): { lead: string; support: string | null } {
-  const lines = body
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith("##") && !line.startsWith("- "));
-
-  return {
-    lead: lines[0] ?? "시장 핵심 맥락을 한 줄로 먼저 정리합니다.",
-    support: lines[1] ?? null,
-  };
-}
+import { displayHeadline, formatIssueTime } from "@/lib/format";
 
 function postureTone(headline: string): {
   posture: string;
@@ -40,15 +29,17 @@ function postureTone(headline: string): {
 
 export function JudgmentBlock({
   headline,
-  body,
+  summaryLead,
+  summarySupport,
   generatedAt,
 }: {
   headline: string;
-  body: string;
+  summaryLead: string;
+  summarySupport: string | null;
   generatedAt: string;
 }) {
-  const summary = summarizeBody(body);
-  const tone = postureTone(headline);
+  const cleanHeadline = displayHeadline(headline);
+  const tone = postureTone(cleanHeadline);
 
   return (
     <Reveal className="hero-judgment-shell">
@@ -56,10 +47,10 @@ export function JudgmentBlock({
         <div className="space-y-6">
           <div className="space-y-3">
             <p className="section-title">오늘의 판단</p>
-            <h2 className="display-headline display-headline-sm">{headline}</h2>
+            <h2 className="display-headline display-headline-sm">{cleanHeadline}</h2>
           </div>
-          <p className="hero-summary-copy">{summary.lead}</p>
-          {summary.support ? <p className="hero-support-note">{summary.support}</p> : null}
+          <p className="hero-summary-copy">{summaryLead}</p>
+          {summarySupport ? <p className="hero-support-note">{summarySupport}</p> : null}
         </div>
 
         <div className="posture-shell">
@@ -81,7 +72,7 @@ export function JudgmentBlock({
               <span className="posture-value posture-muted">{tone.bias}</span>
             </div>
             <div className="posture-divider" />
-            <p className="posture-meta">발행 · {generatedAt}</p>
+            <p className="posture-meta">발행 · {formatIssueTime(generatedAt)} KST</p>
           </div>
         </div>
       </div>

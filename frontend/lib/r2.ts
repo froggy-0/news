@@ -7,6 +7,11 @@ import type { BriefData, BriefIndex } from "@schema/brief.types";
 import { parseBriefData, parseBriefIndex } from "./brief-schema";
 
 const fixtureDir = path.join(process.cwd(), "fixtures");
+const requestVersion =
+  process.env.BRIEF_DATA_BUILD_ID ??
+  process.env.GITHUB_SHA ??
+  process.env.VERCEL_GIT_COMMIT_SHA ??
+  `local-${Date.now()}`;
 
 async function readFixture<T>(name: string): Promise<T> {
   const fullPath = path.join(fixtureDir, name);
@@ -15,12 +20,15 @@ async function readFixture<T>(name: string): Promise<T> {
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, {
+  const requestUrl = new URL(url);
+  requestUrl.searchParams.set("_build", requestVersion);
+
+  const response = await fetch(requestUrl, {
     cache: "force-cache",
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch ${url}: ${response.status}`);
+    throw new Error(`Failed to fetch ${requestUrl}: ${response.status}`);
   }
 
   return (await response.json()) as T;
