@@ -191,14 +191,7 @@ jobs:
           latest_date="unavailable"
           if [ -f outputs/public/index.json ]; then
             latest_date="$(
-              python3 - <<'PY'
-              import json
-              from pathlib import Path
-
-              data = json.loads(Path("outputs/public/index.json").read_text(encoding="utf-8"))
-              dates = data.get("dates") or []
-              print(dates[0] if dates else "unavailable")
-              PY
+              python3 -c 'import json; from pathlib import Path; data = json.loads(Path("outputs/public/index.json").read_text(encoding="utf-8")); dates = data.get("dates") or []; print(dates[0] if dates else "unavailable")'
             )"
           fi
 
@@ -330,16 +323,7 @@ jobs:
           done
 
           latest_date="$(
-            python3 - <<'PY'
-            import json
-            from pathlib import Path
-
-            data = json.loads(Path("/tmp/public-index.json").read_text(encoding="utf-8"))
-            dates = data.get("dates") or []
-            if not dates:
-                raise SystemExit("index.json does not contain any dates")
-            print(dates[0])
-            PY
+            python3 -c 'import json; from pathlib import Path; data = json.loads(Path("/tmp/public-index.json").read_text(encoding="utf-8")); dates = data.get("dates") or []; assert dates, "index.json does not contain any dates"; print(dates[0])'
           )"
 
           brief_url="${base_url}/briefs/${latest_date}.json"

@@ -126,16 +126,7 @@ jobs:
           done
 
           latest_date="$(
-            python3 - <<'PY'
-            import json
-            from pathlib import Path
-
-            data = json.loads(Path("/tmp/frontend-pages-index.json").read_text(encoding="utf-8"))
-            dates = data.get("dates") or []
-            if not dates:
-                raise SystemExit("index.json does not contain any dates")
-            print(dates[0])
-            PY
+            python3 -c 'import json; from pathlib import Path; data = json.loads(Path("/tmp/frontend-pages-index.json").read_text(encoding="utf-8")); dates = data.get("dates") or []; assert dates, "index.json does not contain any dates"; print(dates[0])'
           )"
 
           brief_url="${base_url}/briefs/${latest_date}.json"
