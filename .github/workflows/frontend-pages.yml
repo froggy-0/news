@@ -2,9 +2,30 @@ name: Frontend Pages Deploy
 
 on:
   workflow_dispatch:
+    inputs:
+      git_ref:
+        description: "배포할 브랜치명 또는 커밋 SHA. 비우면 현재 브랜치 HEAD를 사용합니다."
+        required: false
+        type: string
+      deploy_target:
+        description: "Preview 배포인지 production 배포인지 선택합니다."
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - production
+      preview_branch:
+        description: "Preview 배포용 branch alias. 비우면 ref 이름을 slug로 사용합니다."
+        required: false
+        type: string
+      r2_base_url:
+        description: "공개 R2 base URL override. 비우면 repo variable 값을 사용합니다."
+        required: false
+        type: string
 
 concurrency:
-  group: frontend-pages-${{ github.ref_name }}
+  group: frontend-pages-${{ github.event.inputs.deploy_target || 'preview' }}-${{ github.event.inputs.git_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -18,17 +39,44 @@ jobs:
         id: deploy-ref
         shell: bash
         run: |
-          echo "git_ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          echo "deploy_branch=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          git_ref_input="${{ github.event.inputs.git_ref }}"
+          preview_branch_input="${{ github.event.inputs.preview_branch }}"
+          deploy_target="${{ github.event.inputs.deploy_target }}"
+
+          if [ -n "${git_ref_input}" ]; then
+            git_ref="${git_ref_input}"
+            ref_label="${git_ref_input}"
+          else
+            git_ref="${GITHUB_SHA}"
+            ref_label="${GITHUB_REF_NAME}"
+          fi
+
+          branch_source="${preview_branch_input:-$ref_label}"
+          branch_slug="$(printf '%s' "${branch_source}" | tr '/' '-' | tr '[:space:]' '-')"
+
+          echo "git_ref=${git_ref}" >> "$GITHUB_OUTPUT"
+          echo "ref_label=${ref_label}" >> "$GITHUB_OUTPUT"
+          echo "deploy_target=${deploy_target}" >> "$GITHUB_OUTPUT"
+          echo "preview_branch=${branch_slug}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve public R2 URL
+        id: public-url
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.r2_base_url }}" ]; then
+            echo "value=${{ github.event.inputs.r2_base_url }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ vars.NEXT_PUBLIC_R2_BASE_URL }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Validate deployment settings
-        id: validate
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_PAGES_PROJECT_NAME: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
-          NEXT_PUBLIC_R2_BASE_URL: ${{ vars.NEXT_PUBLIC_R2_BASE_URL }}
+          NEXT_PUBLIC_R2_BASE_URL: ${{ steps.public-url.outputs.value }}
         run: |
           missing=()
           for key in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_PAGES_PROJECT_NAME NEXT_PUBLIC_R2_BASE_URL; do
@@ -38,45 +86,121 @@ jobs:
           done
 
           if [ "${#missing[@]}" -gt 0 ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "missing=${missing[*]}" >> "$GITHUB_OUTPUT"
-            echo "Skipping frontend deploy because required settings are missing: ${missing[*]}"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Missing required deployment settings: ${missing[*]}" >&2
+            exit 1
           fi
 
       - name: Checkout
-        if: steps.validate.outputs.skip != 'true'
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
           ref: ${{ steps.deploy-ref.outputs.git_ref }}
 
       - name: Setup Node
-        if: steps.validate.outputs.skip != 'true'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      - name: Wait for public brief availability
+        id: public-brief
+        shell: bash
+        env:
+          NEXT_PUBLIC_R2_BASE_URL: ${{ steps.public-url.outputs.value }}
+        run: |
+          set -euo pipefail
+          base_url="${NEXT_PUBLIC_R2_BASE_URL%/}"
+          index_url="${base_url}/index.json"
+
+          for attempt in $(seq 1 10); do
+            status="$(curl -sS -o /tmp/frontend-pages-index.json -w '%{http_code}' "${index_url}" || true)"
+            if [ "${status}" = "200" ]; then
+              break
+            fi
+            if [ "${attempt}" -eq 10 ]; then
+              echo "Timed out waiting for ${index_url}" >&2
+              exit 1
+            fi
+            sleep 6
+          done
+
+          latest_date="$(
+            python3 - <<'PY'
+            import json
+            from pathlib import Path
+
+            data = json.loads(Path("/tmp/frontend-pages-index.json").read_text(encoding="utf-8"))
+            dates = data.get("dates") or []
+            if not dates:
+                raise SystemExit("index.json does not contain any dates")
+            print(dates[0])
+            PY
+          )"
+
+          brief_url="${base_url}/briefs/${latest_date}.json"
+          for attempt in $(seq 1 10); do
+            status="$(curl -sS -o /tmp/frontend-pages-brief.json -w '%{http_code}' "${brief_url}" || true)"
+            if [ "${status}" = "200" ]; then
+              break
+            fi
+            if [ "${attempt}" -eq 10 ]; then
+              echo "Timed out waiting for ${brief_url}" >&2
+              exit 1
+            fi
+            sleep 6
+          done
+
+          echo "latest_date=${latest_date}" >> "$GITHUB_OUTPUT"
+          echo "index_url=${index_url}" >> "$GITHUB_OUTPUT"
+          echo "brief_url=${brief_url}" >> "$GITHUB_OUTPUT"
+
       - name: Install frontend dependencies
-        if: steps.validate.outputs.skip != 'true'
         working-directory: frontend
         run: npm ci
 
       - name: Build static frontend
-        if: steps.validate.outputs.skip != 'true'
         working-directory: frontend
         run: npm run build
         env:
-          NEXT_PUBLIC_R2_BASE_URL: ${{ vars.NEXT_PUBLIC_R2_BASE_URL }}
+          NEXT_PUBLIC_R2_BASE_URL: ${{ steps.public-url.outputs.value }}
 
-      - name: Deploy to Cloudflare Pages
-        if: steps.validate.outputs.skip != 'true'
+      - name: Deploy preview to Cloudflare Pages
+        if: steps.deploy-ref.outputs.deploy_target == 'preview'
         run: npx wrangler@4 pages deploy frontend/out --project-name="$CLOUDFLARE_PAGES_PROJECT_NAME" --branch="$DEPLOY_BRANCH"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_PAGES_PROJECT_NAME: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
-          DEPLOY_BRANCH: ${{ steps.deploy-ref.outputs.deploy_branch }}
+          DEPLOY_BRANCH: ${{ steps.deploy-ref.outputs.preview_branch }}
+
+      - name: Deploy production to Cloudflare Pages
+        if: steps.deploy-ref.outputs.deploy_target == 'production'
+        run: npx wrangler@4 pages deploy frontend/out --project-name="$CLOUDFLARE_PAGES_PROJECT_NAME"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_PAGES_PROJECT_NAME: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
+
+      - name: Summarize frontend deploy
+        shell: bash
+        env:
+          CLOUDFLARE_PAGES_PROJECT_NAME: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
+          NEXT_PUBLIC_R2_BASE_URL: ${{ steps.public-url.outputs.value }}
+        run: |
+          if [ "${{ steps.deploy-ref.outputs.deploy_target }}" = "preview" ]; then
+            deploy_url="https://${{ steps.deploy-ref.outputs.preview_branch }}.${CLOUDFLARE_PAGES_PROJECT_NAME}.pages.dev"
+          else
+            deploy_url="https://${CLOUDFLARE_PAGES_PROJECT_NAME}.pages.dev"
+          fi
+
+          {
+            echo "## Frontend redeploy"
+            echo "- Git ref: \`${{ steps.deploy-ref.outputs.git_ref }}\`"
+            echo "- Ref label: \`${{ steps.deploy-ref.outputs.ref_label }}\`"
+            echo "- Deploy target: \`${{ steps.deploy-ref.outputs.deploy_target }}\`"
+            echo "- Preview branch: \`${{ steps.deploy-ref.outputs.preview_branch }}\`"
+            echo "- Pages URL: ${deploy_url}"
+            echo "- R2 public URL: \`${NEXT_PUBLIC_R2_BASE_URL}\`"
+            echo "- Latest public brief date: \`${{ steps.public-brief.outputs.latest_date }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
