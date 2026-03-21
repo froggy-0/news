@@ -16,9 +16,9 @@ test("index fixture matches contract", async () => {
   assert.equal(index.dates.length, 3);
 });
 
-test("latest fixture matches contract", async () => {
-  const brief = parseBriefData(await loadJson("latest.json"));
-  assert.equal(brief.meta.dataQuality, "ok");
+test("dated brief fixture matches contract", async () => {
+  const brief = parseBriefData(await loadJson("2026-03-20.json"));
+  assert.equal(brief.meta.dataQuality, "degraded");
   assert.ok(brief.marketSnapshot.items.length > 0);
   assert.ok(brief.news.length > 0);
 });

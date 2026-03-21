@@ -53,6 +53,10 @@ class Settings:
     newsapi_key: str
     max_news_items: int
     output_dir: Path
+    r2_public_bucket: str
+    r2_s3_endpoint: str
+    r2_access_key_id: str
+    r2_secret_access_key: str
     send_email: bool
 
 
@@ -183,5 +187,9 @@ def load_settings() -> Settings:
         newsapi_key=os.getenv("NEWSAPI_KEY", "").strip(),
         max_news_items=_env_bounded_int("MAX_NEWS_ITEMS", default=5, minimum=3, maximum=5),
         output_dir=output_dir,
+        r2_public_bucket=os.getenv("R2_PUBLIC_BUCKET", "").strip(),
+        r2_s3_endpoint=os.getenv("R2_S3_ENDPOINT", "").strip(),
+        r2_access_key_id=os.getenv("R2_ACCESS_KEY_ID", "").strip(),
+        r2_secret_access_key=os.getenv("R2_SECRET_ACCESS_KEY", "").strip(),
         send_email=_env_bool("SEND_EMAIL", True),
     )

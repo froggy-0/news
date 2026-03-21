@@ -39,11 +39,12 @@ export const fetchIndex = cache(async (): Promise<BriefIndex> => {
 });
 
 export const fetchLatest = cache(async (): Promise<BriefData> => {
-  const baseUrl = publicBaseUrl();
-  const payload = baseUrl
-    ? await fetchJson<unknown>(`${baseUrl.replace(/\/$/, "")}/briefs/latest.json`)
-    : await readFixture<unknown>("latest.json");
-  return parseBriefData(payload);
+  const index = await fetchIndex();
+  const latestDate = index.dates[0];
+  if (!latestDate) {
+    throw new Error("index.json must include at least one date");
+  }
+  return fetchBriefByDate(latestDate);
 });
 
 export const fetchBriefByDate = cache(async (date: string): Promise<BriefData> => {

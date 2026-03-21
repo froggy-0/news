@@ -1,0 +1,93 @@
+name: Frontend Pages Deploy
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows:
+      - Morning Market Brief
+    types:
+      - completed
+
+concurrency:
+  group: frontend-pages-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Resolve deploy ref
+        id: deploy-ref
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "git_ref=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+            echo "deploy_branch=${{ github.event.workflow_run.head_branch }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "git_ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            echo "deploy_branch=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate deployment settings
+        id: validate
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_PAGES_PROJECT_NAME: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
+          NEXT_PUBLIC_R2_BASE_URL: ${{ vars.NEXT_PUBLIC_R2_BASE_URL }}
+        run: |
+          missing=()
+          for key in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_PAGES_PROJECT_NAME NEXT_PUBLIC_R2_BASE_URL; do
+            if [ -z "${!key:-}" ]; then
+              missing+=("$key")
+            fi
+          done
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "missing=${missing[*]}" >> "$GITHUB_OUTPUT"
+            echo "Skipping frontend deploy because required settings are missing: ${missing[*]}"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.validate.outputs.skip != 'true'
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          ref: ${{ steps.deploy-ref.outputs.git_ref }}
+
+      - name: Setup Node
+        if: steps.validate.outputs.skip != 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        if: steps.validate.outputs.skip != 'true'
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build static frontend
+        if: steps.validate.outputs.skip != 'true'
+        working-directory: frontend
+        run: npm run build
+        env:
+          NEXT_PUBLIC_R2_BASE_URL: ${{ vars.NEXT_PUBLIC_R2_BASE_URL }}
+
+      - name: Deploy to Cloudflare Pages
+        if: steps.validate.outputs.skip != 'true'
+        run: npx wrangler@4 pages deploy frontend/out --project-name="$CLOUDFLARE_PAGES_PROJECT_NAME" --branch="$DEPLOY_BRANCH"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_PAGES_PROJECT_NAME: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
+          DEPLOY_BRANCH: ${{ steps.deploy-ref.outputs.deploy_branch }}

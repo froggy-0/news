@@ -160,6 +160,10 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.0-flash' }}
           NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
+          R2_PUBLIC_BUCKET: ${{ vars.R2_PUBLIC_BUCKET || '' }}
+          R2_S3_ENDPOINT: ${{ vars.R2_S3_ENDPOINT || '' }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID || '' }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY || '' }}
           GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
           GMAIL_RECIPIENT: ${{ secrets.GMAIL_RECIPIENT }}
           GMAIL_CREDENTIALS_FILE: credentials.json
@@ -205,6 +209,7 @@ jobs:
           name: morning-brief-artifacts
           path: |
             outputs/*.md
+            outputs/public/**/*.json
             outputs/observability/*.json
             run.log
           if-no-files-found: warn

@@ -101,3 +101,17 @@ def test_openai_defaults_use_snapshot_model_and_prompt_version(monkeypatch):
     assert settings.openai_brief_validation_model == DEFAULT_OPENAI_MODEL
     assert settings.openai_web_search_model == DEFAULT_OPENAI_MODEL
     assert settings.prompt_template_version == DEFAULT_PROMPT_TEMPLATE_VERSION
+
+
+def test_r2_public_settings_loaded(monkeypatch):
+    monkeypatch.setenv("R2_PUBLIC_BUCKET", "brief-public")
+    monkeypatch.setenv("R2_S3_ENDPOINT", "https://example.r2.cloudflarestorage.com")
+    monkeypatch.setenv("R2_ACCESS_KEY_ID", "key-id")
+    monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "secret")
+
+    settings = load_settings()
+
+    assert settings.r2_public_bucket == "brief-public"
+    assert settings.r2_s3_endpoint == "https://example.r2.cloudflarestorage.com"
+    assert settings.r2_access_key_id == "key-id"
+    assert settings.r2_secret_access_key == "secret"

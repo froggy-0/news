@@ -47,6 +47,9 @@ function renderRssItem(brief) {
 
 async function writeStaticAssets() {
   const index = await readIndex();
+  if (!index.dates[0]) {
+    throw new Error("index.json must include at least one date");
+  }
   const briefs = await Promise.all(index.dates.map((date) => readBrief(date)));
   const rssItems = briefs.map((brief) => renderRssItem(brief)).join("");
   const rss = `<?xml version="1.0" encoding="UTF-8"?>

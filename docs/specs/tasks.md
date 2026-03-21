@@ -54,7 +54,7 @@
 - [x] 5. Stage 3: 데이터 계층 구현
   - [x] 5.1 `frontend/lib/r2.ts` 구현
     - `fetchLatest()`, `fetchBriefByDate()`, `fetchIndex()` 작성
-    - `latest.json`, 날짜별 JSON, `index.json` 읽기 경로를 고정
+    - `index.json` 과 날짜별 JSON 읽기 경로를 고정하고, 홈은 `index.json.dates[0]` 기준 최신 날짜를 선택한다
     - _Requirements: REQ-001, REQ-009, REQ-013_
   - [x] 5.2 `frontend/lib/brief-schema.ts` 구현
     - runtime validation 함수 작성
@@ -211,20 +211,21 @@
   - mock 전용 레이아웃이 아니라 실제 `BriefData` 와 품질 상태 규칙이 유지되어야 한다
   - _검증: 로컬 dev 서버 + Playwright 시각 확인 + 스크린샷 비교_
 
-- [ ] 15. Stage 8: CI/CD 및 배포 경로 연결
-  - [ ] 15.1 파이프라인 게시 포맷 정리
+- [x] 15. Stage 8: CI/CD 및 배포 경로 연결
+  - [x] 15.1 파이프라인 게시 포맷 정리
     - `src/morning_brief` 출력과 `schema/brief.types.ts` 계약 사이 차이를 정리
-    - 날짜별 JSON, 최신 JSON, 인덱스 JSON 작성 로직 연결
+    - 1차는 날짜별 JSON과 `index.json` 작성 로직을 연결하고, 홈은 `index.json` 최신 날짜를 사용한다
+    - 2차는 날짜 아래 시간별 run JSON 과 확장 `index.json` 으로 전환할 수 있게 경계를 남긴다
     - _Requirements: REQ-013, REQ-015_
-  - [ ] 15.2 프론트 배포 워크플로우 추가
-    - `frontend.yml` 작성
+  - [x] 15.2 프론트 배포 워크플로우 추가
+    - `frontend-pages.yml` 작성
     - JSON fetch → 정적 export 빌드 → `frontend/out` 기준 Cloudflare Pages 배포 순서 구성
     - _Requirements: REQ-015_
-  - [ ] 15.3 `morning-brief.yml` 과 프론트 배포 연결
+  - [x] 15.3 `morning-brief.yml` 과 프론트 배포 연결
     - 게시 완료 후 프론트 배포를 트리거하도록 연결
     - _Requirements: REQ-013, REQ-015_
 
-- [ ] 16. Stage 8 체크포인트
+- [x] 16. Stage 8 체크포인트
   - 데이터 게시와 프론트 배포가 논리적으로 이어져야 한다
   - 파이프라인 실패 시 기존 공개본 유지 전략이 문서와 코드에 일치해야 한다
   - _검증: 워크플로우 dry review, 필요 시 workflow_dispatch 테스트_

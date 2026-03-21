@@ -19,6 +19,7 @@ from morning_brief.emailer import GmailSender
 from morning_brief.llm_errors import BriefGenerationError
 from morning_brief.llm_provider_policy import provider_role_snapshot
 from morning_brief.observability import PipelineObserver
+from morning_brief.public_site import publish_public_brief
 from morning_brief.research_backfill import (
     _needs_web_search_backfill,
     backfill_news_with_web_search,
@@ -163,6 +164,13 @@ def run_pipeline(settings: Settings) -> str:
         output_path = settings.output_dir / file_name
         output_path.write_text(briefing, encoding="utf-8")
         logger.info("브리핑을 저장했어요: %s", output_path)
+        publish_public_brief(
+            packet=packet,
+            briefing=briefing,
+            run_at=now,
+            settings=settings,
+            observer=observer,
+        )
 
         subject = f"SOVEREIGN BRIEF ({now.strftime('%Y-%m-%d')})"
         if quality["status"] == "critical":

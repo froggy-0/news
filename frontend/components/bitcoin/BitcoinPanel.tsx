@@ -108,19 +108,34 @@ export function BitcoinPanel({ bitcoin }: { bitcoin: BitcoinSection }) {
                   <p className="section-title">보유량</p>
                   <p className="section-title text-right">AUM</p>
                 </div>
-                {etf.issuers.map((issuer) => (
-                  <a
-                    key={issuer.name}
-                    href={issuer.sourceUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="grid grid-cols-[0.75fr_1fr_1fr] gap-3 border-t border-white/8 px-4 py-4 first:border-t-0 transition hover:bg-white/[0.04]"
-                  >
-                    <p className="font-mono text-[11px] tracking-[0.18em] text-[var(--text-primary)] uppercase">{issuer.name}</p>
-                    <p className="numeric text-sm text-[var(--text-secondary)]">{issuer.holding ?? "확인 중"}</p>
-                    <p className="numeric text-right text-sm text-[var(--text-secondary)]">{issuer.aum ?? "확인 중"}</p>
-                  </a>
-                ))}
+                {etf.issuers.map((issuer) => {
+                  const rowClassName =
+                    "grid grid-cols-[0.75fr_1fr_1fr] gap-3 border-t border-white/8 px-4 py-4 first:border-t-0";
+
+                  if (!issuer.sourceUrl) {
+                    return (
+                      <div key={issuer.name} className={rowClassName}>
+                        <p className="font-mono text-[11px] tracking-[0.18em] text-[var(--text-primary)] uppercase">{issuer.name}</p>
+                        <p className="numeric text-sm text-[var(--text-secondary)]">{issuer.holding ?? "확인 중"}</p>
+                        <p className="numeric text-right text-sm text-[var(--text-secondary)]">{issuer.aum ?? "확인 중"}</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <a
+                      key={issuer.name}
+                      href={issuer.sourceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={`${rowClassName} transition hover:bg-white/[0.04]`}
+                    >
+                      <p className="font-mono text-[11px] tracking-[0.18em] text-[var(--text-primary)] uppercase">{issuer.name}</p>
+                      <p className="numeric text-sm text-[var(--text-secondary)]">{issuer.holding ?? "확인 중"}</p>
+                      <p className="numeric text-right text-sm text-[var(--text-secondary)]">{issuer.aum ?? "확인 중"}</p>
+                    </a>
+                  );
+                })}
               </div>
             ) : (
               <div className="mt-6">

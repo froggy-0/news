@@ -33,7 +33,8 @@
 - 파이프라인은 계속 `src/morning_brief` 를 사용한다.
 - 프론트는 `frontend/` 아래 Next.js App Router + `output: "export"` 구조를 유지한다.
 - JSON 계약은 `schema/brief.types.ts` 로 고정한다.
-- 파이프라인은 날짜별 JSON과 최신 JSON을 게시하고, 프론트는 그것을 읽어 정적 페이지를 빌드한다.
+- 파이프라인은 1차에서 `index.json` 과 날짜별 JSON을 게시하고, 프론트는 `index.json` 의 최신 날짜를 읽어 정적 페이지를 빌드한다.
+- 2차에서는 날짜 아래 시간별 run JSON 을 보존하는 구조로 확장한다.
 
 ---
 
@@ -54,7 +55,6 @@ morning-brief.yml
   → 파이프라인 실행
   → 브리핑/시장/뉴스 결과 생성
   → 날짜별 JSON 게시
-  → latest.json 갱신
   → index.json 갱신
   → frontend 빌드/배포 트리거
 ```
@@ -63,7 +63,6 @@ morning-brief.yml
 
 ```text
 briefs/
-  latest.json
   2026-03-21.json
   2026-03-20.json
 index.json
@@ -278,7 +277,7 @@ export interface BTCEtfIssuer {
 
 | 경로 | 역할 | 데이터 |
 | --- | --- | --- |
-| `/` | 최신 브리핑 랜딩 | `briefs/latest.json` |
+| `/` | 최신 브리핑 랜딩 | `index.json` → 최신 날짜 → `briefs/YYYY-MM-DD.json` |
 | `/archive` | 날짜 목록 | `index.json` |
 | `/archive/[date]` | 날짜별 상세 | `briefs/YYYY-MM-DD.json` |
 | `/rss.xml` | RSS 피드 | build 시 생성되는 정적 파일 |
@@ -334,6 +333,8 @@ export async function fetchBriefByDate(date: string): Promise<BriefData>
 export async function fetchIndex(): Promise<BriefIndex>
 ```
 
+- `fetchLatest()` 는 별도 `latest.json` 을 읽지 않고, `index.json.dates[0]` 을 사용해 최신 날짜 브리프를 조회한다.
+
 ### validation 유틸
 
 `frontend/lib/brief-schema.ts`
@@ -352,10 +353,10 @@ export async function fetchIndex(): Promise<BriefIndex>
   - 현재 파이프라인 실행 기준
   - 브리핑 생성, 메일 발송, 아티팩트 산출 담당
 
-### 추가될 워크플로우
+### 프론트 배포 워크플로우
 
-- `frontend.yml`
-  - R2 최신 JSON 및 인덱스 fetch
+- `frontend-pages.yml`
+  - 공개 `index.json` 및 날짜별 브리프 fetch
   - Next.js 정적 export 빌드
   - Cloudflare Pages 배포
 
@@ -375,7 +376,7 @@ export async function fetchIndex(): Promise<BriefIndex>
 
 ### 프론트 검증
 
-- 최신 JSON 렌더링
+- `index.json` 최신 날짜 기준 렌더링
 - `ok`, `degraded`, `critical` 상태별 표시 차이
 - null 데이터와 cached 데이터 렌더링
 - `/archive/[date]` 정적 경로 생성
@@ -395,5 +396,5 @@ export async function fetchIndex(): Promise<BriefIndex>
 
 1. `frontend/` 는 이미 Next.js 정적 export 구조로 전환되었다.
 2. 프론트 계약과 파이프라인 게시 JSON 의 1:1 정렬은 후속 Stage 에서 더 다듬는다.
-3. 현재 공개 워크플로우는 `morning-brief.yml` 하나이며, 프론트 배포 워크플로우는 아직 추가되지 않았다.
+3. 현재 공개 워크플로우는 `morning-brief.yml` 과 `frontend-pages.yml` 로 분리되어 있다.
 4. 구독/수신거부는 이번 범위에 포함되지 않는다.
