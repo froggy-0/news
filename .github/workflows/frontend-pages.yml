@@ -2,19 +2,13 @@ name: Frontend Pages Deploy
 
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows:
-      - Morning Market Brief
-    types:
-      - completed
 
 concurrency:
-  group: frontend-pages-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}
+  group: frontend-pages-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
   deploy:
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -24,13 +18,8 @@ jobs:
         id: deploy-ref
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            echo "git_ref=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
-            echo "deploy_branch=${{ github.event.workflow_run.head_branch }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "git_ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
-            echo "deploy_branch=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-          fi
+          echo "git_ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "deploy_branch=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
 
       - name: Validate deployment settings
         id: validate

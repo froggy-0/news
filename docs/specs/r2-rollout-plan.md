@@ -122,7 +122,8 @@ briefs/2026-03-20/0800.json
 
 #### GitHub Actions / 배포
 - 현재 `morning-brief.yml` 뒤에 공개 JSON 업로드 step을 추가합니다.
-- 업로드 성공 후 프론트 빌드/배포 workflow를 트리거합니다.
+- 현재 브랜치 검증에서는 `Morning Market Brief` 하나의 workflow 안에서 공개 JSON 업로드 뒤 Pages preview 배포까지 끝냅니다.
+- 별도 `frontend-pages.yml`은 수동 fallback 경로로만 남기고, 자동 연동은 사용하지 않습니다.
 - 1차는 같은 날짜 재실행 시 공개 브리프를 덮어씁니다.
 
 ### 2차: 시간별 버전 보존
