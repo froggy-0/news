@@ -1,14 +1,16 @@
 name: Frontend Pages Deploy
 
+run-name: Frontend redeploy · ${{ github.event.inputs.deploy_target || 'preview' }} · ${{ github.event.inputs.git_ref || github.ref_name }}
+
 on:
   workflow_dispatch:
     inputs:
       git_ref:
-        description: "배포할 브랜치명 또는 커밋 SHA. 비우면 현재 브랜치 HEAD를 사용합니다."
+        description: "프론트만 다시 배포할 브랜치명 또는 커밋 SHA. 비우면 실행한 브랜치 HEAD를 사용합니다."
         required: false
         type: string
       deploy_target:
-        description: "Preview 배포인지 production 배포인지 선택합니다."
+        description: "Pages preview 배포인지 production 배포인지 선택합니다."
         required: true
         default: preview
         type: choice
@@ -16,11 +18,11 @@ on:
           - preview
           - production
       preview_branch:
-        description: "Preview 배포용 branch alias. 비우면 ref 이름을 slug로 사용합니다."
+        description: "Preview URL에 쓸 branch alias. 비우면 ref 이름을 slug로 사용합니다."
         required: false
         type: string
       r2_base_url:
-        description: "공개 R2 base URL override. 비우면 repo variable 값을 사용합니다."
+        description: "현재 공개 JSON을 읽을 R2 base URL override. 비우면 repo variable 값을 사용합니다."
         required: false
         type: string
 
