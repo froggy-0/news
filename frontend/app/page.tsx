@@ -14,7 +14,7 @@ import { fetchLatest } from "@/lib/r2";
 
 export const metadata: Metadata = {
   title: "SOVEREIGN BRIEF",
-  description: "SOVEREIGN BRIEF는 미국 기술주와 비트코인 핵심 흐름을 한국 시간 아침 기준으로 빠르게 정리합니다.",
+  description: "SOVEREIGN BRIEF는 한국 시간 아침에 핵심 수치와 공식 시그널을 큐레이션해 오늘 장의 판단을 빠르게 돕습니다.",
 };
 
 export default async function HomePage() {
@@ -55,16 +55,16 @@ export default async function HomePage() {
           <section className="panel rounded-[32px] px-6 py-6 md:px-8">
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
               <div className="space-y-2">
-                <p className="section-title">전체 발행본</p>
+                <p className="section-title">오늘의 판단</p>
                 <p className="text-base leading-7 text-[var(--text-secondary)] md:text-lg">
-                  홈에서는 판단과 핵심 카드만 먼저 읽고, 전체 발행본은 상세 페이지에서 이어서 볼 수 있습니다.
+                  홈에서는 노이즈를 덜어낸 판단 카드부터 읽고, 전체 발행본은 상세 페이지에서 이어서 확인할 수 있습니다.
                 </p>
               </div>
               <Link
                 href={`/archive/${brief.meta.date}`}
                 className="inline-flex items-center justify-center rounded-full border border-[var(--accent-primary)]/35 bg-[var(--accent-primary)]/10 px-5 py-3 font-mono text-[11px] tracking-[0.18em] text-[var(--accent-primary)] transition hover:bg-[var(--accent-primary)]/18"
               >
-                전체 발행본 보기
+                오늘의 판단 열기 →
               </Link>
             </div>
           </section>

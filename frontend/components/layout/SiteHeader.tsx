@@ -53,8 +53,8 @@ export function SiteHeader({
             )}
           </div>
           <div className="top-time-block">
-            <p className="eyebrow">PUBLIC EDITION · KST 08:00</p>
-            <p className="numeric nav-time">{formatIssueTime(generatedAt)}</p>
+            <p className="eyebrow">PUBLIC EDITION</p>
+            <p className="numeric nav-time">{formatIssueTime(generatedAt)} KST</p>
           </div>
           <a className="hero-shortcut-link lg:hidden" href={isArchive ? "/" : "/archive"}>
             {isArchive ? "실시간 홈" : "발행 아카이브"}
@@ -76,7 +76,7 @@ export function SiteHeader({
 
         <div className="hero-copy">
           <p className="hero-kicker">
-            {isArchive ? "ARCHIVE · STORED EDITIONS" : "MACRO · TECH · CRYPTO · LIVE DESK"}
+            {isArchive ? "저장된 발행본 아카이브" : "노이즈는 우리가, 판단은 당신이"}
           </p>
           <h1 className="display-headline">
             {isArchive ? (
@@ -87,16 +87,16 @@ export function SiteHeader({
               </>
             ) : (
               <>
-                오늘 아침 시장을
+                아침 한 번으로
                 <br />
-                빠르게 읽는 터미널
+                오늘 장의 확신을
               </>
             )}
           </h1>
           <p className="hero-support">
             {isArchive
               ? "홈의 실시간 스트림 대신, 발행 시점 기준으로 저장된 판단과 뉴스 흐름을 다시 확인할 수 있습니다."
-              : "미국 기술주와 비트코인 흐름을 한국 시간 아침 기준으로 정리하고, 장전 판단에 필요한 수치와 근거를 한 화면에서 바로 읽게 합니다."}
+              : "소버린 브리핑은 FRED·X 공식 시그널·ETF 흐름을 한국 시간 아침에 한 화면으로 큐레이션합니다. 남는 건 당신의 판단뿐."}
           </p>
           {!isArchive ? (
             <div className="hero-shortcuts lg:hidden">
