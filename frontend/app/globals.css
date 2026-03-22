@@ -233,6 +233,8 @@ a {
   right: 0;
   z-index: 70;
   height: 32px;
+  display: flex;
+  align-items: center;
   overflow: hidden;
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(28, 27, 27, 0.88);
@@ -244,10 +246,8 @@ a {
   position: absolute;
   top: 0;
   left: 0;
-  display: inline-flex;
   min-width: max-content;
   height: 100%;
-  align-items: center;
   white-space: nowrap;
   animation: marquee 60s linear infinite;
   will-change: transform;
@@ -264,6 +264,7 @@ a {
   gap: 10px;
   padding: 7px 22px;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
+  line-height: 1;
   font-family:
     "IBM Plex Mono",
     monospace;
@@ -304,6 +305,8 @@ a {
 .ticker-mobile-scroll {
   position: absolute;
   inset: 0;
+  display: flex;
+  align-items: center;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -329,6 +332,7 @@ a {
   height: 100%;
   padding: 6px 14px;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
+  line-height: 1;
   font-family:
     "IBM Plex Mono",
     monospace;
@@ -787,15 +791,15 @@ a {
   }
 
   .ticker-marquee {
-    animation-duration: 34s;
+    display: none;
   }
 
   .top-ticker-shell {
-    height: 36px;
+    height: 38px;
   }
 
   .top-nav-shell {
-    top: 36px;
+    top: 38px;
   }
 
   .ticker-mobile-pill {
@@ -815,5 +819,10 @@ a {
   .ticker-mobile-pill .ticker-change,
   .ticker-mobile-pill .ticker-label {
     font-size: 8px;
+  }
+
+  .ticker-mobile-scroll {
+    display: flex;
+    align-items: center;
   }
 }
