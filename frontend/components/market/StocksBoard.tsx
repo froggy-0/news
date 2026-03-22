@@ -61,9 +61,17 @@ function changeMagnitude(change: string | null | undefined): number {
 
 function heatCellStyle(item: TickerItem): CSSProperties {
   const magnitude = Math.min(changeMagnitude(item.change), 3.5);
-  const strength = magnitude / 3.5;
+  return heatToneStyle(item.trend, magnitude, 3.5);
+}
 
-  if (item.trend === "up") {
+function heatToneStyle(
+  trend: "up" | "down" | "neutral" | null,
+  magnitude: number,
+  maxMagnitude: number,
+): CSSProperties {
+  const strength = Math.min(magnitude, maxMagnitude) / maxMagnitude;
+
+  if (trend === "up") {
     return {
       background: `linear-gradient(135deg, rgba(2, 230, 0, ${0.08 + strength * 0.26}), rgba(19, 19, 19, 0.92) 72%)`,
       borderColor: `rgba(2, 230, 0, ${0.18 + strength * 0.32})`,
@@ -71,7 +79,7 @@ function heatCellStyle(item: TickerItem): CSSProperties {
     };
   }
 
-  if (item.trend === "down") {
+  if (trend === "down") {
     return {
       background: `linear-gradient(135deg, rgba(248, 113, 113, ${0.08 + strength * 0.24}), rgba(19, 19, 19, 0.92) 72%)`,
       borderColor: `rgba(248, 113, 113, ${0.16 + strength * 0.28})`,
@@ -83,6 +91,10 @@ function heatCellStyle(item: TickerItem): CSSProperties {
     background: "linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(19, 19, 19, 0.92) 72%)",
     borderColor: "rgba(255, 255, 255, 0.08)",
   };
+}
+
+function equityCellStyle(stock: TechStock): CSSProperties {
+  return heatToneStyle(stock.trend, stock.absChangeNum ?? changeMagnitude(stock.change), 4);
 }
 
 function HeatCell({ item }: { item: TickerItem }) {
@@ -136,7 +148,10 @@ function MobileIndexCell({ item }: { item: TickerItem }) {
 
 function EquityCell({ stock }: { stock: TechStock }) {
   return (
-    <div className="rounded-[4px] border border-white/8 bg-white/[0.03] px-3 py-3 transition-transform duration-200 hover:scale-[1.02]">
+    <div
+      className="rounded-[4px] border px-3 py-3 transition-transform duration-200 hover:scale-[1.02]"
+      style={equityCellStyle(stock)}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] tracking-[0.18em] text-[var(--text-muted)]">
