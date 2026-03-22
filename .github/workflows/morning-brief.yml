@@ -187,7 +187,6 @@ jobs:
         env:
           NEXT_PUBLIC_R2_BASE_URL: ${{ vars.NEXT_PUBLIC_R2_BASE_URL || '' }}
         run: |
-          branch_slug="$(printf '%s' "${GITHUB_REF_NAME}" | tr '/' '-')"
           latest_date="unavailable"
           if [ -f outputs/public/index.json ]; then
             latest_date="$(
@@ -195,11 +194,17 @@ jobs:
             )"
           fi
 
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then
+            deploy_target="production"
+          else
+            deploy_target="preview"
+          fi
+
           {
             echo "## Public brief publish"
             echo "- Latest public brief date: \`${latest_date}\`"
             echo "- R2 public URL: \`${NEXT_PUBLIC_R2_BASE_URL:-not set}\`"
-            echo "- Pages preview branch: \`${branch_slug}\`"
+            echo "- Pages deploy target: \`${deploy_target}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Save BTC ETF snapshot cache
@@ -263,7 +268,7 @@ jobs:
           if [ "${#missing[@]}" -gt 0 ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "missing=${missing[*]}" >> "$GITHUB_OUTPUT"
-            echo "Skipping frontend preview deploy because required settings are missing: ${missing[*]}"
+            echo "Skipping frontend deploy because required settings are missing: ${missing[*]}"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
@@ -273,7 +278,7 @@ jobs:
         shell: bash
         run: |
           {
-            echo "## Frontend preview deploy"
+            echo "## Frontend deploy"
             echo "- Skipped because required settings are missing: \`${{ steps.validate.outputs.missing }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -291,13 +296,19 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Resolve preview branch slug
+      - name: Resolve deploy target
         if: steps.validate.outputs.skip != 'true'
-        id: preview-branch
+        id: deploy-target
         shell: bash
         run: |
-          branch_slug="$(printf '%s' "${GITHUB_REF_NAME}" | tr '/' '-')"
-          echo "branch_slug=${branch_slug}" >> "$GITHUB_OUTPUT"
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then
+            echo "target=production" >> "$GITHUB_OUTPUT"
+            echo "branch_slug=" >> "$GITHUB_OUTPUT"
+          else
+            branch_slug="$(printf '%s' "${GITHUB_REF_NAME}" | tr '/' '-')"
+            echo "target=preview" >> "$GITHUB_OUTPUT"
+            echo "branch_slug=${branch_slug}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Wait for public brief availability
         if: steps.validate.outputs.skip != 'true'
@@ -356,27 +367,45 @@ jobs:
           NEXT_PUBLIC_R2_BASE_URL: ${{ vars.NEXT_PUBLIC_R2_BASE_URL }}
 
       - name: Deploy preview to Cloudflare Pages
-        if: steps.validate.outputs.skip != 'true'
+        if: steps.validate.outputs.skip != 'true' && steps.deploy-target.outputs.target == 'preview'
         run: npx wrangler@4 pages deploy frontend/out --project-name="$CLOUDFLARE_PAGES_PROJECT_NAME" --branch="$DEPLOY_BRANCH" --commit-dirty=true --commit-message="Deploy $GITHUB_SHA"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_PAGES_PROJECT_NAME: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
-          DEPLOY_BRANCH: ${{ steps.preview-branch.outputs.branch_slug }}
+          DEPLOY_BRANCH: ${{ steps.deploy-target.outputs.branch_slug }}
 
-      - name: Summarize frontend preview deploy
+      - name: Deploy production to Cloudflare Pages
+        if: steps.validate.outputs.skip != 'true' && steps.deploy-target.outputs.target == 'production'
+        run: npx wrangler@4 pages deploy frontend/out --project-name="$CLOUDFLARE_PAGES_PROJECT_NAME" --commit-dirty=true --commit-message="Deploy $GITHUB_SHA"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_PAGES_PROJECT_NAME: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
+
+      - name: Summarize frontend deploy
         if: steps.validate.outputs.skip != 'true'
         shell: bash
         env:
           CLOUDFLARE_PAGES_PROJECT_NAME: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
           NEXT_PUBLIC_R2_BASE_URL: ${{ vars.NEXT_PUBLIC_R2_BASE_URL }}
         run: |
-          preview_url="https://${{ steps.preview-branch.outputs.branch_slug }}.${CLOUDFLARE_PAGES_PROJECT_NAME}.pages.dev"
+          if [ "${{ steps.deploy-target.outputs.target }}" = "preview" ]; then
+            deploy_url="https://${{ steps.deploy-target.outputs.branch_slug }}.${CLOUDFLARE_PAGES_PROJECT_NAME}.pages.dev"
+            deploy_mode="preview"
+          else
+            deploy_url="configured production domain"
+            deploy_mode="production"
+          fi
+
           {
-            echo "## Frontend preview deploy"
+            echo "## Frontend deploy"
             echo "- Pages project: \`${CLOUDFLARE_PAGES_PROJECT_NAME}\`"
-            echo "- Preview branch: \`${{ steps.preview-branch.outputs.branch_slug }}\`"
-            echo "- Preview URL: ${preview_url}"
+            echo "- Deploy mode: \`${deploy_mode}\`"
+            if [ "${deploy_mode}" = "preview" ]; then
+              echo "- Preview branch: \`${{ steps.deploy-target.outputs.branch_slug }}\`"
+            fi
+            echo "- Deploy URL: ${deploy_url}"
             echo "- R2 public URL: \`${NEXT_PUBLIC_R2_BASE_URL}\`"
             echo "- Latest public brief date: \`${{ steps.public-brief.outputs.latest_date }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
