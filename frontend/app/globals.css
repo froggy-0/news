@@ -243,6 +243,7 @@ a {
 }
 
 .ticker-marquee {
+  display: none;
   position: absolute;
   top: 0;
   left: 0;
@@ -336,6 +337,16 @@ a {
   font-family:
     "IBM Plex Mono",
     monospace;
+}
+
+@media (min-width: 769px) {
+  .ticker-marquee {
+    display: flex;
+  }
+
+  .ticker-mobile-scroll {
+    display: none;
+  }
 }
 
 .top-nav-shell {

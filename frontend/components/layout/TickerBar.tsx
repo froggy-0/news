@@ -4,7 +4,7 @@ export function TickerBar({ items }: { items: TickerItem[] }) {
   return (
     <section aria-label="시장 핵심 수치 티커">
       <div className="top-ticker-shell">
-        <div className="ticker-marquee hidden md:inline-flex">
+        <div className="ticker-marquee">
           {[false, true].map((hiddenDuplicate) => (
             <div key={String(hiddenDuplicate)} className="ticker-track" aria-hidden={hiddenDuplicate}>
               {items.map((item) => (
@@ -24,7 +24,7 @@ export function TickerBar({ items }: { items: TickerItem[] }) {
           ))}
         </div>
 
-        <div className="ticker-mobile-scroll md:hidden">
+        <div className="ticker-mobile-scroll">
           <div className="ticker-mobile-track">
             {items.map((item) => (
               <div key={item.symbol} className="ticker-mobile-pill">
