@@ -53,7 +53,6 @@ export function SiteHeader({
             )}
           </div>
           <div className="top-time-block">
-            <p className="eyebrow">PUBLIC EDITION</p>
             <p className="numeric nav-time">{formatIssueTime(generatedAt)} KST</p>
           </div>
           <a className="hero-shortcut-link lg:hidden" href={isArchive ? "/" : "/archive"}>

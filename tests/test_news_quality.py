@@ -311,6 +311,64 @@ def test_build_news_packet_preserves_perplexity_metadata(monkeypatch):
     assert packet[0]["citations"] == ["https://www.reuters.com/world/us/fed-keeps-markets-steady"]
 
 
+def test_filter_publish_news_drops_weak_candidates_and_below_minimum():
+    now = datetime.now(timezone.utc)
+    items = [
+        NewsItem(
+            title="Weak source item",
+            url="https://example.com/weak-item",
+            source="Example",
+            published_at=now,
+            why_it_matters="Weak source item",
+        ),
+        NewsItem(
+            title="Fed keeps options open",
+            url="https://www.reuters.com/world/us/fed-keeps-options-open",
+            source="Reuters",
+            published_at=now,
+            why_it_matters="Fed keeps options open",
+        ),
+    ]
+
+    kept, audit = news.filter_publish_news(items)
+
+    assert kept == []
+    assert audit["below_minimum"] is True
+    assert audit["dropped"]["blocked_domain"] == 1
+
+
+def test_filter_publish_news_keeps_preferred_domains_when_quality_is_sufficient():
+    now = datetime.now(timezone.utc)
+    items = [
+        NewsItem(
+            title="Fed keeps options open amid sticky inflation",
+            url="https://www.reuters.com/world/us/fed-keeps-options-open",
+            source="Reuters",
+            published_at=now,
+            why_it_matters="금리 경로를 읽는 데 도움이 됩니다.",
+        ),
+        NewsItem(
+            title="Nvidia highlights enterprise AI demand",
+            url="https://www.cnbc.com/2026/03/22/nvidia-highlights-enterprise-ai-demand.html",
+            source="CNBC",
+            published_at=now,
+            why_it_matters="반도체 수요에 대한 선행 신호입니다.",
+        ),
+        NewsItem(
+            title="Bitcoin ETF inflows stay positive",
+            url="https://www.coindesk.com/markets/2026/03/22/bitcoin-etf-inflows-stay-positive/",
+            source="CoinDesk",
+            published_at=now,
+            why_it_matters="기관 수요가 유지되고 있음을 시사합니다.",
+        ),
+    ]
+
+    kept, audit = news.filter_publish_news(items)
+
+    assert [item.source for item in kept] == ["Reuters", "CNBC", "CoinDesk"]
+    assert audit["below_minimum"] is False
+
+
 def test_build_news_packet_prefers_perplexity_search_over_sonar_news(monkeypatch):
     now = datetime.now(timezone.utc)
     monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")

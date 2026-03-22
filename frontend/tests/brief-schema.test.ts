@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { parseBriefData, parseBriefIndex } from "../lib/brief-schema";
+import { hasUsableHeadline } from "../lib/format";
 
 async function loadJson(name: string): Promise<unknown> {
   const fullPath = path.join(process.cwd(), "fixtures", name);
@@ -28,4 +29,10 @@ test("degraded fixture preserves quality notes", async () => {
   const brief = parseBriefData(await loadJson("degraded.json"));
   assert.equal(brief.meta.dataQuality, "degraded");
   assert.ok(brief.meta.qualityNotes.length > 0);
+});
+
+test("display headline helper rejects source labels and urls", () => {
+  assert.equal(hasUsableHeadline("참고 출처"), false);
+  assert.equal(hasUsableHeadline("https://www.reuters.com/world/us/fed-keeps-options-open"), false);
+  assert.equal(hasUsableHeadline("오늘은 관망 국면입니다."), true);
 });

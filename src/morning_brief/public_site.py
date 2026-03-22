@@ -60,6 +60,7 @@ _PUBLIC_ALL_X_LIMIT = 12
 _PUBLIC_TRANSLATION_BATCH_ITEMS = 6
 _PUBLIC_TRANSLATION_BATCH_CHARS = 1800
 _TRANSLATION_CACHE_FILE = "public_translation_cache.json"
+_MIN_PUBLIC_TICKER_ITEMS = 3
 
 
 @dataclass(frozen=True)
@@ -181,7 +182,21 @@ def build_public_brief(
         settings=settings,
         observer=observer,
     )
+    headline = _finalize_public_headline(
+        headline=headline,
+        summary_lead=summary_lead,
+        brief_body=brief_body,
+        run_at=run_at,
+    )
     display_headline = _display_headline(headline)
+    summary_lead, summary_support = _finalize_judgment_summary(
+        summary_lead=summary_lead,
+        summary_support=summary_support,
+        brief_body=brief_body,
+        headline=display_headline,
+    )
+    all_news = _filter_public_news_for_display(all_news)
+    all_x_signals = _filter_public_signals_for_display(all_x_signals)
     source_counts = _source_counts(
         public_context=public_context,
         all_news=all_news,
@@ -254,6 +269,10 @@ def _display_headline(text: str) -> str:
     return stripped or normalized
 
 
+def _factual_public_headline(run_at: datetime) -> str:
+    return f"{run_at.strftime('%Y-%m-%d')} 발행본"
+
+
 def _headline_excerpt(text: str) -> str:
     normalized = _normalize_public_text(text)
     if not normalized:
@@ -279,6 +298,64 @@ def _is_public_headline_candidate(text: str) -> bool:
     if lowered.startswith("참고 출처") or lowered.startswith("source:"):
         return False
     return True
+
+
+def _is_display_headline_usable(text: str) -> bool:
+    normalized = _display_headline(text)
+    return (
+        bool(normalized)
+        and _contains_korean(normalized)
+        and _is_public_headline_candidate(normalized)
+    )
+
+
+def _finalize_public_headline(
+    *,
+    headline: str,
+    summary_lead: str,
+    brief_body: str,
+    run_at: datetime,
+) -> str:
+    for candidate in (headline, summary_lead, *_body_paragraphs(brief_body)):
+        normalized = _normalize_public_text(candidate)
+        if _is_display_headline_usable(normalized):
+            return _display_headline(normalized)
+    return _factual_public_headline(run_at)
+
+
+def _finalize_judgment_summary(
+    *,
+    summary_lead: str,
+    summary_support: str | None,
+    brief_body: str,
+    headline: str,
+) -> tuple[str, str | None]:
+    candidates = [summary_lead]
+    if summary_support:
+        candidates.append(summary_support)
+    candidates.extend(_body_paragraphs(brief_body))
+
+    filtered: list[str] = []
+    for candidate in candidates:
+        normalized = _normalize_public_text(candidate)
+        if not normalized:
+            continue
+        if not _contains_korean(normalized):
+            continue
+        display = _display_headline(normalized)
+        if not display or display == headline:
+            continue
+        if not _is_public_headline_candidate(display):
+            continue
+        if display in filtered:
+            continue
+        filtered.append(display)
+
+    if not filtered:
+        return headline, None
+    lead = filtered[0]
+    support = filtered[1] if len(filtered) > 1 else None
+    return lead, support
 
 
 def _judgment_summary(
@@ -548,6 +625,8 @@ def _market_snapshot_items(packet: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
 
+    if len(items) < _MIN_PUBLIC_TICKER_ITEMS:
+        return []
     return items
 
 
@@ -720,17 +799,12 @@ def _source_counts(
         return {
             "newsCandidates": int(raw_counts.get("newsCandidates", len(all_news)) or 0),
             "newsRanked": int(raw_counts.get("newsRanked", len(all_news)) or 0),
-            "newsFeatured": int(
-                raw_counts.get("newsFeatured", min(len(all_news), _PUBLIC_FEATURED_NEWS_LIMIT)) or 0
-            ),
-            "newsAll": int(raw_counts.get("newsAll", len(all_news)) or 0),
+            "newsFeatured": min(len(all_news), _PUBLIC_FEATURED_NEWS_LIMIT),
+            "newsAll": len(all_news),
             "xSignalCandidates": int(raw_counts.get("xSignalCandidates", len(all_x_signals)) or 0),
             "xSignalRanked": int(raw_counts.get("xSignalRanked", len(all_x_signals)) or 0),
-            "xSignalFeatured": int(
-                raw_counts.get("xSignalFeatured", min(len(all_x_signals), _PUBLIC_FEATURED_X_LIMIT))
-                or 0
-            ),
-            "xSignalAll": int(raw_counts.get("xSignalAll", len(all_x_signals)) or 0),
+            "xSignalFeatured": min(len(all_x_signals), _PUBLIC_FEATURED_X_LIMIT),
+            "xSignalAll": len(all_x_signals),
         }
     return {
         "newsCandidates": len(all_news),
@@ -811,18 +885,9 @@ def _news_items(
         if not url or not title:
             continue
         topic = _normalize_news_topic(item.get("topic"))
-        summary_source = (
-            str(item.get("why_it_matters", "")).strip()
-            or str(item.get("summary", "")).strip()
-            or title
-        )
-        summary_ko = (
-            _best_korean_text(
-                str(item.get("why_it_matters", "")).strip(),
-                str(item.get("summary", "")).strip(),
-                title,
-            )
-            or summary_source
+        summary_ko = _best_korean_text(
+            str(item.get("why_it_matters", "")).strip(),
+            str(item.get("summary", "")).strip(),
         )
         fallback_items.append(
             {
@@ -841,6 +906,36 @@ def _news_items(
             }
         )
     return fallback_items
+
+
+def _filter_public_news_for_display(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    filtered: list[dict[str, Any]] = []
+    for item in items:
+        title = _best_korean_text(str(item.get("title", "")).strip())
+        if not title:
+            continue
+        interpretation = _best_korean_text(
+            str(item.get("interpretation", "")).strip(),
+            str(item.get("summaryKo", "")).strip(),
+        )
+        item["title"] = title
+        item["summaryKo"] = interpretation
+        item["interpretation"] = interpretation
+        filtered.append(item)
+    return filtered
+
+
+def _filter_public_signals_for_display(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    filtered: list[dict[str, Any]] = []
+    for item in items:
+        content = _best_korean_text(str(item.get("content", "")).strip())
+        if not content:
+            continue
+        impact = _best_korean_text(str(item.get("impact", "")).strip(), content) or content
+        item["content"] = content
+        item["impact"] = impact
+        filtered.append(item)
+    return filtered
 
 
 def _translation_key(text: str) -> str:

@@ -130,6 +130,11 @@ https://<R2_PUBLIC_BASE_URL>/briefs/2026-03-21.json
 
 `marketSnapshot.items`는 홈 상단 티커와 지수 heatmap의 공용 데이터입니다.
 
+중요:
+
+- 공개 화면에서는 `items.length >= 3`일 때만 상단 티커를 노출합니다.
+- 0~2개만 남으면 `marketSnapshot.items`는 빈 배열로 내리고, 아래 시장/BTC 카드만 유지합니다.
+
 각 item 필드:
 
 | 경로 | 타입 | 필수 | 비고 |
@@ -393,6 +398,8 @@ null
 - `allNews`는 최대 12건
 - 기본 표시는 `summaryKo` 우선
 - 영어 원문은 `rawTitle`로 분리하고 상세에서만 보조 노출
+- publish 품질 gate를 통과하지 못하면 `featuredNews`, `allNews`는 빈 배열이 될 수 있습니다.
+- 테스트/예시 도메인, placeholder 제목, low-value 해석 항목은 공개 JSON에서 제외합니다.
 
 ## 프론트에서 실제로 안 쓰는 이메일용 값
 

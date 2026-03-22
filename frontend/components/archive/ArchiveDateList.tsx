@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { displayHeadline, formatIssueTime, qualityLabel } from "@/lib/format";
+import { displayHeadline, formatIssueTime, hasUsableHeadline, qualityLabel } from "@/lib/format";
 
 type ArchiveItem = {
   date: string;
@@ -32,15 +32,15 @@ export function ArchiveDateList({ items }: { items: ArchiveItem[] }) {
             <div className="space-y-2">
               <p className="font-mono text-[11px] tracking-[0.22em] text-[var(--accent-primary)] uppercase">{item.date}</p>
               <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--text-muted)] uppercase">
-                {item.generatedAt ? formatIssueTime(item.generatedAt) : "08:00"} KST
+                {item.generatedAt ? `${formatIssueTime(item.generatedAt)} KST` : "시각 없음"}
               </p>
             </div>
             <p className="text-lg leading-8 text-[var(--text-primary)]">
-              {item.displayHeadline
+              {item.displayHeadline && hasUsableHeadline(item.displayHeadline)
                 ? item.displayHeadline
-                : item.headline
+                : item.headline && hasUsableHeadline(item.headline)
                   ? displayHeadline(item.headline)
-                  : "브리핑을 열어 상세 내용을 확인하세요."}
+                  : `${item.date} 발행본`}
             </p>
             <div className="md:text-right">
               <span className="inline-flex rounded-full border border-white/10 px-3 py-1 font-mono text-[10px] tracking-[0.18em] text-[var(--text-secondary)] uppercase">

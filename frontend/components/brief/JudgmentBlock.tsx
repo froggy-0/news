@@ -1,5 +1,5 @@
 import { Reveal } from "@/components/ui/Reveal";
-import { displayHeadline, formatIssueTime } from "@/lib/format";
+import { displayHeadline, formatIssueDate, formatIssueTime, hasUsableHeadline } from "@/lib/format";
 
 export function JudgmentBlock({
   headline,
@@ -12,9 +12,20 @@ export function JudgmentBlock({
   summarySupport: string | null;
   generatedAt: string;
 }) {
-  const cleanHeadline = displayHeadline(headline);
-  const cleanLead = displayHeadline(summaryLead);
-  const cleanSupport = summarySupport ? displayHeadline(summarySupport) : null;
+  const cleanHeadline = hasUsableHeadline(headline)
+    ? displayHeadline(headline)
+    : `${formatIssueDate(generatedAt)} 발행본`;
+  const cleanLead =
+    hasUsableHeadline(summaryLead) && displayHeadline(summaryLead) !== cleanHeadline
+      ? displayHeadline(summaryLead)
+      : null;
+  const cleanSupport =
+    summarySupport &&
+    hasUsableHeadline(summarySupport) &&
+    displayHeadline(summarySupport) !== cleanHeadline &&
+    displayHeadline(summarySupport) !== cleanLead
+      ? displayHeadline(summarySupport)
+      : null;
 
   return (
     <Reveal className="hero-judgment-shell">
@@ -24,7 +35,7 @@ export function JudgmentBlock({
             <p className="section-title">오늘의 판단</p>
             <h2 className="display-headline display-headline-sm">{cleanHeadline}</h2>
           </div>
-          <p className="hero-summary-copy">{cleanLead}</p>
+          {cleanLead ? <p className="hero-summary-copy">{cleanLead}</p> : null}
           {cleanSupport ? <p className="hero-support-note">{cleanSupport}</p> : null}
         </div>
 

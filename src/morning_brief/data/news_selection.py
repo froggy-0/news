@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
+from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from morning_brief.data.news_packet import OFFICIAL_SIGNAL_PROVIDER, news_items_to_packet
 from morning_brief.data.news_policy import (
     MAX_ITEMS_PER_DOMAIN,
+    MIN_NEWS_ITEMS,
     TRACKING_QUERY_KEYS,
     TRACKING_QUERY_PREFIXES,
     domain_score,
     extract_domain,
+    is_preferred_domain,
     keyword_score,
     recency_score,
 )
@@ -21,6 +25,118 @@ GROK_KEYWORD_PROVIDER = "grok_x_keyword"
 GROK_WEB_PROVIDER = "grok_web_search"
 _PERPLEXITY_PROVIDERS = {PERPLEXITY_PROVIDER, PERPLEXITY_SONAR_PROVIDER}
 _GROK_PROVIDERS = {OFFICIAL_SIGNAL_PROVIDER, GROK_KEYWORD_PROVIDER, GROK_WEB_PROVIDER}
+_PUBLISH_PLACEHOLDER_TITLE_RE = re.compile(
+    r"^(weak source item|example|sample|test item|placeholder)\b",
+    re.IGNORECASE,
+)
+_PUBLISH_FILELIKE_TITLE_RE = re.compile(r"\.(?:pdf|html?|xml|json|txt|csv)(?:$|\s)", re.IGNORECASE)
+_PUBLISH_BLOCKED_DOMAINS = {"example.com", "example.net", "example.org", "localhost"}
+
+
+def _normalized_publish_text(value: str) -> str:
+    return " ".join(str(value or "").strip().lower().split())
+
+
+def _looks_like_publish_placeholder(title: str) -> bool:
+    normalized = _normalized_publish_text(title)
+    if not normalized:
+        return True
+    if normalized.startswith(("http://", "https://")):
+        return True
+    return bool(_PUBLISH_PLACEHOLDER_TITLE_RE.match(normalized))
+
+
+def _looks_like_file_title(title: str) -> bool:
+    normalized = title.strip()
+    return bool(_PUBLISH_FILELIKE_TITLE_RE.search(normalized))
+
+
+def filter_publish_news(
+    items: list[NewsItem],
+    *,
+    min_items: int = MIN_NEWS_ITEMS,
+) -> tuple[list[NewsItem], dict[str, Any]]:
+    kept: list[NewsItem] = []
+    dropped: dict[str, int] = {}
+
+    for item in items:
+        title = item.title.strip()
+        url = item.url.strip()
+        domain = extract_domain(url)
+        interpretation = item.why_it_matters.strip() or item.summary.strip()
+        reason: str | None = None
+
+        if not title or not url:
+            reason = "missing_title_or_url"
+        elif domain in _PUBLISH_BLOCKED_DOMAINS:
+            reason = "blocked_domain"
+        elif not is_preferred_domain(url):
+            reason = "non_preferred_domain"
+        elif _looks_like_publish_placeholder(title):
+            reason = "placeholder_title"
+        elif _looks_like_file_title(title):
+            reason = "file_like_title"
+        elif interpretation and _normalized_publish_text(
+            interpretation
+        ) == _normalized_publish_text(title):
+            reason = "duplicate_interpretation"
+
+        if reason is not None:
+            dropped[reason] = dropped.get(reason, 0) + 1
+            continue
+        kept.append(item)
+
+    below_minimum = len(kept) < min_items
+    if below_minimum:
+        dropped["below_minimum"] = dropped.get("below_minimum", 0) + len(kept)
+        kept = []
+
+    return kept, {
+        "candidate_count": len(items),
+        "kept_count": len(kept),
+        "below_minimum": below_minimum,
+        "dropped": dropped,
+    }
+
+
+def filter_publish_x_signals(
+    signals: list[Any],
+    *,
+    min_items: int = 1,
+) -> tuple[list[Any], dict[str, Any]]:
+    kept: list[Any] = []
+    dropped: dict[str, int] = {}
+
+    for signal in signals:
+        headline = str(getattr(signal, "headline", "") or "").strip()
+        summary = str(getattr(signal, "summary", "") or "").strip()
+        impact = str(getattr(signal, "why_it_matters", "") or "").strip()
+        handle = str(getattr(signal, "source_handle", "") or "").strip()
+        reason: str | None = None
+
+        if not headline or not summary or not impact:
+            reason = "missing_text"
+        elif not handle:
+            reason = "missing_handle"
+        elif _looks_like_publish_placeholder(headline):
+            reason = "placeholder_headline"
+
+        if reason is not None:
+            dropped[reason] = dropped.get(reason, 0) + 1
+            continue
+        kept.append(signal)
+
+    below_minimum = len(kept) < min_items
+    if below_minimum:
+        dropped["below_minimum"] = dropped.get("below_minimum", 0) + len(kept)
+        kept = []
+
+    return kept, {
+        "candidate_count": len(signals),
+        "kept_count": len(kept),
+        "below_minimum": below_minimum,
+        "dropped": dropped,
+    }
 
 
 def _normalize_url(url: str) -> str:

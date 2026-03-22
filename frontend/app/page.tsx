@@ -29,7 +29,7 @@ export default async function HomePage() {
   return (
     <main className="space-y-10 xl:space-y-14">
       <SiteHeader generatedAt={brief.meta.generatedAt} />
-      <TickerBar items={indexItems} />
+      {indexItems.length >= 3 ? <TickerBar items={indexItems} /> : null}
       {brief.meta.dataQuality !== "ok" ? (
         <QualityBanner quality={brief.meta.dataQuality} notes={brief.meta.qualityNotes} />
       ) : null}

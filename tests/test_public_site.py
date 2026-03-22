@@ -313,6 +313,22 @@ def test_build_public_brief_prefers_public_context_for_full_lists() -> None:
     assert payload["meta"]["sourceCounts"]["xSignalCandidates"] == 9
 
 
+def test_build_public_brief_hides_sparse_market_snapshot() -> None:
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+    packet = _packet()
+    packet["macro"] = []
+    packet["korea_watch"] = []
+    packet["us_indices"] = []
+
+    payload = build_public_brief(
+        packet=packet,
+        briefing=_briefing(),
+        run_at=run_at,
+    )
+
+    assert payload["marketSnapshot"]["items"] == []
+
+
 def test_build_public_brief_translates_selected_public_texts(monkeypatch, tmp_path) -> None:
     class FakeOpenAI:
         def __init__(self, *, api_key: str):
@@ -531,6 +547,7 @@ def test_build_public_brief_uses_source_text_instead_of_generic_copy() -> None:
         payload["aiJudgment"]["summaryLead"]
         == "연준 점도표와 중동 변수로 장중 변동성이 커졌습니다."
     )
-    assert payload["allNews"][0]["summaryKo"] == "English-only title from source"
-    assert payload["featuredXSignals"][0]["content"] == "English-only official signal"
-    assert payload["featuredXSignals"][0]["impact"] == "English-only official signal"
+    assert payload["allNews"] == []
+    assert payload["featuredNews"] == []
+    assert payload["featuredXSignals"] is None
+    assert payload["allXSignals"] is None
