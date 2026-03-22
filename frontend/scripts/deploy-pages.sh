@@ -39,6 +39,9 @@ if [ "${deploy_target}" = "preview" ]; then
   deploy_branch="${DEPLOY_BRANCH:-$(printf '%s' "${current_branch}" | tr '/' '-' | tr '[:space:]' '-')}"
 fi
 
+commit_sha="$(git -C "${REPO_DIR}" rev-parse --short HEAD 2>/dev/null || printf 'local')"
+commit_message="Deploy ${commit_sha}"
+
 echo "Building frontend with public data URL: ${NEXT_PUBLIC_R2_BASE_URL}"
 (
   cd "${FRONTEND_DIR}"
@@ -49,14 +52,14 @@ if [ "${deploy_target}" = "preview" ]; then
   echo "Deploying preview branch: ${deploy_branch}"
   (
     cd "${FRONTEND_DIR}"
-    npx wrangler@4 pages deploy out --project-name="${CLOUDFLARE_PAGES_PROJECT_NAME}" --branch="${deploy_branch}"
+    npx wrangler@4 pages deploy out --project-name="${CLOUDFLARE_PAGES_PROJECT_NAME}" --branch="${deploy_branch}" --commit-dirty=true --commit-message="${commit_message}"
   )
   echo "Preview alias URL is shown in the Wrangler output above."
 else
   echo "Deploying production"
   (
     cd "${FRONTEND_DIR}"
-    npx wrangler@4 pages deploy out --project-name="${CLOUDFLARE_PAGES_PROJECT_NAME}"
+    npx wrangler@4 pages deploy out --project-name="${CLOUDFLARE_PAGES_PROJECT_NAME}" --commit-dirty=true --commit-message="${commit_message}"
   )
   echo "Production URL is shown in the Wrangler output above."
 fi
