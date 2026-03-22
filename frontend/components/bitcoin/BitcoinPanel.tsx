@@ -24,22 +24,17 @@ export function BitcoinPanel({ bitcoin }: { bitcoin: BitcoinSection }) {
           <div className="panel-soft rounded-[26px] px-5 py-6">
             <div className="flex items-center justify-between gap-4">
               <p className="section-title">비트코인 현물</p>
-              <span className="ticker-pill">
-                {bitcoin.trend === "up"
-                  ? "상승 우세"
-                  : bitcoin.trend === "down"
-                    ? "하락 우세"
-                    : bitcoin.trend === "neutral"
-                      ? "중립"
-                      : "확인 중"}
-              </span>
+              {bitcoin.change ? <span className="ticker-pill numeric">{bitcoin.change}</span> : null}
             </div>
-            <p className="numeric mt-5 text-[2.35rem] font-semibold tracking-[-0.04em] text-[var(--text-primary)] md:text-[3.3rem]">
-              {bitcoin.price ?? "확인 중"}
-            </p>
-            <p className="numeric mt-3 text-sm tracking-[0.18em] text-[var(--text-secondary)] uppercase">
-              {bitcoin.change ?? "변동률 확인 중"}
-            </p>
+            {bitcoin.price ? (
+              <p className="numeric mt-5 text-[2.35rem] font-semibold tracking-[-0.04em] text-[var(--text-primary)] md:text-[3.3rem]">
+                {bitcoin.price}
+              </p>
+            ) : (
+              <div className="mt-5">
+                <DataState message="이번 집계에서는 비트코인 현물을 확인하지 못했어요." />
+              </div>
+            )}
             <div className="divider mt-6" />
             <p className="copy-block mt-6">
               비트코인 축은 가격과 변동성만이 아니라 ETF 집행 강도와 위험 선호 변화까지 함께 읽을 때 해석이 안정됩니다.
@@ -86,15 +81,19 @@ export function BitcoinPanel({ bitcoin }: { bitcoin: BitcoinSection }) {
               <div className="mt-5 grid gap-3 lg:grid-cols-2">
                 <div className="rounded-[18px] border border-white/8 bg-black/30 px-4 py-3">
                   <p className="section-title">총 보유량</p>
-                  <p className="numeric mt-3 break-words text-sm leading-6 text-[var(--text-primary)] md:text-base">
-                    {etf.totalHolding ?? "확인 중"}
-                  </p>
+                  {etf.totalHolding ? (
+                    <p className="numeric mt-3 break-words text-sm leading-6 text-[var(--text-primary)] md:text-base">
+                      {etf.totalHolding}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="rounded-[18px] border border-white/8 bg-black/30 px-4 py-3">
                   <p className="section-title">총 AUM</p>
-                  <p className="numeric mt-3 break-words text-sm leading-6 text-[var(--text-primary)] md:text-base">
-                    {etf.totalAum ?? "확인 중"}
-                  </p>
+                  {etf.totalAum ? (
+                    <p className="numeric mt-3 break-words text-sm leading-6 text-[var(--text-primary)] md:text-base">
+                      {etf.totalAum}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             ) : null}
@@ -115,9 +114,9 @@ export function BitcoinPanel({ bitcoin }: { bitcoin: BitcoinSection }) {
                   if (!issuer.sourceUrl) {
                     return (
                       <div key={issuer.name} className={rowClassName}>
-                        <p className="font-mono text-[11px] tracking-[0.18em] text-[var(--text-primary)] uppercase">{issuer.name}</p>
-                        <p className="numeric text-sm text-[var(--text-secondary)]">{issuer.holding ?? "확인 중"}</p>
-                        <p className="numeric text-right text-sm text-[var(--text-secondary)]">{issuer.aum ?? "확인 중"}</p>
+                      <p className="font-mono text-[11px] tracking-[0.18em] text-[var(--text-primary)] uppercase">{issuer.name}</p>
+                        <p className="numeric text-sm text-[var(--text-secondary)]">{issuer.holding}</p>
+                        <p className="numeric text-right text-sm text-[var(--text-secondary)]">{issuer.aum}</p>
                       </div>
                     );
                   }
@@ -131,8 +130,8 @@ export function BitcoinPanel({ bitcoin }: { bitcoin: BitcoinSection }) {
                       className={`${rowClassName} transition hover:bg-white/[0.04]`}
                     >
                       <p className="font-mono text-[11px] tracking-[0.18em] text-[var(--text-primary)] uppercase">{issuer.name}</p>
-                      <p className="numeric text-sm text-[var(--text-secondary)]">{issuer.holding ?? "확인 중"}</p>
-                      <p className="numeric text-right text-sm text-[var(--text-secondary)]">{issuer.aum ?? "확인 중"}</p>
+                      <p className="numeric text-sm text-[var(--text-secondary)]">{issuer.holding}</p>
+                      <p className="numeric text-right text-sm text-[var(--text-secondary)]">{issuer.aum}</p>
                     </a>
                   );
                 })}

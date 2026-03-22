@@ -488,3 +488,49 @@ def test_publish_public_brief_writes_local_public_bundle(monkeypatch, tmp_path) 
 
     index_payload = json.loads(index_path.read_text(encoding="utf-8"))
     assert index_payload["dates"] == ["2026-03-21"]
+
+
+def test_build_public_brief_uses_source_text_instead_of_generic_copy() -> None:
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+    packet = _packet()
+    packet["news"] = [
+        {
+            "title": "English-only title from source",
+            "url": "https://example.com/news-raw",
+            "source": "Example",
+            "published_at": "2026-03-21T07:50:00+09:00",
+            "topic": "macro",
+            "source_tier": 1,
+            "summary": "",
+            "why_it_matters": "",
+        }
+    ]
+    packet["x_market_signals"] = [
+        {
+            "headline": "English-only official signal",
+            "summary": "",
+            "why_it_matters": "",
+            "sentiment": "neutral",
+            "posted_at": "2026-03-21T06:41:00+09:00",
+        }
+    ]
+
+    payload = build_public_brief(
+        packet=packet,
+        briefing="""SOVEREIGN BRIEF
+
+연준 점도표와 중동 변수로 장중 변동성이 커졌습니다.
+""",
+        run_at=run_at,
+    )
+
+    assert (
+        payload["aiJudgment"]["headline"] == "연준 점도표와 중동 변수로 장중 변동성이 커졌습니다."
+    )
+    assert (
+        payload["aiJudgment"]["summaryLead"]
+        == "연준 점도표와 중동 변수로 장중 변동성이 커졌습니다."
+    )
+    assert payload["allNews"][0]["summaryKo"] == "English-only title from source"
+    assert payload["featuredXSignals"][0]["content"] == "English-only official signal"
+    assert payload["featuredXSignals"][0]["impact"] == "English-only official signal"

@@ -20,30 +20,6 @@ function sentimentLabel(value: XSignal["sentiment"]): string {
   return "중립";
 }
 
-function fallbackContent(value: XSignal["sentiment"]): string {
-  if (value === "bullish") {
-    return "공식 채널에서 상방 해석이 가능한 신규 시그널이 포착됐어요.";
-  }
-  if (value === "bearish") {
-    return "공식 채널에서 하방 압력을 시사하는 신규 시그널이 포착됐어요.";
-  }
-  return "공식 채널에서 중립 성격의 신규 시그널이 포착됐어요.";
-}
-
-function fallbackImpact(value: XSignal["sentiment"]): string {
-  if (value === "bullish") {
-    return "관련 자산의 투자 심리와 수급 변화를 함께 확인할 필요가 있어요.";
-  }
-  if (value === "bearish") {
-    return "단기 변동성과 위험 선호 위축 여부를 함께 봐야 해요.";
-  }
-  return "즉시 방향성보다 맥락 확인이 우선인 신호예요.";
-}
-
-function pendingImpact(): string {
-  return "한국어 요약을 준비 중이라 원문 시그널을 먼저 보여줍니다.";
-}
-
 export function XSignals({
   items,
   limit,
@@ -80,15 +56,8 @@ export function XSignals({
       ) : (
         <div className="divide-y divide-white/8">
           {visibleItems.map((item) => {
-            const usesRawContent = !containsKorean(item.content) && Boolean(item.content?.trim());
-            const displayContent = containsKorean(item.content)
-              ? item.content
-              : fallbackContent(item.sentiment);
-            const displayImpact = containsKorean(item.impact)
-              ? item.impact
-              : usesRawContent && item.impact?.trim()
-                ? pendingImpact()
-                : fallbackImpact(item.sentiment);
+            const displayContent = item.content?.trim() || item.rawContent?.trim() || "";
+            const displayImpact = item.impact?.trim() || null;
             const rawContent = item.rawContent ?? (!containsKorean(item.content) ? item.content : null);
 
             return (
@@ -101,20 +70,17 @@ export function XSignals({
                     <span className="inline-flex rounded-full border border-white/10 px-3 py-1 font-mono text-[10px] tracking-[0.18em] text-[var(--text-secondary)] uppercase">
                       {sentimentLabel(item.sentiment)}
                     </span>
-                    {usesRawContent ? (
-                      <span className="inline-flex rounded-full border border-white/10 px-3 py-1 font-mono text-[10px] tracking-[0.18em] text-[var(--text-muted)] uppercase">
-                        번역 대기
-                      </span>
-                    ) : null}
                   </div>
                 </div>
                 <div className="space-y-4">
                   <p className="text-lg leading-8 text-[var(--text-primary)] md:text-xl">{displayContent}</p>
-                  <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-4">
-                    <p className="section-title">시장 영향</p>
-                    <p className="copy-block mt-3">{displayImpact}</p>
-                  </div>
-                  {showRawToggle && rawContent ? (
+                  {displayImpact ? (
+                    <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-4">
+                      <p className="section-title">시장 영향</p>
+                      <p className="copy-block mt-3">{displayImpact}</p>
+                    </div>
+                  ) : null}
+                  {showRawToggle && rawContent && rawContent !== displayContent ? (
                     <details className="rounded-[18px] border border-white/8 bg-white/[0.02] px-4 py-4">
                       <summary className="cursor-pointer font-mono text-[10px] tracking-[0.18em] text-[var(--text-muted)]">
                         영문 원문 보기

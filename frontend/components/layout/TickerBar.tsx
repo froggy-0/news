@@ -10,11 +10,13 @@ export function TickerBar({ items }: { items: TickerItem[] }) {
               {items.map((item) => (
                 <div key={`${hiddenDuplicate ? "dup" : "base"}-${item.symbol}`} className="ticker-pill">
                   <span className="ticker-symbol">{item.symbol}</span>
-                  <span className="ticker-value numeric">{item.value ?? "확인 중"}</span>
-                  <span className={`ticker-change numeric ${item.trend ? `is-${item.trend}` : ""}`}>
-                    {item.change ?? "상태 확인 중"}
-                    {item.isCached ? " · 기준값" : ""}
-                  </span>
+                  {item.value ? <span className="ticker-value numeric">{item.value}</span> : null}
+                  {item.change || item.isCached ? (
+                    <span className={`ticker-change numeric ${item.trend ? `is-${item.trend}` : ""}`}>
+                      {item.change}
+                      {item.isCached ? " · 기준값" : ""}
+                    </span>
+                  ) : null}
                   <span className="ticker-label">{item.label}</span>
                 </div>
               ))}
@@ -27,10 +29,12 @@ export function TickerBar({ items }: { items: TickerItem[] }) {
             {items.map((item) => (
               <div key={item.symbol} className="ticker-mobile-pill">
                 <span className="ticker-symbol">{item.symbol}</span>
-                <span className="ticker-value numeric">{item.value ?? "확인 중"}</span>
-                <span className={`ticker-change numeric ${item.trend ? `is-${item.trend}` : ""}`}>
-                  {item.change ?? "확인 중"}
-                </span>
+                {item.value ? <span className="ticker-value numeric">{item.value}</span> : null}
+                {item.change ? (
+                  <span className={`ticker-change numeric ${item.trend ? `is-${item.trend}` : ""}`}>
+                    {item.change}
+                  </span>
+                ) : null}
                 <span className="ticker-label">{item.label}</span>
               </div>
             ))}

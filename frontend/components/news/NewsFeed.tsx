@@ -27,24 +27,6 @@ function categoryLabel(value: NewsItem["category"]): string {
   return "미국 증시";
 }
 
-function fallbackHeadline(value: NewsItem["category"]): string {
-  if (value === "macro") return "거시 흐름을 읽는 핵심 기사입니다.";
-  if (value === "bigtech") return "빅테크와 AI 투자심리를 읽는 기사입니다.";
-  if (value === "bitcoin") return "비트코인과 ETF 흐름을 읽는 기사입니다.";
-  return "미국 증시 방향을 읽는 핵심 기사입니다.";
-}
-
-function fallbackInterpretation(value: NewsItem["category"]): string {
-  if (value === "macro") return "금리와 달러 흐름이 기술주와 위험 선호에 어떤 부담을 주는지 확인해야 합니다.";
-  if (value === "bigtech") return "빅테크 실적 기대와 AI 투자심리를 같이 읽어야 하는 기사예요.";
-  if (value === "bitcoin") return "비트코인 가격과 ETF 수급 해석에 직접 연결되는 기사예요.";
-  return "미국 증시와 섹터별 투자심리를 같이 읽어야 하는 기사예요.";
-}
-
-function pendingInterpretation(): string {
-  return "한국어 해석을 준비 중이라 원문 제목과 링크를 먼저 제공합니다.";
-}
-
 export function NewsFeed({
   items,
   limit,
@@ -79,21 +61,8 @@ export function NewsFeed({
       ) : (
         <div className="divide-y divide-white/8">
           {visibleItems.map((item) => {
-            const usesRawTitle =
-              !containsKorean(item.summaryKo) && !containsKorean(item.title) && Boolean(item.title?.trim());
-            const displayTitle = containsKorean(item.summaryKo)
-              ? item.summaryKo!.trim()
-              : containsKorean(item.title)
-                ? item.title
-                : fallbackHeadline(item.category);
-            const interpretation =
-              containsKorean(item.interpretation) && item.interpretation!.trim() !== displayTitle.trim()
-                ? item.interpretation
-                : containsKorean(item.summaryKo) && item.summaryKo!.trim() !== displayTitle.trim()
-                  ? item.summaryKo
-                  : usesRawTitle
-                    ? pendingInterpretation()
-                    : fallbackInterpretation(item.category);
+            const displayTitle = item.title?.trim() || item.rawTitle?.trim() || item.url;
+            const interpretation = item.interpretation?.trim() || item.summaryKo?.trim() || null;
             const rawTitle = item.rawTitle ?? (!containsKorean(item.title) ? item.title : null);
 
             return (
@@ -127,11 +96,6 @@ export function NewsFeed({
                       <span className="font-mono text-[10px] tracking-[0.24em] text-[var(--accent-cyan)]">
                         {item.source}
                       </span>
-                      {usesRawTitle ? (
-                        <span className="rounded-[4px] border border-white/10 px-2 py-1 font-mono text-[9px] tracking-[0.18em] text-[var(--text-muted)]">
-                          번역 대기
-                        </span>
-                      ) : null}
                       {item.sourceTier === "tier1" ? (
                         <span className="rounded-[4px] border border-[var(--accent-gold)]/35 px-2 py-1 font-mono text-[9px] tracking-[0.18em] text-[var(--accent-gold)]">
                           핵심 출처
@@ -151,12 +115,14 @@ export function NewsFeed({
                       </p>
                     ) : null}
 
-                    <div className="border-l-2 border-[var(--accent-primary)]/30 bg-[var(--accent-primary)]/6 px-4 py-3">
-                      <p className="font-mono text-[9px] tracking-[0.18em] text-[var(--accent-primary)]">
-                        시장 해석
-                      </p>
-                      <p className="mt-2 text-sm leading-7 text-[var(--text-secondary)]">{interpretation}</p>
-                    </div>
+                    {interpretation ? (
+                      <div className="border-l-2 border-[var(--accent-primary)]/30 bg-[var(--accent-primary)]/6 px-4 py-3">
+                        <p className="font-mono text-[9px] tracking-[0.18em] text-[var(--accent-primary)]">
+                          시장 해석
+                        </p>
+                        <p className="mt-2 text-sm leading-7 text-[var(--text-secondary)]">{interpretation}</p>
+                      </div>
+                    ) : null}
 
                     <div className="flex flex-wrap gap-2">
                       {item.tags.map((tag) => (

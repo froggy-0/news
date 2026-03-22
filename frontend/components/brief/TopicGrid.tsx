@@ -27,20 +27,7 @@ function containsKorean(value: string | null | undefined): boolean {
   return Boolean(value && HANGUL_RE.test(value));
 }
 
-function fallbackSummary(topic: TopicSummary["topic"]): string {
-  if (topic === "macro") {
-    return "거시 흐름은 금리와 달러, 변동성 지표를 함께 보며 오늘 장의 위험 선호를 읽는 구간입니다.";
-  }
-  if (topic === "bigtech") {
-    return "빅테크는 AI 공급망과 대형 기술주 수급의 강도 차이를 중심으로 상대 강도를 점검하는 구간입니다.";
-  }
-  if (topic === "bitcoin") {
-    return "비트코인은 현물 가격과 ETF 자금 흐름을 함께 보며 위험 선호 회복 여부를 확인하는 구간입니다.";
-  }
-  return "미국 증시는 지수 방향과 변동성 레벨을 같이 보며 장의 체력과 추세 지속성을 확인하는 구간입니다.";
-}
-
-function displaySummary(item: TopicSummary): string {
+function displaySummary(item: TopicSummary): string | null {
   const normalizedLines: string[] = [];
 
   for (const rawLine of item.summary.replace(/\r\n/g, "\n").split("\n")) {
@@ -58,8 +45,7 @@ function displaySummary(item: TopicSummary): string {
   }
 
   const normalized = normalizedLines.join(" ");
-
-  return containsKorean(normalized) ? normalized : fallbackSummary(item.topic);
+  return normalized || null;
 }
 
 function displayRelatedStocks(value: string[] | null | undefined): string[] {
@@ -76,6 +62,15 @@ function displayRelatedStocks(value: string[] | null | undefined): string[] {
 }
 
 export function TopicGrid({ items }: { items: TopicSummary[] }) {
+  const visibleItems = items
+    .map((item) => ({
+      item,
+      summary: displaySummary(item),
+      keyMetric: formatKeyMetric(item.keyMetric),
+      relatedStocks: displayRelatedStocks(item.relatedStocks),
+    }))
+    .filter((entry) => entry.summary);
+
   return (
     <section className="panel rounded-[32px] px-6 py-7 md:px-8">
       <div className="mb-7 flex flex-col gap-3 border-b border-white/8 pb-6 md:flex-row md:items-end md:justify-between">
@@ -85,18 +80,15 @@ export function TopicGrid({ items }: { items: TopicSummary[] }) {
         </div>
         <p className="hero-support max-w-sm">거시, 미국 증시, 빅테크, 비트코인 흐름을 먼저 압축해 읽는 상단 맵입니다.</p>
       </div>
-      {items.length === 0 ? (
+      {visibleItems.length === 0 ? (
         <DataState message="이번 집계에서는 토픽 요약을 확인하지 못했어요." />
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
-          {items.map((item) => {
-            const keyMetric = formatKeyMetric(item.keyMetric);
-            const relatedStocks = displayRelatedStocks(item.relatedStocks);
-
+          {visibleItems.map(({ item, summary, keyMetric, relatedStocks }) => {
             return (
               <article key={item.topic} className="panel-soft rounded-[26px] px-5 py-5">
                 <p className="section-title">{item.label}</p>
-                <p className="mt-4 text-base leading-8 text-[var(--text-primary)]">{displaySummary(item)}</p>
+                <p className="mt-4 text-base leading-8 text-[var(--text-primary)]">{summary}</p>
                 {keyMetric ? (
                   <p className="numeric mt-5 text-sm tracking-[0.18em] text-[var(--accent-primary)] uppercase">{keyMetric}</p>
                 ) : null}

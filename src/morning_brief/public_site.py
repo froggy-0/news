@@ -59,22 +59,6 @@ _PUBLIC_FEATURED_X_LIMIT = 5
 _PUBLIC_ALL_X_LIMIT = 12
 _PUBLIC_TRANSLATION_BATCH_ITEMS = 6
 _PUBLIC_TRANSLATION_BATCH_CHARS = 1800
-_NEWS_GENERIC_SUMMARY = {
-    "macro": "거시 흐름과 금리 기대를 해석하는 데 참고할 수 있어요.",
-    "bigtech": "빅테크 투자 심리와 AI 기대를 읽는 데 참고할 수 있어요.",
-    "bitcoin": "비트코인 가격과 ETF 흐름을 해석하는 데 참고할 수 있어요.",
-    "us-stocks": "미국 증시 흐름과 섹터 반응을 읽는 데 참고할 수 있어요.",
-}
-_SIGNAL_GENERIC_CONTENT = {
-    "bullish": "공식 채널에서 상방 해석이 가능한 신규 시그널이 포착됐어요.",
-    "bearish": "공식 채널에서 하방 압력을 시사하는 신규 시그널이 포착됐어요.",
-    "neutral": "공식 채널에서 중립 성격의 신규 시그널이 포착됐어요.",
-}
-_SIGNAL_GENERIC_IMPACT = {
-    "bullish": "관련 자산의 투자 심리와 수급 변화를 함께 확인할 필요가 있어요.",
-    "bearish": "단기 변동성과 위험 선호 위축 여부를 함께 봐야 해요.",
-    "neutral": "즉시 방향성보다 맥락 확인이 우선인 신호예요.",
-}
 _TRANSLATION_CACHE_FILE = "public_translation_cache.json"
 
 
@@ -257,7 +241,11 @@ def _headline_from_sections(section_map: dict[str, str], brief_body: str) -> str
         candidate = _normalize_public_text(paragraph)
         if candidate and _is_public_headline_candidate(candidate):
             return _headline_excerpt(candidate)
-    return "오늘 브리핑을 준비했어요."
+    for line in brief_body.splitlines():
+        candidate = _normalize_public_text(line)
+        if candidate:
+            return _headline_excerpt(candidate)
+    return "SOVEREIGN BRIEF"
 
 
 def _display_headline(text: str) -> str:
@@ -322,7 +310,7 @@ def _judgment_summary(
         paragraph for paragraph in paragraphs if _display_headline(paragraph) != cleaned_headline
     ]
     if not filtered_paragraphs:
-        return "시장 핵심 맥락을 빠르게 읽을 수 있게 정리했어요.", None
+        return cleaned_headline, None
     lead = filtered_paragraphs[0]
     support = filtered_paragraphs[1] if len(filtered_paragraphs) > 1 else None
     return lead, support
@@ -826,12 +814,13 @@ def _news_items(
         summary_source = (
             str(item.get("why_it_matters", "")).strip()
             or str(item.get("summary", "")).strip()
-            or _NEWS_GENERIC_SUMMARY[topic]
+            or title
         )
         summary_ko = (
             _best_korean_text(
                 str(item.get("why_it_matters", "")).strip(),
                 str(item.get("summary", "")).strip(),
+                title,
             )
             or summary_source
         )

@@ -98,21 +98,23 @@ function HeatCell({ item }: { item: TickerItem }) {
           </p>
           <p className="mt-1 text-sm text-[var(--text-secondary)]">{item.label}</p>
         </div>
-        <p className={`font-mono text-[10px] ${toneColor(item.trend)}`}>{item.change ?? "상태 확인"}</p>
+        {item.change ? <p className={`font-mono text-[10px] ${toneColor(item.trend)}`}>{item.change}</p> : null}
       </div>
-      <p className="numeric mt-3 text-xl text-[var(--text-primary)]">{item.value ?? "확인 중"}</p>
-      <div className="mt-3">
-        <Sparkline
-          data={item.history}
-          color={
-            item.trend === "down"
-              ? "rgba(248,113,113,0.95)"
-              : item.trend === "up"
-                ? "rgba(2,230,0,0.95)"
-                : "rgba(229,226,225,0.72)"
-          }
-        />
-      </div>
+      {item.value ? <p className="numeric mt-3 text-xl text-[var(--text-primary)]">{item.value}</p> : null}
+      {item.history.length >= 2 ? (
+        <div className="mt-3">
+          <Sparkline
+            data={item.history}
+            color={
+              item.trend === "down"
+                ? "rgba(248,113,113,0.95)"
+                : item.trend === "up"
+                  ? "rgba(2,230,0,0.95)"
+                  : "rgba(229,226,225,0.72)"
+            }
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -125,9 +127,9 @@ function MobileIndexCell({ item }: { item: TickerItem }) {
           <p className="font-mono text-[10px] tracking-[0.18em] text-[var(--text-muted)]">{item.symbol}</p>
           <p className="mt-1 text-sm text-[var(--text-secondary)]">{item.label}</p>
         </div>
-        <p className={`font-mono text-[10px] ${toneColor(item.trend)}`}>{item.change ?? "확인 중"}</p>
+        {item.change ? <p className={`font-mono text-[10px] ${toneColor(item.trend)}`}>{item.change}</p> : null}
       </div>
-      <p className="numeric text-lg text-[var(--text-primary)]">{item.value ?? "확인 중"}</p>
+      {item.value ? <p className="numeric text-lg text-[var(--text-primary)]">{item.value}</p> : null}
     </div>
   );
 }
@@ -142,9 +144,9 @@ function EquityCell({ stock }: { stock: TechStock }) {
           </p>
           <p className="mt-1 text-sm text-[var(--text-secondary)]">{stock.name}</p>
         </div>
-        <p className={`font-mono text-[10px] ${toneColor(stock.trend)}`}>{stock.change ?? "상태 확인"}</p>
+        {stock.change ? <p className={`font-mono text-[10px] ${toneColor(stock.trend)}`}>{stock.change}</p> : null}
       </div>
-      <p className="numeric mt-3 text-xl text-[var(--text-primary)]">{stock.price ?? "확인 중"}</p>
+      {stock.price ? <p className="numeric mt-3 text-xl text-[var(--text-primary)]">{stock.price}</p> : null}
       {stock.isCached ? (
         <p className="mt-2 font-mono text-[9px] tracking-[0.16em] text-[var(--text-muted)]">CACHED</p>
       ) : null}
