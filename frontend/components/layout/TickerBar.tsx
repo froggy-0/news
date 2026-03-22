@@ -13,7 +13,7 @@ export function TickerBar({ items }: { items: TickerItem[] }) {
                   <span className="ticker-value numeric">{item.value ?? "확인 중"}</span>
                   <span className={`ticker-change numeric ${item.trend ? `is-${item.trend}` : ""}`}>
                     {item.change ?? "상태 확인 중"}
-                    {item.isCached ? " · CACHED" : ""}
+                    {item.isCached ? " · 기준값" : ""}
                   </span>
                   <span className="ticker-label">{item.label}</span>
                 </div>

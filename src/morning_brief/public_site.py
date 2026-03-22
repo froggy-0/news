@@ -57,6 +57,8 @@ _PUBLIC_FEATURED_NEWS_LIMIT = 5
 _PUBLIC_ALL_NEWS_LIMIT = 12
 _PUBLIC_FEATURED_X_LIMIT = 5
 _PUBLIC_ALL_X_LIMIT = 12
+_PUBLIC_TRANSLATION_BATCH_ITEMS = 6
+_PUBLIC_TRANSLATION_BATCH_CHARS = 1800
 _NEWS_GENERIC_SUMMARY = {
     "macro": "거시 흐름과 금리 기대를 해석하는 데 참고할 수 있어요.",
     "bigtech": "빅테크 투자 심리와 AI 기대를 읽는 데 참고할 수 있어요.",
@@ -333,6 +335,9 @@ def _clean_public_body(body: str) -> str:
 
     for line in lines:
         stripped = line.strip()
+        lowered = stripped.lower()
+        if lowered.startswith("(as of ") or lowered.startswith("as of "):
+            continue
         matched = _SECTION_HEADER_RE.match(stripped)
         if matched:
             exclude_section = matched.group("section") in _EXCLUDED_BODY_SECTIONS
@@ -1015,84 +1020,114 @@ def _translate_public_texts(
         return cache_map, "failed"
 
     client = OpenAI(api_key=settings.openai_api_key)
-    items = [{"id": key, "text": text} for key, text in pending.items()]
-
-    try:
-        response = client.responses.create(
-            model=settings.openai_model,
-            instructions=(
-                "시장 브리프 공개 JSON용 번역기입니다. 입력 문장을 자연스러운 한국어로만 옮기세요. "
-                "숫자, 티커, ETF 이름, URL, 출처명은 보존하세요. 장황하게 늘리지 말고 한두 문장 안에서 끝내세요."
-            ),
-            input=json.dumps({"items": items}, ensure_ascii=False),
-            text={
-                "format": {
-                    "type": "json_schema",
-                    "name": "public_translation_batch",
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "items": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "id": {"type": "string"},
-                                        "translated": {"type": "string"},
-                                    },
-                                    "required": ["id", "translated"],
-                                    "additionalProperties": False,
-                                },
-                            }
-                        },
-                        "required": ["items"],
-                        "additionalProperties": False,
-                    },
-                    "strict": True,
-                }
-            },
-            reasoning={"effort": "minimal"},
-            max_output_tokens=2400,
-        )
-    except Exception as exc:
-        if observer is not None:
-            observer.log_event("public_translation_failed", reason=str(exc))
-        logger.warning("공개 JSON 번역 중 오류가 있어 원문을 유지할게요: %s", exc)
-        return cache_map, "failed"
-
-    if observer is not None:
-        observer.record_provider_usage("openai", requests=1, **usage_snapshot(response))
-
-    try:
-        payload = json.loads((response.output_text or "").strip())
-    except json.JSONDecodeError:
-        if observer is not None:
-            observer.log_event(
-                "public_translation_failed",
-                reason="invalid_json",
-                preview=(response.output_text or "")[:200],
-            )
-        return cache_map, "failed"
-
-    translated_items = payload.get("items", []) if isinstance(payload, dict) else []
     translated_count = 0
-    for item in translated_items:
-        if not isinstance(item, dict):
+    batch_failed = False
+
+    for items in _translation_batches(pending):
+        try:
+            response = client.responses.create(
+                model=settings.openai_model,
+                instructions=(
+                    "시장 브리프 공개 JSON용 번역기입니다. 입력 문장을 자연스러운 한국어로만 옮기세요. "
+                    "숫자, 티커, ETF 이름, URL, 출처명은 보존하세요. 장황하게 늘리지 말고 한두 문장 안에서 끝내세요."
+                ),
+                input=json.dumps({"items": items}, ensure_ascii=False),
+                text={
+                    "format": {
+                        "type": "json_schema",
+                        "name": "public_translation_batch",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "items": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {"type": "string"},
+                                            "translated": {"type": "string"},
+                                        },
+                                        "required": ["id", "translated"],
+                                        "additionalProperties": False,
+                                    },
+                                }
+                            },
+                            "required": ["items"],
+                            "additionalProperties": False,
+                        },
+                        "strict": True,
+                    }
+                },
+                reasoning={"effort": "minimal"},
+                max_output_tokens=min(2400, max(900, 220 * len(items))),
+            )
+        except Exception as exc:
+            batch_failed = True
+            if observer is not None:
+                observer.log_event(
+                    "public_translation_failed", reason=str(exc), batch_size=len(items)
+                )
+            logger.warning("공개 JSON 번역 중 오류가 있어 원문을 유지할게요: %s", exc)
             continue
-        key = str(item.get("id", "")).strip()
-        translated = _normalize_public_text(str(item.get("translated", "")).strip())
-        if not key or not translated:
+
+        if observer is not None:
+            observer.record_provider_usage("openai", requests=1, **usage_snapshot(response))
+
+        try:
+            payload = json.loads((response.output_text or "").strip())
+        except json.JSONDecodeError:
+            batch_failed = True
+            if observer is not None:
+                observer.log_event(
+                    "public_translation_failed",
+                    reason="invalid_json",
+                    preview=(response.output_text or "")[:200],
+                    batch_size=len(items),
+                )
             continue
-        cache_map[key] = translated
-        translated_count += 1
+
+        translated_items = payload.get("items", []) if isinstance(payload, dict) else []
+        for item in translated_items:
+            if not isinstance(item, dict):
+                continue
+            key = str(item.get("id", "")).strip()
+            translated = _normalize_public_text(str(item.get("translated", "")).strip())
+            if not key or not translated:
+                continue
+            cache_map[key] = translated
+            translated_count += 1
 
     _save_translation_cache(settings, cache_map)
 
     if translated_count == len(pending):
         return cache_map, "ok"
-    if translated_count > 0:
+    if translated_count > 0 or batch_failed:
         return cache_map, "partial"
     return cache_map, "failed"
+
+
+def _translation_batches(pending: dict[str, str]) -> list[list[dict[str, str]]]:
+    batches: list[list[dict[str, str]]] = []
+    current: list[dict[str, str]] = []
+    current_chars = 0
+
+    for key, text in pending.items():
+        item = {"id": key, "text": text}
+        item_chars = len(text)
+        if current and (
+            len(current) >= _PUBLIC_TRANSLATION_BATCH_ITEMS
+            or current_chars + item_chars > _PUBLIC_TRANSLATION_BATCH_CHARS
+        ):
+            batches.append(current)
+            current = []
+            current_chars = 0
+        current.append(item)
+        current_chars += item_chars
+
+    if current:
+        batches.append(current)
+
+    return batches
 
 
 def _normalize_news_topic(raw_topic: Any) -> str:

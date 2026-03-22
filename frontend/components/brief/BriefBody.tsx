@@ -3,10 +3,11 @@ import remarkGfm from "remark-gfm";
 
 import { MarkdownDownloadButton } from "@/components/ui/MarkdownDownloadButton";
 
-const EXCLUDED_SECTIONS = new Set(["1", "2", "3", "4-1", "4-2", "4-3", "5-1", "5-2", "5-3", "6"]);
+const EXCLUDED_SECTIONS = new Set(["0", "1", "2", "3", "4-1", "4-2", "4-3", "5-1", "5-2", "5-3", "6"]);
 const SECTION_HEADER_RE = /^(\d+(?:-\d+)?)\.\s*/;
 const MACHINE_PAYLOAD_RE = /^\s*[\[{].*[:].*[\]}]\s*$/;
 const HANGUL_RE = /[가-힣]/;
+const AS_OF_LINE_RE = /^\(?as of\s+/i;
 const BODY_REPLACEMENTS: Array<[RegExp, string]> = [
   [/BTC\s*&\s*크립토/gi, "비트코인과 크립토"],
   [/Big Tech/gi, "빅테크"],
@@ -28,6 +29,9 @@ function sanitizePublicBody(body: string): string {
     }
 
     if (excludeSection) {
+      continue;
+    }
+    if (stripped && AS_OF_LINE_RE.test(stripped)) {
       continue;
     }
     if (stripped && (MACHINE_PAYLOAD_RE.test(stripped) || stripped.startsWith("{'") || stripped.startsWith('{"'))) {

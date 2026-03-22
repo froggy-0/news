@@ -83,9 +83,7 @@ export function XSignals({
             const usesRawContent = !containsKorean(item.content) && Boolean(item.content?.trim());
             const displayContent = containsKorean(item.content)
               ? item.content
-              : usesRawContent
-                ? item.content.trim()
-                : fallbackContent(item.sentiment);
+              : fallbackContent(item.sentiment);
             const displayImpact = containsKorean(item.impact)
               ? item.impact
               : usesRawContent && item.impact?.trim()

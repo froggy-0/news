@@ -85,9 +85,7 @@ export function NewsFeed({
               ? item.summaryKo!.trim()
               : containsKorean(item.title)
                 ? item.title
-                : usesRawTitle
-                  ? item.title.trim()
-                  : fallbackHeadline(item.category);
+                : fallbackHeadline(item.category);
             const interpretation =
               containsKorean(item.interpretation) && item.interpretation!.trim() !== displayTitle.trim()
                 ? item.interpretation

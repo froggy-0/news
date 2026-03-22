@@ -26,7 +26,7 @@ export function SiteFooter() {
         <div className="site-footer-column">
           <p className="section-title">운영 기준</p>
           <ul className="site-footer-list">
-            <li>한국 시간 오전 8시 기준 발행</li>
+            <li>한국 시간 기준으로 발행하며 필요 시 재정리본을 갱신</li>
             <li>값이 없는 핵심 블록은 상태를 드러내고 유지</li>
             <li>추정성 강한 수치는 사용자 화면에서 최소화</li>
           </ul>
@@ -45,7 +45,7 @@ export function SiteFooter() {
 
       <div className="site-footer-meta">
         <p>시장 판단을 돕는 정보 브리핑이며 투자 권유가 아닙니다.</p>
-        <p className="numeric">KST 08:00 · PUBLIC EDITION</p>
+        <p className="numeric">최신 공개판 · KST 기준</p>
       </div>
     </footer>
   );

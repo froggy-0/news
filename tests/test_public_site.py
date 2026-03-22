@@ -5,6 +5,7 @@ from datetime import datetime
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
+import morning_brief.public_site as public_site
 from morning_brief.config import load_settings
 from morning_brief.public_site import build_public_brief, build_public_index, publish_public_brief
 
@@ -379,8 +380,96 @@ def test_build_public_brief_translates_selected_public_texts(monkeypatch, tmp_pa
     assert payload["allXSignals"][0]["rawContent"] == "AI server demand is accelerating."
 
 
+def test_build_public_brief_translation_batches_recover_from_partial_invalid_json(
+    monkeypatch, tmp_path
+) -> None:
+    class FakeOpenAI:
+        calls = 0
+
+        def __init__(self, *, api_key: str):
+            self.api_key = api_key
+            self.responses = self
+
+        def create(self, **kwargs):
+            FakeOpenAI.calls += 1
+            if FakeOpenAI.calls == 1:
+                return SimpleNamespace(
+                    output_text='{"items":[{"id":"broken"',
+                    usage=SimpleNamespace(
+                        input_tokens=10,
+                        output_tokens=20,
+                        input_tokens_details=SimpleNamespace(cached_tokens=0),
+                        output_tokens_details=SimpleNamespace(reasoning_tokens=0),
+                    ),
+                )
+
+            payload = json.loads(kwargs["input"])
+            translated = [
+                {"id": item["id"], "translated": f"번역 {index}"}
+                for index, item in enumerate(payload["items"], start=1)
+            ]
+            return SimpleNamespace(
+                output_text=json.dumps({"items": translated}, ensure_ascii=False),
+                usage=SimpleNamespace(
+                    input_tokens=10,
+                    output_tokens=20,
+                    input_tokens_details=SimpleNamespace(cached_tokens=0),
+                    output_tokens_details=SimpleNamespace(reasoning_tokens=0),
+                ),
+            )
+
+    english_packet = _packet()
+    english_packet["topic_summaries"]["macro"]["market_implication"] = "Rates remain elevated."
+    english_packet["news"] = [
+        {
+            "title": f"English title {index}",
+            "url": f"https://example.com/english-news-{index}",
+            "source": "Reuters",
+            "published_at": "2026-03-21T05:50:00+09:00",
+            "topic": "macro",
+            "source_tier": 1,
+            "summary": f"English summary {index}",
+            "why_it_matters": f"English why it matters {index}",
+        }
+        for index in range(2)
+    ]
+    english_packet["x_market_signals"] = [
+        {
+            "headline": f"English signal headline {index}",
+            "summary": f"English signal summary {index}",
+            "why_it_matters": f"English signal impact {index}",
+            "sentiment": "bearish",
+            "posted_at": "2026-03-21T06:41:00+09:00",
+        }
+        for index in range(2)
+    ]
+
+    monkeypatch.setattr("morning_brief.public_site.OpenAI", FakeOpenAI)
+    monkeypatch.setattr(public_site, "_PUBLIC_TRANSLATION_BATCH_ITEMS", 1)
+    monkeypatch.setattr(public_site, "_PUBLIC_TRANSLATION_BATCH_CHARS", 200)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    settings = load_settings()
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+
+    payload = build_public_brief(
+        packet=english_packet,
+        briefing=_briefing(),
+        run_at=run_at,
+        settings=settings,
+    )
+
+    assert FakeOpenAI.calls > 1
+    assert payload["meta"]["translationStatus"] == "partial"
+    assert any(str(item["title"]).startswith("번역") for item in payload["allNews"])
+
+
 def test_publish_public_brief_writes_local_public_bundle(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
+    monkeypatch.delenv("R2_PUBLIC_BUCKET", raising=False)
+    monkeypatch.delenv("R2_S3_ENDPOINT", raising=False)
+    monkeypatch.delenv("R2_ACCESS_KEY_ID", raising=False)
+    monkeypatch.delenv("R2_SECRET_ACCESS_KEY", raising=False)
     settings = load_settings()
     run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
 
