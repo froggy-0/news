@@ -47,7 +47,7 @@ export function NewsFeed({
             <p className="section-title">핵심 뉴스</p>
           </div>
           <h3 className="serif-display text-[2.2rem] italic tracking-[-0.04em] text-[var(--text-primary)] md:text-[3.2rem]">
-            {typeof limit === "number" ? "오늘의 뉴스 5건" : "전체 뉴스 플로우"}
+            {typeof limit === "number" ? "오늘의 핵심 뉴스" : "전체 뉴스 플로우"}
           </h3>
         </div>
         <p className="eyebrow">

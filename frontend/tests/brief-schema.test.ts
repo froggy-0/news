@@ -33,6 +33,7 @@ test("degraded fixture preserves quality notes", async () => {
 
 test("display headline helper rejects source labels and urls", () => {
   assert.equal(hasUsableHeadline("참고 출처"), false);
+  assert.equal(hasUsableHeadline("발행본"), false);
   assert.equal(hasUsableHeadline("https://www.reuters.com/world/us/fed-keeps-options-open"), false);
   assert.equal(hasUsableHeadline("오늘은 관망 국면입니다."), true);
 });

@@ -19,7 +19,7 @@ export function SiteHeader({
             </div>
             <div className="space-y-1">
               <p className="nav-brand">SOVEREIGN BRIEF</p>
-              <p className="nav-subtitle">미국 기술주 · 비트코인 시장 브리핑</p>
+              <p className="nav-subtitle">해외 시장 뉴스 · 공식 시그널 브리프</p>
             </div>
           </div>
           <div className="hidden items-center gap-7 lg:flex">
@@ -37,14 +37,14 @@ export function SiteHeader({
                 <a className="nav-link" href="#brief">
                   오늘의 판단
                 </a>
+                <a className="nav-link" href="#map">
+                  브리핑 지도
+                </a>
                 <a className="nav-link" href="#news">
-                  뉴스 플로우
+                  핵심 뉴스
                 </a>
-                <a className="nav-link" href="#market">
-                  마켓 보드
-                </a>
-                <a className="nav-link" href="#btc">
-                  BTC 데스크
+                <a className="nav-link" href="#signals">
+                  공식 X 시그널
                 </a>
                 <a className="nav-link" href="/archive">
                   발행 아카이브
@@ -95,21 +95,21 @@ export function SiteHeader({
           <p className="hero-support">
             {isArchive
               ? "홈의 실시간 스트림 대신, 발행 시점 기준으로 저장된 판단과 뉴스 흐름을 다시 확인할 수 있습니다."
-              : "소버린 브리핑은 FRED·X 공식 시그널·ETF 흐름을 한국 시간 아침에 한 화면으로 큐레이션합니다. 남는 건 당신의 판단뿐."}
+              : "소버린 브리핑은 흩어진 영문 기사와 공식 시그널을 한국어 판단으로 압축해, 한국 시간 아침 한 화면에서 빠르게 읽게 합니다."}
           </p>
           {!isArchive ? (
             <div className="hero-shortcuts lg:hidden">
               <a className="hero-shortcut-link" href="#brief">
                 오늘의 판단
               </a>
+              <a className="hero-shortcut-link" href="#map">
+                브리핑 지도
+              </a>
               <a className="hero-shortcut-link" href="#news">
-                뉴스 플로우
+                핵심 뉴스
               </a>
-              <a className="hero-shortcut-link" href="#market">
-                마켓 보드
-              </a>
-              <a className="hero-shortcut-link" href="#btc">
-                BTC 데스크
+              <a className="hero-shortcut-link" href="#signals">
+                공식 X 시그널
               </a>
             </div>
           ) : null}

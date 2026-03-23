@@ -11,6 +11,7 @@ const timeFormatter = new Intl.DateTimeFormat("ko-KR", {
   hour12: false,
 });
 const INVALID_HEADLINE_PREFIXES = ["참고 출처", "source:"];
+const INVALID_HEADLINE_EXACT = new Set(["발행본", "오늘 발행본"]);
 
 export function formatIssueDate(value: string): string {
   return dateFormatter.format(new Date(value));
@@ -57,6 +58,9 @@ export function hasUsableHeadline(value: string | null | undefined): boolean {
     return false;
   }
   const lowered = normalized.toLowerCase();
+  if (INVALID_HEADLINE_EXACT.has(normalized)) {
+    return false;
+  }
   if (INVALID_HEADLINE_PREFIXES.some((prefix) => lowered.startsWith(prefix))) {
     return false;
   }

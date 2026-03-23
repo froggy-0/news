@@ -61,7 +61,13 @@ function displayRelatedStocks(value: string[] | null | undefined): string[] {
     .slice(0, 5);
 }
 
-export function TopicGrid({ items }: { items: TopicSummary[] }) {
+export function TopicGrid({
+  items,
+  variant = "detail",
+}: {
+  items: TopicSummary[];
+  variant?: "home" | "detail";
+}) {
   const visibleItems = items
     .map((item) => ({
       item,
@@ -70,6 +76,74 @@ export function TopicGrid({ items }: { items: TopicSummary[] }) {
       relatedStocks: displayRelatedStocks(item.relatedStocks),
     }))
     .filter((entry) => entry.summary);
+
+  if (variant === "home") {
+    const [leadItem, ...otherItems] = visibleItems;
+
+    return (
+      <section id="map" className="section-shell rounded-[8px] px-5 py-6 md:px-8 md:py-8">
+        <div className="mb-8 flex flex-col gap-3 border-b border-white/10 pb-6 md:flex-row md:items-end md:justify-between">
+          <div className="space-y-2">
+            <p className="section-title">브리핑 지도</p>
+            <h2 className="display-headline max-w-5xl text-[2.2rem] md:text-[3.35rem]">
+              오늘 장을 움직이는 축부터 먼저 읽습니다.
+            </h2>
+          </div>
+          <p className="eyebrow max-w-sm">
+            숫자보다 먼저, 왜 오늘 시장이 그렇게 흘렀는지 핵심 축을 요약합니다.
+          </p>
+        </div>
+        {visibleItems.length === 0 ? (
+          <DataState message="이번 집계에서는 토픽 요약을 확인하지 못했어요." />
+        ) : (
+          <div className="space-y-4">
+            {leadItem ? (
+              <article className="panel-soft rounded-[8px] border border-white/10 bg-white/[0.03] px-5 py-5 md:px-6 md:py-6">
+                <p className="section-title">{leadItem.item.label}</p>
+                <p className="mt-4 max-w-4xl text-[1.05rem] leading-8 text-[var(--text-primary)] md:text-[1.18rem]">
+                  {leadItem.summary}
+                </p>
+                {leadItem.keyMetric || leadItem.relatedStocks.length > 0 ? (
+                  <div className="mt-5 flex flex-wrap items-center gap-3">
+                    {leadItem.keyMetric ? (
+                      <p className="numeric font-mono text-[10px] tracking-[0.18em] text-[var(--accent-primary)] uppercase">
+                        {leadItem.keyMetric}
+                      </p>
+                    ) : null}
+                    {leadItem.relatedStocks.length > 0 ? (
+                      <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--text-muted)] uppercase">
+                        {leadItem.relatedStocks.join(" · ")}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </article>
+            ) : null}
+            {otherItems.length > 0 ? (
+              <div className="grid gap-4 md:grid-cols-3">
+                {otherItems.map(({ item, summary, keyMetric, relatedStocks }) => (
+                  <article key={item.topic} className="panel-soft rounded-[8px] border border-white/8 bg-black/20 px-5 py-5">
+                    <p className="section-title">{item.label}</p>
+                    <p className="mt-4 text-sm leading-7 text-[var(--text-secondary)]">{summary}</p>
+                    {keyMetric ? (
+                      <p className="numeric mt-5 font-mono text-[10px] tracking-[0.18em] text-[var(--accent-primary)] uppercase">
+                        {keyMetric}
+                      </p>
+                    ) : null}
+                    {relatedStocks.length > 0 ? (
+                      <p className="mt-3 font-mono text-[10px] tracking-[0.16em] text-[var(--text-muted)] uppercase">
+                        {relatedStocks.join(" · ")}
+                      </p>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        )}
+      </section>
+    );
+  }
 
   return (
     <section className="panel rounded-[32px] px-6 py-7 md:px-8">
