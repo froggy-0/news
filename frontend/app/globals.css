@@ -65,7 +65,7 @@ a {
 .page-inner {
   width: min(1600px, calc(100% - 32px));
   margin: 0 auto;
-  padding: 150px 0 96px;
+  padding: 110px 0 96px;
 }
 
 .section-shell {
@@ -305,7 +305,7 @@ a {
 
 .top-nav-shell {
   position: fixed;
-  top: 32px;
+  top: 0;
   left: 0;
   right: 0;
   z-index: 65;
@@ -329,23 +329,7 @@ a {
   display: flex;
   align-items: center;
   gap: 14px;
-}
-
-.brand-mark {
-  width: 34px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  background: var(--accent-primary);
-}
-
-.brand-mark-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 9999px;
-  background: #000;
+  min-width: 0;
 }
 
 .nav-brand {
@@ -372,6 +356,7 @@ a {
   letter-spacing: 0.24em;
   text-transform: uppercase;
   color: rgba(198, 198, 198, 0.68);
+  white-space: nowrap;
 }
 
 .nav-link {
@@ -715,22 +700,60 @@ a {
 @media (max-width: 768px) {
   .page-inner {
     width: min(100% - 24px, 1600px);
-    padding-top: 138px;
+    padding-top: 92px;
     padding-bottom: 72px;
   }
 
   .top-nav-inner {
     width: min(100% - 24px, 1600px);
+    gap: 12px;
+  }
+
+  .top-nav-shell {
+    height: 58px;
+  }
+
+  .top-brand-lockup {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .nav-brand {
+    font-size: 1.05rem;
+    letter-spacing: -0.035em;
+  }
+
+  .nav-subtitle {
+    font-size: 7px;
+    letter-spacing: 0.12em;
+  }
+
+  .top-time-block {
+    flex-shrink: 0;
+  }
+
+  .nav-time {
+    font-size: 0.84rem;
+  }
+
+  .hero-shell {
+    margin-bottom: 14px;
+    padding-bottom: 20px;
   }
 
   .hero-meta-row {
     flex-direction: column;
     align-items: flex-start;
+    gap: 10px;
   }
 
   .top-time-block,
   .hero-date-block {
     text-align: left;
+  }
+
+  .hero-date {
+    font-size: 0.92rem;
   }
 
   .hero-support,
@@ -755,30 +778,15 @@ a {
     align-items: flex-start;
   }
 
-  .top-ticker-shell {
-    height: 38px;
-  }
-
-  .top-nav-shell {
-    top: 38px;
-  }
-
-  .ticker-pill {
-    gap: 6px;
-    padding: 7px 12px;
-  }
-
-  .ticker-pill .ticker-symbol {
+  .hero-shortcut-link {
+    padding: 7px 11px;
     font-size: 9px;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.1em;
   }
 
-  .ticker-pill .ticker-value {
-    font-size: 10px;
-  }
-
-  .ticker-pill .ticker-change,
-  .ticker-pill .ticker-label {
-    font-size: 8px;
+  .section-title,
+  .eyebrow {
+    font-size: 9px;
+    letter-spacing: 0.16em;
   }
 }

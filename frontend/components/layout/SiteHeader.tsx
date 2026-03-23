@@ -8,15 +8,14 @@ export function SiteHeader({
   variant?: "home" | "archive";
 }) {
   const isArchive = variant === "archive";
+  const issueDate = formatIssueDate(generatedAt);
+  const issueTime = `${formatIssueTime(generatedAt)} KST`;
 
   return (
     <>
       <nav className="top-nav-shell">
         <div className="top-nav-inner">
           <div className="top-brand-lockup">
-            <div className="brand-mark">
-              <span className="brand-mark-dot" />
-            </div>
             <div className="space-y-1">
               <p className="nav-brand">SOVEREIGN BRIEF</p>
               <p className="nav-subtitle">해외 시장 뉴스 · 공식 시그널 브리프</p>
@@ -53,7 +52,7 @@ export function SiteHeader({
             )}
           </div>
           <div className="top-time-block">
-            <p className="numeric nav-time">{formatIssueTime(generatedAt)} KST</p>
+            <p className="numeric nav-time">{issueTime}</p>
           </div>
           <a className="hero-shortcut-link lg:hidden" href={isArchive ? "/" : "/archive"}>
             {isArchive ? "실시간 홈" : "발행 아카이브"}
@@ -68,8 +67,8 @@ export function SiteHeader({
             {isArchive ? "아카이브 발행본" : "오늘 발행본"}
           </div>
           <div className="hero-date-block">
-            <p className="eyebrow">발행 시각</p>
-            <p className="numeric hero-date">{formatIssueDate(generatedAt)}</p>
+            <p className="eyebrow">발행일</p>
+            <p className="numeric hero-date">{issueDate}</p>
           </div>
         </div>
 

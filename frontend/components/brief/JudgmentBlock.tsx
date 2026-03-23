@@ -33,12 +33,9 @@ export function JudgmentBlock({
     return (
       <Reveal className="section-shell rounded-[8px] px-5 py-6 md:px-8 md:py-8">
         <div className="space-y-6">
-          <div className="flex flex-col gap-3 border-b border-white/10 pb-6 md:flex-row md:items-end md:justify-between">
-            <div className="space-y-2">
-              <p className="section-title">오늘의 판단</p>
-              <h2 className="display-headline display-headline-sm max-w-5xl">{cleanHeadline}</h2>
-            </div>
-            <p className="eyebrow">발행 {formatIssueTime(generatedAt)} KST</p>
+          <div className="space-y-2 border-b border-white/10 pb-6">
+            <p className="section-title">오늘의 판단</p>
+            <h2 className="display-headline display-headline-sm max-w-5xl">{cleanHeadline}</h2>
           </div>
           {cleanLead ? <p className="hero-summary-copy max-w-4xl">{cleanLead}</p> : null}
           {cleanSupport ? (

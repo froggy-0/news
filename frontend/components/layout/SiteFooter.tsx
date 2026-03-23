@@ -10,16 +10,16 @@ export function SiteFooter() {
             <h2 className="site-footer-heading">한국장 오픈 전에 핵심 흐름을 읽는 공개 브리핑 데스크</h2>
           </div>
           <p className="site-footer-copy">
-            장전 판단에 필요한 핵심 수치, 선별 뉴스, 공식 X 시그널, 비트코인과 ETF 흐름을 같은 지면에서 빠르게 훑도록 구성했습니다.
+            흩어진 영문 기사와 공식 시그널을 한국어 요약으로 압축하고, 필요할 때 전체 발행본으로 이어 읽게 구성했습니다.
           </p>
         </div>
 
         <div className="site-footer-column">
           <p className="section-title">데이터 범위</p>
           <ul className="site-footer-list">
-            <li>거시 · 미국 지수 · 주요 기술주 · 비트코인</li>
-            <li>신뢰 뉴스 소스와 공식 X 시그널</li>
-            <li>공식 ETF 보유 현황과 아카이브 발행본</li>
+            <li>브리핑 지도 · 핵심 뉴스 · 공식 X 시그널</li>
+            <li>전체 발행본에서 시장 수치와 상세 본문 제공</li>
+            <li>아카이브 발행본과 공개 인덱스 유지</li>
           </ul>
         </div>
 
