@@ -46,11 +46,11 @@ export function NewsFeed({
             <span className="h-2 w-2 rounded-full bg-[var(--accent-primary)]" />
             <p className="section-title">핵심 뉴스</p>
           </div>
-          <h3 className="serif-display text-[2.2rem] italic tracking-[-0.04em] text-[var(--text-primary)] md:text-[3.2rem]">
+          <h3 className="section-headline">
             {typeof limit === "number" ? "오늘의 핵심 뉴스" : "전체 뉴스 플로우"}
           </h3>
         </div>
-        <p className="eyebrow">
+        <p className="section-intro">
           {typeof limit === "number"
             ? "홈에서는 핵심 흐름만 먼저 읽을 수 있게 요약해 보여줍니다"
             : "상세에서는 원문 링크와 함께 전체 뉴스를 다시 확인할 수 있습니다"}
@@ -104,7 +104,7 @@ export function NewsFeed({
                     </div>
 
                     <a href={item.url} target="_blank" rel="noreferrer" className="block">
-                      <h4 className="serif-display text-[1.85rem] leading-[1.18] tracking-[-0.03em] text-[var(--text-primary)] transition-colors group-hover:text-[var(--accent-primary)] md:text-[2.65rem]">
+                      <h4 className="serif-display text-[1.45rem] leading-[1.22] tracking-[-0.03em] text-[var(--text-primary)] transition-colors group-hover:text-[var(--accent-primary)] md:text-[2rem]">
                         {displayTitle}
                       </h4>
                     </a>

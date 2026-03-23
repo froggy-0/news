@@ -80,8 +80,8 @@ a {
     "IBM Plex Mono",
     "SFMono-Regular",
     monospace;
-  font-size: 10px;
-  letter-spacing: 0.28em;
+  font-size: 9px;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
   color: var(--accent-primary);
 }
@@ -103,9 +103,9 @@ a {
   font-family:
     "IBM Plex Mono",
     monospace;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  font-size: 10px;
+  font-size: 9px;
 }
 
 .display-headline {
@@ -113,15 +113,34 @@ a {
     "Newsreader",
     "Noto Serif KR",
     serif;
-  font-size: clamp(2.3rem, 5.4vw, 4.5rem);
-  line-height: 0.98;
+  font-size: clamp(2rem, 4.8vw, 4rem);
+  line-height: 1.02;
   letter-spacing: -0.05em;
   color: var(--text-primary);
   font-style: italic;
 }
 
 .display-headline-sm {
-  font-size: clamp(1.9rem, 4.1vw, 3.2rem);
+  font-size: clamp(1.65rem, 3.6vw, 2.75rem);
+}
+
+.section-headline {
+  font-family:
+    "Newsreader",
+    "Noto Serif KR",
+    serif;
+  font-size: clamp(1.7rem, 3.6vw, 2.9rem);
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+  color: var(--text-primary);
+  font-style: italic;
+}
+
+.section-intro {
+  max-width: 640px;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.76;
 }
 
 .status-chip {
@@ -179,7 +198,8 @@ a {
 .copy-block {
   max-width: 780px;
   color: var(--text-secondary);
-  line-height: 1.85;
+  font-size: 0.96rem;
+  line-height: 1.78;
 }
 
 .panel {
@@ -198,8 +218,8 @@ a {
   background: rgba(255, 255, 255, 0.03);
   padding: 18px 20px;
   color: var(--text-secondary);
-  font-size: 0.95rem;
-  line-height: 1.8;
+  font-size: 0.92rem;
+  line-height: 1.72;
 }
 
 .scanline {
@@ -338,7 +358,7 @@ a {
     "Newsreader",
     "Noto Serif KR",
     serif;
-  font-size: 1.3rem;
+  font-size: 1.18rem;
   line-height: 1;
   letter-spacing: -0.03em;
   font-style: italic;
@@ -351,7 +371,7 @@ a {
     "Space Grotesk",
     "Noto Sans KR",
     sans-serif;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 500;
   letter-spacing: 0.24em;
   text-transform: uppercase;
@@ -365,7 +385,7 @@ a {
     "Space Grotesk",
     "Noto Sans KR",
     sans-serif;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 500;
   letter-spacing: 0.2em;
   text-transform: uppercase;
@@ -379,7 +399,7 @@ a {
 
 .nav-time {
   color: var(--text-primary);
-  font-size: 1rem;
+  font-size: 0.94rem;
 }
 
 .top-time-block {
@@ -406,7 +426,7 @@ a {
 
 .hero-date {
   color: var(--text-primary);
-  font-size: 1.1rem;
+  font-size: 1rem;
 }
 
 .hero-copy {
@@ -418,9 +438,9 @@ a {
   font-family:
     "Space Grotesk",
     sans-serif;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.28em;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--accent-primary);
 }
@@ -431,8 +451,8 @@ a {
   padding-left: 20px;
   border-left: 3px solid rgba(2, 230, 0, 0.45);
   color: var(--text-secondary);
-  font-size: 1rem;
-  line-height: 1.85;
+  font-size: 0.96rem;
+  line-height: 1.76;
 }
 
 .hero-shortcuts {
@@ -489,16 +509,16 @@ a {
   padding-left: 20px;
   border-left: 3px solid rgba(2, 230, 0, 0.35);
   color: var(--text-secondary);
-  font-size: 1rem;
-  line-height: 1.84;
+  font-size: 0.98rem;
+  line-height: 1.78;
 }
 
 .hero-support-note {
   font-family:
     "IBM Plex Mono",
     monospace;
-  font-size: 10px;
-  letter-spacing: 0.16em;
+  font-size: 9px;
+  letter-spacing: 0.13em;
   text-transform: uppercase;
   color: rgba(198, 198, 198, 0.6);
 }
@@ -620,8 +640,8 @@ a {
 .site-footer-heading {
   margin: 12px 0 0;
   font-family: "Newsreader", "Noto Serif KR", serif;
-  font-size: clamp(1.7rem, 2.4vw, 2.5rem);
-  line-height: 1.08;
+  font-size: clamp(1.55rem, 2.2vw, 2.1rem);
+  line-height: 1.14;
   letter-spacing: -0.04em;
   color: var(--text-primary);
   font-style: italic;
@@ -630,14 +650,16 @@ a {
 .site-footer-copy {
   max-width: 38rem;
   color: var(--text-secondary);
-  line-height: 1.82;
+  font-size: 0.95rem;
+  line-height: 1.72;
 }
 
 .site-footer-list {
   margin: 0;
   padding-left: 18px;
   color: var(--text-secondary);
-  line-height: 1.9;
+  font-size: 0.92rem;
+  line-height: 1.76;
 }
 
 .site-footer-links {
@@ -719,13 +741,13 @@ a {
   }
 
   .nav-brand {
-    font-size: 1.05rem;
+    font-size: 0.98rem;
     letter-spacing: -0.035em;
   }
 
   .nav-subtitle {
-    font-size: 7px;
-    letter-spacing: 0.12em;
+    font-size: 6px;
+    letter-spacing: 0.1em;
   }
 
   .top-time-block {
@@ -733,7 +755,7 @@ a {
   }
 
   .nav-time {
-    font-size: 0.84rem;
+    font-size: 0.76rem;
   }
 
   .hero-shell {
@@ -753,20 +775,27 @@ a {
   }
 
   .hero-date {
-    font-size: 0.92rem;
+    font-size: 0.82rem;
   }
 
   .hero-support,
   .hero-summary-copy {
     padding-left: 18px;
+    font-size: 0.9rem;
+    line-height: 1.68;
   }
 
   .display-headline {
-    font-size: clamp(2rem, 9vw, 3rem);
+    font-size: clamp(1.8rem, 8vw, 2.65rem);
   }
 
   .display-headline-sm {
-    font-size: clamp(1.8rem, 7vw, 2.45rem);
+    font-size: clamp(1.55rem, 6.5vw, 2.2rem);
+  }
+
+  .section-headline {
+    font-size: clamp(1.45rem, 6.2vw, 2rem);
+    line-height: 1.12;
   }
 
   .site-footer-grid {
@@ -780,13 +809,13 @@ a {
 
   .hero-shortcut-link {
     padding: 7px 11px;
-    font-size: 9px;
+    font-size: 8px;
     letter-spacing: 0.1em;
   }
 
   .section-title,
   .eyebrow {
-    font-size: 9px;
-    letter-spacing: 0.16em;
+    font-size: 8px;
+    letter-spacing: 0.13em;
   }
 }

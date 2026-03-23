@@ -40,11 +40,11 @@ export function XSignals({
       <div className="mb-8 flex flex-col gap-3 border-b border-white/10 pb-6 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="section-title">공식 X 시그널</p>
-          <h2 className="display-headline mt-4 max-w-4xl text-[2.1rem] md:text-[3.2rem]">
+          <h2 className="section-headline mt-4 max-w-4xl">
             공식 채널에서 먼저 나온 문장을 짧게 읽고, 시장 영향만 남깁니다.
           </h2>
         </div>
-        <p className="hero-support max-w-sm">
+        <p className="section-intro max-w-sm">
           {typeof limit === "number"
             ? "홈에서는 방향을 바꿀 수 있는 핵심 시그널만 선별해 이어서 읽게 합니다."
             : "상세에서는 전체 시그널을 다시 읽고, 필요하면 원문 표현도 함께 확인할 수 있습니다."}
@@ -73,7 +73,7 @@ export function XSignals({
                   </div>
                 </div>
                 <div className="space-y-4">
-                  <p className="text-lg leading-8 text-[var(--text-primary)] md:text-[1.15rem]">{displayContent}</p>
+                  <p className="text-[1rem] leading-7 text-[var(--text-primary)] md:text-[1.05rem] md:leading-8">{displayContent}</p>
                   {displayImpact ? (
                     <div className="rounded-[8px] border border-white/8 bg-white/[0.03] px-4 py-4">
                       <p className="section-title">시장 영향</p>

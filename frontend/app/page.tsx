@@ -46,8 +46,8 @@ export default async function HomePage() {
           <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div className="space-y-2">
               <p className="section-title">전체 발행본</p>
-              <h2 className="display-headline max-w-4xl text-[2rem] md:text-[3rem]">
-                요약에서 끝나지 않고, 전체 발행 맥락까지 이어서 읽습니다.
+              <h2 className="section-headline max-w-4xl">
+                핵심만 먼저 읽고, 전체 발행본으로 이어집니다.
               </h2>
               <p className="copy-block max-w-2xl">
                 홈에서는 핵심 판단과 이슈만 먼저 읽고, 상세 페이지에서는 수치 블록과 전체 본문, 전체 뉴스 흐름을 다시 확인할 수 있습니다.

@@ -85,11 +85,11 @@ export function TopicGrid({
         <div className="mb-8 flex flex-col gap-3 border-b border-white/10 pb-6 md:flex-row md:items-end md:justify-between">
           <div className="space-y-2">
             <p className="section-title">브리핑 지도</p>
-            <h2 className="display-headline max-w-5xl text-[2.2rem] md:text-[3.35rem]">
+            <h2 className="section-headline max-w-5xl">
               오늘 장을 움직이는 축부터 먼저 읽습니다.
             </h2>
           </div>
-          <p className="eyebrow max-w-sm">
+          <p className="section-intro max-w-sm">
             숫자보다 먼저, 왜 오늘 시장이 그렇게 흘렀는지 핵심 축을 요약합니다.
           </p>
         </div>
@@ -150,9 +150,9 @@ export function TopicGrid({
       <div className="mb-7 flex flex-col gap-3 border-b border-white/8 pb-6 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="section-title">브리핑 지도</p>
-          <h2 className="display-headline mt-4 text-[2.15rem] md:text-[3.2rem]">오늘 브리핑을 움직이는 축을 먼저 잡습니다.</h2>
+          <h2 className="section-headline mt-4">오늘 브리핑을 움직이는 축을 먼저 잡습니다.</h2>
         </div>
-        <p className="hero-support max-w-sm">거시, 미국 증시, 빅테크, 비트코인 흐름을 먼저 압축해 읽는 상단 맵입니다.</p>
+        <p className="section-intro max-w-sm">거시, 미국 증시, 빅테크, 비트코인 흐름을 먼저 압축해 읽는 상단 맵입니다.</p>
       </div>
       {visibleItems.length === 0 ? (
         <DataState message="이번 집계에서는 토픽 요약을 확인하지 못했어요." />

@@ -61,8 +61,8 @@ export function BriefBody({
       <div className="mb-6 flex flex-col gap-4 border-b border-white/8 pb-6 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="section-title">전체 발행본</p>
-          <h2 className="display-headline mt-4 text-[2.15rem] md:text-[3.1rem]">브리핑 본문</h2>
-          <p className="hero-support mt-3 max-w-2xl">
+          <h2 className="section-headline mt-4">브리핑 본문</h2>
+          <p className="section-intro mt-3 max-w-2xl">
             홈에서 먼저 본 시장 카드와 중복되는 수치 블록은 덜어내고, 판단의 근거와 전체 발행 맥락을 읽게 합니다.
           </p>
         </div>
