@@ -3,9 +3,13 @@ import { formatIssueDate, formatIssueTime } from "@/lib/format";
 export function SiteHeader({
   generatedAt,
   variant = "home",
+  showNews = true,
+  showSignals = true,
 }: {
   generatedAt: string;
   variant?: "home" | "archive";
+  showNews?: boolean;
+  showSignals?: boolean;
 }) {
   const isArchive = variant === "archive";
   const issueDate = formatIssueDate(generatedAt);
@@ -39,12 +43,16 @@ export function SiteHeader({
                 <a className="nav-link" href="#map">
                   브리핑 지도
                 </a>
-                <a className="nav-link" href="#news">
-                  핵심 뉴스
-                </a>
-                <a className="nav-link" href="#signals">
-                  공식 X 시그널
-                </a>
+                {showNews ? (
+                  <a className="nav-link" href="#news">
+                    핵심 뉴스
+                  </a>
+                ) : null}
+                {showSignals ? (
+                  <a className="nav-link" href="#signals">
+                    공식 X 시그널
+                  </a>
+                ) : null}
                 <a className="nav-link" href="/archive">
                   발행 아카이브
                 </a>
@@ -104,12 +112,16 @@ export function SiteHeader({
               <a className="hero-shortcut-link" href="#map">
                 브리핑 지도
               </a>
-              <a className="hero-shortcut-link" href="#news">
-                핵심 뉴스
-              </a>
-              <a className="hero-shortcut-link" href="#signals">
-                공식 X 시그널
-              </a>
+              {showNews ? (
+                <a className="hero-shortcut-link" href="#news">
+                  핵심 뉴스
+                </a>
+              ) : null}
+              {showSignals ? (
+                <a className="hero-shortcut-link" href="#signals">
+                  공식 X 시그널
+                </a>
+              ) : null}
             </div>
           ) : null}
         </div>

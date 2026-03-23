@@ -16,10 +16,16 @@ export const metadata: Metadata = {
 
 export default async function HomePage() {
   const brief = await fetchLatest();
+  const hasFeaturedNews = brief.featuredNews.length > 0;
+  const hasFeaturedSignals = Boolean(brief.featuredXSignals && brief.featuredXSignals.length > 0);
 
   return (
     <main className="space-y-10 xl:space-y-14">
-      <SiteHeader generatedAt={brief.meta.generatedAt} />
+      <SiteHeader
+        generatedAt={brief.meta.generatedAt}
+        showNews={hasFeaturedNews}
+        showSignals={hasFeaturedSignals}
+      />
       {brief.meta.dataQuality !== "ok" ? (
         <QualityBanner quality={brief.meta.dataQuality} notes={brief.meta.qualityNotes} />
       ) : null}
@@ -34,10 +40,12 @@ export default async function HomePage() {
       </section>
       <section className="space-y-8">
         <TopicGrid items={brief.topicSummaries} variant="home" />
-        <section id="news">
-          <NewsFeed items={brief.featuredNews} limit={5} />
-        </section>
-        {brief.featuredXSignals && brief.featuredXSignals.length > 0 ? (
+        {hasFeaturedNews ? (
+          <section id="news">
+            <NewsFeed items={brief.featuredNews} limit={5} />
+          </section>
+        ) : null}
+        {hasFeaturedSignals ? (
           <section id="signals">
             <XSignals items={brief.featuredXSignals} limit={5} />
           </section>
