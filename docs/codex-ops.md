@@ -57,3 +57,18 @@
 3. 브리핑/이메일 품질: `brief-quality-review`, `email-render-audit`
 4. 뉴스 품질: `news-source-quality`
 5. 운영 UI 설계: `brief-ops-app` + global `chatgpt-apps`
+
+## 6. Frontend QA와 Playwright
+
+- macOS에서 일반 `Google Chrome` 앱이 이미 열려 있으면, Codex 내장 Playwright의 persistent Chrome context가 `기존 브라우저 세션에서 여는 중입니다.` 메시지와 함께 실패할 수 있습니다.
+- 원인:
+  - 내장 Playwright는 설치된 `Google Chrome.app`을 직접 띄우고
+  - macOS는 같은 앱 번들을 별도 persistent GUI 인스턴스로 띄우지 않고 기존 세션으로 요청을 넘기기 때문입니다.
+- 이 저장소에서는 로컬 프론트 QA 시 내장 Playwright보다 `Chromium` 기반 CLI 경로를 기본값으로 둡니다.
+- 사용:
+  - `cd frontend && npm run qa:playwright`
+  - 특정 URL: `cd frontend && npm run qa:playwright -- http://localhost:3000 archive`
+- 산출물:
+  - `output/playwright/<name>-mobile.png`
+  - `output/playwright/<name>-desktop.png`
+- 내장 Playwright를 꼭 써야 하면 먼저 일반 `Google Chrome` 앱을 종료한 뒤 다시 시도합니다.

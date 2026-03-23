@@ -9,6 +9,7 @@
     "build:fixture": "BRIEF_DATA_SOURCE=fixture node ./scripts/generate-static-assets.mjs && next build",
     "deploy:preview": "./scripts/deploy-pages.sh preview",
     "deploy:production": "./scripts/deploy-pages.sh production",
+    "qa:playwright": "./scripts/playwright-capture.sh",
     "start": "npx serve out --listen 3000",
     "lint": "next typegen && tsc --noEmit",
     "test": "node --test --import tsx ./tests/*.test.ts"
