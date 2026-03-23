@@ -64,13 +64,14 @@ def filter_publish_news(
         url = item.url.strip()
         domain = extract_domain(url)
         interpretation = item.why_it_matters.strip() or item.summary.strip()
+        is_official_signal = item.provider == OFFICIAL_SIGNAL_PROVIDER
         reason: str | None = None
 
         if not title or not url:
             reason = "missing_title_or_url"
         elif domain in _PUBLISH_BLOCKED_DOMAINS:
             reason = "blocked_domain"
-        elif not is_preferred_domain(url):
+        elif not is_official_signal and not is_preferred_domain(url):
             reason = "non_preferred_domain"
         elif _looks_like_publish_placeholder(title):
             reason = "placeholder_title"
@@ -97,6 +98,10 @@ def filter_publish_news(
         "below_minimum": below_minimum,
         "dropped": dropped,
     }
+
+
+def filter_publish_news_candidates(items: list[NewsItem]) -> tuple[list[NewsItem], dict[str, Any]]:
+    return filter_publish_news(items, min_items=0)
 
 
 def filter_publish_x_signals(
@@ -137,6 +142,10 @@ def filter_publish_x_signals(
         "below_minimum": below_minimum,
         "dropped": dropped,
     }
+
+
+def filter_publish_x_signal_candidates(signals: list[Any]) -> tuple[list[Any], dict[str, Any]]:
+    return filter_publish_x_signals(signals, min_items=0)
 
 
 def _normalize_url(url: str) -> str:

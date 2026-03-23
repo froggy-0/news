@@ -60,10 +60,12 @@ def test_cache_dir_loaded(monkeypatch, tmp_path):
 def test_openai_web_search_flags_loaded(monkeypatch):
     monkeypatch.setenv("OPENAI_WEB_SEARCH_ENABLED", "false")
     monkeypatch.setenv("OPENAI_WEB_SEARCH_MODEL", "gpt-5")
+    monkeypatch.setenv("OPENAI_PUBLIC_TRANSLATION_MODEL", "gpt-5-nano")
     monkeypatch.setenv("OPENAI_WEB_SEARCH_MAX_RESULTS", "4")
     settings = load_settings()
     assert settings.openai_web_search_enabled is False
     assert settings.openai_web_search_model == "gpt-5"
+    assert settings.openai_public_translation_model == "gpt-5-nano"
     assert settings.openai_web_search_max_results == 4
 
 
@@ -99,6 +101,7 @@ def test_openai_defaults_use_snapshot_model_and_prompt_version(monkeypatch):
 
     assert settings.openai_model == DEFAULT_OPENAI_MODEL
     assert settings.openai_brief_validation_model == DEFAULT_OPENAI_MODEL
+    assert settings.openai_public_translation_model == DEFAULT_OPENAI_MODEL
     assert settings.openai_web_search_model == DEFAULT_OPENAI_MODEL
     assert settings.prompt_template_version == DEFAULT_PROMPT_TEMPLATE_VERSION
 

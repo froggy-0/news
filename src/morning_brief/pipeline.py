@@ -7,10 +7,15 @@ from zoneinfo import ZoneInfo
 
 from morning_brief.briefing import generate_briefing
 from morning_brief.config import Settings
-from morning_brief.data.data_quality import assess_data_quality
+from morning_brief.data.data_quality import (
+    MIN_NEWS_ITEMS,
+    MIN_PREFERRED_NEWS_ITEMS,
+    MIN_TIER_1_NEWS_ITEMS,
+    assess_data_quality,
+)
 from morning_brief.data.market import build_market_packet, reset_market_warned_state
 from morning_brief.data.market_keywords import build_search_keywords, extract_market_keywords
-from morning_brief.data.news import build_news_packet
+from morning_brief.data.news import PUBLIC_FEATURED_NEWS_ITEMS, build_news_packet
 from morning_brief.data.sources.provider_runtime import (
     provider_stats_snapshot,
     reset_provider_runtime_state,
@@ -28,6 +33,36 @@ from morning_brief.research_backfill import (
 logger = logging.getLogger(__name__)
 
 _assess_data_quality = assess_data_quality
+
+
+def _needs_public_news_backfill(public_context: dict) -> bool:
+    counts = public_context.get("source_counts", {})
+    if not isinstance(counts, dict):
+        return True
+    try:
+        return int(counts.get("newsFeatured", 0)) < PUBLIC_FEATURED_NEWS_ITEMS
+    except (TypeError, ValueError):
+        return True
+
+
+def _needs_email_news_backfill(quality: dict) -> bool:
+    if not isinstance(quality, dict):
+        return True
+
+    def _count(key: str) -> int:
+        try:
+            return int(quality.get(key, 0))
+        except (TypeError, ValueError):
+            return 0
+
+    news_count = _count("news_count")
+    preferred_signal_count = _count("preferred_news_count") + _count("official_signal_count")
+    authoritative_signal_count = _count("tier_1_news_count") + _count("official_signal_count")
+    return (
+        news_count < MIN_NEWS_ITEMS
+        or preferred_signal_count < MIN_PREFERRED_NEWS_ITEMS
+        or authoritative_signal_count < MIN_TIER_1_NEWS_ITEMS
+    )
 
 
 def run_pipeline(settings: Settings) -> str:
@@ -113,6 +148,8 @@ def run_pipeline(settings: Settings) -> str:
 
         quality = _assess_data_quality(packet=packet, news_packet=news_packet)
         with observer.phase("backfill"):
+            public_needs_backfill = _needs_public_news_backfill(public_context)
+            email_needs_backfill = _needs_email_news_backfill(quality)
             if not settings.openai_web_search_enabled:
                 observer.log_event(
                     "backfill_skipped",
@@ -122,6 +159,16 @@ def run_pipeline(settings: Settings) -> str:
                 observer.log_event(
                     "backfill_skipped",
                     reason="현재 뉴스 품질이 백필 기준을 넘겨 OpenAI web_search는 건너뛸게요.",
+                )
+            elif not email_needs_backfill:
+                observer.log_event(
+                    "backfill_skipped",
+                    reason="이메일 기준 신뢰 출처 뉴스와 공식 시그널이 이미 충분해 OpenAI web_search는 건너뛸게요.",
+                )
+            elif not public_needs_backfill:
+                observer.log_event(
+                    "backfill_skipped",
+                    reason="공개 홈 기준 featured 뉴스가 이미 충분해 OpenAI web_search는 건너뛸게요.",
                 )
             else:
                 merged_news, references = backfill_news_with_web_search(

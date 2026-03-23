@@ -172,16 +172,20 @@ def build_public_brief(
         public_context=public_context,
         limit=_PUBLIC_ALL_X_LIMIT,
     )
+    featured_news = [dict(item) for item in all_news[:_PUBLIC_FEATURED_NEWS_LIMIT]]
+    featured_x_signals = [dict(item) for item in all_x_signals[:_PUBLIC_FEATURED_X_LIMIT]]
     headline, summary_lead, summary_support, translation_status = _apply_public_translation(
         headline=headline,
         summary_lead=summary_lead,
         summary_support=summary_support,
         topic_summaries=topic_summaries,
-        news_items=all_news,
-        x_signals=all_x_signals,
+        news_items=featured_news,
+        x_signals=featured_x_signals,
         settings=settings,
         observer=observer,
     )
+    featured_news = _filter_public_news_for_display(featured_news)
+    featured_x_signals = _filter_public_signals_for_display(featured_x_signals)
     headline = _finalize_public_headline(
         headline=headline,
         summary_lead=summary_lead,
@@ -195,15 +199,12 @@ def build_public_brief(
         brief_body=brief_body,
         headline=display_headline,
     )
-    all_news = _filter_public_news_for_display(all_news)
-    all_x_signals = _filter_public_signals_for_display(all_x_signals)
     source_counts = _source_counts(
         public_context=public_context,
         all_news=all_news,
         all_x_signals=all_x_signals,
     )
-    featured_news = all_news[:_PUBLIC_FEATURED_NEWS_LIMIT]
-    featured_x_signals = all_x_signals[:_PUBLIC_FEATURED_X_LIMIT] or None
+    featured_x_signals_payload = featured_x_signals or None
 
     return {
         "meta": {
@@ -227,11 +228,11 @@ def build_public_brief(
         "topicSummaries": topic_summaries,
         "techStocks": _tech_stocks(packet),
         "bitcoin": _bitcoin_section(packet),
-        "featuredXSignals": featured_x_signals,
+        "featuredXSignals": featured_x_signals_payload,
         "allXSignals": all_x_signals or None,
         "featuredNews": featured_news,
         "allNews": all_news,
-        "xSignals": featured_x_signals,
+        "xSignals": featured_x_signals_payload,
         "news": featured_news,
     }
 
@@ -1065,39 +1066,58 @@ def _translate_public_texts(
     observer: PipelineObserver | None,
 ) -> tuple[dict[str, str], str]:
     cache_map = _load_translation_cache(settings)
-    translatable_texts: dict[str, str] = {}
+    priority_texts: dict[str, str] = {}
+    secondary_texts: dict[str, str] = {}
 
     for candidate in (headline, summary_lead, summary_support or ""):
         normalized = _normalize_public_text(candidate)
         if _needs_translation(normalized):
-            translatable_texts[_translation_key(normalized)] = normalized
+            priority_texts[_translation_key(normalized)] = normalized
 
     for item in topic_summaries:
         summary = _normalize_public_text(str(item.get("summary", "")).strip())
         if _needs_translation(summary):
-            translatable_texts[_translation_key(summary)] = summary
+            secondary_texts[_translation_key(summary)] = summary
 
     for item in news_items:
         for field in ("title", "summaryKo", "interpretation"):
             value = _normalize_public_text(str(item.get(field, "")).strip())
             if _needs_translation(value):
-                translatable_texts[_translation_key(value)] = value
+                priority_texts[_translation_key(value)] = value
 
     for item in x_signals:
         for field in ("content", "impact"):
             value = _normalize_public_text(str(item.get(field, "")).strip())
             if _needs_translation(value):
-                translatable_texts[_translation_key(value)] = value
+                priority_texts[_translation_key(value)] = value
+
+    translatable_texts = {**priority_texts, **secondary_texts}
 
     if not translatable_texts:
         return cache_map, "ok"
 
-    pending = {
+    pending_priority = {
         key: text
-        for key, text in translatable_texts.items()
+        for key, text in priority_texts.items()
         if not _normalize_public_text(cache_map.get(key, ""))
     }
+    pending_secondary = {
+        key: text
+        for key, text in secondary_texts.items()
+        if not _normalize_public_text(cache_map.get(key, ""))
+    }
+    pending = {**pending_priority, **pending_secondary}
     if not pending:
+        return cache_map, "ok"
+
+    if not pending_priority and len(pending_secondary) < 2:
+        if observer is not None:
+            observer.log_event(
+                "public_translation_skipped",
+                reason="low_value_pending",
+                pending_priority=0,
+                pending_secondary=len(pending_secondary),
+            )
         return cache_map, "ok"
 
     if not settings.openai_api_key:
@@ -1110,7 +1130,7 @@ def _translate_public_texts(
     for items in _translation_batches(pending):
         try:
             response = client.responses.create(
-                model=settings.openai_model,
+                model=settings.openai_public_translation_model,
                 instructions=(
                     "시장 브리프 공개 JSON용 번역기입니다. 입력 문장을 자연스러운 한국어로만 옮기세요. "
                     "숫자, 티커, ETF 이름, URL, 출처명은 보존하세요. 장황하게 늘리지 말고 한두 문장 안에서 끝내세요."
@@ -1155,7 +1175,12 @@ def _translate_public_texts(
             continue
 
         if observer is not None:
-            observer.record_provider_usage("openai", requests=1, **usage_snapshot(response))
+            observer.record_provider_usage(
+                "openai",
+                phase="public_translation",
+                requests=1,
+                **usage_snapshot(response),
+            )
 
         try:
             payload = json.loads((response.output_text or "").strip())

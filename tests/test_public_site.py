@@ -365,7 +365,7 @@ def test_build_public_brief_translates_selected_public_texts(monkeypatch, tmp_pa
     english_packet["news"] = [
         {
             "title": "Tech valuations face pressure as yields rise",
-            "url": "https://example.com/english-news",
+            "url": "https://www.reuters.com/world/us/tech-valuations-face-pressure",
             "source": "Reuters",
             "published_at": "2026-03-21T05:50:00+09:00",
             "topic": "macro",
@@ -390,9 +390,13 @@ def test_build_public_brief_translates_selected_public_texts(monkeypatch, tmp_pa
 
     assert payload["meta"]["translationStatus"] == "ok"
     assert payload["topicSummaries"][0]["summary"].startswith("번역")
-    assert payload["allNews"][0]["title"].startswith("번역")
+    assert payload["featuredNews"][0]["title"].startswith("번역")
+    assert payload["featuredNews"][0]["rawTitle"] == "Tech valuations face pressure as yields rise"
+    assert payload["allNews"][0]["title"] == "Tech valuations face pressure as yields rise"
     assert payload["allNews"][0]["rawTitle"] == "Tech valuations face pressure as yields rise"
-    assert payload["allXSignals"][0]["content"].startswith("번역")
+    assert payload["featuredXSignals"][0]["content"].startswith("번역")
+    assert payload["featuredXSignals"][0]["rawContent"] == "AI server demand is accelerating."
+    assert payload["allXSignals"][0]["content"] == "AI server demand is accelerating."
     assert payload["allXSignals"][0]["rawContent"] == "AI server demand is accelerating."
 
 
@@ -439,8 +443,12 @@ def test_build_public_brief_translation_batches_recover_from_partial_invalid_jso
     english_packet["news"] = [
         {
             "title": f"English title {index}",
-            "url": f"https://example.com/english-news-{index}",
-            "source": "Reuters",
+            "url": (
+                f"https://www.reuters.com/world/us/english-news-{index}"
+                if index == 0
+                else f"https://www.cnbc.com/2026/03/21/english-news-{index}.html"
+            ),
+            "source": "Reuters" if index == 0 else "CNBC",
             "published_at": "2026-03-21T05:50:00+09:00",
             "topic": "macro",
             "source_tier": 1,
@@ -477,7 +485,8 @@ def test_build_public_brief_translation_batches_recover_from_partial_invalid_jso
 
     assert FakeOpenAI.calls > 1
     assert payload["meta"]["translationStatus"] == "partial"
-    assert any(str(item["title"]).startswith("번역") for item in payload["allNews"])
+    assert any(str(item["title"]).startswith("번역") for item in payload["featuredNews"])
+    assert any(str(item["title"]).startswith("English title") for item in payload["allNews"])
 
 
 def test_publish_public_brief_writes_local_public_bundle(monkeypatch, tmp_path) -> None:
@@ -547,7 +556,57 @@ def test_build_public_brief_uses_source_text_instead_of_generic_copy() -> None:
         payload["aiJudgment"]["summaryLead"]
         == "연준 점도표와 중동 변수로 장중 변동성이 커졌습니다."
     )
-    assert payload["allNews"] == []
+    assert payload["featuredNews"] == []
+    assert payload["allNews"][0]["title"] == "English-only title from source"
     assert payload["featuredNews"] == []
     assert payload["featuredXSignals"] is None
-    assert payload["allXSignals"] is None
+    assert payload["allXSignals"][0]["content"] == "English-only official signal"
+
+
+def test_build_public_brief_skips_translation_when_only_single_low_value_topic_summary_remains(
+    monkeypatch, tmp_path
+) -> None:
+    class FakeOpenAI:
+        called = False
+
+        def __init__(self, *, api_key: str):
+            self.api_key = api_key
+            self.responses = self
+
+        def create(self, **kwargs):
+            FakeOpenAI.called = True
+            return SimpleNamespace(output_text='{"items":[]}', usage=None)
+
+    packet = _packet()
+    packet["topic_summaries"] = {
+        "macro": {
+            "summary_text": "Long-end yields stayed elevated overnight.",
+            "market_implication": "",
+            "key_data_points": [],
+            "notable_stocks": [],
+        }
+    }
+    packet["news"] = []
+    packet["x_market_signals"] = []
+    briefing = """SOVEREIGN BRIEF
+
+2026-03-21 발행본
+장기 금리 부담이 이어졌습니다.
+"""
+
+    monkeypatch.setattr("morning_brief.public_site.OpenAI", FakeOpenAI)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    settings = load_settings()
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+
+    payload = build_public_brief(
+        packet=packet,
+        briefing=briefing,
+        run_at=run_at,
+        settings=settings,
+    )
+
+    assert FakeOpenAI.called is False
+    assert payload["meta"]["translationStatus"] == "ok"
+    assert payload["topicSummaries"][0]["summary"] == "Long-end yields stayed elevated overnight."

@@ -998,7 +998,12 @@ def generate_briefing(
                     cached_tokens,
                 )
             if observer is not None:
-                observer.record_provider_usage("openai", requests=1, **usage_snapshot(response))
+                observer.record_provider_usage(
+                    "openai",
+                    phase="brief_generation",
+                    requests=1,
+                    **usage_snapshot(response),
+                )
             return response, text
 
         response, text = create_response(settings.openai_max_output_tokens)

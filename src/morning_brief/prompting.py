@@ -62,15 +62,10 @@ def _build_news_focus(packet: dict) -> dict:
     if not isinstance(news, list):
         return {
             "top_items": [],
-            "topics": {},
             "official_signals": [],
-            "topic_summaries": packet.get("topic_summaries", []),
-            "x_market_signals": packet.get("x_market_signals", []),
-            "sonar_context": packet.get("sonar_context"),
         }
 
     top_items = []
-    topics: dict[str, list[dict]] = {}
     official_signals: list[dict] = []
     for raw_item in news[:5]:
         if not isinstance(raw_item, dict):
@@ -83,8 +78,6 @@ def _build_news_focus(packet: dict) -> dict:
             "why_it_matters": str(raw_item.get("why_it_matters", "")).strip(),
             "provider": str(raw_item.get("provider", "")).strip(),
             "official_source": bool(raw_item.get("official_source")),
-            "source_tier": str(raw_item.get("source_tier", "")).strip(),
-            "preferred_source": bool(raw_item.get("preferred_source")),
             "citations": [
                 str(value).strip() for value in raw_item.get("citations", []) if str(value).strip()
             ]
@@ -94,18 +87,12 @@ def _build_news_focus(packet: dict) -> dict:
         if not item["title"]:
             continue
         top_items.append(item)
-        topic_key = str(item["topic"])
-        topics.setdefault(topic_key, []).append(item)
         if item["official_source"] or item["provider"] == "grok_official_x":
             official_signals.append(item)
 
     return {
         "top_items": top_items,
-        "topics": topics,
         "official_signals": official_signals,
-        "topic_summaries": packet.get("topic_summaries", []),
-        "x_market_signals": packet.get("x_market_signals", []),
-        "sonar_context": packet.get("sonar_context"),
     }
 
 
@@ -126,7 +113,6 @@ def render_brief_prompts(packet: dict, settings: Settings) -> tuple[str, str]:
         template_name=INPUT_TEMPLATE,
         packet_json=packet_json,
         news_focus_json=news_focus_json,
-        sonar_context=packet.get("sonar_context"),
     )
     return instructions, user_prompt
 

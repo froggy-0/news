@@ -130,6 +130,7 @@ class PipelineObserver:
         self.events: list[dict] = []
         self.phase_durations_ms: dict[str, int] = {}
         self.provider_usage: dict[str, ProviderUsageTotals] = {}
+        self.provider_usage_by_phase: dict[str, dict[str, ProviderUsageTotals]] = {}
         self.anomalies: list[dict[str, object]] = []
         self.cache_statuses: list[dict[str, object]] = []
         self.perplexity_topic_audit: dict[str, dict[str, object]] = {}
@@ -156,8 +157,11 @@ class PipelineObserver:
             self.phase_durations_ms[name] = self.phase_durations_ms.get(name, 0) + duration_ms
             self._emit("phase_duration", phase=name, duration_ms=duration_ms)
 
-    def record_provider_usage(self, provider: str, **metrics: int | None) -> None:
-        totals = self.provider_usage.setdefault(provider, ProviderUsageTotals())
+    def _apply_provider_usage_metrics(
+        self,
+        totals: ProviderUsageTotals,
+        **metrics: int | None,
+    ) -> None:
         for key, value in metrics.items():
             if not hasattr(totals, key):
                 continue
@@ -176,6 +180,21 @@ class PipelineObserver:
                 setattr(totals, key, normalized)
             else:
                 setattr(totals, key, int(current_value) + normalized)
+
+    def record_provider_usage(
+        self,
+        provider: str,
+        *,
+        phase: str | None = None,
+        **metrics: int | None,
+    ) -> None:
+        totals = self.provider_usage.setdefault(provider, ProviderUsageTotals())
+        self._apply_provider_usage_metrics(totals, **metrics)
+        if not phase:
+            return
+        phase_providers = self.provider_usage_by_phase.setdefault(phase, {})
+        phase_totals = phase_providers.setdefault(provider, ProviderUsageTotals())
+        self._apply_provider_usage_metrics(phase_totals, **metrics)
 
     def record_phase_duration(self, name: str, duration_ms: int) -> None:
         self.phase_durations_ms[name] = self.phase_durations_ms.get(name, 0) + int(duration_ms)
@@ -319,10 +338,20 @@ class PipelineObserver:
         )
         return [*prioritized, *remaining]
 
-    def provider_usage_summary_payload(self) -> dict[str, dict[str, int | float | None]]:
+    def _ordered_provider_names_for(self, usage_map: dict[str, ProviderUsageTotals]) -> list[str]:
+        prioritized = [provider for provider in PREFERRED_PROVIDER_ORDER if provider in usage_map]
+        remaining = sorted(
+            provider for provider in usage_map if provider not in PREFERRED_PROVIDER_ORDER
+        )
+        return [*prioritized, *remaining]
+
+    def _provider_usage_payload(
+        self,
+        usage_map: dict[str, ProviderUsageTotals],
+    ) -> dict[str, dict[str, int | float | None]]:
         payload: dict[str, dict[str, int | float | None]] = {}
-        for provider in self._ordered_provider_names():
-            totals = self.provider_usage[provider]
+        for provider in self._ordered_provider_names_for(usage_map):
+            totals = usage_map[provider]
             cost_usd = _provider_cost_usd(
                 provider=provider,
                 input_tokens=totals.input_tokens,
@@ -341,6 +370,17 @@ class PipelineObserver:
                 "cost_usd": cost_usd,
             }
         return payload
+
+    def provider_usage_summary_payload(self) -> dict[str, dict[str, int | float | None]]:
+        return self._provider_usage_payload(self.provider_usage)
+
+    def provider_usage_by_phase_payload(
+        self,
+    ) -> dict[str, dict[str, dict[str, int | float | None]]]:
+        return {
+            phase: self._provider_usage_payload(provider_usage)
+            for phase, provider_usage in sorted(self.provider_usage_by_phase.items())
+        }
 
     def provider_usage_summary_line(self) -> str:
         payload = self.provider_usage_summary_payload()
@@ -377,6 +417,7 @@ class PipelineObserver:
         observability_dir.mkdir(parents=True, exist_ok=True)
 
         usage_summary = self.provider_usage_summary_payload()
+        phase_usage_summary = self.provider_usage_by_phase_payload()
         usage_summary_line = self.provider_usage_summary_line()
         summary: dict[str, object] = {
             "run_id": self.run_id,
@@ -385,6 +426,7 @@ class PipelineObserver:
             "finished_at_utc": datetime.now(timezone.utc).isoformat(),
             "durations_ms": dict(sorted(self.phase_durations_ms.items())),
             "provider_usage": usage_summary,
+            "provider_usage_by_phase": phase_usage_summary,
             "provider_usage_line": usage_summary_line or None,
             "provider_runtime_stats": provider_stats or {},
             "anomaly_count": len(self.anomalies),
@@ -400,6 +442,7 @@ class PipelineObserver:
                 "provider_usage_summary",
                 line=usage_summary_line,
                 providers=usage_summary,
+                phases=phase_usage_summary,
             )
 
         run_file = observability_dir / f"pipeline-run-{self.run_id}.json"

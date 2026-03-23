@@ -507,6 +507,71 @@ def test_build_news_packet_skips_legacy_when_perplexity_quality_is_good(monkeypa
     assert {item["topic"] for item in packet} == {"macro", "us_equity", "ai_bigtech", "bitcoin"}
 
 
+def test_build_news_packet_triggers_legacy_when_public_publish_candidates_are_filtered(
+    monkeypatch,
+):
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")
+    monkeypatch.setenv("ENABLE_LEGACY_NEWS_FALLBACK", "true")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news_from_perplexity",
+        lambda **_: [
+            NewsItem(
+                title="Macro outlook shifts",
+                url="https://alpha.example.ai/macro-outlook",
+                source="Alpha Example",
+                published_at=now,
+                topic="macro",
+                provider="perplexity_search",
+                why_it_matters="금리 흐름을 읽는 데 도움이 됩니다.",
+                citations=["https://alpha.example.ai/macro-outlook"],
+            ),
+            NewsItem(
+                title="US equity breadth narrows",
+                url="https://beta.example.ai/equity-breadth",
+                source="Beta Example",
+                published_at=now - timedelta(hours=1),
+                topic="us_equity",
+                provider="perplexity_search",
+                why_it_matters="미국 증시 흐름을 읽는 데 도움이 됩니다.",
+                citations=["https://beta.example.ai/equity-breadth"],
+            ),
+            NewsItem(
+                title="Bitcoin derivatives positioning changes",
+                url="https://gamma.example.ai/bitcoin-positioning",
+                source="Gamma Example",
+                published_at=now - timedelta(hours=2),
+                topic="bitcoin",
+                provider="perplexity_search",
+                why_it_matters="비트코인 수급을 읽는 데 도움이 됩니다.",
+                citations=["https://gamma.example.ai/bitcoin-positioning"],
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news",
+        lambda **_: [
+            NewsItem(
+                title="Fed tone stays steady",
+                url="https://www.reuters.com/world/us/fed-tone-stays-steady",
+                source="Reuters",
+                published_at=now,
+                topic="macro",
+                provider="legacy_rss",
+                why_it_matters="금리 흐름을 읽는 데 도움이 돼요.",
+                citations=["https://www.reuters.com/world/us/fed-tone-stays-steady"],
+            )
+        ],
+    )
+
+    packet, _, _, public_context = news.build_news_packet(settings=load_settings())
+
+    assert any(item["source"] == "Reuters" for item in packet)
+    assert public_context["source_counts"]["newsCandidates"] == 4
+    assert public_context["source_counts"]["newsAll"] == 0
+
+
 def test_build_news_packet_does_not_trigger_legacy_fallback_for_uncited_grok_items(monkeypatch):
     now = datetime.now(timezone.utc)
     monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")

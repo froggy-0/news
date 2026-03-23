@@ -1,0 +1,23 @@
+{
+  "run_id": "23390939438",
+  "started_at_kst": "2026-03-22T08:14:00+09:00",
+  "provider_usage": {
+    "openai": {
+      "requests": 4,
+      "input_tokens": 57385,
+      "output_tokens": 8348,
+      "cached_input_tokens": 9088,
+      "reasoning_tokens": 832,
+      "cost_usd": 0.028997
+    },
+    "perplexity": {
+      "requests": 9,
+      "input_tokens": 1026,
+      "output_tokens": 3116,
+      "cached_input_tokens": null,
+      "reasoning_tokens": null,
+      "cost_usd": 0.004142
+    }
+  },
+  "total_cost_usd": 0.053885
+}

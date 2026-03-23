@@ -277,6 +277,124 @@ def test_run_pipeline_uses_openai_backfill_only_when_quality_is_degraded(monkeyp
     assert "Reuters" in briefing or "reuters.com" in briefing
 
 
+def test_run_pipeline_skips_openai_backfill_when_public_featured_news_is_already_sufficient(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_WEB_SEARCH_ENABLED", "true")
+    monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
+    settings = load_settings()
+    backfill_called = {"called": False}
+
+    initial_news = [
+        {
+            "title": "Weak source item",
+            "url": "https://example.com/weak-item",
+            "source": "Example",
+            "published_at": "2026-03-14T01:00:00+00:00",
+            "domain": "example.com",
+            "source_tier": "tier_3",
+            "preferred_source": False,
+            "age_hours": 4.0,
+        },
+        {
+            "title": "Weak source item 2",
+            "url": "https://example.com/weak-item-2",
+            "source": "Example",
+            "published_at": "2026-03-14T02:00:00+00:00",
+            "domain": "example.com",
+            "source_tier": "tier_3",
+            "preferred_source": False,
+            "age_hours": 3.0,
+        },
+        {
+            "title": "Weak source item 3",
+            "url": "https://example.net/weak-item-3",
+            "source": "Example",
+            "published_at": "2026-03-14T03:00:00+00:00",
+            "domain": "example.net",
+            "source_tier": "tier_3",
+            "preferred_source": False,
+            "age_hours": 2.0,
+        },
+    ]
+
+    monkeypatch.setattr("morning_brief.pipeline.build_market_packet", lambda **_: _market_packet())
+    monkeypatch.setattr(
+        "morning_brief.pipeline.build_news_packet",
+        lambda **_: (
+            initial_news,
+            {},
+            [],
+            {"source_counts": {"newsFeatured": 5, "newsAll": 5}},
+        ),
+    )
+    monkeypatch.setattr(
+        "morning_brief.pipeline.backfill_news_with_web_search",
+        lambda **_: backfill_called.__setitem__("called", True) or (initial_news, []),
+    )
+    monkeypatch.setattr(
+        "morning_brief.pipeline.generate_briefing",
+        lambda **_: "SOVEREIGN BRIEF (2026-03-14)",
+    )
+    monkeypatch.setattr(
+        "morning_brief.pipeline.GmailSender",
+        lambda _settings: SimpleNamespace(send=lambda **_: None),
+    )
+
+    run_pipeline(settings=settings)
+
+    assert backfill_called["called"] is False
+
+
+def test_run_pipeline_skips_backfill_when_email_trust_signals_are_already_sufficient(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_WEB_SEARCH_ENABLED", "true")
+    monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
+    settings = load_settings()
+    backfill_called = {"called": False}
+
+    monkeypatch.setattr("morning_brief.pipeline.build_market_packet", lambda **_: _market_packet())
+    monkeypatch.setattr("morning_brief.pipeline.build_news_packet", lambda **_: ([], {}, [], {}))
+    monkeypatch.setattr("morning_brief.pipeline._needs_web_search_backfill", lambda _quality: True)
+    monkeypatch.setattr(
+        "morning_brief.pipeline._assess_data_quality",
+        lambda **_: {
+            "status": "degraded",
+            "warnings": ["도메인 다양성이 조금 낮습니다."],
+            "news_count": 3,
+            "preferred_news_count": 2,
+            "tier_1_news_count": 1,
+            "official_signal_count": 0,
+        },
+    )
+    monkeypatch.setattr(
+        "morning_brief.pipeline.backfill_news_with_web_search",
+        lambda **_: backfill_called.__setitem__("called", True) or ([], []),
+    )
+    monkeypatch.setattr(
+        "morning_brief.pipeline.generate_briefing",
+        lambda **_: "SOVEREIGN BRIEF (2026-03-14)\n\nSection 0. 오늘의 판단\n본문",
+    )
+    monkeypatch.setattr(
+        "morning_brief.pipeline.GmailSender",
+        lambda _settings: SimpleNamespace(send=lambda **_: None),
+    )
+
+    run_pipeline(settings=settings)
+
+    assert backfill_called["called"] is False
+    run_files = list((settings.output_dir / "observability").glob("pipeline-run-*.json"))
+    payload = json.loads(run_files[0].read_text(encoding="utf-8"))
+    assert any(
+        event["event"] == "backfill_skipped"
+        and "이메일 기준 신뢰 출처 뉴스와 공식 시그널이 이미 충분" in str(event.get("reason", ""))
+        for event in payload["events"]
+    )
+
+
 def test_pipeline_observability_serializes_null_provider_token_usage(tmp_path):
     from morning_brief.observability import PipelineObserver
 
@@ -358,3 +476,53 @@ def test_pipeline_observability_writes_provider_usage_summary_event(tmp_path):
     assert summary_event["providers"]["perplexity"]["input_tokens"] is None
     assert summary_event["providers"]["openai"]["cost_usd"] == 0.000516
     assert summary["total_cost_usd"] == 0.000554
+
+
+def test_pipeline_observability_tracks_provider_usage_by_phase(tmp_path):
+    from morning_brief.observability import PipelineObserver
+
+    observer = PipelineObserver(output_dir=tmp_path)
+    observer.record_provider_usage(
+        "openai",
+        phase="brief_generation",
+        requests=2,
+        input_tokens=1200,
+        output_tokens=240,
+        cached_input_tokens=100,
+        reasoning_tokens=20,
+    )
+    observer.record_provider_usage(
+        "openai",
+        phase="brief_review",
+        requests=1,
+        input_tokens=400,
+        output_tokens=80,
+        cached_input_tokens=40,
+        reasoning_tokens=0,
+    )
+    observer.record_provider_usage(
+        "perplexity",
+        phase="news_search",
+        requests=3,
+        response_sources=12,
+        usage_parse_failures=1,
+    )
+
+    summary = observer.write_outputs(status="ok", provider_stats={}, extra={})
+    openai_totals = summary["provider_usage"]["openai"]
+    phases = summary["provider_usage_by_phase"]
+
+    assert openai_totals["requests"] == 3
+    assert openai_totals["input_tokens"] == 1600
+    assert phases["brief_generation"]["openai"]["requests"] == 2
+    assert phases["brief_generation"]["openai"]["input_tokens"] == 1200
+    assert phases["brief_review"]["openai"]["requests"] == 1
+    assert phases["brief_review"]["openai"]["input_tokens"] == 400
+    assert phases["news_search"]["perplexity"]["requests"] == 3
+    assert phases["news_search"]["perplexity"]["response_sources"] == 12
+    assert phases["news_search"]["perplexity"]["usage_parse_failures"] == 1
+    assert (
+        phases["brief_generation"]["openai"]["input_tokens"]
+        + phases["brief_review"]["openai"]["input_tokens"]
+        == openai_totals["input_tokens"]
+    )

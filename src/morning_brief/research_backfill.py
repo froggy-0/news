@@ -13,7 +13,7 @@ from openai import OpenAI
 
 from morning_brief.config import Settings
 from morning_brief.data.news_packet import merge_news_packets
-from morning_brief.data.news_selection import _merge_rank
+from morning_brief.data.news_selection import _merge_rank, filter_publish_news_candidates
 from morning_brief.data.sources.domain_utils import normalize_domain
 from morning_brief.llm_provider_policy import (
     CAPABILITY_WEB_BACKFILL,
@@ -22,6 +22,7 @@ from morning_brief.llm_provider_policy import (
 )
 from morning_brief.models import NewsItem
 from morning_brief.observability import COLLECTED_ITEM_LOG_LIMIT, PipelineObserver
+from morning_brief.openai_utils import usage_snapshot
 from morning_brief.prompting import build_prompt_cache_key, render_web_search_prompts
 
 logger = logging.getLogger(__name__)
@@ -385,6 +386,13 @@ def backfill_news_with_web_search(
             max_output_tokens=1200,
             prompt_cache_key=prompt_cache_key,
         )
+        if observer is not None:
+            observer.record_provider_usage(
+                "openai",
+                phase="web_backfill",
+                requests=1,
+                **usage_snapshot(response),
+            )
         output_text = (response.output_text or "").strip()
         payload = _extract_json_object(output_text)
         extra_items = _parse_web_news_items(payload)
@@ -392,9 +400,30 @@ def backfill_news_with_web_search(
         if not extra_items:
             citation_fallback_items = _fallback_items_from_citations(citations)
             if citation_fallback_items:
+                public_candidates, candidate_audit = filter_publish_news_candidates(
+                    citation_fallback_items
+                )
+                if not public_candidates:
+                    if observer is not None:
+                        observer.log_event(
+                            "web_backfill_result",
+                            before_count=len(packet.get("news", [])),
+                            extra_item_count=0,
+                            merged_count=len(packet.get("news", [])),
+                            citation_count=len(citations),
+                            citation_samples=citations[:COLLECTED_ITEM_LOG_LIMIT],
+                            items=_loggable_backfill_items(citation_fallback_items),
+                            reason="source_only_filtered",
+                            dropped=candidate_audit["dropped"],
+                        )
+                    logger.info(
+                        "OpenAI 웹 검색 source 후보 %s건이 있었지만 publish 품질 기준을 통과하지 못해 병합하지 않을게요.",
+                        len(citation_fallback_items),
+                    )
+                    return packet.get("news", []), citations
                 merged_packet = merge_news_packets(
                     existing_packet=packet.get("news", []),
-                    extra_items=citation_fallback_items,
+                    extra_items=public_candidates,
                     max_items=settings.max_news_items,
                     merge_rank_fn=_merge_rank,
                 )
@@ -402,17 +431,17 @@ def backfill_news_with_web_search(
                     observer.log_event(
                         "web_backfill_result",
                         before_count=len(packet.get("news", [])),
-                        extra_item_count=len(citation_fallback_items),
+                        extra_item_count=len(public_candidates),
                         merged_count=len(merged_packet),
                         citation_count=len(citations),
                         citation_samples=citations[:COLLECTED_ITEM_LOG_LIMIT],
-                        items=_loggable_backfill_items(citation_fallback_items),
+                        items=_loggable_backfill_items(public_candidates),
                         output_preview=output_text[:200],
                         reason="source_only_fallback",
                     )
                 logger.info(
                     "OpenAI 웹 검색 본문은 비어 있었지만 source 후보 %s건을 살려 최종 뉴스 %s건으로 정리했어요.",
-                    len(citation_fallback_items),
+                    len(public_candidates),
                     len(merged_packet),
                 )
                 return merged_packet, citations
@@ -430,9 +459,28 @@ def backfill_news_with_web_search(
             logger.info("OpenAI 웹 검색을 돌렸지만 새 기사 후보는 찾지 못했어요.")
             return packet.get("news", []), citations
 
+        publish_candidates, candidate_audit = filter_publish_news_candidates(extra_items)
+        if not publish_candidates:
+            if observer is not None:
+                observer.log_event(
+                    "web_backfill_result",
+                    before_count=len(packet.get("news", [])),
+                    extra_item_count=0,
+                    merged_count=len(packet.get("news", [])),
+                    citation_count=len(citations),
+                    items=_loggable_backfill_items(extra_items),
+                    reason="parsed_items_filtered",
+                    dropped=candidate_audit["dropped"],
+                )
+            logger.info(
+                "OpenAI 웹 검색 후보 %s건이 있었지만 publish 품질 기준을 통과하지 못해 병합하지 않을게요.",
+                len(extra_items),
+            )
+            return packet.get("news", []), citations
+
         merged_packet = merge_news_packets(
             existing_packet=packet.get("news", []),
-            extra_items=extra_items,
+            extra_items=publish_candidates,
             max_items=settings.max_news_items,
             merge_rank_fn=_merge_rank,
         )
@@ -440,15 +488,15 @@ def backfill_news_with_web_search(
             observer.log_event(
                 "web_backfill_result",
                 before_count=len(packet.get("news", [])),
-                extra_item_count=len(extra_items),
+                extra_item_count=len(publish_candidates),
                 merged_count=len(merged_packet),
                 citation_count=len(citations),
-                items=_loggable_backfill_items(extra_items),
+                items=_loggable_backfill_items(publish_candidates),
                 reason="merged",
             )
         logger.info(
             "OpenAI 웹 검색으로 후보 뉴스 %s건을 더 확인했고, 최종 뉴스는 %s건으로 정리했어요.",
-            len(extra_items),
+            len(publish_candidates),
             len(merged_packet),
         )
         return merged_packet, citations

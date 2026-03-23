@@ -216,7 +216,12 @@ def _review_briefing(
                 cached_tokens,
             )
         if observer is not None:
-            observer.record_provider_usage("openai", requests=1, **usage_snapshot(response))
+            observer.record_provider_usage(
+                "openai",
+                phase="brief_review",
+                requests=1,
+                **usage_snapshot(response),
+            )
         return response
 
     response = create_response(VALIDATOR_MAX_OUTPUT_TOKENS)
@@ -307,7 +312,12 @@ def _rewrite_briefing(
             cached_tokens,
         )
     if observer is not None:
-        observer.record_provider_usage("openai", requests=1, **usage_snapshot(response))
+        observer.record_provider_usage(
+            "openai",
+            phase="brief_rewrite",
+            requests=1,
+            **usage_snapshot(response),
+        )
         observer.record_phase_duration(
             "review",
             int(round((time.perf_counter() - started_at) * 1000)),

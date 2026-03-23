@@ -5,19 +5,13 @@
 {{ packet_json }}
 </market_data_json>
 
-특히 뉴스는 아래 보조 컨텍스트를 함께 참고해요.
+특히 뉴스와 공식 시그널은 아래 선별 컨텍스트를 함께 참고해요.
 
 <news_focus_json>
 {{ news_focus_json }}
 </news_focus_json>
 
-Sonar 토픽 요약과 X 시장 시그널은 news_focus_json 안에 포함되어 있어요.
-- `topic_summaries`: 토픽별 구조화된 요약 (summary, why_it_matters, citations)
-- `x_market_signals`: 실시간 X 키워드 시그널 (headline, summary, sentiment, source_handle)
-{% if sonar_context is defined and sonar_context %}
-- `sonar_context.key_narrative`: 오늘 시장의 핵심 내러티브
-- `sonar_context.analyses`: 기사별 심층 맥락과 교차 섹터 연결
-{% endif %}
+market_data_json 안의 `topic_summaries`, `x_market_signals`, `sonar_context`가 있으면 같이 참고해요.
 
 작성 지침:
 - 거시, 지수, 빅테크/반도체, 비트코인, 뉴스를 모두 반영하되 Section 0~6 구조로 작성해요.
@@ -33,12 +27,8 @@ Sonar 토픽 요약과 X 시장 시그널은 news_focus_json 안에 포함되어
   4-2. 핵심 뉴스 5선
   4-3. 섹터/자산 영향 매핑
   5-1. 주간 맥락 연결
-{% if sonar_context is defined and sonar_context %}
-  5-2. Sonar 교차 분석
-{% endif %}
-{% if x_market_signals is defined and x_market_signals %}
-  5-3. X 시장 반응
-{% endif %}
+  5-2. Sonar 교차 분석 (market_data_json.sonar_context가 있을 때만)
+  5-3. X 시장 반응 (market_data_json.x_market_signals에 유효 항목이 있을 때만)
   6. 이벤트 캘린더
 
 - Section 0 오늘의 핵심: 오늘 시장의 가장 중요한 이야기를 1~3문장으로 요약해요. 이상 움직임이 있으면 추가 bullet로 알려줘요.
@@ -52,12 +42,8 @@ Sonar 토픽 요약과 X 시장 시그널은 news_focus_json 안에 포함되어
   ⚠️ 뉴스 데이터는 영어 원문이지만, 헤드라인·서술 단락·핵심 한줄은 반드시 자연스럽고 이해하기 쉬운 한국어로 의역해서 작성해요. 영어를 그대로 쓰면 안 돼요. 출처명과 원문 링크만 영어를 허용해요.
 - Section 4-3 섹터/자산 영향 매핑: 수혜(+)/압력(-)/중립 3분류로 매핑하고, 각 항목에 판단 근거 한 줄을 필수로 포함해요.
 - Section 5-1 주간 맥락 연결: 요일별 고정 틀(월: 지난주 여운+이번 주 예고, 화~목: 이벤트 전후 위치, 금: 주간 결산)을 적용해요.
-{% if sonar_context is defined and sonar_context %}
-- Section 5-2 Sonar 교차 분석: 최대 2건, 각 2~3문장 서술로 교차 섹터 연결을 설명해요.
-{% endif %}
-{% if x_market_signals is defined and x_market_signals %}
-- Section 5-3 X 시장 반응: 2~3단락 압축 서술로 계정 핸들(@...)을 인라인으로 포함해요.
-{% endif %}
+- Section 5-2 Sonar 교차 분석: `market_data_json.sonar_context`가 있을 때만 최대 2건, 각 2~3문장 서술로 교차 섹터 연결을 설명해요.
+- Section 5-3 X 시장 반응: `market_data_json.x_market_signals`에 유효 항목이 있을 때만 2~3단락 압축 서술로 계정 핸들(@...)을 인라인으로 포함해요.
 - Section 6 이벤트 캘린더: 오늘 발표 예정을 상단에 분리하고, 이번 주 나머지를 날짜순으로 나열해요. 5단계 영향도(■□)를 부여해요.
 
 문체 지침:

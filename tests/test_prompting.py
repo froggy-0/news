@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from morning_brief.config import load_settings
 from morning_brief.prompting import (
+    _build_news_focus,
     build_prompt_cache_key,
     render_brief_prompts,
     render_brief_rewrite_prompts,
@@ -66,6 +67,52 @@ def test_render_brief_prompts_contains_contract_and_packet(monkeypatch):
     assert '"topic":"macro"' in user_prompt
     assert '"why_it_matters":"금리 흐름을 읽는 데 도움이 되는 기사예요."' in user_prompt
     assert '"official_signals"' in user_prompt
+    assert '"source_tier"' not in user_prompt
+    assert '"preferred_source"' not in user_prompt
+    assert "Sonar 토픽 요약과 X 시장 시그널은 news_focus_json 안에 포함" not in user_prompt
+
+
+def test_build_news_focus_keeps_only_minimum_selected_context():
+    packet = {
+        "news": [
+            {
+                "title": "Example",
+                "source": "Reuters",
+                "topic": "macro",
+                "summary": "Fed 관련 기사예요.",
+                "why_it_matters": "금리 흐름을 읽는 데 도움이 되는 기사예요.",
+                "provider": "perplexity_search",
+                "official_source": False,
+                "source_tier": "tier_1",
+                "preferred_source": True,
+                "citations": ["https://www.reuters.com/example"],
+            },
+            {
+                "title": "Official update",
+                "source": "@AMD",
+                "topic": "ai_bigtech",
+                "summary": "AMD 공식 계정이 투자 계획을 다시 설명했어요.",
+                "why_it_matters": "공식 채널 확인이라 해석의 우선 근거가 돼요.",
+                "provider": "grok_official_x",
+                "official_source": True,
+                "source_tier": "tier_1",
+                "preferred_source": True,
+                "citations": ["https://x.com/AMD/status/1"],
+            },
+        ],
+        "topic_summaries": [{"topic": "macro"}],
+        "x_market_signals": [{"headline": "signal"}],
+        "sonar_context": {"key_narrative": "narrative"},
+    }
+
+    payload = _build_news_focus(packet)
+
+    assert set(payload.keys()) == {"top_items", "official_signals"}
+    assert payload["top_items"][0]["title"] == "Example"
+    assert "source_tier" not in payload["top_items"][0]
+    assert "preferred_source" not in payload["top_items"][0]
+    assert len(payload["official_signals"]) == 1
+    assert payload["official_signals"][0]["title"] == "Official update"
 
 
 def test_prompt_cache_key_is_stable_and_sanitized(monkeypatch):
@@ -144,15 +191,17 @@ def test_render_brief_validator_prompts_contains_draft_and_packet(monkeypatch):
     )
 
     assert "품질 검수 에디터" in instructions
-    assert "4-2" in instructions
-    assert "한국어 헤드라인" in instructions
-    assert "None" in instructions
+    assert "Section 0, 1, 2, 3, 4-1, 4-2, 4-3, 5-1, 6" in user_prompt
+    assert "한국어 헤드라인" in user_prompt
+    assert "bare URL" in user_prompt
     assert "수혜" in instructions
-    assert "금리 변화가 0bp일 때는 `+0bp`" in instructions
-    assert "BTC 기사 요약에 `$69K`, `$70K`" in instructions
+    assert "rewrite_needed" in instructions
+    assert "자동 재작성이 실제로 필요한 경우에만 true" in instructions
     assert "Prompt Version: market_brief_test" in instructions
     assert "<brief_text>" in user_prompt
     assert '"macro":[{"label":"US10Y"}]' in user_prompt
+    assert "3개 레이어" not in user_prompt
+    assert "LAYER 2" not in user_prompt
 
 
 def test_render_brief_rewrite_prompts_contains_review_feedback(monkeypatch):

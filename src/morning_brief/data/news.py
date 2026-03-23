@@ -59,7 +59,9 @@ _packet_summary = news_selection._packet_summary
 _provider_breakdown = news_selection._provider_breakdown
 _provider_counts = news_selection._provider_counts
 filter_publish_news = news_selection.filter_publish_news
+filter_publish_news_candidates = news_selection.filter_publish_news_candidates
 filter_publish_x_signals = news_selection.filter_publish_x_signals
+filter_publish_x_signal_candidates = news_selection.filter_publish_x_signal_candidates
 summarize_news_packet_quality = data_quality.summarize_news_packet_quality
 
 
@@ -318,7 +320,8 @@ def build_news_packet(
         if official_signal_items:
             items = _merge_rank(items, official_signal_items, max_items=public_merge_limit)
         items = _dedup_and_rank(items, max_items=public_merge_limit)
-        packet, _ = _packet_summary(items)
+        public_candidate_items, publish_candidate_audit = filter_publish_news_candidates(items)
+        packet, _ = _packet_summary(public_candidate_items)
         fallback_review = assess_perplexity_fallback_need(packet)
         assert fallback_review is not None
         needs_legacy_fallback = bool(fallback_review.get("needs_legacy_fallback", False))
@@ -330,6 +333,13 @@ def build_news_packet(
         fallback_count = int(fallback_review.get("count", 0))
         fallback_unique_domains = int(fallback_review.get("unique_domains", 0))
         fallback_topic_coverage_count = int(fallback_review.get("topic_coverage_count", 0))
+        if observer is not None:
+            observer.log_event(
+                "public_publish_news_candidates",
+                candidate_count=publish_candidate_audit["candidate_count"],
+                kept_count=publish_candidate_audit["kept_count"],
+                dropped=publish_candidate_audit["dropped"],
+            )
         if needs_legacy_fallback and settings.enable_legacy_news_fallback:
             reduce_broad_fallback = should_reduce_legacy_broad_fallback(settings.cache_dir)
             allow_broad_fallback = not (
@@ -372,11 +382,15 @@ def build_news_packet(
         if grok_web_news:
             items = _merge_rank(items, grok_web_news, max_items=public_merge_limit)
 
-    public_ranked_items = _dedup_and_rank(items, max_items=PUBLIC_ALL_NEWS_ITEMS)
+    public_candidate_items, publish_candidate_audit = filter_publish_news_candidates(items)
+    public_ranked_items = _dedup_and_rank(public_candidate_items, max_items=PUBLIC_ALL_NEWS_ITEMS)
     publish_news_items, publish_news_audit = filter_publish_news(public_ranked_items)
     email_ranked_items = _dedup_and_rank(items, max_items=settings.max_news_items)
     public_ranked_signals = x_signals[:PUBLIC_ALL_X_SIGNALS]
-    publish_signals, publish_signal_audit = filter_publish_x_signals(public_ranked_signals)
+    public_candidate_signals, publish_signal_candidate_audit = filter_publish_x_signal_candidates(
+        public_ranked_signals
+    )
+    publish_signals, publish_signal_audit = filter_publish_x_signals(public_candidate_signals)
     featured_publish_signals = publish_signals[:PUBLIC_FEATURED_X_SIGNALS]
 
     if observer is not None:
@@ -386,6 +400,12 @@ def build_news_packet(
             kept_count=publish_news_audit["kept_count"],
             below_minimum=publish_news_audit["below_minimum"],
             dropped=publish_news_audit["dropped"],
+        )
+        observer.log_event(
+            "public_publish_x_candidates",
+            candidate_count=publish_signal_candidate_audit["candidate_count"],
+            kept_count=publish_signal_candidate_audit["kept_count"],
+            dropped=publish_signal_candidate_audit["dropped"],
         )
         observer.log_event(
             "public_publish_x_selection",
@@ -430,7 +450,7 @@ def build_news_packet(
             "newsFeatured": min(len(publish_news_items), PUBLIC_FEATURED_NEWS_ITEMS),
             "newsAll": len(publish_news_items),
             "xSignalCandidates": len(x_signals),
-            "xSignalRanked": len(public_ranked_signals),
+            "xSignalRanked": len(public_candidate_signals),
             "xSignalFeatured": len(featured_publish_signals),
             "xSignalAll": len(publish_signals),
         },
