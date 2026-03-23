@@ -123,8 +123,8 @@ briefs/2026-03-20/0800.json
 #### GitHub Actions / 배포
 - 현재 `morning-brief.yml` 뒤에 공개 JSON 업로드 step을 추가합니다.
 - `Morning Market Brief` 하나의 workflow 안에서 공개 JSON 업로드 뒤 Pages 배포까지 끝냅니다. `main`은 production, 그 외 브랜치는 preview로 배포합니다.
-- 별도 `frontend-pages.yml`은 수집 없이 프론트만 다시 배포하는 수동 workflow로 남기고, 자동 연동은 사용하지 않습니다.
-- `frontend-pages.yml`은 `ref`, `preview/production`, optional preview branch alias를 입력받아 현재 공개 R2 JSON 기준으로 `frontend/out`만 다시 배포합니다.
+- 별도 `frontend-pages.yml`은 수집 없이 `main` 기준 프론트 production만 다시 배포하는 수동 workflow로 남깁니다.
+- `frontend-pages.yml`은 입력 없이 현재 공개 R2 JSON 기준으로 `main`의 `frontend/out`을 production에 다시 배포합니다.
 - 1차는 같은 날짜 재실행 시 공개 브리프를 덮어씁니다.
 
 ### 2차: 시간별 버전 보존
