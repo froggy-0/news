@@ -23,23 +23,6 @@ export function TickerBar({ items }: { items: TickerItem[] }) {
             </div>
           ))}
         </div>
-
-        <div className="ticker-mobile-scroll">
-          <div className="ticker-mobile-track">
-            {items.map((item) => (
-              <div key={item.symbol} className="ticker-mobile-pill">
-                <span className="ticker-symbol">{item.symbol}</span>
-                {item.value ? <span className="ticker-value numeric">{item.value}</span> : null}
-                {item.change ? (
-                  <span className={`ticker-change numeric ${item.trend ? `is-${item.trend}` : ""}`}>
-                    {item.change}
-                  </span>
-                ) : null}
-                <span className="ticker-label">{item.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
     </section>
   );
