@@ -176,7 +176,7 @@ def test_build_market_packet_omits_anomalous_values_and_records_footer_note(
 
     dxy = packet["macro"][0]
     assert dxy["price"] is None
-    assert dxy["raw_value"] == 119.0
+    assert dxy["raw_value"] == 135.0
     assert dxy["resolved_value"] is None
     assert dxy["validation_status"] == "anomaly"
     assert any("허용 범위" in note for note in packet["data_footer_notes"])

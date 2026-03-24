@@ -134,7 +134,7 @@ def test_fetch_bitcoin_snapshot_calls_stooq_once_per_etf(monkeypatch, tmp_path: 
         lambda **_: ([], None, None),
     )
 
-    snapshot = fetch_bitcoin_snapshot(cache_dir=tmp_path)
+    snapshot = fetch_bitcoin_snapshot(cache_dir=tmp_path, fetch_etf_prices=True)
 
     assert [point.ticker for point in snapshot.etf_points] == [
         "IBIT",
