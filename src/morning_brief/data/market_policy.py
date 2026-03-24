@@ -5,9 +5,9 @@ from typing import Iterable
 CANONICAL_LABELS = {
     "us10y": "미국 10년물 국채금리",
     "us2y": "미국 2년물 국채금리",
-    "us3m": "미국 13주물 단기금리",
     "dxy": "달러 인덱스",
     "vix": "VIX",
+    "hy_spread": "하이일드 스프레드",
     "usdkrw": "원/달러 환율",
     "nq_futures": "나스닥 선물",
     "spy": "S&P500",
@@ -20,10 +20,12 @@ CANONICAL_KEY_BY_SOURCE = {
     "DGS10": "us10y",
     "^TNX": "us10y",
     "DGS2": "us2y",
-    "^IRX": "us3m",
-    # ICE DXY만 canonical dxy로 취급하고, FRED broad dollar index는 의도적으로 제외한다.
-    "DX=F": "dxy",
-    "DX-Y.NYB": "dxy",  # 하위 호환성 유지 (캐시에 이전 티커가 남아있을 수 있음)
+    # ICE DXY만 canonical dxy로 취급하고, FRED broad dollar index(DTWEXBGS)는 의도적으로 제외한다.
+    # DTWEXAFEGS(연준 AFE 무역가중 달러 지수)는 공식 FRED 시리즈로 dxy canonical에 포함한다.
+    "DTWEXAFEGS": "dxy",
+    "DX=F": "dxy",  # yfinance fallback — FRED 실패 시 사용
+    "DX-Y.NYB": "dxy",  # 하위 호환성 유지 (캐시에 이전 티커가 남아있을 수 있음, 상장폐지)
+    "BAMLH0A0HYM2": "hy_spread",
     "VIXCLS": "vix",
     "^VIX": "vix",
     "KRW=X": "usdkrw",
@@ -38,14 +40,22 @@ CANONICAL_KEY_BY_SOURCE = {
 }
 
 MARKET_VALIDATION_BOUNDS = {
-    "dxy": (95.0, 115.0),
+    # DTWEXAFEGS는 DXY(ICE)보다 스케일이 다름. 실제 시계열 기준 범위 조정.
+    "dxy": (95.0, 130.0),
     "vix": (10.0, 80.0),
     "us10y": (0.5, 8.0),
     "btc": (10_000.0, 200_000.0),
     "spy": (300.0, 700.0),
+    "hy_spread": (1.5, 20.0),  # 단위: %. 정상: 2~5%, 위기: 8%+, 상한 20은 이상값 방어
 }
 
-RATE_CANONICAL_KEYS = frozenset({"us10y", "us2y", "us3m"})
+# 감성 분석 파이프라인 검증에서 제외되는 뉴스레터 표시 전용 항목 검증 범위
+DISPLAY_ONLY_VALIDATION = {
+    "usdkrw": (900.0, 2000.0),
+    "nq_futures": (8000.0, 40000.0),
+}
+
+RATE_CANONICAL_KEYS = frozenset({"us10y", "us2y"})
 
 
 def _normalize_identifier(value: str) -> str:

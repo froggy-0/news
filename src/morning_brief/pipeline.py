@@ -13,7 +13,11 @@ from morning_brief.data.data_quality import (
     MIN_TIER_1_NEWS_ITEMS,
     assess_data_quality,
 )
-from morning_brief.data.market import build_market_packet, reset_market_warned_state
+from morning_brief.data.market import (
+    build_market_packet,
+    fetch_newsletter_display_data,
+    reset_market_warned_state,
+)
 from morning_brief.data.market_keywords import build_search_keywords, extract_market_keywords
 from morning_brief.data.news import PUBLIC_FEATURED_NEWS_ITEMS, build_news_packet
 from morning_brief.data.sources.provider_runtime import (
@@ -212,8 +216,21 @@ def run_pipeline(settings: Settings) -> str:
         output_path = settings.output_dir / file_name
         output_path.write_text(briefing, encoding="utf-8")
         logger.info("브리핑을 저장했어요: %s", output_path)
+
+        # 뉴스레터 렌더링 직전 — 표시 전용 데이터 주입 (감성 파이프라인 제외 항목)
+        display_data = fetch_newsletter_display_data(cache_dir=settings.cache_dir)
+        render_packet = {
+            **packet,
+            "korea_watch": display_data["korea_watch"],
+            "tech_stocks": display_data["tech_stocks"],
+        }
+        render_packet["bitcoin"] = {
+            **render_packet.get("bitcoin", {}),
+            "etf_points": display_data["btc_etf_points"],
+        }
+
         publish_public_brief(
-            packet=packet,
+            packet=render_packet,
             briefing=briefing,
             run_at=now,
             settings=settings,
@@ -238,7 +255,7 @@ def run_pipeline(settings: Settings) -> str:
             logger.warning("데이터 품질 critical + 검수 미통과로 이메일 발송을 건너뛸게요.")
         else:
             with observer.phase("email"):
-                GmailSender(settings).send(subject=subject, body=briefing, packet=packet)
+                GmailSender(settings).send(subject=subject, body=briefing, packet=render_packet)
     except BriefGenerationError as exc:
         status = "openai_failed"
         failure_message = str(exc)

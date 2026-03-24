@@ -385,7 +385,9 @@ def _market_source_label(point: dict) -> str:
     ticker = str(point.get("ticker", "")).strip()
     if ticker in {"DGS10", "DGS2", "VIXCLS"}:
         return "FRED"
-    if ticker in {"DX-Y.NYB", "^IRX", "^TNX", "^VIX", "KRW=X", "NQ=F"}:
+    if ticker in {"DTWEXAFEGS", "BAMLH0A0HYM2"}:
+        return "FRED"
+    if ticker in {"DX-Y.NYB", "^TNX", "^VIX", "KRW=X", "NQ=F"}:
         return "yfinance"
     if ticker == "BTC-USD":
         return "CoinGecko"

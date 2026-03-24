@@ -42,7 +42,9 @@ MARKET_POINT_CACHE_RELATIVE_PATH = Path("market/last_success_points.json")
 BTC_ETF_CACHE_MAX_AGE_HOURS = 48
 MACRO_FALLBACK_TARGETS = [
     ("us10y", "^TNX", 0.1),
-    ("us3m", "^IRX", 1.0),
+    # DEPRECATED: dxy yfinance DX=F — ICE Dollar Futures, 비공식 스크래퍼, 현물 DXY 괴리
+    # DEPRECATED: dxy yfinance DX-Y.NYB — 상장폐지
+    # REPLACED BY: FRED DTWEXAFEGS (일별, 연준 공식)
     ("dxy", "DX=F", 1.0),
     ("vix", "^VIX", 1.0),
 ]
@@ -440,6 +442,44 @@ def fetch_tech_stock_points() -> list[MarketPoint]:
     return points
 
 
+def fetch_newsletter_display_data(
+    cache_dir: Path | None = None,
+) -> dict:
+    """뉴스레터 렌더링 직전에만 호출하는 표시 전용 데이터 수집 함수.
+
+    감성 분석 파이프라인(LLM 프롬프트)에서 제외된 항목:
+    - 빅테크 10종 가격 (tech_stocks)
+    - BTC ETF 가격 5종 (btc_etf_points)
+    - nq_futures / usdkrw (korea_watch)
+    """
+    korea_watch = fetch_korea_investor_points()
+    tech_stocks = fetch_tech_stock_points()
+    btc_etf_points: list[MarketPoint] = []
+    for ticker in BTC_ETF_TICKERS:
+        point, _ = _safe_stooq_point_and_volume(
+            label=ticker,
+            ticker=ticker,
+        )
+        btc_etf_points.append(point)
+
+    effective_cache_dir = cache_dir or Path(".cache").resolve()
+    cache_file = _market_point_cache_file(effective_cache_dir)
+    previous_by_key = _load_market_point_cache(cache_file)
+
+    korea_watch = _resolve_points_from_cache(korea_watch, previous_by_key)
+    tech_stocks = _resolve_points_from_cache(tech_stocks, previous_by_key)
+    btc_etf_points = _resolve_points_from_cache(btc_etf_points, previous_by_key)
+    korea_watch, _ = _validate_market_points(korea_watch)
+    tech_stocks, _ = _validate_market_points(tech_stocks)
+    btc_etf_points, _ = _validate_market_points(btc_etf_points)
+
+    return {
+        "korea_watch": [point.__dict__ for point in korea_watch],
+        "tech_stocks": [point.__dict__ for point in tech_stocks],
+        "btc_etf_points": [point.__dict__ for point in btc_etf_points],
+    }
+
+
 def fetch_korea_investor_points() -> list[MarketPoint]:
     points = [
         _safe_yfinance_point(
@@ -794,16 +834,24 @@ def fetch_bitcoin_snapshot(
     cache_dir: Path | None = None,
     perplexity_api_key: str = "",
     observer: PipelineObserver | None = None,
+    *,
+    fetch_etf_prices: bool = False,
 ) -> BitcoinSnapshot:
+    """BTC 스냅샷 수집.
+
+    fetch_etf_prices=False (기본값): 감성 분석 파이프라인용 — spot + fear_greed + official_snapshots
+    fetch_etf_prices=True: 뉴스레터 렌더링용 — ETF 가격 5종 포함 (fetch_newsletter_display_data에서 호출)
+    """
     spot = _fetch_btc_spot_point()
 
-    etf_points = []
-    for ticker in BTC_ETF_TICKERS:
-        point, _ = _safe_stooq_point_and_volume(
-            label=ticker,
-            ticker=ticker,
-        )
-        etf_points.append(point)
+    etf_points: list[MarketPoint] = []
+    if fetch_etf_prices:
+        for ticker in BTC_ETF_TICKERS:
+            point, _ = _safe_stooq_point_and_volume(
+                label=ticker,
+                ticker=ticker,
+            )
+            etf_points.append(point)
 
     fear_greed_value, fear_greed_label = _fetch_fear_greed()
     (
@@ -833,61 +881,69 @@ def build_market_packet(
     cache_dir: Path | None = None,
     observer: PipelineObserver | None = None,
 ) -> dict:
+    """감성 분석 파이프라인용 시장 패킷.
+
+    포함: macro(us10y, us2y, dxy, vix, hy_spread), us_indices, btc(spot + fear_greed + official_snapshots)
+    제외: tech_stocks, korea_watch(usdkrw/nq_futures), btc etf_prices
+          → fetch_newsletter_display_data()에서 뉴스레터 렌더링 직전에 수집
+    """
     effective_cache_dir = cache_dir or Path(".cache").resolve()
     cache_file = _market_point_cache_file(effective_cache_dir)
     previous_by_key = _load_market_point_cache(cache_file)
     macro_points = fetch_macro_points(fred_api_key=fred_api_key)
-    korea_watch_points = fetch_korea_investor_points()
     us_index_points = fetch_us_index_points()
-    tech_stock_points = fetch_tech_stock_points()
     btc_snapshot = fetch_bitcoin_snapshot(
         cache_dir=effective_cache_dir,
         perplexity_api_key=perplexity_api_key,
         observer=observer,
+        fetch_etf_prices=False,
     )
     all_current_points = [
         *macro_points,
-        *korea_watch_points,
         *us_index_points,
-        *tech_stock_points,
         btc_snapshot.spot,
-        *btc_snapshot.etf_points,
     ]
     macro_points = _resolve_points_from_cache(macro_points, previous_by_key)
-    korea_watch_points = _resolve_points_from_cache(korea_watch_points, previous_by_key)
     us_index_points = _resolve_points_from_cache(us_index_points, previous_by_key)
-    tech_stock_points = _resolve_points_from_cache(tech_stock_points, previous_by_key)
     btc_snapshot.spot = _resolve_point_from_cache(btc_snapshot.spot, previous_by_key)
-    btc_snapshot.etf_points = _resolve_points_from_cache(btc_snapshot.etf_points, previous_by_key)
     _save_market_point_cache(cache_file, all_current_points)
     macro_points, macro_notes = _validate_market_points(macro_points)
-    korea_watch_points, korea_watch_notes = _validate_market_points(korea_watch_points)
     us_index_points, index_notes = _validate_market_points(us_index_points)
-    tech_stock_points, tech_notes = _validate_market_points(tech_stock_points)
     validated_spot, spot_note = _validate_market_point(btc_snapshot.spot)
-    validated_etf_points, etf_notes = _validate_market_points(btc_snapshot.etf_points)
     btc_snapshot.spot = validated_spot
-    btc_snapshot.etf_points = validated_etf_points
+
+    # yield_spread: us10y - us2y (장단기 금리차). 음수 = 장단기 역전 = 경기침체 우려 시그널
+    _macro_by_key = {p.canonical_key: p for p in macro_points}
+    _us10y = _macro_by_key.get("us10y")
+    _us2y = _macro_by_key.get("us2y")
+    if (
+        _us10y is not None
+        and _us10y.price is not None
+        and _us2y is not None
+        and _us2y.price is not None
+    ):
+        yield_spread: float | None = round(_us10y.price - _us2y.price, 4)
+    else:
+        yield_spread = None
+
     data_footer_notes = [
         *macro_notes,
-        *korea_watch_notes,
         *index_notes,
-        *tech_notes,
         *([spot_note] if spot_note else []),
-        *etf_notes,
     ]
     if perplexity_api_key and not btc_snapshot.official_etf_snapshots:
         data_footer_notes.append("BTC ETF 공식 보유 현황은 이번 집계에서는 확인되지 않았어요.")
     packet = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "macro": [point.__dict__ for point in macro_points],
-        "korea_watch": [point.__dict__ for point in korea_watch_points],
+        "yield_spread": yield_spread,  # 장단기 금리차 (10Y-2Y). 음수 = 역전 = 경기침체 우려
+        "korea_watch": [],
         "us_indices": [point.__dict__ for point in us_index_points],
-        "tech_stocks": [point.__dict__ for point in tech_stock_points],
+        "tech_stocks": [],
         "data_footer_notes": data_footer_notes,
         "bitcoin": {
             "spot": btc_snapshot.spot.__dict__,
-            "etf_points": [point.__dict__ for point in btc_snapshot.etf_points],
+            "etf_points": [],
             "fear_greed_value": btc_snapshot.fear_greed_value,
             "fear_greed_label": btc_snapshot.fear_greed_label,
             "official_etf_snapshots": [

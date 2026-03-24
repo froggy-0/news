@@ -20,6 +20,12 @@ SERIES_MAP = [
     ("us10y", "DGS10"),
     ("us2y", "DGS2"),
     ("vix", "VIXCLS"),
+    # dxy: FRED DTWEXAFEGS — 일별 연준 무역가중 달러 지수 (Advanced Foreign Economies)
+    # 기존 yfinance DX=F(ICE Dollar Futures)에서 연준 공식 시리즈로 교체
+    ("dxy", "DTWEXAFEGS"),
+    # hy_spread: FRED BAMLH0A0HYM2 — ICE BofA 미국 하이일드 옵션조정 스프레드
+    # 단위: %. 정상: 2~4%, 경계: 4~6%, 위험: 6~8%, 위기: 8%+ (2008: 20%, 2020 COVID: 10%)
+    ("hy_spread", "BAMLH0A0HYM2"),
 ]
 
 

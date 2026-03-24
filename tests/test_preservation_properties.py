@@ -57,30 +57,25 @@ class TestMacroFallbackPreservation:
     """DXY 외 거시 지표가 동일한 FRED → yfinance fallback 경로를 유지하는지 검증.
 
     관찰:
-    - MACRO_FALLBACK_TARGETS에 us10y(^TNX), us3m(^IRX), vix(^VIX)가 포함됨
+    - MACRO_FALLBACK_TARGETS에 us10y(^TNX), vix(^VIX)가 포함됨 (us3m 제거됨)
+    - dxy는 FRED DTWEXAFEGS가 주소스; DX=F는 FRED 실패 시 yfinance fallback
     - fetch_macro_points()는 FRED 우선 → MACRO_FALLBACK_TARGETS yfinance fallback 구조
 
     **Validates: Requirements 3.1, 3.7**
     """
 
     def test_non_dxy_macro_targets_present(self):
-        """us10y, us3m, vix가 MACRO_FALLBACK_TARGETS에 포함되어야 한다."""
+        """us10y, vix가 MACRO_FALLBACK_TARGETS에 포함되어야 한다 (us3m 제거됨)."""
         keys = {key for key, _, _ in MACRO_FALLBACK_TARGETS}
         assert "us10y" in keys, "us10y가 MACRO_FALLBACK_TARGETS에 없음"
-        assert "us3m" in keys, "us3m가 MACRO_FALLBACK_TARGETS에 없음"
         assert "vix" in keys, "vix가 MACRO_FALLBACK_TARGETS에 없음"
+        assert "us3m" not in keys, "us3m이 MACRO_FALLBACK_TARGETS에 있으면 안 됨 (제거됨)"
 
     def test_us10y_ticker_is_tnx(self):
         """us10y 티커가 ^TNX여야 한다."""
         entries = [(k, t) for k, t, _ in MACRO_FALLBACK_TARGETS if k == "us10y"]
         assert len(entries) == 1
         assert entries[0][1] == "^TNX"
-
-    def test_us3m_ticker_is_irx(self):
-        """us3m 티커가 ^IRX여야 한다."""
-        entries = [(k, t) for k, t, _ in MACRO_FALLBACK_TARGETS if k == "us3m"]
-        assert len(entries) == 1
-        assert entries[0][1] == "^IRX"
 
     def test_vix_ticker_is_vix(self):
         """vix 티커가 ^VIX여야 한다."""
@@ -180,14 +175,15 @@ class TestStooqFallbackPreservation:
         assert "GBTC" in BTC_ETF_TICKERS
 
     def test_btc_etf_uses_safe_stooq_point_and_volume(self):
-        """fetch_bitcoin_snapshot()에서 BTC ETF 가격·거래량이
+        """fetch_newsletter_display_data()에서 BTC ETF 가격·거래량이
         _safe_stooq_point_and_volume() 경로를 사용하는 구조를 유지한다.
+        (ETF 가격은 감성 파이프라인에서 제외 → 뉴스레터 렌더링 전용)
 
         **Validates: Requirements 3.3**
         """
-        from morning_brief.data.market import fetch_bitcoin_snapshot
+        from morning_brief.data.market import fetch_newsletter_display_data
 
-        source = textwrap.dedent(inspect.getsource(fetch_bitcoin_snapshot))
+        source = textwrap.dedent(inspect.getsource(fetch_newsletter_display_data))
         assert "_safe_stooq_point_and_volume" in source
         assert "BTC_ETF_TICKERS" in source
 
@@ -229,13 +225,14 @@ class TestCacheAndPacketStructurePreservation:
         assert not missing, f"build_market_packet() packet에 {missing} 키가 누락됨"
 
     def test_dxy_validation_bounds(self):
-        """DXY validation bounds가 (95.0, 115.0)이어야 한다.
+        """DXY validation bounds가 (95.0, 130.0)이어야 한다.
+        (DTWEXAFEGS는 ICE DXY보다 스케일이 다름 — 범위 조정됨)
 
         **Validates: Requirements 3.7**
         """
         bounds = validation_bounds_for("dxy")
         assert bounds is not None, "dxy validation bounds가 없음"
-        assert bounds == (95.0, 115.0), f"dxy bounds가 {bounds}이지만 (95.0, 115.0)이어야 함"
+        assert bounds == (95.0, 130.0), f"dxy bounds가 {bounds}이지만 (95.0, 130.0)이어야 함"
 
     def test_market_validation_bounds_preserved(self):
         """기존 MARKET_VALIDATION_BOUNDS의 모든 키가 보존되어야 한다.
@@ -361,8 +358,10 @@ class TestCanonicalKeyMappingPreservation:
         "DGS10": "us10y",
         "^TNX": "us10y",
         "DGS2": "us2y",
-        "^IRX": "us3m",
-        "DX-Y.NYB": "dxy",
+        "DTWEXAFEGS": "dxy",  # FRED 공식 달러 지수 (신규)
+        "DX=F": "dxy",  # yfinance fallback
+        "DX-Y.NYB": "dxy",  # 하위 호환성 (상장폐지)
+        "BAMLH0A0HYM2": "hy_spread",  # FRED 하이일드 스프레드 (신규)
         "VIXCLS": "vix",
         "^VIX": "vix",
         "KRW=X": "usdkrw",
