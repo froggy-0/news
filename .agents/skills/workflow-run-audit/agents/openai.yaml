@@ -1,6 +1,0 @@
-interface:
-  display_name: "Workflow Run Audit"
-  short_description: "run 아티팩트, observability, 메일 원문을 함께 대조합니다."
-
-policy:
-  allow_implicit_invocation: true

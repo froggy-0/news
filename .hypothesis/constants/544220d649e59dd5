@@ -1,4 +1,0 @@
-# file: /Users/giwon/code/news/src/morning_brief/data/news_policy.py
-# hypothesis_version: 6.151.9
-
-[0.0, 0.2, 0.8, 1.0, 1.2, 1.3, 1.5, 1.6, 1.7, 1.8, 2.0, 3.0, 3.8, 3.9, 4.0, 4.5, 5.0, 6.0, 3600, 'about.fb.com', 'aboutamazon.com', 'amazon', 'amd', 'apple', 'asml', 'asml.com', 'avgo', 'bitbetf.com', 'bitcoin', 'blog.google', 'bloomberg.com', 'broadcom.com', 'btc', 'cmpid', 'cnbc.com', 'coindesk.com', 'etf', 'etfs.grayscale.com', 'fbclid', 'fed', 'federalreserve.gov', 'fomc', 'ft.com', 'gclid', 'google', 'home.treasury.gov', 'igshid', 'investor.nvidia.com', 'ir.amd.com', 'ishares.com', 'mc_cid', 'mc_eid', 'meta', 'microsoft', 'nasdaq', 'news.microsoft.com', 'nvidia', 'ocid', 'ref', 'regulation', 'reuters.com', 's&p 500', 'sec.gov', 'semiconductor', 'tier_1', 'tier_2', 'tier_3', 'treasury', 'tsm', 'tsmc.com', 'utm_', 'wsj.com', 'yield']

@@ -1,6 +1,0 @@
-interface:
-  display_name: "Brief Quality Review"
-  short_description: "브리핑 생성, 검수, 재작성, fallback 구조를 함께 점검합니다."
-
-policy:
-  allow_implicit_invocation: true

@@ -1,6 +1,0 @@
-interface:
-  display_name: "News Source Quality"
-  short_description: "뉴스 후보 품질, 필터, 토픽 커버리지를 점검합니다."
-
-policy:
-  allow_implicit_invocation: true

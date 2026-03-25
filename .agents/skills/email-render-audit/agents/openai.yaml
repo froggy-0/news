@@ -1,6 +1,0 @@
-interface:
-  display_name: "Email Render Audit"
-  short_description: "브리핑 본문과 실제 메일 렌더링 차이를 좁힙니다."
-
-policy:
-  allow_implicit_invocation: true

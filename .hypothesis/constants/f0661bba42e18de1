@@ -1,4 +1,0 @@
-# file: /Users/giwon/code/news/src/morning_brief/pipeline.py
-# hypothesis_version: 6.151.9
-
-[1000, '; ', 'analyses', 'backfill', 'backfill_skipped', 'brief_%Y%m%d_%H%M.md', 'brief_fallback', 'brief_fallback_used', 'brief_path', 'brief_review_failed', 'critical', 'data_quality', 'degraded', 'email', 'email_skipped', 'event', 'failed', 'failure_message', 'key_narrative', 'market', 'news', 'news_count', 'ok', 'openai_alert', 'openai_failed', 'pipeline_error', 'provider_role_policy', 'provider_usage_line', 'skip_email', 'skipped', 'sonar_context', 'status', 'summary', 'title', 'topic', 'topic_summaries', 'total_duration_ms', 'utf-8', 'warnings', 'x_market_signals', '브리핑 파이프라인을 시작할게요.', '브리핑을 저장했어요: %s', '시장 지표와 뉴스 %s건을 모았어요.', '이번 실행의 수집 공급자 상태는 %s']

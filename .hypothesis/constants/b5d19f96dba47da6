@@ -1,4 +1,0 @@
-# file: /Users/giwon/code/news/src/morning_brief/openai_utils.py
-# hypothesis_version: 6.151.9
-
-['cached_input_tokens', 'cached_tokens', 'incomplete', 'incomplete_details', 'input_tokens', 'input_tokens_details', 'output_tokens', 'reason', 'reasoning_tokens', 'status', 'unknown', 'usage']

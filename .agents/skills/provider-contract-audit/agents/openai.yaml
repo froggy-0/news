@@ -1,6 +1,0 @@
-interface:
-  display_name: "Provider Contract Audit"
-  short_description: "공급자 계약, retry, parser, ranking 변경을 안전하게 다룹니다."
-
-policy:
-  allow_implicit_invocation: true

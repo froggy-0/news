@@ -1,4 +1,0 @@
-# file: /Users/giwon/code/news/src/morning_brief/data/sources/grok_web_search.py
-# hypothesis_version: 6.151.9
-
-[429, 500, 502, 503, 504, '+00:00', '.', 'Unknown', 'Z', 'articles', 'cached_input_tokens', 'cn.wsj.com', 'completion_tokens', 'content', 'data.coindesk.com', 'grok_web_search', 'input_tokens', 'jp.reuters.com', 'json_object', 'markets.ft.com', 'output_tokens', 'prompt_tokens', 'published_at', 'reasoning_tokens', 'required', 'response', 'source', 'status_code', 'summary', 'title', 'topic', 'url', 'usage', 'www.']

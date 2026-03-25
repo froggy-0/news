@@ -1,4 +1,0 @@
-# file: /Users/giwon/code/news/src/morning_brief/data/sources/grok_official_signals.py
-# hypothesis_version: 6.151.9
-
-[429, '%Y-%m-%d', '+00:00', '@', 'Official X', 'Retry-After', 'Z', 'ai_bigtech', 'ai_bigtech_primary', 'api_empty', 'author', 'bitcoin', 'btc_etf_primary', 'cached_input_tokens', 'cached_tokens', 'citations', 'collected_at', 'completion_tokens', 'connection', 'content', 'entity_name', 'grok_official', 'grok_official_x', 'headers', 'headline', 'http', 'https://x.com', 'inline_citations', 'input_tokens', 'input_tokens_details', 'items', 'json_object', 'macro', 'macro_regulator', 'no_results', 'output_tokens', 'posted_at', 'prompt_tokens', 'reasoning_tokens', 'required', 'response', 'retry-after', 'source_handle', 'status_code', 'summary', 'text', 'timed out', 'timeout', 'transport', 'url', 'us_equity', 'usage', 'why_it_matters', 'x_handle', '시장에 의미 있는 공식 업데이트']

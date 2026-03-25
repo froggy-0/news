@@ -1,4 +1,0 @@
-# file: /Users/giwon/code/news/src/morning_brief/data/sources/coingecko.py
-# hypothesis_version: 6.151.9
-
-[0.0, 'HttpFetchError', 'bitcoin', 'coingecko', 'ids', 'include_24hr_change', 'true', 'usd', 'usd_24h_change', 'vs_currencies']

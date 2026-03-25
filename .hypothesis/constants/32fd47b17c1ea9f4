@@ -1,4 +1,0 @@
-# file: /Users/giwon/code/news/src/morning_brief/brief_review.py
-# hypothesis_version: 6.151.9
-
-[200, 240, 1000, 4000, 8000, ',', '0', '1', ':', ':brief-rewrite', ':brief-validator', '; ', 'additionalProperties', 'array', 'boolean', 'brief_review', 'brief_review_failed', 'brief_review_retry', 'brief_review_skipped', 'description', 'effort', 'empty_response', 'false', 'format', 'invalid_json', 'issues', 'items', 'json_schema', 'low', 'maxItems', 'maxLength', 'max_output_tokens', 'minimal', 'name', 'no', 'object', 'off', 'on', 'openai', 'pass', 'payload', 'plain_language_pass', 'properties', 'required', 'review', 'rewrite', 'rewrite_guidance', 'rewrite_needed', 'schema', 'strict', 'string', 'structure_pass', 'true', 'type', 'unknown', 'validator', 'verbosity', 'yes', '{', '}', '보완이 필요한 표현이 있었어요', '브리핑 최종 검수를 통과했어요.', '아직 다듬을 부분이 남아 있어요', '\ufeff']

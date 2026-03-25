@@ -1,4 +1,0 @@
-# file: /Users/giwon/code/news/src/morning_brief/data/data_quality.py
-# hypothesis_version: 6.151.9
-
-[0.0, 0.6, 0.8, 1.0, 'age_hours', 'bitcoin', 'citations', 'count', 'critical', 'degraded', 'domain', 'etf_points', 'explained_count', 'fresh_count', 'fresh_news_count', 'grok_official_x', 'grok_web_search', 'grok_x_keyword', 'macro', 'news_count', 'official_source', 'ok', 'perplexity_search', 'perplexity_sonar', 'preferred_count', 'preferred_news_count', 'preferred_source', 'price', 'provider', 'reasons', 'source', 'source_tier', 'spot', 'status', 'tech_stocks', 'tier_1', 'tier_1_count', 'tier_1_news_count', 'topic', 'topic_coverage_count', 'unique_domains', 'unique_news_domains', 'unique_topics', 'us_indices', 'warnings', 'why_it_matters', 'zero_price_ratio', '일부 기사에 근거 링크가 빠져 있어요']

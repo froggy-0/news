@@ -1,4 +1,0 @@
-# file: /Users/giwon/code/news/src/morning_brief/brief_formatting.py
-# hypothesis_version: 6.151.9
-
-['\n데이터 처리 메모\n', '\n참고 출처\n', '- ', 'Morning Market Brief', '[데이터 품질 알림]', '^(\\d+)\\.\\s+(.+)$', 'conclusion', 'insight', 'label', 'lines', 'macro', 'metrics', 'watch', '거시 지표', '거시 환경', '배경과 해석', '수치 체크', '쉽게 보면', '오늘 볼 점', '오늘 체크할 포인트', '오늘의 한줄 결론', '왜 중요한지', '이렇게 읽으면 돼요', '이렇게 읽으면 좋아요', '주목할 변수', '주요 수치', '주요 지표', '지금 주의해서 볼 점', '체크 포인트', '한줄 결론', '해석', '핵심 내용', '핵심 수치', '핵심 이슈', '핵심 판단']
