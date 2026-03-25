@@ -6,6 +6,20 @@ __pycache__/
 credentials.json
 token.json
 outputs/
+output/
 .cache/
 .ruff_cache/
 .pre-commit-cache/
+
+# AI/IDE tool dirs
+.claude/*
+.codex/*
+.kiro/
+.agents/
+.hypothesis/
+.playwright-cli/
+.superset/
+.wrangler/
+
+# Misc
+log.txt
