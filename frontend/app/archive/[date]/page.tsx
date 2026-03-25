@@ -42,12 +42,24 @@ export default async function ArchiveDetailPage({
       ["SPX", "QQQ", "SOXX"].includes(item.symbol),
     );
 
+    const { sourceCounts, translationStatus } = brief.meta;
+
     return (
       <main className="space-y-8">
         <SiteHeader generatedAt={brief.meta.generatedAt} variant="archive" />
         {brief.meta.dataQuality !== "ok" ? (
           <QualityBanner quality={brief.meta.dataQuality} notes={brief.meta.qualityNotes} />
         ) : null}
+        {/* 데이터 수집 현황 및 번역 상태 */}
+        <div className="flex flex-wrap gap-x-6 gap-y-1 font-mono text-[10px] tracking-[0.18em] text-[var(--text-muted)] uppercase">
+          <span>뉴스 {sourceCounts.newsCandidates}건 수집 → {sourceCounts.newsAll}건 선별</span>
+          <span>X 시그널 {sourceCounts.xSignalCandidates}건 수집 → {sourceCounts.xSignalAll}건 선별</span>
+          {translationStatus === "partial" ? (
+            <span className="text-[var(--accent-gold)]">번역 일부 완료</span>
+          ) : translationStatus === "failed" ? (
+            <span className="text-[var(--accent-down)]">번역 실패</span>
+          ) : null}
+        </div>
         <section className="space-y-8">
           <JudgmentBlock
             headline={brief.meta.displayHeadline || brief.aiJudgment.headline}

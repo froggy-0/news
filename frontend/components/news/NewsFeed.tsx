@@ -10,6 +10,14 @@ function containsKorean(text: string | null | undefined): boolean {
   return Boolean(text && HANGUL_RE.test(text));
 }
 
+// LLM이 "없음" 같은 무의미 플레이스홀더를 반환하는 경우 null로 처리
+const MEANINGLESS_KO = new Set(["없음", "해당없음", "없음.", "없음,", "N/A", "n/a", "null"]);
+function filterMeaningless(s: string | null | undefined): string | null {
+  const t = s?.trim();
+  if (!t || MEANINGLESS_KO.has(t)) return null;
+  return t;
+}
+
 function urgencyLabel(value: NewsItem["urgency"]): string {
   if (value === "high") {
     return "높음";
@@ -62,7 +70,7 @@ export function NewsFeed({
         <div className="divide-y divide-white/8">
           {visibleItems.map((item) => {
             const displayTitle = item.title?.trim() || item.rawTitle?.trim() || item.url;
-            const interpretation = item.interpretation?.trim() || item.summaryKo?.trim() || null;
+            const interpretation = filterMeaningless(item.interpretation) || filterMeaningless(item.summaryKo) || null;
             const rawTitle = item.rawTitle ?? (!containsKorean(item.title) ? item.title : null);
 
             return (

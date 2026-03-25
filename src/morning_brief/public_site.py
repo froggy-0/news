@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import logging
@@ -465,10 +466,21 @@ def _is_machine_payload(text: str) -> bool:
     return normalized.startswith("{'") or normalized.startswith('{"')
 
 
+# LLM이 "없음" 같은 무의미 한국어 플레이스홀더를 반환하는 경우를 필터링
+_MEANINGLESS_KO: frozenset[str] = frozenset(
+    {"없음", "해당없음", "없음.", "없음,", "N/A", "n/a", "null"}
+)
+
+
 def _best_korean_text(*candidates: str) -> str | None:
     for candidate in candidates:
         normalized = _normalize_public_text(candidate)
-        if normalized and _contains_korean(normalized) and not _is_machine_payload(normalized):
+        if (
+            normalized
+            and _contains_korean(normalized)
+            and not _is_machine_payload(normalized)
+            and normalized not in _MEANINGLESS_KO
+        ):
             return normalized
     return None
 
@@ -694,6 +706,58 @@ def _market_snapshot_items_v2(unified: UnifiedOutput) -> list[dict[str, Any]]:
     return items
 
 
+def _parse_key_metric(raw: str | None) -> str | None:
+    """LLM이 Python dict 문자열로 반환한 keyMetric을 읽기 좋은 텍스트로 변환한다.
+
+    예: "{'label': 'Fed Funds Rate', 'value': '3.50%-3.75%', 'change': 'Unchanged'}"
+    → "Fed Funds Rate · 3.50%-3.75%"
+    """
+    if not raw:
+        return None
+    text = raw.strip()
+    if text.startswith("{'") or text.startswith('{"'):
+        try:
+            d = ast.literal_eval(text)
+            if isinstance(d, dict):
+                label = str(d.get("label") or d.get("name") or "").strip()
+                val = str(d.get("value") or d.get("val") or "").strip()
+                change = str(d.get("change") or "").strip()
+                parts = [p for p in [label, val] if p]
+                if change and change.upper() not in ("N/A", "UNCHANGED", "없음", ""):
+                    parts.append(change)
+                result = " · ".join(parts)
+                return result or None
+        except Exception:
+            pass
+        return None  # 파싱 불가 dict 문자열 — 표시 억제
+    return text or None
+
+
+def _parse_related_stock(entry: str) -> str | None:
+    """LLM이 Python dict 문자열로 반환한 종목 항목에서 ticker (+ 등락률)를 추출한다.
+
+    예: "{'ticker': 'NVDA', 'reason': '...', 'change_pct': '-4.8%'}" → "NVDA -4.8%"
+    """
+    text = entry.strip()
+    if not text:
+        return None
+    if text.startswith("{'") or text.startswith('{"'):
+        try:
+            d = ast.literal_eval(text)
+            if isinstance(d, dict):
+                ticker = str(d.get("ticker") or d.get("symbol") or "").strip().upper()
+                change_pct = str(d.get("change_pct") or "").strip()
+                if not ticker:
+                    return None
+                if change_pct and change_pct.upper() not in ("N/A", ""):
+                    return f"{ticker} {change_pct}"
+                return ticker
+        except Exception:
+            pass
+        return None  # 파싱 불가 dict 문자열 — 표시 억제
+    return text or None
+
+
 def _topic_summaries(packet: dict[str, Any]) -> list[dict[str, Any]]:
     raw = packet.get("topic_summaries", {})
     if not isinstance(raw, dict):
@@ -717,10 +781,12 @@ def _topic_summaries(packet: dict[str, Any]) -> list[dict[str, Any]]:
                 "topic": public_topic,
                 "label": label,
                 "summary": summary,
-                "keyMetric": str(key_points[0]).strip()
+                "keyMetric": _parse_key_metric(str(key_points[0]).strip())
                 if isinstance(key_points, list) and key_points
                 else None,
-                "relatedStocks": [str(item).strip() for item in notable_stocks if str(item).strip()]
+                "relatedStocks": [
+                    s for s in (_parse_related_stock(str(item)) for item in notable_stocks) if s
+                ]
                 if isinstance(notable_stocks, list) and notable_stocks
                 else None,
             }
