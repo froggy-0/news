@@ -11,6 +11,7 @@
 ### 시장 데이터
 
 - 미국 금리와 변동성
+- 하이일드 스프레드
 - 달러 흐름
 - 미국 주요 지수
 - 기술주 주요 종목
@@ -91,6 +92,6 @@ README에는 프로젝트의 목적과 흐름만 남기고, 상세 기준은 별
 
 - 개발 기준: [docs/development-standards.md](docs/development-standards.md)
 - 품질 점검 기준: [docs/ai-evals.md](docs/ai-evals.md)
-- 데이터 흐름: [docs/data-flow.md](docs/data-flow.md)
-- 데이터 신뢰성 메모: [docs/data-source-reliability.md](docs/data-source-reliability.md)
+- 데이터 소스 및 품질 기준: [docs/data-sources.md](docs/data-sources.md)
+- LLM 비용 운영: [docs/llm-cost-ops.md](docs/llm-cost-ops.md)
 - Codex 운영 가이드: [docs/codex-ops.md](docs/codex-ops.md)
