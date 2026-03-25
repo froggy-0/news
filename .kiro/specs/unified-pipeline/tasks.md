@@ -235,3 +235,25 @@
     - `observer` phase별 usage에서 호출 횟수 확인
     - _VERIFIED: test_llm_cost_baselines.py 1 passed — 비용 기준 준수 확인_
     - **OUTCOME:** 전체 372개 수집, 371 passed, 1 skipped, 0 failed (2026-03-25)
+
+---
+
+## Code Review 반영 (2026-03-25)
+
+- [x] **Critical 1** — `pipeline.py`: `unified_output` 생성 실패 시 `observer.log_event("unified_output_failed", reason=...)` 추가
+  - 기존: `logger.exception(...)` 만 있어 observability 누락
+  - 수정: except 블록에서 `unified_exc`를 캡처하여 `observer.log_event` 호출
+
+- [x] **Critical 2** — `public_site.py` / `emailer.py`: ETF 발행사 데이터 하드코딩 `[]` 교체
+  - 기존: `_bitcoin_section_v2`의 `"issuers": []`, `_build_btc_data_v2`의 `official_snapshots=[]` 항상 빈 리스트 반환
+  - 수정: `QuantitativeLayer.btc_etf_issuers` 기반 실데이터로 채움
+
+- [x] **Suggestion 1** — `unified_output.py`: `ETFIssuerPoint` dataclass 신규 추가
+  - 필드: `issuer`, `ticker`, `btc_held` (FC-2 포맷), `aum`, `source_url`
+
+- [x] **Suggestion 2** — `unified_output.py`: `QuantitativeLayer`에 `btc_etf_issuers: list[ETFIssuerPoint]` 필드 추가
+
+- [x] **Suggestion 3** — `unified_output.py`: `packet_to_quantitative()`에서 `official_etf_snapshots` → `ETFIssuerPoint` 변환 로직 추가
+  - `official_etf_total_btc` / `official_etf_total_aum_usd` 뿐 아니라 개별 발행사 스냅샷도 QuantitativeLayer에 포함
+
+- **테스트 결과:** `test_unified_output.py` 28 passed (2026-03-25)
