@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from morning_brief.data.news_policy import FRESH_NEWS_HOURS, MIN_NEWS_ITEMS
+from morning_brief.data.news_policy import FRESH_NEWS_HOURS
+from morning_brief.data.news_policy import MIN_NEWS_ITEMS as MIN_NEWS_ITEMS
 
 MIN_PREFERRED_NEWS_ITEMS = 2
 MIN_TIER_1_NEWS_ITEMS = 1

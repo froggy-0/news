@@ -224,27 +224,23 @@ def run_pipeline(settings: Settings) -> str:
             )
             observer.log_event(
                 "unified_output_created",
-                {
-                    "quantitative_keys": [
-                        k for k, v in unified.quantitative.sparkline_data.items()
-                    ],
-                    "narrative_optional_present": [
-                        f
-                        for f in (
-                            "sector_mapping",
-                            "event_calendar",
-                            "issue_briefings",
-                            "weekly_context",
-                            "sonar_analyses",
-                        )
-                        if getattr(unified.narrative, f) is not None
-                    ],
-                },
+                quantitative_keys=list(unified.quantitative.sparkline_data.keys()),
+                narrative_optional_present=[
+                    f
+                    for f in (
+                        "sector_mapping",
+                        "event_calendar",
+                        "issue_briefings",
+                        "weekly_context",
+                        "sonar_analyses",
+                    )
+                    if getattr(unified.narrative, f) is not None
+                ],
             )
         except Exception as unified_exc:
             logger.exception("unified_output 생성 실패 — 기존 경로로 계속 진행")
             observer.log_event("unified_output_failed", reason=str(unified_exc))
-            unified = None  # type: ignore[assignment]
+            unified = None
 
         brief_fallback_used = any(
             str(event.get("event", "")).strip() == "brief_fallback_used"
