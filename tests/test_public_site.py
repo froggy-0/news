@@ -392,11 +392,11 @@ def test_build_public_brief_translates_selected_public_texts(monkeypatch, tmp_pa
     assert payload["topicSummaries"][0]["summary"].startswith("번역")
     assert payload["featuredNews"][0]["title"].startswith("번역")
     assert payload["featuredNews"][0]["rawTitle"] == "Tech valuations face pressure as yields rise"
-    assert payload["allNews"][0]["title"] == "Tech valuations face pressure as yields rise"
+    assert payload["allNews"][0]["title"].startswith("번역")
     assert payload["allNews"][0]["rawTitle"] == "Tech valuations face pressure as yields rise"
     assert payload["featuredXSignals"][0]["content"].startswith("번역")
     assert payload["featuredXSignals"][0]["rawContent"] == "AI server demand is accelerating."
-    assert payload["allXSignals"][0]["content"] == "AI server demand is accelerating."
+    assert payload["allXSignals"][0]["content"].startswith("번역")
     assert payload["allXSignals"][0]["rawContent"] == "AI server demand is accelerating."
 
 
