@@ -64,6 +64,8 @@ _SNAPSHOT_LABELS = {
 
 if TYPE_CHECKING:
     from google.oauth2.credentials import Credentials
+
+    from morning_brief.unified_output import UnifiedOutput
 else:  # pragma: no cover - runtime import guard
     Credentials = Any
 
@@ -587,9 +589,7 @@ def _stock_summary_text(*, name: str, change_text: str, context_text: str) -> st
     if normalized_name in {"BTC", "BTC-USD", "비트코인", "비트코인 현물"}:
         price_match = re.search(r"([\d,]+(?:\.\d+)?)달러", context_text)
         if price_match is not None:
-            return (
-                f"비트코인은 전일 대비 {abs_change} {verb}, 현재 {price_match.group(1)}달러입니다."
-            )
+            return f"비트코인은 전일 대비 {abs_change} {verb}, 현재 ${price_match.group(1)}입니다."
         return f"비트코인은 전일 대비 {abs_change} {verb}했습니다."
 
     return f"{normalized_name}는 전일 대비 {abs_change} {verb}했습니다."
@@ -829,6 +829,7 @@ _DAY_NAMES = ["월", "화", "수", "목", "금", "토", "일"]
 
 
 def _build_snapshot_badges(packet: dict) -> list[dict]:
+    # DEPRECATED: unified-pipeline — _build_snapshot_badges_v2(unified) 로 교체 예정
     """상단 핵심 수치 6개를 이메일용 배지로 정리."""
     macro_points = packet.get("macro", []) if isinstance(packet.get("macro", []), list) else []
     korea_points = (
@@ -864,6 +865,43 @@ def _build_snapshot_badges(packet: dict) -> list[dict]:
             }
         )
 
+    return badges
+
+
+def _build_snapshot_badges_v2(unified: "UnifiedOutput") -> list[dict]:
+    """QuantitativeLayer 기반 배지 생성 (v2).
+
+    unified-pipeline: unified.quantitative의 TickerPoint 목록을 직접 소비.
+    FC-1 change_pct 소수 2자리 적용 (TickerPoint.change 이미 포맷됨).
+    """
+    q = unified.quantitative
+    ticker_order = [q.us10y, q.dxy, q.vix, q.usdkrw, q.nq_futures, q.btc_spot]
+    badges: list[dict] = []
+    for ticker in ticker_order:
+        if ticker is None:
+            badges.append(
+                {
+                    "label": "",
+                    "value": "",
+                    "change": "",
+                    "direction": "flat",
+                    "status_text": "이번 집계에서는 확인되지 않았어요.",
+                }
+            )
+            continue
+        label = _SNAPSHOT_LABELS.get(ticker.symbol.lower(), ticker.label)
+        # BTC는 canonical_key가 "btc"이므로 label lookup 시도
+        if ticker.symbol == "BTC":
+            label = _SNAPSHOT_LABELS.get("btc", ticker.label)
+        badges.append(
+            {
+                "label": label,
+                "value": ticker.value_fmt or "",
+                "change": ticker.change or "",
+                "direction": ticker.trend or "flat",
+                "status_text": "전일 값" if ticker.is_cached else "",
+            }
+        )
     return badges
 
 
@@ -931,7 +969,7 @@ def _snapshot_change_text(point: dict[str, Any]) -> str:
     change_pct = point.get("change_pct")
     if change_pct is None:
         return ""
-    return f"{float(change_pct):+.1f}%"
+    return f"{float(change_pct):+.2f}%"
 
 
 def _snapshot_direction(point: dict[str, Any]) -> str:
@@ -1002,12 +1040,13 @@ def _format_macro_change(item: dict[str, Any]) -> tuple[str, str]:
         return "", "flat"
     numeric = float(change_pct)
     return (
-        f"{numeric:+.1f}%",
+        f"{numeric:+.2f}%",
         "up" if numeric > 0 else "down" if numeric < 0 else "flat",
     )
 
 
 def _build_btc_data(packet: dict, section_3: str) -> BTCData:
+    # DEPRECATED: unified-pipeline — _build_btc_data_v2(unified) 로 교체 예정
     """packet의 bitcoin 데이터로 BTCData 구성."""
     btc = packet.get("bitcoin", {})
     spot = btc.get("spot", {})
@@ -1023,7 +1062,7 @@ def _build_btc_data(packet: dict, section_3: str) -> BTCData:
             {
                 "ticker": e.get("ticker", e.get("label", "")),
                 "price": e.get("price", 0),
-                "change_pct": f"{pct:+.1f}%",
+                "change_pct": f"{pct:+.2f}%",
                 "direction": "up" if pct > 0 else "down" if pct < 0 else "flat",
                 "volume": _format_volume(e.get("daily_volume", 0) or 0),
             }
@@ -1070,6 +1109,39 @@ def _build_btc_data(packet: dict, section_3: str) -> BTCData:
             if btc.get("official_etf_total_aum_usd") is not None
             else ""
         ),
+        status_text=status_text,
+    )
+
+
+def _build_btc_data_v2(unified: "UnifiedOutput") -> BTCData:
+    """QuantitativeLayer 기반 BTCData 생성 (v2).
+
+    unified-pipeline: unified.quantitative.btc_* 필드를 직접 소비.
+    FC-2: btc_total_holding (소수 2자리), FC-3: btc_spot.value_fmt ($형식).
+    NOTE: etf_items / official_snapshots 는 QuantitativeLayer 미포함 → 빈 리스트 처리.
+    # TODO: clarify - etf_items / official_snapshots 도 QuantitativeLayer에 추가할지
+    """
+    q = unified.quantitative
+    btc = q.btc_spot
+
+    status_text = ""
+    if btc is None and q.btc_fear_greed_value is None:
+        status_text = "이번 집계에서는 BTC 핵심값을 확인하지 못했어요."
+    elif btc is None:
+        status_text = "BTC 현물가는 이번 집계에서는 확인되지 않았어요."
+    elif q.btc_fear_greed_value is None:
+        status_text = "공포탐욕지수는 이번 집계에서는 확인되지 않았어요."
+
+    return BTCData(
+        spot_price=btc.value_fmt if btc is not None else "이번 집계에서는 확인되지 않았어요",
+        spot_change=btc.change if btc is not None else "",
+        spot_direction=btc.trend if btc is not None else "flat",
+        fear_greed_value=q.btc_fear_greed_value if q.btc_fear_greed_value is not None else 0,
+        fear_greed_label=q.btc_fear_greed_label or "이번 집계에서는 확인되지 않았어요",
+        etf_items=[],  # TODO: clarify - QuantitativeLayer에 etf_points 추가 시 활성화
+        official_snapshots=[],  # TODO: clarify - QuantitativeLayer에 snapshots 추가 시 활성화
+        official_total_btc=q.btc_total_holding or "",
+        official_total_aum=q.btc_total_aum_usd or "",
         status_text=status_text,
     )
 
@@ -1169,81 +1241,88 @@ def _format_display_date_v2(packet: dict) -> str:
 
 
 def _parse_macro_indicators(section_1: str) -> list[MacroIndicator]:
-    """Section 1 거시 지표 텍스트를 MacroIndicator 리스트로 파싱."""
-    indicators: list[MacroIndicator] = []
-    if not section_1.strip():
-        return indicators
-
-    indicator_re = re.compile(r"(.+?):\s*(.+?)\s*\((.+?)\)")
-    for line in section_1.splitlines():
-        stripped = line.strip().lstrip("- ")
-        if not stripped:
-            continue
-        match = indicator_re.match(stripped)
-        if match:
-            label = match.group(1).strip()
-            value = match.group(2).strip()
-            change = match.group(3).strip()
-            is_prev = "(전일" in stripped or "전일 값" in stripped
-            is_anom = "anomaly" in stripped.lower() or value == "—"
-            direction = "flat"
-            if change.startswith("+"):
-                direction = "up"
-            elif change.startswith("-"):
-                direction = "down"
-            indicators.append(
-                MacroIndicator(
-                    label=label,
-                    value=value,
-                    change=change,
-                    direction=direction,
-                    is_previous=is_prev,
-                    is_anomaly=is_anom,
-                    status_text=None,
-                )
-            )
-    return indicators
+    # DEPRECATED: unified-pipeline — LLM 텍스트 regex 파싱 제거 대상
+    # 기존 로직은 _macro_indicators_from_packet(packet) 폴백으로 대체됨
+    # (호출자 _build_email_context_v2 의 폴백 분기가 처리)
+    return []
+    # --- 이하 기존 로직 (주석 처리) ---
+    # indicators: list[MacroIndicator] = []
+    # if not section_1.strip():
+    #     return indicators
+    #
+    # indicator_re = re.compile(r"(.+?):\s*(.+?)\s*\((.+?)\)")
+    # for line in section_1.splitlines():
+    #     stripped = line.strip().lstrip("- ")
+    #     if not stripped:
+    #         continue
+    #     match = indicator_re.match(stripped)
+    #     if match:
+    #         label = match.group(1).strip()
+    #         value = match.group(2).strip()
+    #         change = match.group(3).strip()
+    #         is_prev = "(전일" in stripped or "전일 값" in stripped
+    #         is_anom = "anomaly" in stripped.lower() or value == "—"
+    #         direction = "flat"
+    #         if change.startswith("+"):
+    #             direction = "up"
+    #         elif change.startswith("-"):
+    #             direction = "down"
+    #         indicators.append(
+    #             MacroIndicator(
+    #                 label=label,
+    #                 value=value,
+    #                 change=change,
+    #                 direction=direction,
+    #                 is_previous=is_prev,
+    #                 is_anomaly=is_anom,
+    #                 status_text=None,
+    #             )
+    #         )
+    # return indicators
 
 
 def _parse_stocks(section_2: str) -> tuple[list[StockItem], list[StockItem]]:
-    """Section 2 미국 증시 텍스트를 (주요 지수, 빅테크) 튜플로 파싱."""
-    indices: list[StockItem] = []
-    tech: list[StockItem] = []
-    if not section_2.strip():
-        return indices, tech
-
-    in_tech = False
-    stock_re = re.compile(r"(\w+)\s+\$?([\d,.]+)\s*([+-][\d.]+%)")
-    for line in section_2.splitlines():
-        stripped = line.strip()
-        if "빅테크" in stripped or "Big Tech" in stripped.lower():
-            in_tech = True
-            continue
-        match = stock_re.search(stripped)
-        if match:
-            ticker = match.group(1)
-            price = match.group(2)
-            change_pct = match.group(3)
-            direction = (
-                "up"
-                if change_pct.startswith("+")
-                else "down"
-                if change_pct.startswith("-")
-                else "flat"
-            )
-            item = StockItem(
-                ticker=ticker,
-                name=ticker,
-                price=price,
-                change_pct=change_pct,
-                direction=direction,
-                volume=None,
-            )
-            if in_tech:
-                tech.append(item)
-            else:
-                indices.append(item)
-    return indices, tech
+    # DEPRECATED: unified-pipeline — LLM 텍스트 regex 파싱 제거 대상
+    # 기존 로직은 _stock_indices_from_packet / _stock_tech_from_packet 폴백으로 대체됨
+    return [], []
+    # --- 이하 기존 로직 (주석 처리) ---
+    # indices: list[StockItem] = []
+    # tech: list[StockItem] = []
+    # if not section_2.strip():
+    #     return indices, tech
+    #
+    # in_tech = False
+    # stock_re = re.compile(r"(\w+)\s+\$?([\d,.]+)\s*([+-][\d.]+%)")
+    # for line in section_2.splitlines():
+    #     stripped = line.strip()
+    #     if "빅테크" in stripped or "Big Tech" in stripped.lower():
+    #         in_tech = True
+    #         continue
+    #     match = stock_re.search(stripped)
+    #     if match:
+    #         ticker = match.group(1)
+    #         price = match.group(2)
+    #         change_pct = match.group(3)
+    #         direction = (
+    #             "up"
+    #             if change_pct.startswith("+")
+    #             else "down"
+    #             if change_pct.startswith("-")
+    #             else "flat"
+    #         )
+    #         item = StockItem(
+    #             ticker=ticker,
+    #             name=ticker,
+    #             price=price,
+    #             change_pct=change_pct,
+    #             direction=direction,
+    #             volume=None,
+    #         )
+    #         if in_tech:
+    #             tech.append(item)
+    #         else:
+    #             indices.append(item)
+    # return indices, tech
 
 
 def _parse_issue_briefings(section_4_1: str) -> list[dict]:
@@ -1316,7 +1395,7 @@ def _stock_indices_from_packet(packet: dict) -> list[StockItem]:
                 ticker=ticker,
                 name=_LABEL[ticker],
                 price=f"{price:,.2f}" if price else "",
-                change_pct=f"{pct:+.1f}%",
+                change_pct=f"{pct:+.2f}%",
                 direction="up" if pct > 0 else "down" if pct < 0 else "flat",
                 volume=None,
             )
@@ -1335,7 +1414,7 @@ def _stock_tech_from_packet(packet: dict) -> list[StockItem]:
                 ticker=ticker,
                 name=s.get("label", ticker),
                 price="",
-                change_pct=f"{pct:+.1f}%",
+                change_pct=f"{pct:+.2f}%",
                 direction="up" if pct > 0 else "down" if pct < 0 else "flat",
                 volume=None,
             )
@@ -1369,8 +1448,31 @@ def _macro_indicators_from_packet(packet: dict) -> list[MacroIndicator]:
 
 
 def _prepare_v2_news_items(section_4_2: str) -> list[dict[str, object]]:
+    # DEPRECATED: unified-pipeline — _prepare_v2_news_items_from_unified(unified) 로 교체 예정
     prepared: list[dict[str, object]] = []
     for item in parse_news_items(section_4_2):
+        safe_url = _safe_link(item.get("source_url") or "")
+        prepared.append(
+            {
+                **item,
+                "source_url": safe_url,
+                "source_name": _display_source_name(item.get("source_name"), safe_url),
+                "source_kind": _source_kind(item.get("source_name"), safe_url),
+                "source_label": _news_source_label(item.get("source_name"), safe_url),
+            }
+        )
+    return prepared
+
+
+def _prepare_v2_news_items_from_unified(unified: "UnifiedOutput") -> list[dict[str, object]]:
+    """NarrativeLayer 기반 뉴스 아이템 생성 (v2).
+
+    unified-pipeline: unified.narrative.news 직접 소비.
+    """
+    prepared: list[dict[str, object]] = []
+    for item in unified.narrative.news:
+        if not isinstance(item, dict):
+            continue
         safe_url = _safe_link(item.get("source_url") or "")
         prepared.append(
             {
@@ -1405,14 +1507,31 @@ def _build_email_context_v2(
     packet: dict,
     *,
     sender: str = "",
+    unified: "UnifiedOutput | None" = None,
 ) -> dict[str, object]:
     """새 섹션 구조 기반 이메일 컨텍스트 빌드."""
     section_map = extract_sections(body)
 
-    snapshot_badges = _build_snapshot_badges(packet)
-    news_items = _prepare_v2_news_items(section_map.get("section_4_2", ""))
-    sector_mapping = parse_sector_mapping(section_map.get("section_4_3", ""))
-    btc_data = _build_btc_data(packet, section_map.get("section_3", ""))
+    snapshot_badges = (
+        _build_snapshot_badges_v2(unified)
+        if unified is not None
+        else _build_snapshot_badges(packet)
+    )
+    news_items = (
+        _prepare_v2_news_items_from_unified(unified)
+        if unified is not None
+        else _prepare_v2_news_items(section_map.get("section_4_2", ""))
+    )
+    sector_mapping = (
+        unified.narrative.sector_mapping
+        if unified is not None and unified.narrative.sector_mapping is not None
+        else parse_sector_mapping(section_map.get("section_4_3", ""))
+    )
+    btc_data = (
+        _build_btc_data_v2(unified)
+        if unified is not None
+        else _build_btc_data(packet, section_map.get("section_3", ""))
+    )
     events = parse_event_calendar(section_map.get("section_6", ""))
     event_calendar = events if events else None
     macro_indicators = _parse_macro_indicators(section_map.get("section_1", ""))
@@ -1420,10 +1539,22 @@ def _build_email_context_v2(
 
     # 시장 지표 폴백: LLM 섹션 파싱이 비어있으면 packet 데이터에서 직접 구성
     if not stock_indices:
+        logger.warning(
+            "briefing_parse_fallback: field=%s source=packet_fallback",
+            "stock_indices",
+        )
         stock_indices = _stock_indices_from_packet(packet)
     if not stock_tech:
+        logger.warning(
+            "briefing_parse_fallback: field=%s source=packet_fallback",
+            "stock_tech",
+        )
         stock_tech = _stock_tech_from_packet(packet)
     if not macro_indicators:
+        logger.warning(
+            "briefing_parse_fallback: field=%s source=packet_fallback",
+            "macro_indicators",
+        )
         macro_indicators = _macro_indicators_from_packet(packet)
 
     dq = packet.get("data_quality", {})
@@ -1464,15 +1595,31 @@ def _build_email_context_v2(
             if not stock_indices and not stock_tech and not macro_indicators
             else ""
         ),
-        "issue_briefings": _parse_issue_briefings(section_map.get("section_4_1", "")),
+        "issue_briefings": (
+            unified.narrative.issue_briefings
+            if unified is not None and unified.narrative.issue_briefings is not None
+            else _parse_issue_briefings(section_map.get("section_4_1", ""))
+        ),
         "news_items": news_items,
         "news_source_items": news_source_items,
         "market_source_lines": _market_source_lines(),
         "sector_mapping": sector_mapping,
-        "weekly_context": section_map.get("section_5_1", ""),
-        "sonar_analyses": _parse_sonar(section_map.get("section_5_2", "")),
+        "weekly_context": (
+            unified.narrative.weekly_context
+            if unified is not None and unified.narrative.weekly_context is not None
+            else section_map.get("section_5_1", "")
+        ),
+        "sonar_analyses": (
+            unified.narrative.sonar_analyses
+            if unified is not None and unified.narrative.sonar_analyses is not None
+            else _parse_sonar(section_map.get("section_5_2", ""))
+        ),
         "x_reactions": section_map.get("section_5_3", "") or None,
-        "event_calendar": event_calendar,
+        "event_calendar": (
+            unified.narrative.event_calendar
+            if unified is not None and unified.narrative.event_calendar is not None
+            else event_calendar
+        ),
         "data_quality_status": data_quality_status,
         "footer_notes": footer_notes if data_quality_status != "ok" else [],
         "unsubscribe_url": _unsubscribe_url(sender),
@@ -1667,11 +1814,12 @@ def render_briefing_email_html(
     *,
     sender: str = "",
     packet: dict | None = None,
+    unified: "UnifiedOutput | None" = None,
 ) -> str:
     environment = _load_email_environment()
     template = environment.get_template("email_base.html.j2")
     context = _build_email_context_v2(
-        subject=subject, body=body, packet=packet or {}, sender=sender
+        subject=subject, body=body, packet=packet or {}, sender=sender, unified=unified
     )
     return template.render(**context).strip()
 
@@ -1682,11 +1830,12 @@ def render_briefing_email_text(
     *,
     sender: str = "",
     packet: dict | None = None,
+    unified: "UnifiedOutput | None" = None,
 ) -> str:
     environment = _load_email_environment()
     template = environment.get_template("email_v2.txt.j2")
     context = _build_email_context_v2(
-        subject=subject, body=body, packet=packet or {}, sender=sender
+        subject=subject, body=body, packet=packet or {}, sender=sender, unified=unified
     )
     return template.render(**context).strip()
 
@@ -1698,9 +1847,14 @@ def build_briefing_message(
     sender: str,
     recipients: list[str],
     packet: dict | None = None,
+    unified: "UnifiedOutput | None" = None,
 ) -> MIMEMultipart:
-    html_body = render_briefing_email_html(subject=subject, body=body, sender=sender, packet=packet)
-    text_body = render_briefing_email_text(subject=subject, body=body, sender=sender, packet=packet)
+    html_body = render_briefing_email_html(
+        subject=subject, body=body, sender=sender, packet=packet, unified=unified
+    )
+    text_body = render_briefing_email_text(
+        subject=subject, body=body, sender=sender, packet=packet, unified=unified
+    )
     msg = MIMEMultipart("alternative")
     msg["to"] = recipients[0] if len(recipients) == 1 else sender
     if len(recipients) > 1:
@@ -1758,7 +1912,14 @@ class GmailSender:
         self.settings.gmail_token_file.write_text(creds.to_json(), encoding="utf-8")
         return creds
 
-    def send(self, subject: str, body: str, *, packet: dict | None = None) -> None:
+    def send(
+        self,
+        subject: str,
+        body: str,
+        *,
+        packet: dict | None = None,
+        unified: "UnifiedOutput | None" = None,
+    ) -> None:
         if not self.settings.send_email:
             logger.info("SEND_EMAIL=false라서 메일 발송은 건너뛸게요.")
             return
@@ -1776,6 +1937,7 @@ class GmailSender:
             sender=self.settings.gmail_sender,
             recipients=recipients,
             packet=packet,
+            unified=unified,
         )
 
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode("utf-8")

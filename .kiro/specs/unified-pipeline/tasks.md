@@ -145,66 +145,66 @@
 
 ## Phase 3 — 이메일 소비 전환
 
-- [ ] 10. `emailer.py` — regex 파싱 제거
+- [x] 10. `emailer.py` — regex 파싱 제거
   - **GOAL:** LLM 텍스트 기반 수치 역추출 경로를 제거하여 정량 수치 신뢰성을 확보한다
   - **CRITICAL:** 제거 전 `_macro_indicators_from_packet()` 폴백이 실제 실행 중인지 `observer` 로그로 검증 완료 후 진행할 것
   - **DO NOT** 폴백 로직이 검증되지 않은 상태에서 regex 파싱을 먼저 제거하지 말 것
-  - [ ] 10.1 폴백 정상 동작 검증
+  - [x] 10.1 폴백 정상 동작 검증
     - `_macro_indicators_from_packet()` 단독 실행 시 이메일 렌더링 결과가 정상인지 테스트 fixture로 확인
     - `_stock_indices_from_packet()` 동일 검증
     - **EXPECTED OUTCOME:** 폴백 경로 단독으로 렌더링 결과 정상
-  - [ ] 10.2 `_parse_macro_indicators()` 제거
+  - [x] 10.2 `_parse_macro_indicators()` 제거
     - `emailer.py:1171` `_parse_macro_indicators()` 함수 및 호출부 제거
     - 제거 후 폴백이 자동으로 활성화되는지 확인
-  - [ ] 10.3 `_parse_stocks()` 제거
+  - [x] 10.3 `_parse_stocks()` 제거
     - `emailer.py:1208` `_parse_stocks()` 함수 및 호출부 제거
 
-- [ ] 11. `emailer.py` — `QuantitativeLayer` 소비로 전환
+- [x] 11. `emailer.py` — `QuantitativeLayer` 소비로 전환
   - **GOAL:** 이메일 정량 데이터를 UnifiedOutput.quantitative에서 직접 읽어 포맷 표준을 통일한다
   - _Depends: 10_
-  - [ ] 11.1 `_build_snapshot_badges()` 수정
+  - [x] 11.1 `_build_snapshot_badges()` 수정
     - `unified.quantitative` 읽도록 수정
     - FC-1 포맷(`+.2f`) 이미 QuantitativeLayer에 적용된 값 사용 — emailer 내 자체 포맷팅 제거
     - `emailer.py:934`, `emailer.py:1004` change_pct 포맷 중복 적용 금지 확인
-  - [ ] 11.2 `_build_btc_data()` 수정
+  - [x] 11.2 `_build_btc_data()` 수정
     - `unified.quantitative.btc` 읽도록 수정
     - packet 직접 접근 코드 제거
 
-- [ ] 12. `emailer.py` — `NarrativeLayer` 소비로 전환
+- [x] 12. `emailer.py` — `NarrativeLayer` 소비로 전환
   - **GOAL:** 이메일 서사 데이터를 UnifiedOutput.narrative에서 읽어 이메일·대시보드 서사를 동기화한다
   - _Depends: 10, 11_
-  - [ ] 12.1 `_prepare_v2_news_items()` 수정
-    - `unified.narrative.news` 읽도록 수정
+  - [x] 12.1 `_prepare_v2_news_items()` 수정
+    - `unified.narrative.news` 읽도록 수비
     - briefing 마크다운 파싱(`section_4_2`) 경로 제거
-  - [ ] 12.2 이메일 전용 optional 필드 소비
+  - [x] 12.2 이메일 전용 optional 필드 소비
     - `sector_mapping` → 섹터 요약 렌더링
     - `event_calendar` → 이번 주 일정 렌더링
     - `issue_briefings`, `weekly_context`, `sonar_analyses` 각 optional 필드
     - 필드가 `None`이면 해당 섹션 렌더링 생략 (graceful degradation)
 
-- [ ] 13. `observer` 폴백 로깅 추가
+- [x] 13. `observer` 폴백 로깅 추가
   - **GOAL:** regex 파싱 완전 제거 전 폴백 빈도를 실측하여 Phase 3 진행 안전성을 확인한다
   - **NOTE:** 이 태스크는 Phase 3 선행 조건 — 10번 태스크 착수 전에 완료해야 한다
-  - [ ] 13.1 폴백 이벤트 로깅 구현
+  - [x] 13.1 폴백 이벤트 로깅 구현
     - `observer.log_event("briefing_parse_fallback", {"field": ..., "source": "packet_fallback"})` 구현
     - 폴백이 실행될 때마다 기록 — 성공/실패 무관
-  - [ ] 13.2 폴백 빈도 측정 기간 운영
+  - [x] 13.2 폴백 빈도 측정 기간 운영
     - 최소 2회 이상 실 run에서 `briefing_parse_fallback` 이벤트 빈도 확인
     - 빈도가 높으면 태스크 10 착수 전 원인 분석 필요
     - _Expected: run당 0건 — regex 파싱이 정상 시 폴백 실행 안 됨_
 
-- [ ] 14. 포맷 표준 일괄 적용 (FC-1~FC-4)
+- [x] 14. 포맷 표준 일괄 적용 (FC-1~FC-4)
   - **GOAL:** 이메일·대시보드 양 채널의 잔여 포맷 불일치를 QuantitativeLayer 통합으로 일괄 해소한다
   - **IMPORTANT:** QuantitativeLayer 변환(태스크 2)에서 포맷이 이미 적용됐다면 중복 적용 금지 — 각 항목 확인 후 처리
-  - [ ] 14.1 FC-1: emailer.py change_pct 포맷 통일
+  - [x] 14.1 FC-1: emailer.py change_pct 포맷 통일
     - `emailer.py:934`, `emailer.py:1004` `+.1f` → `+.2f` 확인 및 수정
     - QuantitativeLayer에서 이미 처리 시 emailer 내 자체 포맷팅 코드 제거
-  - [ ] 14.2 FC-2: public_site.py total_btc 포맷 통일
+  - [x] 14.2 FC-2: public_site.py total_btc 포맷 통일
     - `public_site.py:1039` `:,.0f` → `:,.2f` 확인 및 수정
-  - [ ] 14.3 FC-3: BTC 가격 단위 통일
+  - [x] 14.3 FC-3: BTC 가격 단위 통일
     - 이메일/대시보드 양쪽에서 `$84,321` 형식으로 통일
     - QuantitativeLayer 변환에서 처리 완료 시 스킵
-  - [ ] 14.4 FC-4: change_bps 부호 통일
+  - [x] 14.4 FC-4: change_bps 부호 통일
     - `sign+:.0f` 형식으로 이메일/대시보드 동일 적용 확인
 
 ---
