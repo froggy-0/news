@@ -18,6 +18,7 @@ from morning_brief.config import Settings
 from morning_brief.data.market_policy import is_rate_canonical_key
 from morning_brief.observability import PipelineObserver
 from morning_brief.openai_utils import usage_snapshot
+from morning_brief.unified_output import UnifiedOutput
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,7 @@ def publish_public_brief(
     settings: Settings,
     observer: PipelineObserver | None = None,
     public_context: dict[str, Any] | None = None,
+    unified: UnifiedOutput | None = None,
 ) -> _PublicBriefArtifacts:
     run_local = run_at.astimezone(ZoneInfo(settings.timezone))
     date_key = run_local.strftime("%Y-%m-%d")
@@ -92,6 +94,7 @@ def publish_public_brief(
         settings=settings,
         observer=observer,
         public_context=public_context,
+        unified=unified,
     )
 
     _write_json(public_dir / brief_relative_path, brief_payload)
@@ -150,6 +153,7 @@ def build_public_brief(
     settings: Settings | None = None,
     observer: PipelineObserver | None = None,
     public_context: dict[str, Any] | None = None,
+    unified: UnifiedOutput | None = None,
 ) -> dict[str, Any]:
     section_map = extract_sections(briefing)
     brief_body = _clean_public_body(_brief_body_without_title(briefing))
@@ -160,18 +164,22 @@ def build_public_brief(
         headline=headline,
     )
     topic_summaries = _topic_summaries(packet)
-    all_news = _news_items(
-        packet,
-        run_at,
-        public_context=public_context,
-        limit=_PUBLIC_ALL_NEWS_LIMIT,
-    )
-    all_x_signals = _x_signals(
-        packet,
-        run_at,
-        public_context=public_context,
-        limit=_PUBLIC_ALL_X_LIMIT,
-    )
+    if unified is not None:
+        all_news = _news_items_v2(unified, run_at, limit=_PUBLIC_ALL_NEWS_LIMIT)
+        all_x_signals = _x_signals_v2(unified, run_at, limit=_PUBLIC_ALL_X_LIMIT)
+    else:
+        all_news = _news_items(
+            packet,
+            run_at,
+            public_context=public_context,
+            limit=_PUBLIC_ALL_NEWS_LIMIT,
+        )
+        all_x_signals = _x_signals(
+            packet,
+            run_at,
+            public_context=public_context,
+            limit=_PUBLIC_ALL_X_LIMIT,
+        )
     featured_news = [dict(item) for item in all_news[:_PUBLIC_FEATURED_NEWS_LIMIT]]
     featured_x_signals = [dict(item) for item in all_x_signals[:_PUBLIC_FEATURED_X_LIMIT]]
     headline, summary_lead, summary_support, translation_status = _apply_public_translation(
@@ -217,7 +225,9 @@ def build_public_brief(
             "translationStatus": translation_status,
         },
         "marketSnapshot": {
-            "items": _market_snapshot_items(packet),
+            "items": _market_snapshot_items_v2(unified)
+            if unified is not None
+            else _market_snapshot_items(packet),
         },
         "aiJudgment": {
             "headline": headline,
@@ -227,7 +237,9 @@ def build_public_brief(
         },
         "topicSummaries": topic_summaries,
         "techStocks": _tech_stocks(packet),
-        "bitcoin": _bitcoin_section(packet),
+        "bitcoin": _bitcoin_section_v2(unified)
+        if unified is not None
+        else _bitcoin_section(packet),
         "featuredXSignals": featured_x_signals_payload,
         "allXSignals": all_x_signals or None,
         "featuredNews": featured_news,
@@ -584,6 +596,7 @@ def _synthetic_history(canonical_key: str, point: dict[str, Any]) -> list[float]
 
 
 def _market_snapshot_items(packet: dict[str, Any]) -> list[dict[str, Any]]:
+    # DEPRECATED: unified-pipeline — use _market_snapshot_items_v2(unified) instead
     packet_sections = {
         "macro": packet.get("macro", []),
         "korea_watch": packet.get("korea_watch", []),
@@ -626,6 +639,55 @@ def _market_snapshot_items(packet: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
 
+    if len(items) < _MIN_PUBLIC_TICKER_ITEMS:
+        return []
+    return items
+
+
+def _market_snapshot_items_v2(unified: UnifiedOutput) -> list[dict[str, Any]]:
+    """Task 6.1 — QuantitativeLayer 소비 전환.
+
+    FC-1, FC-4 포맷은 QuantitativeLayer 생성 시 이미 적용됨. 재포맷 금지.
+    """
+    quant = unified.quantitative
+    ticker_fields = (
+        quant.us10y,
+        quant.dxy,
+        quant.vix,
+        quant.usdkrw,
+        quant.nq_futures,
+        quant.spy,
+        quant.qqq,
+        quant.soxx,
+    )
+    items: list[dict[str, Any]] = []
+    for ticker in ticker_fields:
+        if ticker is None:
+            continue
+        items.append(
+            {
+                "symbol": ticker.symbol,
+                "label": ticker.label,
+                "value": ticker.value_fmt,
+                "change": ticker.change,
+                "trend": ticker.trend,
+                "isCached": ticker.is_cached,
+                "history": ticker.sparkline,
+            }
+        )
+    if quant.btc_spot is not None:
+        bt = quant.btc_spot
+        items.append(
+            {
+                "symbol": bt.symbol,
+                "label": bt.label,
+                "value": bt.value_fmt,
+                "change": bt.change,
+                "trend": bt.trend,
+                "isCached": bt.is_cached,
+                "history": bt.sparkline,
+            }
+        )
     if len(items) < _MIN_PUBLIC_TICKER_ITEMS:
         return []
     return items
@@ -696,6 +758,7 @@ def _tech_stocks(packet: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _bitcoin_section(packet: dict[str, Any]) -> dict[str, Any]:
+    # DEPRECATED: unified-pipeline — use _bitcoin_section_v2(unified) instead
     btc = packet.get("bitcoin", {})
     if not isinstance(btc, dict):
         return {
@@ -756,6 +819,37 @@ def _bitcoin_section(packet: dict[str, Any]) -> dict[str, Any]:
         "price": _format_value("btc", spot_price),
         "change": _format_change("btc", spot) if isinstance(spot, dict) else None,
         "trend": _trend_from_point(spot, "btc") if isinstance(spot, dict) else None,
+        "fearGreedIndex": fear_greed,
+        "etf": etf,
+    }
+
+
+def _bitcoin_section_v2(unified: UnifiedOutput) -> dict[str, Any]:
+    """Task 6.2 — QuantitativeLayer.btc 소비 전환.
+
+    FC-2 (btc_total_holding) 포맷은 QuantitativeLayer 생성 시 이미 적용됨.
+    개별 issuer 목록은 QuantitativeLayer에 없으므로 빈 목록 사용 (schema compat).
+    """
+    quant = unified.quantitative
+    btc_spot = quant.btc_spot
+    etf: dict[str, Any] | None = None
+    if quant.btc_total_holding is not None or quant.btc_total_aum_usd is not None:
+        etf = {
+            "totalHolding": quant.btc_total_holding,  # FC-2 이미 적용
+            "totalAum": quant.btc_total_aum_usd,
+            # TODO: clarify - individual issuer snapshots not in QuantitativeLayer; [] preserves schema
+            "issuers": [],
+        }
+    fear_greed: dict[str, Any] | None = None
+    if quant.btc_fear_greed_value is not None and quant.btc_fear_greed_label is not None:
+        fear_greed = {
+            "value": quant.btc_fear_greed_value,
+            "label": quant.btc_fear_greed_label,
+        }
+    return {
+        "price": btc_spot.value_fmt if btc_spot is not None else None,
+        "change": btc_spot.change if btc_spot is not None else None,
+        "trend": btc_spot.trend if btc_spot is not None else None,
         "fearGreedIndex": fear_greed,
         "etf": etf,
     }
@@ -826,6 +920,7 @@ def _x_signals(
     public_context: dict[str, Any] | None = None,
     limit: int,
 ) -> list[dict[str, Any]]:
+    # DEPRECATED: unified-pipeline — use _x_signals_v2(unified, run_at, limit=...) instead
     signals = _public_signal_entries(packet, public_context)[:limit]
     if not isinstance(signals, list) or not signals:
         return []
@@ -878,6 +973,7 @@ def _news_items(
     public_context: dict[str, Any] | None = None,
     limit: int,
 ) -> list[dict[str, Any]]:
+    # DEPRECATED: unified-pipeline — use _news_items_v2(unified, run_at, limit=...) instead
     normalized_packet_news = _public_news_entries(packet, public_context)[:limit]
     fallback_items: list[dict[str, Any]] = []
     for index, item in enumerate(normalized_packet_news, start=1):
@@ -907,6 +1003,98 @@ def _news_items(
             }
         )
     return fallback_items
+
+
+def _x_signals_v2(
+    unified: UnifiedOutput,
+    run_at: datetime,
+    *,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Task 7.2 — NarrativeLayer.x_signals 소비 전환."""
+    signals = unified.narrative.x_signals[:limit]
+    if not signals:
+        return []
+
+    results: list[dict[str, Any]] = []
+    for index, signal in enumerate(signals, start=1):
+        if not isinstance(signal, dict):
+            continue
+        content = str(signal.get("summary", "")).strip() or str(signal.get("headline", "")).strip()
+        impact = str(signal.get("why_it_matters", "")).strip() or content
+        if not content or not impact:
+            continue
+        sentiment = str(signal.get("sentiment", "neutral")).strip().lower()
+        if sentiment not in {"bullish", "bearish", "neutral"}:
+            sentiment = "neutral"
+        posted_at = str(signal.get("posted_at", "")).strip() or run_at.isoformat()
+        raw_content = content if not _contains_korean(content) else None
+        content_ko = (
+            _best_korean_text(
+                str(signal.get("summary", "")).strip(),
+                str(signal.get("headline", "")).strip(),
+                str(signal.get("why_it_matters", "")).strip(),
+            )
+            or content
+        )
+        impact_ko = (
+            _best_korean_text(
+                str(signal.get("why_it_matters", "")).strip(),
+                str(signal.get("summary", "")).strip(),
+            )
+            or impact
+        )
+        results.append(
+            {
+                "id": f"x-{index}",
+                "postedAt": posted_at,
+                "impact": impact_ko,
+                "sentiment": sentiment,
+                "content": content_ko,
+                "rawContent": raw_content,
+            }
+        )
+    return results
+
+
+def _news_items_v2(
+    unified: UnifiedOutput,
+    run_at: datetime,
+    *,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Task 7.1 — NarrativeLayer.news 소비 전환."""
+    raw_news = unified.narrative.news[:limit]
+    results: list[dict[str, Any]] = []
+    for index, item in enumerate(raw_news, start=1):
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("url", "")).strip()
+        title = str(item.get("title", "")).strip()
+        if not url or not title:
+            continue
+        topic = _normalize_news_topic(item.get("topic"))
+        summary_ko = _best_korean_text(
+            str(item.get("why_it_matters", "")).strip(),
+            str(item.get("summary", "")).strip(),
+        )
+        results.append(
+            {
+                "id": f"news-{index}",
+                "publishedAt": str(item.get("published_at", "")).strip() or run_at.isoformat(),
+                "category": topic,
+                "title": title,
+                "interpretation": summary_ko,
+                "summaryKo": summary_ko,
+                "rawTitle": title if not _contains_korean(title) else None,
+                "source": str(item.get("source", "")).strip() or _source_from_url(url),
+                "sourceTier": "tier1" if _source_tier_value(item) == 1 else "standard",
+                "url": url,
+                "urgency": "high" if _source_tier_value(item) == 1 else "medium",
+                "tags": [_topic_label(topic)],
+            }
+        )
+    return results
 
 
 def _filter_public_news_for_display(items: list[dict[str, Any]]) -> list[dict[str, Any]]:

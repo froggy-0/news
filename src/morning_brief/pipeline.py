@@ -280,6 +280,7 @@ def run_pipeline(settings: Settings) -> str:
             settings=settings,
             observer=observer,
             public_context=public_context,
+            unified=unified,
         )
 
         subject = f"SOVEREIGN BRIEF ({now.strftime('%Y-%m-%d')})"
