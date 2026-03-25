@@ -11,6 +11,7 @@ DO NOT redefine packet / briefing variable names inside this module
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -53,24 +54,24 @@ def _resolved_price(point: dict[str, Any]) -> float | None:
     if not isinstance(point, dict):
         return None
     resolved = point.get("resolved_value")
-    if isinstance(resolved, (float, int)):
+    if isinstance(resolved, (float, int)) and math.isfinite(resolved):
         return float(resolved)
     price = point.get("price")
-    if isinstance(price, (float, int)):
+    if isinstance(price, (float, int)) and math.isfinite(price):
         return float(price)
     return None
 
 
 def _change_pct(point: dict[str, Any]) -> float | None:
     raw = point.get("change_pct")
-    if isinstance(raw, (float, int)):
+    if isinstance(raw, (float, int)) and math.isfinite(raw):
         return float(raw)
     return None
 
 
 def _change_bps(point: dict[str, Any]) -> float | None:
     raw = point.get("change_bps")
-    if isinstance(raw, (float, int)):
+    if isinstance(raw, (float, int)) and math.isfinite(raw):
         return float(raw)
     return None
 

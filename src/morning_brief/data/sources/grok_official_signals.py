@@ -336,12 +336,15 @@ def _search_group(
     return [], "api_empty"
 
 
+_GROK_MAX_HANDLES = 10
+
+
 def _group_handles(entities: list[dict[str, Any]]) -> list[str]:
     return [
         str(entity.get("x_handle", "")).strip().lstrip("@")
         for entity in entities
         if entity.get("x_handle")
-    ]
+    ][:_GROK_MAX_HANDLES]
 
 
 def _perform_group_search(

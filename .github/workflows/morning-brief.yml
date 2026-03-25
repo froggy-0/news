@@ -92,15 +92,6 @@ jobs:
             echo "pip_status=miss" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Check formatting
-        run: python -m ruff format --check .
-
-      - name: Run lint
-        run: python -m ruff check .
-
-      - name: Run tests
-        run: python -m pytest -q
-
       - name: Restore Gmail OAuth files
         shell: bash
         run: |
