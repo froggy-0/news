@@ -833,12 +833,23 @@ def _bitcoin_section_v2(unified: UnifiedOutput) -> dict[str, Any]:
     quant = unified.quantitative
     btc_spot = quant.btc_spot
     etf: dict[str, Any] | None = None
-    if quant.btc_total_holding is not None or quant.btc_total_aum_usd is not None:
+    if (
+        quant.btc_total_holding is not None
+        or quant.btc_total_aum_usd is not None
+        or quant.btc_etf_issuers
+    ):
         etf = {
             "totalHolding": quant.btc_total_holding,  # FC-2 이미 적용
             "totalAum": quant.btc_total_aum_usd,
-            # TODO: clarify - individual issuer snapshots not in QuantitativeLayer; [] preserves schema
-            "issuers": [],
+            "issuers": [
+                {
+                    "name": p.ticker or p.issuer or "ETF",
+                    "holding": f"{p.btc_held} BTC" if p.btc_held else None,
+                    "aum": p.aum,
+                    "sourceUrl": p.source_url,
+                }
+                for p in quant.btc_etf_issuers
+            ],
         }
     fear_greed: dict[str, Any] | None = None
     if quant.btc_fear_greed_value is not None and quant.btc_fear_greed_label is not None:

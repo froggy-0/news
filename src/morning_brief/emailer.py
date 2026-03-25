@@ -1118,8 +1118,8 @@ def _build_btc_data_v2(unified: "UnifiedOutput") -> BTCData:
 
     unified-pipeline: unified.quantitative.btc_* 필드를 직접 소비.
     FC-2: btc_total_holding (소수 2자리), FC-3: btc_spot.value_fmt ($형식).
-    NOTE: etf_items / official_snapshots 는 QuantitativeLayer 미포함 → 빈 리스트 처리.
-    # TODO: clarify - etf_items / official_snapshots 도 QuantitativeLayer에 추가할지
+    official_snapshots: QuantitativeLayer.btc_etf_issuers 에서 채움.
+    etf_items(live ETF 가격): QuantitativeLayer 미포함 → 빈 리스트 유지.
     """
     q = unified.quantitative
     btc = q.btc_spot
@@ -1138,8 +1138,16 @@ def _build_btc_data_v2(unified: "UnifiedOutput") -> BTCData:
         spot_direction=btc.trend if btc is not None else "flat",
         fear_greed_value=q.btc_fear_greed_value if q.btc_fear_greed_value is not None else 0,
         fear_greed_label=q.btc_fear_greed_label or "이번 집계에서는 확인되지 않았어요",
-        etf_items=[],  # TODO: clarify - QuantitativeLayer에 etf_points 추가 시 활성화
-        official_snapshots=[],  # TODO: clarify - QuantitativeLayer에 snapshots 추가 시 활성화
+        etf_items=[],  # live ETF price points — QuantitativeLayer 미포함
+        official_snapshots=[
+            {
+                "issuer": p.issuer,
+                "ticker": p.ticker,
+                "btc_held": p.btc_held or "",
+                "aum": p.aum or "",
+            }
+            for p in q.btc_etf_issuers
+        ],
         official_total_btc=q.btc_total_holding or "",
         official_total_aum=q.btc_total_aum_usd or "",
         status_text=status_text,

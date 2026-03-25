@@ -172,6 +172,20 @@ class TickerPoint:
 
 
 @dataclass
+class ETFIssuerPoint:
+    """BTC ETF 발행사별 공식 보유 현황.
+
+    FC-2: btc_held → f"{v:,.0f}" (정수, 천 단위 구분)
+    """
+
+    issuer: str  # 발행사 이름
+    ticker: str  # 티커 심볼
+    btc_held: str | None  # FC-2: "570,234"
+    aum: str | None  # "$35,000,000"
+    source_url: str
+
+
+@dataclass
 class QuantitativeLayer:
     """정량 데이터 레이어.
 
@@ -198,6 +212,7 @@ class QuantitativeLayer:
     # BTC ETF 집계 (FC-2, FC-3)
     btc_total_holding: str | None  # FC-2: "570,234.56 BTC"
     btc_total_aum_usd: str | None  # "$XX,XXX,XXX"
+    btc_etf_issuers: list  # list[ETFIssuerPoint] — 발행사별 보유 현황
     btc_fear_greed_value: int | None
     btc_fear_greed_label: str | None
     # sparkline_data: canonical_key → [prev, current]
@@ -361,6 +376,27 @@ def packet_to_quantitative(packet: dict) -> QuantitativeLayer:
         f"${float(total_aum):,.0f}" if isinstance(total_aum, (float, int)) else None
     )
 
+    # BTC ETF 발행사별 보유 현황
+    btc_etf_issuers: list[ETFIssuerPoint] = []
+    for snap in btc_raw.get("official_etf_snapshots", []):
+        if not isinstance(snap, dict):
+            continue
+        snap_total_btc = snap.get("total_btc")
+        snap_aum_usd = snap.get("aum_usd")
+        btc_etf_issuers.append(
+            ETFIssuerPoint(
+                issuer=str(snap.get("issuer", "")).strip(),
+                ticker=str(snap.get("ticker", "")).strip(),
+                btc_held=f"{float(snap_total_btc):,.0f}"
+                if isinstance(snap_total_btc, (float, int))
+                else None,
+                aum=f"${float(snap_aum_usd):,.0f}"
+                if isinstance(snap_aum_usd, (float, int))
+                else None,
+                source_url=str(snap.get("source_url", "")).strip(),
+            )
+        )
+
     # Fear & Greed
     fear_value = btc_raw.get("fear_greed_value")
     fear_label = str(btc_raw.get("fear_greed_label", "") or "").strip()
@@ -379,6 +415,7 @@ def packet_to_quantitative(packet: dict) -> QuantitativeLayer:
         btc_spot=btc_spot,
         btc_total_holding=btc_total_holding,
         btc_total_aum_usd=btc_total_aum_usd,
+        btc_etf_issuers=btc_etf_issuers,
         btc_fear_greed_value=btc_fear_greed_value,
         btc_fear_greed_label=btc_fear_greed_label,
         sparkline_data=sparkline_data,
