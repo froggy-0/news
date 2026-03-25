@@ -201,6 +201,50 @@ def run_pipeline(settings: Settings) -> str:
             )
 
         briefing = generate_briefing(packet=packet, settings=settings, observer=observer)
+
+        # unified-pipeline: 공통 레이어 생성 (Phase 1 — 채널 분기 전 SSOT 확립)
+        # 기존 packet / briefing 변수는 그대로 유지 (하위 호환 참조)
+        try:
+            from morning_brief.unified_output import (
+                MetaLayer,
+                UnifiedOutput,
+                briefing_to_narrative,
+                packet_to_quantitative,
+            )
+
+            unified = UnifiedOutput(
+                quantitative=packet_to_quantitative(packet),
+                narrative=briefing_to_narrative(briefing, packet, public_context),
+                meta=MetaLayer(
+                    run_at=datetime.now(ZoneInfo(settings.timezone)).isoformat(),
+                    pipeline_version="2.0",
+                    source_counts=packet.get("data_quality") or {},
+                    translation_status="skipped",  # Phase 2에서 갱신
+                ),
+            )
+            observer.log_event(
+                "unified_output_created",
+                {
+                    "quantitative_keys": [
+                        k for k, v in unified.quantitative.sparkline_data.items()
+                    ],
+                    "narrative_optional_present": [
+                        f
+                        for f in (
+                            "sector_mapping",
+                            "event_calendar",
+                            "issue_briefings",
+                            "weekly_context",
+                            "sonar_analyses",
+                        )
+                        if getattr(unified.narrative, f) is not None
+                    ],
+                },
+            )
+        except Exception:
+            logger.exception("unified_output 생성 실패 — 기존 경로로 계속 진행")
+            unified = None  # type: ignore[assignment]
+
         brief_fallback_used = any(
             str(event.get("event", "")).strip() == "brief_fallback_used"
             for event in observer.events
