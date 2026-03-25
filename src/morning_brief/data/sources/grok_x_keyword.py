@@ -78,10 +78,8 @@ Focus on:
 3. AI infrastructure, data center capex, model announcements
 4. Earnings guidance, revenue signals, product launches
 
-Return the top {max_items} most market-moving posts as JSON:
-{{"keywords": ["keyword1", "keyword2"], "signals": [
-{{"headline": "...", "summary": "...", "why_it_matters": "...", "sentiment": "bullish|bearish|neutral", "source_handle": "...", "posted_at": "ISO8601"}}
-]}}
+Return the top {max_items} most market-moving posts.
+Output format: {{"signals": [{{"headline": "...", "summary": "...", "why_it_matters": "...", "sentiment": "bullish|bearish|neutral", "source_handle": "...", "posted_at": "ISO8601"}}]}}
 Skip marketing, promotional, and non-market posts."""
 
 BTC_ETF_PRIMARY_PROMPT = """Search X for the most significant Bitcoin ETF and institutional crypto posts from the last {lookback_hours} hours.
@@ -91,10 +89,8 @@ Focus on:
 3. Institutional Bitcoin adoption announcements
 4. Major exchange or custodian updates
 
-Return the top {max_items} most impactful posts as JSON:
-{{"keywords": ["keyword1", "keyword2"], "signals": [
-{{"headline": "...", "summary": "...", "why_it_matters": "...", "sentiment": "bullish|bearish|neutral", "source_handle": "...", "posted_at": "ISO8601"}}
-]}}
+Return the top {max_items} most impactful posts.
+Output format: {{"signals": [{{"headline": "...", "summary": "...", "why_it_matters": "...", "sentiment": "bullish|bearish|neutral", "source_handle": "...", "posted_at": "ISO8601"}}]}}
 Prioritize posts with specific data points. Skip promotional content."""
 
 GROUP_PROMPTS = {
@@ -106,7 +102,7 @@ GROUP_PROMPTS = {
 
 GROUP_TOPIC_MAP = {
     MACRO_EQUITY_GROUP: "macro",
-    CRYPTO_ETF_GROUP: "bitcoin",
+    CRYPTO_ETF_GROUP: "crypto",
     AI_BIGTECH_GROUP: "ai_bigtech",
     BTC_ETF_GROUP: "bitcoin",
 }
@@ -181,14 +177,32 @@ def _usage_int(container: object, *keys: str) -> int | None:
         return None
 
 
+def _first_usage_int(container: object, *paths: tuple[str, ...]) -> int | None:
+    for path in paths:
+        value = _usage_int(container, *path)
+        if value is not None:
+            return value
+    return None
+
+
 def _usage_snapshot(response: object) -> dict[str, int | None]:
     usage = _usage_field(response, "usage")
     return {
         "input_tokens": _usage_int(usage, "prompt_tokens") or _usage_int(usage, "input_tokens"),
         "output_tokens": _usage_int(usage, "completion_tokens")
         or _usage_int(usage, "output_tokens"),
-        "cached_input_tokens": None,
-        "reasoning_tokens": None,
+        "cached_input_tokens": _first_usage_int(
+            usage,
+            ("cached_prompt_text_tokens",),
+            ("prompt_tokens_details", "cached_tokens"),
+            ("input_tokens_details", "cached_tokens"),
+        ),
+        "reasoning_tokens": _first_usage_int(
+            usage,
+            ("completion_tokens_details", "reasoning_tokens"),
+            ("output_tokens_details", "reasoning_tokens"),
+            ("reasoning_tokens",),
+        ),
     }
 
 
