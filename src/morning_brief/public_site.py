@@ -182,20 +182,20 @@ def build_public_brief(
             public_context=public_context,
             limit=_PUBLIC_ALL_X_LIMIT,
         )
-    featured_news = [dict(item) for item in all_news[:_PUBLIC_FEATURED_NEWS_LIMIT]]
-    featured_x_signals = [dict(item) for item in all_x_signals[:_PUBLIC_FEATURED_X_LIMIT]]
     headline, summary_lead, summary_support, translation_status = _apply_public_translation(
         headline=headline,
         summary_lead=summary_lead,
         summary_support=summary_support,
         topic_summaries=topic_summaries,
-        news_items=featured_news,
-        x_signals=featured_x_signals,
+        news_items=all_news,
+        x_signals=all_x_signals,
         settings=settings,
         observer=observer,
     )
-    featured_news = _filter_public_news_for_display(featured_news)
-    featured_x_signals = _filter_public_signals_for_display(featured_x_signals)
+    featured_news = _filter_public_news_for_display(all_news[:_PUBLIC_FEATURED_NEWS_LIMIT])
+    featured_x_signals = _filter_public_signals_for_display(
+        all_x_signals[:_PUBLIC_FEATURED_X_LIMIT]
+    )
     headline = _finalize_public_headline(
         headline=headline,
         summary_lead=summary_lead,
