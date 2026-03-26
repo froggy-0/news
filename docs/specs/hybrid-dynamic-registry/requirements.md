@@ -16,13 +16,13 @@
 
 ### Dynamic Layer (Grok API 기반 자동 업데이트)
 
-2.1 WHEN 매일 새벽 스케줄러가 실행될 때 THEN 시스템은 하루 1회 Grok API를 호출하여 그룹별 Parallel Tool Calling으로 각 그룹의 Top 10개 influential handles를 추천받아야 한다
+2.1 WHEN 매일 새벽 스케줄러가 실행될 때 THEN 시스템은 하루 1회 Grok API를 호출하여 그룹당 순차 API 호출(4그룹 = 4회)로 각 그룹의 Top 10개 influential handles를 추천받아야 한다
 
 2.2 WHEN Grok API를 호출할 때 THEN 시스템은 `grok-4-1-fast-non-reasoning` (alias: `grok-4-1-fast-non-reasoning-latest`) 모델을 사용하고, `response_format: {"type": "json_object"}`로 Structured JSON 출력을 강제해야 한다
 
-2.3 WHEN Grok API를 호출할 때 THEN 시스템은 단일 `x_search` 도구를 사용하며, 각 그룹별로 독립적인 `x_search` 호출을 **Parallel Tool Calling**으로 병렬 실행해야 한다. 그룹별 요청은 prompt 내에서 명확히 구분하여 기술한다
+2.3 WHEN Grok API를 호출할 때 THEN 시스템은 단일 `x_search` 도구를 사용하며, 각 그룹별로 독립적인 `x_search` 호출을 **그룹당 순차 API 요청**으로 실행해야 한다. `allowed_x_handles`는 tool 등록 시 고정되므로 그룹별 별도 API 요청이 필요하다 (`grok_official_signals.py` 패턴과 동일)
 
-2.4 WHEN Grok API를 호출할 때 THEN 시스템은 모든 그룹을 하나의 API 요청으로 처리하여 하루 1회 단일 호출로 제한해야 한다
+2.4 WHEN Grok API를 호출할 때 THEN 시스템은 그룹당 1회씩 순차 호출(4그룹 = 4회)하며, 스케줄러의 `coalesce=True` 및 `max_instances=1` 설정으로 하루 1회 실행을 보장해야 한다
 
 ### Grok 추천 신뢰성 기준
 
@@ -94,13 +94,13 @@
 
 8.1 WHEN Dynamic Layer가 핸들을 추천할 때 THEN AI/bigtech 편향을 완화하되, Dynamic 엔티티도 `x_verified: true` 필수 조건을 동일하게 적용해야 한다. 비인증 계정은 Grok 프롬프트 단계에서 사전 차단하며(추천 자체를 받지 않음), 파이프라인 진입 시 기존 `list_verified_x_entities()` 필터를 그대로 통과해야 한다. 별도의 `dynamic_verified` 필드는 추가하지 않으며 `x_verified: true`로 통일한다. Base Layer와 Dynamic Layer의 출처 구분은 **파일 분리(Option B)**로 확정한다: Grok 추천 결과는 `dynamic_signal_registry.json`에 자동 저장되고, 런타임에 `official_signal_registry.json`(Base)과 merge된다
 
-8.2 WHEN Dynamic Layer가 커버리지를 확대할 때 THEN 그룹별 Parallel Tool Calling으로 각 그룹을 독립적으로 호출하여 더 넓은 시그널 수집이 가능해야 한다. 그룹당 핸들 수 상한 `_GROK_MAX_HANDLES = 10`은 유지하며, 그룹 수 확대로 전체 커버리지를 늘린다
+8.2 WHEN Dynamic Layer가 커버리지를 확대할 때 THEN 그룹당 순차 API 호출로 각 그룹을 독립적으로 호출하여 더 넓은 시그널 수집이 가능해야 한다. 그룹당 핸들 수 상한 `_GROK_MAX_HANDLES = 10`은 유지하며, 그룹 수 확대로 전체 커버리지를 늘린다
 
 ## Constraints
 
 - xai_sdk: **v1.10.0 이상 필요** (gRPC metadata 지원). 단일 `x_search` 도구 제공. `allowed_x_handles` 최대 10개 (excluded_x_handles와 mutually exclusive)
 - `from:handle OR ...` OR 쿼리 방식: xAI 미지원 — 사용 불가
-- Parallel Tool Calling: 그룹별 독립 `x_search` 호출을 동시 실행하여 커버리지 확대
+- 그룹당 순차 API 호출: `allowed_x_handles`가 tool 등록 시 고정되므로 그룹별 별도 API 요청 필요. 4그룹 = 4회 순차 실행
 - 권장 모델: `grok-4-1-fast-non-reasoning` (alias: `grok-4-1-fast-non-reasoning-latest`) — Input $0.20/M, Output $0.50/M, Cached $0.05/M
 - Context Window: 최대 2M tokens
 - Structured Outputs: `response_format: {"type": "json_object"}` 지원
