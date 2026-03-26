@@ -38,6 +38,7 @@ from morning_brief.brief_formatting import (
 )
 from morning_brief.config import Settings
 from morning_brief.data.market_policy import is_rate_canonical_key
+from morning_brief.logging_utils import log_structured
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
 
@@ -1547,21 +1548,33 @@ def _build_email_context_v2(
 
     # 시장 지표 폴백: LLM 섹션 파싱이 비어있으면 packet 데이터에서 직접 구성
     if not stock_indices:
-        logger.warning(
-            "briefing_parse_fallback: field=%s source=packet_fallback",
-            "stock_indices",
+        log_structured(
+            logger,
+            event="fallback.used",
+            message="briefing 파싱 결과가 비어 packet 값으로 stock_indices를 보강했어요.",
+            level=logging.WARNING,
+            field="stock_indices",
+            source="packet_fallback",
         )
         stock_indices = _stock_indices_from_packet(packet)
     if not stock_tech:
-        logger.warning(
-            "briefing_parse_fallback: field=%s source=packet_fallback",
-            "stock_tech",
+        log_structured(
+            logger,
+            event="fallback.used",
+            message="briefing 파싱 결과가 비어 packet 값으로 stock_tech를 보강했어요.",
+            level=logging.WARNING,
+            field="stock_tech",
+            source="packet_fallback",
         )
         stock_tech = _stock_tech_from_packet(packet)
     if not macro_indicators:
-        logger.warning(
-            "briefing_parse_fallback: field=%s source=packet_fallback",
-            "macro_indicators",
+        log_structured(
+            logger,
+            event="fallback.used",
+            message="briefing 파싱 결과가 비어 packet 값으로 macro_indicators를 보강했어요.",
+            level=logging.WARNING,
+            field="macro_indicators",
+            source="packet_fallback",
         )
         macro_indicators = _macro_indicators_from_packet(packet)
 
@@ -1889,7 +1902,15 @@ class GmailSender:
                     str(self.settings.gmail_token_file), SCOPES
                 )
             except Exception as exc:
-                logger.warning("토큰 파일을 읽는 중 문제가 있어 다시 인증이 필요해요: %s", exc)
+                log_structured(
+                    logger,
+                    event="error.raised",
+                    message="토큰 파일을 읽는 중 문제가 있어 다시 인증이 필요해요.",
+                    level=logging.WARNING,
+                    provider="gmail",
+                    reason=str(exc),
+                    error_type=type(exc).__name__,
+                )
 
         if creds and creds.valid:
             return creds
@@ -1929,7 +1950,13 @@ class GmailSender:
         unified: "UnifiedOutput | None" = None,
     ) -> None:
         if not self.settings.send_email:
-            logger.info("SEND_EMAIL=false라서 메일 발송은 건너뛸게요.")
+            log_structured(
+                logger,
+                event="phase.skip",
+                message="SEND_EMAIL=false라서 메일 발송은 건너뛸게요.",
+                provider="gmail",
+                reason="send_email_disabled",
+            )
             return
 
         recipients = _split_recipients(self.settings.gmail_recipient)
@@ -1951,4 +1978,10 @@ class GmailSender:
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode("utf-8")
         service.users().messages().send(userId="me", body={"raw": raw}).execute()
 
-        logger.info("브리핑 메일을 %s명에게 보냈어요.", len(recipients))
+        log_structured(
+            logger,
+            event="publish.complete",
+            message="브리핑 메일을 보냈어요.",
+            provider="gmail",
+            kept_count=len(recipients),
+        )

@@ -27,6 +27,7 @@ from morning_brief.data.sources.provider_runtime import (
     policy_for,
     record_skip,
 )
+from morning_brief.logging_utils import log_structured
 from morning_brief.models import BitcoinEtfIssuerSnapshot
 from morning_brief.observability import PipelineObserver
 
@@ -337,7 +338,16 @@ def _fetch_direct_reference_snapshots(
             )
             snapshots.append(parser(text))
         except Exception as exc:
-            logger.warning("공식 발행사 페이지에서 %s 스냅샷을 바로 읽지 못했어요: %s", ticker, exc)
+            log_structured(
+                logger,
+                event="error.raised",
+                message="공식 발행사 페이지 스냅샷을 바로 읽지 못했어요.",
+                level=logging.WARNING,
+                provider=OFFICIAL_BTC_ETF_PROVIDER,
+                ticker=ticker,
+                reason=str(exc),
+                error_type=type(exc).__name__,
+            )
             failures.append({"ticker": ticker, "detail": str(exc)})
 
     snapshots.sort(key=lambda item: item.ticker)
@@ -647,7 +657,15 @@ def _parse_reference_snapshot_text(text: str) -> list[BitcoinEtfIssuerSnapshot]:
         try:
             snapshots.append(_snapshot_from_item(raw_item))
         except ValueError as exc:
-            logger.warning("Perplexity ETF 참조 항목을 건너뛸게요: %s", exc)
+            log_structured(
+                logger,
+                event="selection.complete",
+                message="Perplexity ETF 참조 항목을 건너뛸게요.",
+                level=logging.WARNING,
+                provider=PERPLEXITY_PROVIDER,
+                reason=str(exc),
+                kept_count=0,
+            )
 
     snapshots.sort(key=lambda item: item.ticker)
     return snapshots
@@ -664,7 +682,14 @@ def _request_reference_snapshots(
     observer: PipelineObserver | None = None,
 ) -> list[BitcoinEtfIssuerSnapshot]:
     if not api_key:
-        logger.debug("Perplexity API 키가 없어 BTC ETF 참조 스냅샷은 건너뛸게요.")
+        log_structured(
+            logger,
+            event="phase.skip",
+            message="Perplexity API 키가 없어 BTC ETF 참조 스냅샷은 건너뛸게요.",
+            level=logging.DEBUG,
+            provider=PERPLEXITY_PROVIDER,
+            reason="missing_api_key",
+        )
         return []
 
     unavailable_reason = disabled_reason(PERPLEXITY_PROVIDER)
@@ -736,12 +761,17 @@ def _request_reference_snapshots(
         provider=PERPLEXITY_PROVIDER,
         operation=request_once,
         should_retry=lambda exc: isinstance(exc, HttpFetchError) and exc.retryable,
-        on_retry=lambda exc, attempt, max_attempts, delay: logger.warning(
-            "Perplexity ETF 참조 데이터를 다시 시도하는 중이에요 (%s/%s). %s | sleep=%.2fs",
-            attempt,
-            max_attempts,
-            exc,
-            delay,
+        on_retry=lambda exc, attempt, max_attempts, delay: log_structured(
+            logger,
+            event="provider.retry",
+            message="Perplexity ETF 참조 데이터를 다시 시도하는 중이에요.",
+            level=logging.WARNING,
+            provider=PERPLEXITY_PROVIDER,
+            attempt=attempt,
+            max_attempts=max_attempts,
+            reason=str(exc),
+            retryable=True,
+            delay_seconds=delay,
         ),
         retry_after_seconds_for_error=lambda exc: exc.retry_after_seconds
         if isinstance(exc, HttpFetchError)

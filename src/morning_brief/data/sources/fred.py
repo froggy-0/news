@@ -9,6 +9,7 @@ from morning_brief.data.market_policy import (
     normalize_change_bps,
 )
 from morning_brief.data.sources.http_client import HttpFetchError, get_json_with_retry
+from morning_brief.logging_utils import log_structured
 from morning_brief.models import MarketPoint
 
 logger = logging.getLogger(__name__)
@@ -105,6 +106,14 @@ def fetch_macro_points_from_fred(api_key: str) -> list[MarketPoint]:
             )
         )
 
+    log_structured(
+        logger,
+        event="selection.complete",
+        message="FRED 기준으로 거시 지표를 가져왔어요.",
+        level=logging.DEBUG,
+        provider="fred",
+        kept_count=len(points),
+    )
     return points
 
 

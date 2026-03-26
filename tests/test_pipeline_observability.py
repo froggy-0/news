@@ -3,10 +3,6 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
-from morning_brief.config import load_settings
-from morning_brief.llm_errors import BriefGenerationError
-from morning_brief.pipeline import run_pipeline
-
 
 def _market_packet() -> dict:
     return {
@@ -28,6 +24,10 @@ def _market_packet() -> dict:
 
 
 def test_run_pipeline_skips_email_when_openai_generation_fails(monkeypatch, tmp_path):
+    from morning_brief.config import load_settings
+    from morning_brief.llm_errors import BriefGenerationError
+    from morning_brief.pipeline import run_pipeline
+
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
     monkeypatch.setenv("CACHE_BTC_ETF_KEY", "btc-etf-snapshots-20260314")
@@ -64,9 +64,14 @@ def test_run_pipeline_skips_email_when_openai_generation_fails(monkeypatch, tmp_
     assert payload["summary"]["failure_message"] == "openai down"
     assert payload["summary"]["cache_statuses"][0]["hit"] is False
     assert payload["summary"]["cache_statuses"][0]["status"] == "miss"
+    assert payload["summary"]["app_events_path"].endswith(".jsonl")
+    assert payload["summary"]["queue_fallback_active"] is False
 
 
 def test_run_pipeline_writes_observability_and_perplexity_audit(monkeypatch, tmp_path):
+    from morning_brief.config import load_settings
+    from morning_brief.pipeline import run_pipeline
+
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
     monkeypatch.setenv("CACHE_BTC_ETF_KEY", "btc-etf-snapshots-20260314")
@@ -147,6 +152,7 @@ def test_run_pipeline_writes_observability_and_perplexity_audit(monkeypatch, tmp
     run_payload = json.loads(run_files[0].read_text(encoding="utf-8"))
     audit_payload = json.loads(audit_files[0].read_text(encoding="utf-8"))
     assert run_payload["summary"]["status"] == "ok"
+    assert run_payload["summary"]["app_events_path"].endswith(".jsonl")
     assert "market" in run_payload["summary"]["durations_ms"]
     assert "news" in run_payload["summary"]["durations_ms"]
     assert "backfill" in run_payload["summary"]["durations_ms"]
@@ -159,6 +165,9 @@ def test_run_pipeline_writes_observability_and_perplexity_audit(monkeypatch, tmp
 
 
 def test_run_pipeline_marks_brief_fallback_status_when_safe_brief_is_used(monkeypatch, tmp_path):
+    from morning_brief.config import load_settings
+    from morning_brief.pipeline import run_pipeline
+
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
     settings = load_settings()
@@ -190,6 +199,9 @@ def test_run_pipeline_marks_brief_fallback_status_when_safe_brief_is_used(monkey
 
 
 def test_run_pipeline_uses_openai_backfill_only_when_quality_is_degraded(monkeypatch, tmp_path):
+    from morning_brief.config import load_settings
+    from morning_brief.pipeline import run_pipeline
+
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("OPENAI_WEB_SEARCH_ENABLED", "true")
     monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
@@ -280,6 +292,9 @@ def test_run_pipeline_uses_openai_backfill_only_when_quality_is_degraded(monkeyp
 def test_run_pipeline_skips_openai_backfill_when_public_featured_news_is_already_sufficient(
     monkeypatch, tmp_path
 ):
+    from morning_brief.config import load_settings
+    from morning_brief.pipeline import run_pipeline
+
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("OPENAI_WEB_SEARCH_ENABLED", "true")
     monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
@@ -350,6 +365,9 @@ def test_run_pipeline_skips_openai_backfill_when_public_featured_news_is_already
 def test_run_pipeline_skips_backfill_when_email_trust_signals_are_already_sufficient(
     monkeypatch, tmp_path
 ):
+    from morning_brief.config import load_settings
+    from morning_brief.pipeline import run_pipeline
+
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("OPENAI_WEB_SEARCH_ENABLED", "true")
     monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
@@ -465,6 +483,9 @@ def test_pipeline_observability_writes_provider_usage_summary_event(tmp_path):
     summary_event = next(
         event for event in payload["events"] if event["event"] == "provider_usage_summary"
     )
+    final_summary = next(
+        event for event in payload["events"] if event["event"] == "pipeline_summary"
+    )
 
     assert summary["provider_usage_line"] == (
         "openai[requests=3, input=900, output=150, cached=40, reasoning=12, sources=0, parse_failures=0, cost_usd=0.000516] | "
@@ -476,6 +497,10 @@ def test_pipeline_observability_writes_provider_usage_summary_event(tmp_path):
     assert summary_event["providers"]["perplexity"]["input_tokens"] is None
     assert summary_event["providers"]["openai"]["cost_usd"] == 0.000516
     assert summary["total_cost_usd"] == 0.000554
+    assert final_summary["status"] == "ok"
+    assert final_summary["provider_usage_line"] == summary["provider_usage_line"]
+    assert final_summary["pipeline_run_path"].endswith(".json")
+    assert final_summary["app_events_path"].endswith(".jsonl")
 
 
 def test_pipeline_observability_tracks_provider_usage_by_phase(tmp_path):

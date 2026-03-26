@@ -15,6 +15,7 @@ from morning_brief.data.sources.provider_runtime import (
     policy_for,
     record_skip,
 )
+from morning_brief.logging_utils import log_structured
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,14 @@ def is_host_resolvable(value: str) -> bool:
         _host_resolution_cache[host] = (True, now)
     except socket.gaierror:
         _host_resolution_cache[host] = (False, now)
-        logger.warning("호스트 주소를 확인하지 못했어요: %s", host)
+        log_structured(
+            logger,
+            event="error.raised",
+            message="호스트 주소를 확인하지 못했어요.",
+            level=logging.WARNING,
+            provider="http",
+            reason=host,
+        )
 
     return _host_resolution_cache[host][0]
 
@@ -133,23 +141,33 @@ def _request_with_retry(
 
     def log_retry(exc: Exception, attempt: int, max_attempts: int, delay: float) -> None:
         if isinstance(exc, HttpFetchError) and exc.status_code is not None:
-            logger.warning(
-                "HTTP 요청을 다시 시도하는 중이에요 (%s/%s). 대상=%s | status=%s | sleep=%.2fs",
-                attempt,
-                max_attempts,
-                url,
-                exc.status_code,
-                delay,
+            log_structured(
+                logger,
+                event="provider.retry",
+                message="HTTP 요청을 다시 시도하는 중이에요.",
+                level=logging.WARNING,
+                provider=provider or "http",
+                attempt=attempt,
+                max_attempts=max_attempts,
+                url=url,
+                status=exc.status_code,
+                retryable=True,
+                delay_seconds=delay,
             )
             return
 
-        logger.warning(
-            "HTTP 요청을 다시 시도하는 중이에요 (%s/%s). 대상=%s | %s | sleep=%.2fs",
-            attempt,
-            max_attempts,
-            url,
-            exc,
-            delay,
+        log_structured(
+            logger,
+            event="provider.retry",
+            message="HTTP 요청을 다시 시도하는 중이에요.",
+            level=logging.WARNING,
+            provider=provider or "http",
+            attempt=attempt,
+            max_attempts=max_attempts,
+            url=url,
+            reason=str(exc),
+            retryable=True,
+            delay_seconds=delay,
         )
 
     return execute_with_provider_retry(

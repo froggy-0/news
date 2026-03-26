@@ -31,7 +31,7 @@ def main() -> None:
     from morning_brief.logging_utils import setup_logging
 
     settings = load_settings()
-    setup_logging()
+    setup_logging(output_dir=settings.output_dir)
 
     if args.mode == "once":
         from morning_brief.pipeline import run_pipeline

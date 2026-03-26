@@ -30,6 +30,7 @@ from morning_brief.data.official_signal_registry import (
     load_dynamic_signal_registry,
     load_official_signal_registry,
 )
+from morning_brief.logging_utils import log_structured
 
 logger = logging.getLogger(__name__)
 
@@ -193,10 +194,13 @@ def _call_grok_for_group(
 
     content = getattr(response, "content", "") or ""
     usage = _extract_usage(response)
-    logger.info(
-        "Dynamic registry Grok API 호출 완료 group=%s cached_input_tokens=%s",
-        group,
-        usage.get("cached_input_tokens"),
+    log_structured(
+        logger,
+        event="provider.response",
+        message="Dynamic registry Grok API 호출을 완료했어요.",
+        provider="grok_keyword",
+        group=group,
+        cached_input_tokens=usage.get("cached_input_tokens"),
     )
     return _parse_group_handles(content, group)
 
@@ -236,7 +240,16 @@ def _parse_group_handles(content: str, group: str) -> list[dict[str, Any]]:
     try:
         data = json.loads(content)
     except json.JSONDecodeError:
-        logger.warning("Dynamic registry JSON 파싱 실패 (group=%s): %.200s", group, content)
+        log_structured(
+            logger,
+            event="error.raised",
+            message="Dynamic registry JSON 파싱이 실패했어요.",
+            level=logging.WARNING,
+            provider="grok_keyword",
+            group=group,
+            preview=content[:200],
+            reason="invalid_json",
+        )
         return []
 
     if not isinstance(data, dict):
@@ -270,17 +283,42 @@ def _validate_entity(item: dict[str, Any], group: str) -> DynamicSignalEntity | 
     try:
         trust_score = int(item["trust_score"])
     except (KeyError, TypeError, ValueError):
-        logger.debug("trust_score 누락/비정상 — 핸들 제외: %s", handle)
+        log_structured(
+            logger,
+            event="selection.complete",
+            message="trust_score 누락 또는 비정상이라 핸들을 제외했어요.",
+            level=logging.DEBUG,
+            handle=handle,
+            kept_count=0,
+            reason="invalid_trust_score",
+        )
         return None
 
     if trust_score < 3:
-        logger.debug("trust_score < 3 — 핸들 제외: %s (score=%d)", handle, trust_score)
+        log_structured(
+            logger,
+            event="selection.complete",
+            message="trust_score가 낮아 핸들을 제외했어요.",
+            level=logging.DEBUG,
+            handle=handle,
+            trust_score=trust_score,
+            kept_count=0,
+            reason="trust_score_below_minimum",
+        )
         return None
 
     # rationale 검증
     rationale = str(item.get("rationale", "")).strip()
     if not rationale:
-        logger.debug("rationale 누락 — 핸들 제외: %s", handle)
+        log_structured(
+            logger,
+            event="selection.complete",
+            message="rationale이 없어 핸들을 제외했어요.",
+            level=logging.DEBUG,
+            handle=handle,
+            kept_count=0,
+            reason="missing_rationale",
+        )
         return None
 
     return DynamicSignalEntity(
@@ -339,9 +377,12 @@ def _save_dynamic_registry(entities: list[DynamicSignalEntity]) -> None:
     tmp.replace(DYNAMIC_REGISTRY_PATH)  # 원자적 교체
     # 캐시 무효화 — 갱신된 파일을 즉시 반영
     load_dynamic_signal_registry.cache_clear()
-    logger.info(
-        "dynamic_signal_registry.json 저장 완료: %d개 엔티티",
-        len(entities),
+    log_structured(
+        logger,
+        event="artifact.created",
+        message="dynamic_signal_registry.json 저장을 완료했어요.",
+        path=str(DYNAMIC_REGISTRY_PATH),
+        kept_count=len(entities),
     )
 
 
@@ -360,7 +401,14 @@ def update_dynamic_registry(*, api_key: str, today: date | None = None) -> bool:
         True if successful, False if Grok API failed (Base Layer fallback).
     """
     if not api_key.strip():
-        logger.warning("Grok API 키 없음 — Dynamic Registry 갱신 건너뜀")
+        log_structured(
+            logger,
+            event="phase.skip",
+            message="Grok API 키가 없어 Dynamic Registry 갱신을 건너뛸게요.",
+            level=logging.WARNING,
+            provider="grok_keyword",
+            reason="missing_api_key",
+        )
         return False
 
     if today is None:
@@ -386,7 +434,16 @@ def update_dynamic_registry(*, api_key: str, today: date | None = None) -> bool:
                 today=today,
             )
         except RuntimeError as exc:
-            logger.warning("Grok API 실패 (group=%s) — Base Layer fallback: %s", group, exc)
+            log_structured(
+                logger,
+                event="error.raised",
+                message="Grok API 호출이 실패해 Base Layer fallback으로 이어갈게요.",
+                level=logging.WARNING,
+                provider="grok_keyword",
+                group=group,
+                reason=str(exc),
+                error_type=type(exc).__name__,
+            )
             continue
 
         any_success = True
@@ -404,17 +461,27 @@ def update_dynamic_registry(*, api_key: str, today: date | None = None) -> bool:
         # Base에 없는 신규 핸들만 추가 (그룹당 상한 _GROK_MAX_HANDLES=10)
         new_handles = _filter_new_handles(verified, base_handle_set)[:_GROK_MAX_HANDLES]
 
-        logger.info(
-            "Dynamic registry 그룹 처리: group=%s raw=%d validated=%d new=%d",
-            group,
-            len(raw_items),
-            len(verified),
-            len(new_handles),
+        log_structured(
+            logger,
+            event="selection.complete",
+            message="Dynamic registry 그룹 처리를 마쳤어요.",
+            provider="grok_keyword",
+            group=group,
+            raw_count=len(raw_items),
+            candidate_count=len(verified),
+            kept_count=len(new_handles),
         )
         all_dynamic.extend(new_handles)
 
     if not any_success:
-        logger.error("모든 Grok API 호출 실패 — Dynamic Registry 갱신 중단, Base Layer fallback")
+        log_structured(
+            logger,
+            event="error.raised",
+            message="모든 Grok API 호출이 실패해 Dynamic Registry 갱신을 중단할게요.",
+            level=logging.ERROR,
+            provider="grok_keyword",
+            reason="all_groups_failed",
+        )
         return False
 
     _save_dynamic_registry(all_dynamic)

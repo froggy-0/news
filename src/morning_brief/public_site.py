@@ -18,6 +18,7 @@ from openai import OpenAI
 from morning_brief.brief_formatting import extract_sections
 from morning_brief.config import Settings
 from morning_brief.data.market_policy import is_rate_canonical_key
+from morning_brief.logging_utils import log_structured
 from morning_brief.observability import PipelineObserver
 from morning_brief.openai_utils import usage_snapshot
 from morning_brief.unified_output import UnifiedOutput
@@ -1435,9 +1436,24 @@ def _translate_public_texts(
             batch_failed = True
             if observer is not None:
                 observer.log_event(
-                    "public_translation_failed", reason=str(exc), batch_size=len(items)
+                    "public_translation_failed",
+                    level=logging.WARNING,
+                    message="공개 JSON 번역 중 오류가 있어 원문을 유지할게요.",
+                    reason=str(exc),
+                    error_type=type(exc).__name__,
+                    batch_size=len(items),
                 )
-            logger.warning("공개 JSON 번역 중 오류가 있어 원문을 유지할게요: %s", exc)
+            else:
+                log_structured(
+                    logger,
+                    event="error.raised",
+                    message="공개 JSON 번역 중 오류가 있어 원문을 유지할게요.",
+                    level=logging.WARNING,
+                    phase="public_translation",
+                    reason=str(exc),
+                    error_type=type(exc).__name__,
+                    batch_size=len(items),
+                )
             continue
 
         if observer is not None:
@@ -1455,6 +1471,8 @@ def _translate_public_texts(
             if observer is not None:
                 observer.log_event(
                     "public_translation_failed",
+                    level=logging.WARNING,
+                    message="공개 JSON 번역 응답이 JSON 형식을 만족하지 않아 원문을 유지할게요.",
                     reason="invalid_json",
                     preview=(response.output_text or "")[:200],
                     batch_size=len(items),

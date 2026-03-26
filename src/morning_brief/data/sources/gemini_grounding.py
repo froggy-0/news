@@ -17,6 +17,7 @@ from morning_brief.data.sources.provider_runtime import (
     execute_with_provider_retry,
     open_circuit,
 )
+from morning_brief.logging_utils import log_structured
 from morning_brief.models import NewsItem
 from morning_brief.observability import PipelineObserver
 
@@ -114,9 +115,25 @@ def fetch_gemini_grounding(
                     input_tokens=getattr(usage, "prompt_token_count", None),
                     output_tokens=getattr(usage, "candidates_token_count", None),
                 )
-            logger.info("Gemini grounding %s: %d건 수집", topic, len(items))
+            log_structured(
+                logger,
+                event="selection.complete",
+                message="Gemini grounding 수집을 마쳤어요.",
+                provider=GEMINI_PROVIDER,
+                topic=topic,
+                kept_count=len(items),
+            )
         except Exception as exc:
-            logger.warning("Gemini grounding %s 실패: %s", topic, exc)
+            log_structured(
+                logger,
+                event="error.raised",
+                message="Gemini grounding이 실패했어요.",
+                level=logging.WARNING,
+                provider=GEMINI_PROVIDER,
+                topic=topic,
+                reason=str(exc),
+                error_type=type(exc).__name__,
+            )
             if "429" in str(exc) or "RESOURCE_EXHAUSTED" in str(exc):
                 open_circuit(GEMINI_PROVIDER, str(exc))
                 break

@@ -8,6 +8,7 @@ from urllib.parse import quote_plus
 
 import feedparser
 
+from morning_brief.logging_utils import log_structured
 from morning_brief.models import NewsItem
 
 logger = logging.getLogger(__name__)
@@ -45,10 +46,14 @@ def fetch_news_from_google_rss(
     for query in queries:
         feed = feedparser.parse(_google_news_rss(query))
         if getattr(feed, "bozo", 0):
-            logger.warning(
-                "RSS를 읽는 중 경고가 있었어요. query=%s | %s",
-                query,
-                getattr(feed, "bozo_exception", "unknown"),
+            log_structured(
+                logger,
+                event="error.raised",
+                message="RSS를 읽는 중 경고가 있었어요.",
+                level=logging.WARNING,
+                provider="google_news_rss",
+                query=query,
+                reason=str(getattr(feed, "bozo_exception", "unknown")),
             )
 
         for entry in feed.entries:

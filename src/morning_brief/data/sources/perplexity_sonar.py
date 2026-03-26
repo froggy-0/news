@@ -32,6 +32,7 @@ from morning_brief.data.sources.provider_runtime import (
     policy_for,
     record_skip,
 )
+from morning_brief.logging_utils import log_structured
 from morning_brief.models import NewsItem
 from morning_brief.observability import PipelineObserver
 
@@ -248,7 +249,16 @@ def _parse_sonar_content(raw_content: str, topic: str) -> dict[str, Any]:
     try:
         data = json.loads(text)
     except json.JSONDecodeError:
-        logger.warning("Sonar %s 응답 JSON 파싱 실패: %.200s", topic, text)
+        log_structured(
+            logger,
+            event="error.raised",
+            message="Sonar 응답 JSON 파싱이 실패했어요.",
+            level=logging.WARNING,
+            provider=SONAR_PROVIDER,
+            topic=topic,
+            preview=text[:200],
+            reason="invalid_json",
+        )
         return {
             "topic": topic,
             "summary_text": text,
@@ -393,13 +403,18 @@ def _sonar_chat_once(
         provider=SONAR_PROVIDER,
         operation=perform,
         should_retry=lambda exc: isinstance(exc, HttpFetchError) and exc.retryable,
-        on_retry=lambda exc, attempt, max_attempts, delay: logger.warning(
-            "Perplexity Sonar를 다시 시도하는 중이에요 (%s/%s). topic=%s | %s | sleep=%.2fs",
-            attempt,
-            max_attempts,
-            topic,
-            exc,
-            delay,
+        on_retry=lambda exc, attempt, max_attempts, delay: log_structured(
+            logger,
+            event="provider.retry",
+            message="Perplexity Sonar를 다시 시도하는 중이에요.",
+            level=logging.WARNING,
+            provider=SONAR_PROVIDER,
+            attempt=attempt,
+            max_attempts=max_attempts,
+            topic=topic,
+            reason=str(exc),
+            retryable=True,
+            delay_seconds=delay,
         ),
         retry_after_seconds_for_error=lambda exc: (
             exc.retry_after_seconds if isinstance(exc, HttpFetchError) else None
@@ -436,7 +451,14 @@ def fetch_sonar_summaries(
 ) -> dict[str, TopicSummary]:
     """모든 토픽에 대해 Sonar 요약을 병렬로 수집한다."""
     if not api_key.strip():
-        logger.warning("Perplexity API 키가 없어서 Sonar 요약을 건너뛸게요.")
+        log_structured(
+            logger,
+            event="phase.skip",
+            message="Perplexity API 키가 없어서 Sonar 요약을 건너뛸게요.",
+            level=logging.WARNING,
+            provider=SONAR_PROVIDER,
+            reason="missing_api_key",
+        )
         return {}
 
     client = _build_sonar_client(api_key)
@@ -459,17 +481,37 @@ def fetch_sonar_summaries(
                 citations=citations,
                 news_items=_citations_to_news_items(citations, topic),
             )
-            logger.info(
-                "Sonar %s 요약 수집 완료: data_points=%d, citations=%d",
-                topic,
-                len(summary.key_data_points),
-                len(citations),
+            log_structured(
+                logger,
+                event="selection.complete",
+                message="Sonar 토픽 요약 수집을 마쳤어요.",
+                provider=SONAR_PROVIDER,
+                topic=topic,
+                candidate_count=len(citations),
+                kept_count=len(summary.key_data_points),
             )
             return topic, summary
         except HttpFetchError as exc:
-            logger.warning("Sonar %s 토픽 수집 실패: %s", topic, exc)
             if observer:
-                observer.log_event("sonar_topic_failed", topic=topic, reason=str(exc))
+                observer.log_event(
+                    "sonar_topic_failed",
+                    level=logging.WARNING,
+                    message="Sonar 토픽 수집이 실패했어요.",
+                    topic=topic,
+                    reason=str(exc),
+                    error_type=type(exc).__name__,
+                )
+            else:
+                log_structured(
+                    logger,
+                    event="error.raised",
+                    message="Sonar 토픽 수집이 실패했어요.",
+                    level=logging.WARNING,
+                    provider=SONAR_PROVIDER,
+                    topic=topic,
+                    reason=str(exc),
+                    error_type=type(exc).__name__,
+                )
             return topic, None
 
     results: dict[str, TopicSummary] = {}
@@ -629,14 +671,32 @@ def fetch_sonar_context(
             should_retry=lambda exc: isinstance(exc, HttpFetchError) and exc.retryable,
         )
         _record_sonar_usage(observer, "context", usage)
-        logger.info(
-            "Sonar 맥락 분석 완료: analyses=%d, narrative=%s",
-            len(result.analyses),
-            result.key_narrative[:80] if result.key_narrative else "(없음)",
+        log_structured(
+            logger,
+            event="selection.complete",
+            message="Sonar 맥락 분석을 마쳤어요.",
+            provider=SONAR_PROVIDER,
+            kept_count=len(result.analyses),
+            narrative_preview=result.key_narrative[:80] if result.key_narrative else "(없음)",
         )
         return result
     except HttpFetchError as exc:
-        logger.warning("Sonar 맥락 분석 실패: %s", exc)
         if observer:
-            observer.log_event("sonar_context_failed", reason=str(exc))
+            observer.log_event(
+                "sonar_context_failed",
+                level=logging.WARNING,
+                message="Sonar 맥락 분석이 실패했어요.",
+                reason=str(exc),
+                error_type=type(exc).__name__,
+            )
+        else:
+            log_structured(
+                logger,
+                event="error.raised",
+                message="Sonar 맥락 분석이 실패했어요.",
+                level=logging.WARNING,
+                provider=SONAR_PROVIDER,
+                reason=str(exc),
+                error_type=type(exc).__name__,
+            )
         return None

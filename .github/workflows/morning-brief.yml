@@ -112,12 +112,12 @@ jobs:
           attempt=1
           max_attempts=2
           while [ "${attempt}" -le "${max_attempts}" ]; do
-            echo "Pipeline attempt ${attempt}/${max_attempts}"
+            echo "[workflow] Pipeline attempt ${attempt}/${max_attempts}"
             if python main.py once 2>&1 | tee run.log; then
               exit 0
             fi
             if [ "${attempt}" -eq "${max_attempts}" ]; then
-              echo "Pipeline failed after retries." >&2
+              echo "[workflow] Pipeline failed after retries." >&2
               exit 1
             fi
             attempt=$((attempt + 1))
@@ -228,6 +228,7 @@ jobs:
             outputs/*.md
             outputs/public/**/*.json
             outputs/observability/*.json
+            outputs/observability/*.jsonl
             run.log
           if-no-files-found: warn
 

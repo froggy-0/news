@@ -36,6 +36,7 @@ from morning_brief.data.sources.perplexity_sonar import (
     collect_sonar_news_items,
     fetch_sonar_summaries,
 )
+from morning_brief.logging_utils import log_structured
 from morning_brief.models import NewsItem
 from morning_brief.observability import PipelineObserver
 
@@ -115,12 +116,33 @@ def _collect_official_signal_items(
             observer=observer,
         )
     except Exception as exc:
-        logger.warning("Grok 공식 X 시그널을 가져오지 못해 해당 섹션은 생략할게요: %s", exc)
         if observer is not None:
-            observer.log_event("grok_signal_omitted", reason=str(exc))
+            observer.log_event(
+                "grok_signal_omitted",
+                level=logging.WARNING,
+                message="Grok 공식 X 시그널을 가져오지 못해 해당 섹션은 생략할게요.",
+                reason=str(exc),
+                error_type=type(exc).__name__,
+            )
+        else:
+            log_structured(
+                logger,
+                event="fallback.used",
+                message="Grok 공식 X 시그널을 가져오지 못해 해당 섹션은 생략할게요.",
+                level=logging.WARNING,
+                provider="grok_official",
+                reason=str(exc),
+                error_type=type(exc).__name__,
+            )
         return []
     if items:
-        logger.info("검증된 공식 X 시그널 %s건을 함께 반영했어요.", len(items))
+        log_structured(
+            logger,
+            event="selection.complete",
+            message="검증된 공식 X 시그널을 함께 반영했어요.",
+            provider="grok_official",
+            kept_count=len(items),
+        )
     return items
 
 
@@ -141,14 +163,25 @@ def _collect_sonar_summaries(
             observer=observer,
         )
     except Exception as exc:
-        logger.warning("Sonar 요약 수집 중 오류 발생, 건너뛸게요: %s", exc)
+        log_structured(
+            logger,
+            event="error.raised",
+            message="Sonar 요약 수집 중 오류가 발생해 건너뛸게요.",
+            level=logging.WARNING,
+            provider="perplexity",
+            reason=str(exc),
+            error_type=type(exc).__name__,
+        )
         return {}, []
     news_items = collect_sonar_news_items(summaries)
     if summaries:
-        logger.info(
-            "Sonar 요약 %d개 토픽 수집 완료, citations에서 NewsItem %d건 추출",
-            len(summaries),
-            len(news_items),
+        log_structured(
+            logger,
+            event="selection.complete",
+            message="Sonar 요약과 citations 기반 NewsItem을 정리했어요.",
+            provider="perplexity",
+            candidate_count=len(summaries),
+            kept_count=len(news_items),
         )
     return summaries, news_items
 
@@ -199,34 +232,77 @@ def fetch_news(
 
     items = _collect_from_rss(max_items=candidate_limit, preferred_only=True)
     if items:
-        logger.debug("뉴스 수집은 Google News RSS 우선 결과를 사용했어요.")
+        log_structured(
+            logger,
+            event="selection.complete",
+            message="뉴스 수집은 Google News RSS 우선 결과를 사용했어요.",
+            level=logging.DEBUG,
+            provider="google_news_rss",
+            kept_count=len(items),
+        )
 
     if len(items) < MIN_NEWS_ITEMS and newsapi_key:
         try:
             newsapi_items = _collect_from_newsapi(newsapi_key, max_items=candidate_limit)
             items = _merge_rank(items, newsapi_items, max_items=candidate_limit)
             if newsapi_items:
-                logger.debug("뉴스 보강에는 NewsAPI를 함께 사용했어요.")
+                log_structured(
+                    logger,
+                    event="fallback.used",
+                    message="뉴스 보강에는 NewsAPI를 함께 사용했어요.",
+                    level=logging.DEBUG,
+                    provider="newsapi",
+                    kept_count=len(newsapi_items),
+                )
         except (HttpFetchError, ValueError) as exc:
-            logger.warning("NewsAPI에서 뉴스를 가져오지 못했어요: %s", exc)
+            log_structured(
+                logger,
+                event="error.raised",
+                message="NewsAPI에서 뉴스를 가져오지 못했어요.",
+                level=logging.WARNING,
+                provider="newsapi",
+                reason=str(exc),
+                error_type=type(exc).__name__,
+            )
 
     if len(items) < MIN_NEWS_ITEMS and allow_broad_fallback:
-        logger.info(
-            "우선 신뢰 출처가 %s건이라 범위를 넓혀 RSS를 한 번 더 살펴봤어요.",
-            len(items),
+        log_structured(
+            logger,
+            event="fallback.used",
+            message="우선 신뢰 출처가 부족해 범위를 넓혀 RSS를 한 번 더 살펴봤어요.",
+            provider="google_news_rss",
+            candidate_count=len(items),
         )
         rss_broad = _collect_from_rss(max_items=candidate_limit, preferred_only=False)
         items = _merge_rank(items, rss_broad, max_items=candidate_limit)
     elif len(items) < MIN_NEWS_ITEMS and not allow_broad_fallback:
-        logger.debug("최근 운영 이력이 안정적이라 broad legacy fallback은 이번엔 건너뛸게요.")
+        log_structured(
+            logger,
+            event="phase.skip",
+            message="최근 운영 이력이 안정적이라 broad legacy fallback은 이번엔 건너뛸게요.",
+            level=logging.DEBUG,
+            reason="legacy_broad_disabled",
+        )
 
     final_items = _dedup_and_rank(items, max_items=max_items)
     if final_items:
-        logger.debug("legacy 뉴스 provider 비중은 %s였어요.", _provider_breakdown(final_items))
+        log_structured(
+            logger,
+            event="selection.complete",
+            message="legacy 뉴스 provider 비중을 정리했어요.",
+            level=logging.DEBUG,
+            provider_breakdown=_provider_breakdown(final_items),
+            kept_count=len(final_items),
+        )
     elif candidate_limit >= MIN_NEWS_ITEMS:
-        logger.warning(
-            "RSS와 NewsAPI까지 확인했지만 legacy 뉴스가 최소 기준(%s건)을 채우지 못했어요.",
-            MIN_NEWS_ITEMS,
+        log_structured(
+            logger,
+            event="selection.complete",
+            message="RSS와 NewsAPI까지 확인했지만 legacy 뉴스가 최소 기준을 채우지 못했어요.",
+            level=logging.WARNING,
+            candidate_count=candidate_limit,
+            kept_count=0,
+            reason=f"minimum={MIN_NEWS_ITEMS}",
         )
     return final_items
 
@@ -278,9 +354,13 @@ def build_news_packet(
         )
         if not items and settings.perplexity_use_sonar and sonar_news:
             items = sonar_news
-            logger.info(
-                "Perplexity Search 결과가 비어 Sonar citations %s건을 보조 뉴스로 사용할게요.",
-                len(sonar_news),
+            log_structured(
+                logger,
+                event="fallback.used",
+                message="Perplexity Search 결과가 비어 Sonar citations를 보조 뉴스로 사용할게요.",
+                provider="perplexity",
+                candidate_count=len(sonar_news),
+                reason="search_empty",
             )
             if observer is not None:
                 observer.log_event(
@@ -289,8 +369,13 @@ def build_news_packet(
                     count=len(sonar_news),
                 )
         elif items and settings.perplexity_use_sonar and sonar_news:
-            logger.info(
-                "Sonar 요약은 맥락 보강에만 쓰고, 실제 뉴스 본문은 Perplexity Search 결과를 우선 사용할게요."
+            log_structured(
+                logger,
+                event="selection.complete",
+                message="Sonar 요약은 맥락 보강에만 쓰고 실제 뉴스 본문은 Perplexity Search 결과를 우선 사용할게요.",
+                provider="perplexity",
+                candidate_count=len(sonar_news),
+                kept_count=len(items),
             )
         if not items and observer is not None:
             observer.log_event(
@@ -309,7 +394,13 @@ def build_news_packet(
             )
             if gemini_items:
                 items = gemini_items
-                logger.info("Gemini grounding fallback으로 %d건 수집", len(gemini_items))
+                log_structured(
+                    logger,
+                    event="fallback.used",
+                    message="Gemini grounding fallback으로 뉴스를 수집했어요.",
+                    provider="gemini",
+                    kept_count=len(gemini_items),
+                )
 
         # Grok X 키워드 + Web Search 결과 병합
         if x_news:
@@ -345,13 +436,20 @@ def build_news_packet(
             allow_broad_fallback = not (
                 reduce_broad_fallback and not _needs_full_legacy_backfill(fallback_review)
             )
-            logger.info(
-                "Perplexity와 공식 시그널 결과를 살펴보니 %s. legacy 뉴스로 빈 부분을 함께 채울게요.",
-                "; ".join(fallback_reasons),
+            log_structured(
+                logger,
+                event="fallback.used",
+                message="Perplexity와 공식 시그널 결과를 살펴보니 legacy 뉴스로 빈 부분을 함께 채울게요.",
+                provider="perplexity",
+                reason="; ".join(fallback_reasons),
             )
             if reduce_broad_fallback and not allow_broad_fallback:
-                logger.info(
-                    "최근 Perplexity 결과가 안정적이어서 이번에는 선별된 legacy fallback만 사용할게요."
+                log_structured(
+                    logger,
+                    event="fallback.used",
+                    message="최근 Perplexity 결과가 안정적이어서 이번에는 선별된 legacy fallback만 사용할게요.",
+                    provider="perplexity",
+                    reason="reduced_legacy_broad_fallback",
                 )
             legacy_items = fetch_news(
                 max_items=PUBLIC_ALL_NEWS_ITEMS,
@@ -360,15 +458,23 @@ def build_news_packet(
             )
             items = _merge_rank(items, legacy_items, max_items=public_merge_limit)
         elif not items:
-            logger.warning(
-                "Perplexity 연구 결과가 없고 legacy 뉴스 폴백도 꺼져 있어서 빈 뉴스 묶음을 그대로 사용할게요."
+            log_structured(
+                logger,
+                event="selection.complete",
+                message="Perplexity 연구 결과가 없고 legacy 뉴스 폴백도 꺼져 있어서 빈 뉴스 묶음을 유지할게요.",
+                level=logging.WARNING,
+                kept_count=0,
+                reason="empty_without_legacy_fallback",
             )
         else:
-            logger.info(
-                "Perplexity와 공식 시그널만으로도 기사 %s건, 도메인 %s개, 토픽 %s개 기준을 채웠어요.",
-                fallback_count,
-                fallback_unique_domains,
-                fallback_topic_coverage_count,
+            log_structured(
+                logger,
+                event="selection.complete",
+                message="Perplexity와 공식 시그널만으로도 기사/도메인/토픽 기준을 채웠어요.",
+                provider="perplexity",
+                kept_count=fallback_count,
+                unique_domains=fallback_unique_domains,
+                topic_coverage_count=fallback_topic_coverage_count,
             )
     else:
         legacy_items = fetch_news(
@@ -463,14 +569,18 @@ def build_news_packet(
         perplexity_count, official_signal_count, legacy_count, provider_breakdown = (
             _provider_counts(email_ranked_items)
         )
-        logger.info(
-            "최종 뉴스 구성은 Perplexity %s건, 공식 시그널 %s건, legacy %s건이었고 도메인 %s개, 토픽 %s개, provider 비중 %s로 정리됐어요.",
-            perplexity_count,
-            official_signal_count,
-            legacy_count,
-            final_summary["unique_domains"],
-            final_summary["topic_coverage_count"],
-            provider_breakdown,
+        log_structured(
+            logger,
+            event="selection.complete",
+            message="최종 뉴스 구성을 정리했어요.",
+            candidate_count=len(items),
+            kept_count=len(email_ranked_items),
+            provider_breakdown=provider_breakdown,
+            unique_domains=final_summary["unique_domains"],
+            topic_coverage_count=final_summary["topic_coverage_count"],
+            perplexity_count=perplexity_count,
+            official_signal_count=official_signal_count,
+            legacy_count=legacy_count,
         )
         if settings.research_provider == "perplexity" and fallback_review is not None:
             record_news_rollout_run(

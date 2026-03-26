@@ -27,6 +27,7 @@ from morning_brief.data.sources.provider_runtime import (
     execute_with_provider_retry,
 )
 from morning_brief.data.sources.stooq import fetch_close_change_and_volume, to_stooq_symbol
+from morning_brief.logging_utils import log_structured
 from morning_brief.models import BitcoinEtfIssuerSnapshot, BitcoinSnapshot, MarketPoint
 from morning_brief.observability import PipelineObserver
 
@@ -108,7 +109,14 @@ def _warn_once(key: str, message: str, *args) -> None:
     if key in _provider_warned:
         return
     _provider_warned.add(key)
-    logger.warning(message, *args)
+    rendered_message = message % args if args else message
+    log_structured(
+        logger,
+        event="fallback.used",
+        message=rendered_message,
+        level=logging.WARNING,
+        reason=key,
+    )
 
 
 def _history_with_retry(ticker: str, period: str, interval: str):
@@ -135,13 +143,18 @@ def _history_with_retry(ticker: str, period: str, interval: str):
             provider="yfinance",
             operation=fetch_history,
             should_retry=lambda exc: True,
-            on_retry=lambda exc, attempt, max_attempts, delay: logger.warning(
-                "yfinance 데이터를 다시 가져오는 중이에요 (%s/%s). 대상=%s | %s | sleep=%.2fs",
-                attempt,
-                max_attempts,
-                ticker,
-                exc,
-                delay,
+            on_retry=lambda exc, attempt, max_attempts, delay: log_structured(
+                logger,
+                event="provider.retry",
+                message="yfinance 데이터를 다시 가져오는 중이에요.",
+                level=logging.WARNING,
+                provider="yfinance",
+                attempt=attempt,
+                max_attempts=max_attempts,
+                ticker=ticker,
+                reason=str(exc),
+                retryable=True,
+                delay_seconds=delay,
             ),
             max_attempts=MAX_RETRIES,
             base_backoff_seconds=BACKOFF_SECONDS,
@@ -392,12 +405,22 @@ def fetch_macro_points(fred_api_key: str = "") -> list[MarketPoint]:
             existing_keys = {point.canonical_key for point in points if point.canonical_key}
             supplemental_points = _fallback_macro_points(existing_keys)
             if supplemental_points:
-                logger.debug(
-                    "거시 지표는 FRED 기준으로 가져오고, 일부 보완 지표(%s)는 yfinance 기준으로 채웠어요.",
-                    ", ".join(point.label for point in supplemental_points),
+                log_structured(
+                    logger,
+                    event="fallback.used",
+                    message="거시 지표는 FRED 기준으로 가져오고 일부 보완 지표는 yfinance 기준으로 채웠어요.",
+                    level=logging.DEBUG,
+                    provider="fred",
+                    filled_labels=", ".join(point.label for point in supplemental_points),
                 )
             else:
-                logger.debug("거시 지표는 FRED 기준으로 가져왔어요.")
+                log_structured(
+                    logger,
+                    event="selection.complete",
+                    message="거시 지표는 FRED 기준으로 가져왔어요.",
+                    level=logging.DEBUG,
+                    provider="fred",
+                )
             return [*points, *supplemental_points]
         except Exception as exc:
             _warn_once(
@@ -406,7 +429,13 @@ def fetch_macro_points(fred_api_key: str = "") -> list[MarketPoint]:
                 exc,
             )
 
-    logger.debug("거시 지표는 yfinance 폴백 기준으로 가져왔어요.")
+    log_structured(
+        logger,
+        event="fallback.used",
+        message="거시 지표는 yfinance 폴백 기준으로 가져왔어요.",
+        level=logging.DEBUG,
+        provider="yfinance",
+    )
     return _fallback_macro_points()
 
 
@@ -421,7 +450,14 @@ def fetch_us_index_points() -> list[MarketPoint]:
         )
         for canonical_key, ticker, stooq_symbol in US_INDEX_TARGETS
     ]
-    logger.debug("미국 지수 흐름은 Stooq 기준으로 보고, 필요하면 yfinance로 보강했어요.")
+    log_structured(
+        logger,
+        event="selection.complete",
+        message="미국 지수 흐름은 Stooq 기준으로 보고 필요하면 yfinance로 보강했어요.",
+        level=logging.DEBUG,
+        provider="stooq",
+        kept_count=len(points),
+    )
     return points
 
 
@@ -438,7 +474,14 @@ def fetch_tech_stock_points() -> list[MarketPoint]:
         key=lambda point: abs(point.change_pct) if point.change_pct is not None else -1.0,
         reverse=True,
     )
-    logger.debug("기술주는 Stooq 기준으로 보고, 필요하면 yfinance로 보강했어요.")
+    log_structured(
+        logger,
+        event="selection.complete",
+        message="기술주는 Stooq 기준으로 보고 필요하면 yfinance로 보강했어요.",
+        level=logging.DEBUG,
+        provider="stooq",
+        kept_count=len(points),
+    )
     return points
 
 
@@ -490,7 +533,14 @@ def fetch_korea_investor_points() -> list[MarketPoint]:
         )
         for canonical_key, ticker, scale in KOREA_INVESTOR_TARGETS
     ]
-    logger.debug("한국 투자자 참고 지표는 yfinance 기준으로 가져왔어요.")
+    log_structured(
+        logger,
+        event="selection.complete",
+        message="한국 투자자 참고 지표는 yfinance 기준으로 가져왔어요.",
+        level=logging.DEBUG,
+        provider="yfinance",
+        kept_count=len(points),
+    )
     return points
 
 
@@ -540,7 +590,13 @@ def _fetch_fear_greed() -> tuple[int | None, str | None]:
 def _fetch_btc_spot_point() -> MarketPoint:
     try:
         price, change_pct = fetch_btc_usd_price_change()
-        logger.debug("비트코인 현물 가격은 CoinGecko 기준으로 가져왔어요.")
+        log_structured(
+            logger,
+            event="selection.complete",
+            message="비트코인 현물 가격은 CoinGecko 기준으로 가져왔어요.",
+            level=logging.DEBUG,
+            provider="coingecko",
+        )
         return MarketPoint(
             label="BTC-USD",
             ticker="BTC-USD",
@@ -811,9 +867,12 @@ def _fetch_official_btc_etf_data(
             snapshot_count=0,
             reason=empty_reason,
         )
-        logger.info(
-            "BTC ETF 공식 스냅샷이 비어 있어 캐시 상태만 남길게요. reason=%s",
-            empty_reason,
+        log_structured(
+            logger,
+            event="selection.complete",
+            message="BTC ETF 공식 스냅샷이 비어 있어 캐시 상태만 남길게요.",
+            reason=empty_reason,
+            kept_count=0,
         )
         if observer is not None:
             observer.log_event(

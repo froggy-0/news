@@ -11,6 +11,7 @@ from openai import OpenAI
 
 from morning_brief.config import Settings
 from morning_brief.llm_errors import BriefGenerationError
+from morning_brief.logging_utils import log_structured
 from morning_brief.observability import PipelineObserver
 from morning_brief.openai_utils import (
     cached_input_tokens,
@@ -130,9 +131,21 @@ def _parse_review_payload_text(
 ) -> dict | None:
     normalized_text = response_text.strip()
     if not normalized_text:
-        logger.warning("브리핑 검수 응답이 비어 있어 이번 검수는 건너뛸게요.")
         if observer is not None:
-            observer.log_event("brief_review_skipped", reason="empty_response")
+            observer.log_event(
+                "brief_review_skipped",
+                level=logging.WARNING,
+                message="브리핑 검수 응답이 비어 있어 이번 검수는 건너뛸게요.",
+                reason="empty_response",
+            )
+        else:
+            log_structured(
+                logger,
+                event="review.skip",
+                message="브리핑 검수 응답이 비어 있어 이번 검수는 건너뛸게요.",
+                level=logging.WARNING,
+                reason="empty_response",
+            )
         return None
 
     last_error: JSONDecodeError | None = None
@@ -145,14 +158,21 @@ def _parse_review_payload_text(
             last_error = exc
 
     if payload is None:
-        logger.warning(
-            "브리핑 검수 JSON을 읽지 못해 이번 검수는 건너뛸게요: %s | preview=%s",
-            last_error,
-            _review_parse_preview(normalized_text),
-        )
         if observer is not None:
             observer.log_event(
                 "brief_review_skipped",
+                level=logging.WARNING,
+                message="브리핑 검수 JSON을 읽지 못해 이번 검수는 건너뛸게요.",
+                reason="invalid_json",
+                error=str(last_error),
+                preview=_review_parse_preview(normalized_text),
+            )
+        else:
+            log_structured(
+                logger,
+                event="review.skip",
+                message="브리핑 검수 JSON을 읽지 못해 이번 검수는 건너뛸게요.",
+                level=logging.WARNING,
                 reason="invalid_json",
                 error=str(last_error),
                 preview=_review_parse_preview(normalized_text),
@@ -210,10 +230,15 @@ def _review_briefing(
         total_elapsed_ms += int(round((time.perf_counter() - started_at) * 1000))
         cached_tokens = cached_input_tokens(response)
         if cached_tokens is not None:
-            logger.debug(
-                "브리핑 검수 프롬프트 캐시를 사용했어요. key=%s | cached_input_tokens=%s",
-                prompt_cache_key,
-                cached_tokens,
+            log_structured(
+                logger,
+                event="provider.cache.hit",
+                message="브리핑 검수 프롬프트 캐시를 사용했어요.",
+                level=logging.DEBUG,
+                provider="openai",
+                phase="brief_review",
+                prompt_cache_key=prompt_cache_key,
+                cached_input_tokens=cached_tokens,
             )
         if observer is not None:
             observer.record_provider_usage(
@@ -227,15 +252,24 @@ def _review_briefing(
     response = create_response(VALIDATOR_MAX_OUTPUT_TOKENS)
     incomplete_reason = response_incomplete_reason(response)
     if incomplete_reason == RETRYABLE_INCOMPLETE_REASON:
-        logger.warning(
-            "브리핑 검수 응답이 max_output_tokens에 걸려 1회 재시도할게요: previous=%s retry=%s",
-            VALIDATOR_MAX_OUTPUT_TOKENS,
-            VALIDATOR_RETRY_MAX_OUTPUT_TOKENS,
-        )
         if observer is not None:
             observer.log_event(
                 "brief_review_retry",
+                level=logging.WARNING,
+                message="브리핑 검수 응답이 max_output_tokens에 걸려 1회 재시도할게요.",
                 phase="validator",
+                reason=incomplete_reason,
+                previous_max_output_tokens=VALIDATOR_MAX_OUTPUT_TOKENS,
+                retry_max_output_tokens=VALIDATOR_RETRY_MAX_OUTPUT_TOKENS,
+            )
+        else:
+            log_structured(
+                logger,
+                event="provider.retry",
+                message="브리핑 검수 응답이 max_output_tokens에 걸려 1회 재시도할게요.",
+                level=logging.WARNING,
+                provider="openai",
+                phase="brief_review",
                 reason=incomplete_reason,
                 previous_max_output_tokens=VALIDATOR_MAX_OUTPUT_TOKENS,
                 retry_max_output_tokens=VALIDATOR_RETRY_MAX_OUTPUT_TOKENS,
@@ -245,15 +279,27 @@ def _review_briefing(
     if observer is not None:
         observer.record_phase_duration("review", total_elapsed_ms)
     if incomplete_reason is not None:
-        logger.warning(
-            "브리핑 검수 응답이 불완전했어요: status=%s reason=%s",
-            response_status(response) or "unknown",
-            incomplete_reason,
-        )
         if observer is not None:
             observer.log_event(
                 "brief_review_response_incomplete",
+                level=logging.WARNING,
+                message="브리핑 검수 응답이 불완전했어요.",
                 phase="validator",
+                status=response_status(response),
+                reason=incomplete_reason,
+                max_output_tokens=VALIDATOR_RETRY_MAX_OUTPUT_TOKENS
+                if incomplete_reason == RETRYABLE_INCOMPLETE_REASON
+                else VALIDATOR_MAX_OUTPUT_TOKENS,
+                preview=_review_parse_preview(response.output_text or ""),
+            )
+        else:
+            log_structured(
+                logger,
+                event="provider.response",
+                message="브리핑 검수 응답이 불완전했어요.",
+                level=logging.WARNING,
+                provider="openai",
+                phase="brief_review",
                 status=response_status(response),
                 reason=incomplete_reason,
                 max_output_tokens=VALIDATOR_RETRY_MAX_OUTPUT_TOKENS
@@ -306,10 +352,15 @@ def _rewrite_briefing(
         raise BriefGenerationError("검수 반영 재작성 결과가 비어 있어요.")
     cached_tokens = cached_input_tokens(response)
     if cached_tokens is not None:
-        logger.debug(
-            "브리핑 재작성 프롬프트 캐시를 사용했어요. key=%s | cached_input_tokens=%s",
-            prompt_cache_key,
-            cached_tokens,
+        log_structured(
+            logger,
+            event="provider.cache.hit",
+            message="브리핑 재작성 프롬프트 캐시를 사용했어요.",
+            level=logging.DEBUG,
+            provider="openai",
+            phase="brief_rewrite",
+            prompt_cache_key=prompt_cache_key,
+            cached_input_tokens=cached_tokens,
         )
     if observer is not None:
         observer.record_provider_usage(
@@ -324,15 +375,25 @@ def _rewrite_briefing(
         )
     incomplete_reason = response_incomplete_reason(response)
     if incomplete_reason is not None:
-        logger.warning(
-            "브리핑 재작성 응답이 불완전했어요: status=%s reason=%s",
-            response_status(response) or "unknown",
-            incomplete_reason,
-        )
         if observer is not None:
             observer.log_event(
                 "brief_review_response_incomplete",
+                level=logging.WARNING,
+                message="브리핑 재작성 응답이 불완전했어요.",
                 phase="rewrite",
+                status=response_status(response),
+                reason=incomplete_reason,
+                max_output_tokens=settings.openai_max_output_tokens,
+                preview=_review_parse_preview(rewritten),
+            )
+        else:
+            log_structured(
+                logger,
+                event="provider.response",
+                message="브리핑 재작성 응답이 불완전했어요.",
+                level=logging.WARNING,
+                provider="openai",
+                phase="brief_rewrite",
                 status=response_status(response),
                 reason=incomplete_reason,
                 max_output_tokens=settings.openai_max_output_tokens,
@@ -346,7 +407,13 @@ def _should_skip_rewrite(review: dict, settings: Settings) -> bool:
         return True
     if review["rewrite_needed"]:
         return False
-    logger.info("자동 재작성보다 사람 확인이 더 적절해 보여서 초안을 유지할게요.")
+    log_structured(
+        logger,
+        event="review.skip",
+        message="자동 재작성보다 사람 확인이 더 적절해 보여서 초안을 유지할게요.",
+        phase="brief_review",
+        reason="manual_review_preferred",
+    )
     return True
 
 
@@ -371,7 +438,13 @@ def _run_rewrite_loop(
                 client=client,
                 observer=observer,
             )
-            logger.info("검수 지적을 반영해 브리핑을 %s회 다듬었어요.", attempt)
+            log_structured(
+                logger,
+                event="brief.rewrite.complete",
+                message="검수 지적을 반영해 브리핑을 다듬었어요.",
+                phase="brief_review",
+                attempt=attempt,
+            )
         except BriefGenerationError:
             raise
         except Exception as exc:
@@ -385,15 +458,33 @@ def _run_rewrite_loop(
             observer=observer,
         )
         if current_review is None or current_review["pass"]:
-            logger.info("재작성한 브리핑도 다시 확인했고, 최종 검수를 통과했어요.")
+            log_structured(
+                logger,
+                event="review.pass",
+                message="재작성한 브리핑도 다시 확인했고 최종 검수를 통과했어요.",
+                phase="brief_review",
+            )
             return rewritten
 
         followup_issues = (
             "; ".join(current_review["issues"][:3]) or "아직 다듬을 부분이 남아 있어요"
         )
-        logger.warning("재작성 뒤에도 보완점이 남아 있어요: %s", followup_issues)
+        log_structured(
+            logger,
+            event="review.followup",
+            message="재작성 뒤에도 보완점이 남아 있어요.",
+            level=logging.WARNING,
+            phase="brief_review",
+            reason=followup_issues,
+        )
         if not current_review["rewrite_needed"]:
-            logger.info("추가 자동 재작성보다는 현재 버전을 유지하는 편이 안전해 보여요.")
+            log_structured(
+                logger,
+                event="review.skip",
+                message="추가 자동 재작성보다는 현재 버전을 유지하는 편이 안전해 보여요.",
+                phase="brief_review",
+                reason="rewrite_no_longer_needed",
+            )
             return rewritten
     return rewritten
 
@@ -421,11 +512,24 @@ def validate_and_rewrite_briefing(
         return draft_text
 
     if review["pass"]:
-        logger.info("브리핑 최종 검수를 통과했어요.")
+        log_structured(
+            logger,
+            event="review.pass",
+            message="브리핑 최종 검수를 통과했어요.",
+            phase="brief_review",
+        )
         return draft_text
 
     issues = "; ".join(review["issues"][:3]) or "보완이 필요한 표현이 있었어요"
-    logger.warning("브리핑 최종 검수에서 보완점을 찾았어요: %s", issues)
+    log_structured(
+        logger,
+        event="review.fail",
+        message="브리핑 최종 검수에서 보완점을 찾았어요.",
+        level=logging.WARNING,
+        phase="brief_review",
+        issues=review["issues"][:3],
+        reason=issues,
+    )
 
     if _should_skip_rewrite(review, settings):
         if observer is not None:

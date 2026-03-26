@@ -22,6 +22,7 @@ from morning_brief.brief_review import validate_and_rewrite_briefing
 from morning_brief.config import Settings
 from morning_brief.data.market_policy import is_rate_canonical_key
 from morning_brief.llm_errors import BriefGenerationError
+from morning_brief.logging_utils import log_structured
 from morning_brief.observability import PipelineObserver
 from morning_brief.openai_utils import (
     cached_input_tokens,
@@ -353,13 +354,22 @@ def _fallback_if_incomplete(
 
     merged_text = serialize_sections(merged)
 
-    logger.warning(
-        "브리핑 일부 섹션이 부족해 부분 보충했어요: %s",
-        "; ".join((issues or ["불완전 응답을 감지해 섹션을 보강했어요."])[:3]),
-    )
     if observer is not None:
         observer.log_event(
             "brief_partial_fallback",
+            level=logging.WARNING,
+            message="브리핑 일부 섹션이 부족해 부분 보충했어요.",
+            reason="incomplete_structure",
+            issues=issues,
+            filled_sections=sorted(replacement_keys),
+        )
+    else:
+        log_structured(
+            logger,
+            event="fallback.used",
+            message="브리핑 일부 섹션이 부족해 부분 보충했어요.",
+            level=logging.WARNING,
+            phase="brief_generation",
             reason="incomplete_structure",
             issues=issues,
             filled_sections=sorted(replacement_keys),
@@ -994,10 +1004,15 @@ def generate_briefing(
             text = _improve_readability_spacing(text)
             cached_tokens = cached_input_tokens(response)
             if cached_tokens is not None:
-                logger.debug(
-                    "OpenAI 프롬프트 캐시를 사용했어요. key=%s | cached_input_tokens=%s",
-                    prompt_cache_key,
-                    cached_tokens,
+                log_structured(
+                    logger,
+                    event="provider.cache.hit",
+                    message="OpenAI 프롬프트 캐시를 사용했어요.",
+                    level=logging.DEBUG,
+                    provider="openai",
+                    phase="brief_generation",
+                    prompt_cache_key=prompt_cache_key,
+                    cached_input_tokens=cached_tokens,
                 )
             if observer is not None:
                 observer.record_provider_usage(
@@ -1014,14 +1029,23 @@ def generate_briefing(
             incomplete_reason == RETRYABLE_INCOMPLETE_REASON
             and settings.openai_max_output_tokens < RETRY_MAX_OUTPUT_TOKENS
         ):
-            logger.warning(
-                "OpenAI 브리핑 생성이 max_output_tokens에 걸려 1회 재시도할게요: previous=%s retry=%s",
-                settings.openai_max_output_tokens,
-                RETRY_MAX_OUTPUT_TOKENS,
-            )
             if observer is not None:
                 observer.log_event(
                     "brief_generation_retry",
+                    level=logging.WARNING,
+                    message="OpenAI 브리핑 생성이 max_output_tokens에 걸려 1회 재시도할게요.",
+                    reason=incomplete_reason,
+                    previous_max_output_tokens=settings.openai_max_output_tokens,
+                    retry_max_output_tokens=RETRY_MAX_OUTPUT_TOKENS,
+                )
+            else:
+                log_structured(
+                    logger,
+                    event="provider.retry",
+                    message="OpenAI 브리핑 생성이 max_output_tokens에 걸려 1회 재시도할게요.",
+                    level=logging.WARNING,
+                    provider="openai",
+                    phase="brief_generation",
                     reason=incomplete_reason,
                     previous_max_output_tokens=settings.openai_max_output_tokens,
                     retry_max_output_tokens=RETRY_MAX_OUTPUT_TOKENS,
@@ -1032,14 +1056,24 @@ def generate_briefing(
             observer.record_phase_duration("brief", total_elapsed_ms)
         if incomplete_reason is not None:
             status = response_status(response)
-            logger.warning(
-                "OpenAI 브리핑 생성 응답이 불완전해 안전 보정으로 이어갈게요: status=%s reason=%s",
-                status or "unknown",
-                incomplete_reason,
-            )
             if observer is not None:
                 observer.log_event(
                     "brief_generation_incomplete",
+                    level=logging.WARNING,
+                    message="OpenAI 브리핑 생성 응답이 불완전해 안전 보정으로 이어갈게요.",
+                    status=status,
+                    reason=incomplete_reason,
+                    max_output_tokens=settings.openai_max_output_tokens,
+                    output_preview=_brief_output_preview(text),
+                )
+            else:
+                log_structured(
+                    logger,
+                    event="provider.response",
+                    message="OpenAI 브리핑 생성 응답이 불완전해 안전 보정으로 이어갈게요.",
+                    level=logging.WARNING,
+                    provider="openai",
+                    phase="brief_generation",
                     status=status,
                     reason=incomplete_reason,
                     max_output_tokens=settings.openai_max_output_tokens,

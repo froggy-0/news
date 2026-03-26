@@ -24,6 +24,7 @@ from morning_brief.data.sources.provider_runtime import (
     open_circuit,
     record_skip,
 )
+from morning_brief.logging_utils import log_structured
 from morning_brief.models import NewsItem
 from morning_brief.observability import PipelineObserver
 
@@ -263,7 +264,16 @@ def _perform_keyword_search(
     try:
         data = json.loads(content)
     except json.JSONDecodeError:
-        logger.warning("Grok X Search %s 응답 JSON 파싱 실패: %.200s", group, content)
+        log_structured(
+            logger,
+            event="error.raised",
+            message="Grok X Search 응답 JSON 파싱이 실패했어요.",
+            level=logging.WARNING,
+            provider=GROK_KEYWORD_PROVIDER,
+            group=group,
+            preview=content[:200],
+            reason="invalid_json",
+        )
         return [], _usage_snapshot(response), []
 
     signals = data.get("signals", []) if isinstance(data, dict) else []
@@ -335,7 +345,14 @@ def fetch_x_keyword_signals(
         (signals, news_items, keywords_by_sector) 튜플.
     """
     if not api_key.strip():
-        logger.warning("Grok API 키가 없어서 X 키워드 검색을 건너뛸게요.")
+        log_structured(
+            logger,
+            event="phase.skip",
+            message="Grok API 키가 없어서 X 키워드 검색을 건너뛸게요.",
+            level=logging.WARNING,
+            provider=GROK_KEYWORD_PROVIDER,
+            reason="missing_api_key",
+        )
         return [], [], {}
 
     all_handles = grouped_verified_x_handles()
@@ -349,7 +366,14 @@ def fetch_x_keyword_signals(
         reason = disabled_reason(GROK_KEYWORD_PROVIDER)
         if reason:
             record_skip(GROK_KEYWORD_PROVIDER)
-            logger.warning("Grok keyword는 이번 실행에서 더 이상 쓰지 않을게요: %s", reason)
+            log_structured(
+                logger,
+                event="phase.skip",
+                message="Grok keyword는 이번 실행에서 더 이상 쓰지 않을게요.",
+                level=logging.WARNING,
+                provider=GROK_KEYWORD_PROVIDER,
+                reason=reason,
+            )
             break
 
         handles = all_handles.get(group, [])
@@ -367,13 +391,18 @@ def fetch_x_keyword_signals(
                     max_items=max_items,
                 ),
                 should_retry=lambda exc: isinstance(exc, HttpFetchError) and exc.retryable,
-                on_retry=lambda exc, attempt, max_attempts, delay: logger.warning(
-                    "Grok X Search를 다시 시도하는 중이에요 (%s/%s). group=%s | %s | sleep=%.2fs",
-                    attempt,
-                    max_attempts,
-                    group,
-                    exc,
-                    delay,
+                on_retry=lambda exc, attempt, max_attempts, delay: log_structured(
+                    logger,
+                    event="provider.retry",
+                    message="Grok X Search를 다시 시도하는 중이에요.",
+                    level=logging.WARNING,
+                    provider=GROK_KEYWORD_PROVIDER,
+                    attempt=attempt,
+                    max_attempts=max_attempts,
+                    group=group,
+                    reason=str(exc),
+                    retryable=True,
+                    delay_seconds=delay,
                 ),
                 retry_after_seconds_for_error=lambda exc: exc.retry_after_seconds
                 if isinstance(exc, HttpFetchError)
@@ -391,11 +420,35 @@ def fetch_x_keyword_signals(
                     all_signals.append(signal)
                     all_news_items.append(_signal_to_news_item(signal))
 
-            logger.info("Grok X Search %s: %d건 시그널 수집", group, len(raw_signals))
+            log_structured(
+                logger,
+                event="selection.complete",
+                message="Grok X Search 시그널 수집을 마쳤어요.",
+                provider=GROK_KEYWORD_PROVIDER,
+                group=group,
+                kept_count=len(raw_signals),
+            )
         except HttpFetchError as exc:
-            logger.warning("Grok X Search %s 실패: %s", group, exc)
             if observer:
-                observer.log_event("grok_x_keyword_failed", group=group, reason=str(exc))
+                observer.log_event(
+                    "grok_x_keyword_failed",
+                    level=logging.WARNING,
+                    message="Grok X Search가 실패했어요.",
+                    group=group,
+                    reason=str(exc),
+                    error_type=type(exc).__name__,
+                )
+            else:
+                log_structured(
+                    logger,
+                    event="error.raised",
+                    message="Grok X Search가 실패했어요.",
+                    level=logging.WARNING,
+                    provider=GROK_KEYWORD_PROVIDER,
+                    group=group,
+                    reason=str(exc),
+                    error_type=type(exc).__name__,
+                )
 
     return all_signals, all_news_items, keywords_by_sector
 

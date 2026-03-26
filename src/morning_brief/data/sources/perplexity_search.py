@@ -25,6 +25,7 @@ from morning_brief.data.sources.provider_runtime import (
     policy_for,
     record_skip,
 )
+from morning_brief.logging_utils import log_structured
 from morning_brief.models import NewsItem
 from morning_brief.observability import COLLECTED_ITEM_LOG_LIMIT, PipelineObserver
 
@@ -626,13 +627,18 @@ def _search_once(
         provider=PERPLEXITY_PROVIDER,
         operation=perform_search,
         should_retry=lambda exc: isinstance(exc, HttpFetchError) and exc.retryable,
-        on_retry=lambda exc, attempt, max_attempts, delay: logger.warning(
-            "Perplexity Search API를 다시 시도하는 중이에요 (%s/%s). query=%s | %s | sleep=%.2fs",
-            attempt,
-            max_attempts,
-            " ".join(_search_query_label(query).split())[:80],
-            exc,
-            delay,
+        on_retry=lambda exc, attempt, max_attempts, delay: log_structured(
+            logger,
+            event="provider.retry",
+            message="Perplexity Search API를 다시 시도하는 중이에요.",
+            level=logging.WARNING,
+            provider=PERPLEXITY_PROVIDER,
+            attempt=attempt,
+            max_attempts=max_attempts,
+            query=" ".join(_search_query_label(query).split())[:80],
+            reason=str(exc),
+            retryable=True,
+            delay_seconds=delay,
         ),
         retry_after_seconds_for_error=lambda exc: exc.retry_after_seconds
         if isinstance(exc, HttpFetchError)
@@ -862,7 +868,14 @@ def _fetch_news_from_perplexity(
     del max_items
 
     if not api_key:
-        logger.debug("Perplexity API 키가 아직 없어 legacy 뉴스 수집으로 이어갈게요.")
+        log_structured(
+            logger,
+            event="phase.skip",
+            message="Perplexity API 키가 아직 없어 legacy 뉴스 수집으로 이어갈게요.",
+            level=logging.DEBUG,
+            provider=PERPLEXITY_PROVIDER,
+            reason="missing_api_key",
+        )
         return []
 
     client = _build_client(api_key)
@@ -899,10 +912,14 @@ def _fetch_news_from_perplexity(
                     raw_items=raw_items if not topic_items else None,
                 )
 
-            logger.info(
-                "Perplexity에서 %s 토픽 후보를 %s건 확인했어요.",
-                topic.name,
-                len(topic_items),
+            log_structured(
+                logger,
+                event="selection.complete",
+                message="Perplexity 토픽 후보를 확인했어요.",
+                provider=PERPLEXITY_PROVIDER,
+                topic=topic.name,
+                candidate_count=total_result_count,
+                kept_count=len(topic_items),
             )
             collected.extend(topic_items)
         except HttpFetchError as exc:
@@ -912,8 +929,15 @@ def _fetch_news_from_perplexity(
                     items=[],
                     reason="parse_error",
                 )
-            logger.warning(
-                "Perplexity에서 %s 토픽을 확인하는 중 문제가 있었어요: %s", topic.name, exc
+            log_structured(
+                logger,
+                event="error.raised",
+                message="Perplexity 토픽을 확인하는 중 문제가 있었어요.",
+                level=logging.WARNING,
+                provider=PERPLEXITY_PROVIDER,
+                topic=topic.name,
+                reason=str(exc),
+                error_type=type(exc).__name__,
             )
 
     return collected

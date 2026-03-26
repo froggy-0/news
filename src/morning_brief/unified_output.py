@@ -21,6 +21,7 @@ from morning_brief.brief_formatting import (
     parse_sector_mapping,
 )
 from morning_brief.data.market_policy import is_rate_canonical_key
+from morning_brief.logging_utils import log_structured
 
 logger = logging.getLogger(__name__)
 
@@ -273,9 +274,13 @@ class MetaLayer:
     def __post_init__(self) -> None:
         if self.translation_status not in _TRANSLATION_STATUS_VALUES:
             # TODO: clarify - 잘못된 값 진입 시 skipped로 강제 처리 vs 예외
-            logger.warning(
-                "MetaLayer.translation_status 허용값 외 값 '%s' → 'skipped' 으로 보정",
-                self.translation_status,
+            log_structured(
+                logger,
+                event="fallback.used",
+                message="MetaLayer.translation_status 허용값 외 값을 skipped로 보정했어요.",
+                level=logging.WARNING,
+                invalid_translation_status=self.translation_status,
+                reason="invalid_translation_status",
             )
             self.translation_status = "skipped"
 
@@ -496,7 +501,13 @@ def briefing_to_narrative(
     try:
         section_map = extract_sections(briefing)
     except Exception:
-        logger.exception("briefing_to_narrative: extract_sections 실패 — 빈 섹션맵 사용")
+        log_structured(
+            logger,
+            event="error.raised",
+            message="briefing_to_narrative에서 extract_sections가 실패해 빈 섹션맵을 사용할게요.",
+            level=logging.ERROR,
+            reason="extract_sections_failed",
+        )
         section_map = {}
 
     # section_0: 30초 요약 → headline / summary_lead / summary_support
@@ -532,7 +543,13 @@ def briefing_to_narrative(
             _parse_issue_briefings(section_map.get("section_4_1", "") or "") or None
         )
     except Exception:
-        logger.exception("briefing_to_narrative: issue_briefings 파싱 실패")
+        log_structured(
+            logger,
+            event="error.raised",
+            message="briefing_to_narrative에서 issue_briefings 파싱이 실패했어요.",
+            level=logging.ERROR,
+            reason="issue_briefings_parse_failed",
+        )
         issue_briefings = None
 
     try:
@@ -541,20 +558,38 @@ def briefing_to_narrative(
             parse_sector_mapping(sector_mapping_raw) if sector_mapping_raw.strip() else None
         )
     except Exception:
-        logger.exception("briefing_to_narrative: sector_mapping 파싱 실패")
+        log_structured(
+            logger,
+            event="error.raised",
+            message="briefing_to_narrative에서 sector_mapping 파싱이 실패했어요.",
+            level=logging.ERROR,
+            reason="sector_mapping_parse_failed",
+        )
         sector_mapping = None
 
     try:
         weekly_context_raw = section_map.get("section_5_1", "") or ""
         weekly_context: str | None = weekly_context_raw.strip() or None
     except Exception:
-        logger.exception("briefing_to_narrative: weekly_context 추출 실패")
+        log_structured(
+            logger,
+            event="error.raised",
+            message="briefing_to_narrative에서 weekly_context 추출이 실패했어요.",
+            level=logging.ERROR,
+            reason="weekly_context_parse_failed",
+        )
         weekly_context = None
 
     try:
         sonar_analyses = _parse_sonar(section_map.get("section_5_2", "") or "")
     except Exception:
-        logger.exception("briefing_to_narrative: sonar_analyses 파싱 실패")
+        log_structured(
+            logger,
+            event="error.raised",
+            message="briefing_to_narrative에서 sonar_analyses 파싱이 실패했어요.",
+            level=logging.ERROR,
+            reason="sonar_analyses_parse_failed",
+        )
         sonar_analyses = None
 
     try:
@@ -562,7 +597,13 @@ def briefing_to_narrative(
         events = parse_event_calendar(event_calendar_raw) if event_calendar_raw.strip() else []
         event_calendar = events if events else None
     except Exception:
-        logger.exception("briefing_to_narrative: event_calendar 파싱 실패")
+        log_structured(
+            logger,
+            event="error.raised",
+            message="briefing_to_narrative에서 event_calendar 파싱이 실패했어요.",
+            level=logging.ERROR,
+            reason="event_calendar_parse_failed",
+        )
         event_calendar = None
 
     return NarrativeLayer(

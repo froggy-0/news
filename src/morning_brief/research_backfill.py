@@ -20,6 +20,7 @@ from morning_brief.llm_provider_policy import (
     OPENAI_PROVIDER,
     capability_allowed,
 )
+from morning_brief.logging_utils import log_structured
 from morning_brief.models import NewsItem
 from morning_brief.observability import COLLECTED_ITEM_LOG_LIMIT, PipelineObserver
 from morning_brief.openai_utils import usage_snapshot
@@ -331,11 +332,23 @@ def backfill_news_with_web_search(
     observer: PipelineObserver | None = None,
 ) -> tuple[list[dict], list[dict[str, str]]]:
     if not settings.openai_web_search_enabled:
-        logger.debug("OpenAI web_search 설정이 꺼져 있어 뉴스 백필은 건너뛸게요.")
+        log_structured(
+            logger,
+            event="phase.skip",
+            message="OpenAI web_search 설정이 꺼져 있어 뉴스 백필은 건너뛸게요.",
+            level=logging.DEBUG,
+            phase="web_backfill",
+            reason="disabled",
+        )
         return packet.get("news", []), []
     if not capability_allowed(OPENAI_PROVIDER, CAPABILITY_WEB_BACKFILL):
-        logger.warning(
-            "OpenAI web_search 백필은 비활성화돼 있어서 현재 뉴스 묶음을 그대로 유지할게요."
+        log_structured(
+            logger,
+            event="fallback.used",
+            message="OpenAI web_search 백필은 비활성화돼 있어서 현재 뉴스 묶음을 그대로 유지할게요.",
+            level=logging.WARNING,
+            phase="web_backfill",
+            reason="capability_disabled",
         )
         return packet.get("news", []), []
 
@@ -407,6 +420,7 @@ def backfill_news_with_web_search(
                     if observer is not None:
                         observer.log_event(
                             "web_backfill_result",
+                            message="OpenAI 웹 검색 source 후보가 있었지만 publish 품질 기준을 통과하지 못했어요.",
                             before_count=len(packet.get("news", [])),
                             extra_item_count=0,
                             merged_count=len(packet.get("news", [])),
@@ -416,10 +430,17 @@ def backfill_news_with_web_search(
                             reason="source_only_filtered",
                             dropped=candidate_audit["dropped"],
                         )
-                    logger.info(
-                        "OpenAI 웹 검색 source 후보 %s건이 있었지만 publish 품질 기준을 통과하지 못해 병합하지 않을게요.",
-                        len(citation_fallback_items),
-                    )
+                    else:
+                        log_structured(
+                            logger,
+                            event="selection.complete",
+                            message="OpenAI 웹 검색 source 후보가 있었지만 publish 품질 기준을 통과하지 못했어요.",
+                            phase="web_backfill",
+                            candidate_count=len(citation_fallback_items),
+                            kept_count=0,
+                            dropped=candidate_audit["dropped"],
+                            reason="source_only_filtered",
+                        )
                     return packet.get("news", []), citations
                 merged_packet = merge_news_packets(
                     existing_packet=packet.get("news", []),
@@ -430,6 +451,7 @@ def backfill_news_with_web_search(
                 if observer is not None:
                     observer.log_event(
                         "web_backfill_result",
+                        message="OpenAI 웹 검색 본문은 비어 있었지만 source 후보를 살려 최종 뉴스로 정리했어요.",
                         before_count=len(packet.get("news", [])),
                         extra_item_count=len(public_candidates),
                         merged_count=len(merged_packet),
@@ -439,15 +461,22 @@ def backfill_news_with_web_search(
                         output_preview=output_text[:200],
                         reason="source_only_fallback",
                     )
-                logger.info(
-                    "OpenAI 웹 검색 본문은 비어 있었지만 source 후보 %s건을 살려 최종 뉴스 %s건으로 정리했어요.",
-                    len(public_candidates),
-                    len(merged_packet),
-                )
+                else:
+                    log_structured(
+                        logger,
+                        event="fallback.used",
+                        message="OpenAI 웹 검색 본문은 비어 있었지만 source 후보를 살려 최종 뉴스로 정리했어요.",
+                        phase="web_backfill",
+                        candidate_count=len(citation_fallback_items),
+                        kept_count=len(public_candidates),
+                        merged_count=len(merged_packet),
+                        reason="source_only_fallback",
+                    )
                 return merged_packet, citations
             if observer is not None:
                 observer.log_event(
                     "web_backfill_result",
+                    message="OpenAI 웹 검색을 돌렸지만 새 기사 후보는 찾지 못했어요.",
                     before_count=len(packet.get("news", [])),
                     extra_item_count=0,
                     merged_count=len(packet.get("news", [])),
@@ -456,7 +485,16 @@ def backfill_news_with_web_search(
                     output_preview=output_text[:200],
                     reason="no_items_parsed",
                 )
-            logger.info("OpenAI 웹 검색을 돌렸지만 새 기사 후보는 찾지 못했어요.")
+            else:
+                log_structured(
+                    logger,
+                    event="selection.complete",
+                    message="OpenAI 웹 검색을 돌렸지만 새 기사 후보는 찾지 못했어요.",
+                    phase="web_backfill",
+                    candidate_count=0,
+                    kept_count=0,
+                    reason="no_items_parsed",
+                )
             return packet.get("news", []), citations
 
         publish_candidates, candidate_audit = filter_publish_news_candidates(extra_items)
@@ -464,6 +502,7 @@ def backfill_news_with_web_search(
             if observer is not None:
                 observer.log_event(
                     "web_backfill_result",
+                    message="OpenAI 웹 검색 후보가 있었지만 publish 품질 기준을 통과하지 못했어요.",
                     before_count=len(packet.get("news", [])),
                     extra_item_count=0,
                     merged_count=len(packet.get("news", [])),
@@ -472,10 +511,17 @@ def backfill_news_with_web_search(
                     reason="parsed_items_filtered",
                     dropped=candidate_audit["dropped"],
                 )
-            logger.info(
-                "OpenAI 웹 검색 후보 %s건이 있었지만 publish 품질 기준을 통과하지 못해 병합하지 않을게요.",
-                len(extra_items),
-            )
+            else:
+                log_structured(
+                    logger,
+                    event="selection.complete",
+                    message="OpenAI 웹 검색 후보가 있었지만 publish 품질 기준을 통과하지 못했어요.",
+                    phase="web_backfill",
+                    candidate_count=len(extra_items),
+                    kept_count=0,
+                    dropped=candidate_audit["dropped"],
+                    reason="parsed_items_filtered",
+                )
             return packet.get("news", []), citations
 
         merged_packet = merge_news_packets(
@@ -487,6 +533,7 @@ def backfill_news_with_web_search(
         if observer is not None:
             observer.log_event(
                 "web_backfill_result",
+                message="OpenAI 웹 검색으로 후보 뉴스를 더 확인했고 최종 뉴스로 정리했어요.",
                 before_count=len(packet.get("news", [])),
                 extra_item_count=len(publish_candidates),
                 merged_count=len(merged_packet),
@@ -494,14 +541,36 @@ def backfill_news_with_web_search(
                 items=_loggable_backfill_items(publish_candidates),
                 reason="merged",
             )
-        logger.info(
-            "OpenAI 웹 검색으로 후보 뉴스 %s건을 더 확인했고, 최종 뉴스는 %s건으로 정리했어요.",
-            len(publish_candidates),
-            len(merged_packet),
-        )
+        else:
+            log_structured(
+                logger,
+                event="selection.complete",
+                message="OpenAI 웹 검색으로 후보 뉴스를 더 확인했고 최종 뉴스로 정리했어요.",
+                phase="web_backfill",
+                candidate_count=len(extra_items),
+                kept_count=len(publish_candidates),
+                merged_count=len(merged_packet),
+                reason="merged",
+            )
         return merged_packet, citations
     except Exception as exc:
         if observer is not None:
-            observer.log_event("web_backfill_result", reason="error", detail=str(exc))
-        logger.warning("OpenAI 웹 검색으로 뉴스를 보강하는 중 문제가 있었어요: %s", exc)
+            observer.log_event(
+                "web_backfill_result",
+                level=logging.WARNING,
+                message="OpenAI 웹 검색으로 뉴스를 보강하는 중 문제가 있었어요.",
+                reason="error",
+                detail=str(exc),
+                error_type=type(exc).__name__,
+            )
+        else:
+            log_structured(
+                logger,
+                event="error.raised",
+                message="OpenAI 웹 검색으로 뉴스를 보강하는 중 문제가 있었어요.",
+                level=logging.WARNING,
+                phase="web_backfill",
+                reason=str(exc),
+                error_type=type(exc).__name__,
+            )
         return packet.get("news", []), []

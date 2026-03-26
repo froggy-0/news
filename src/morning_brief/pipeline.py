@@ -27,6 +27,7 @@ from morning_brief.data.sources.provider_runtime import (
 from morning_brief.emailer import GmailSender
 from morning_brief.llm_errors import BriefGenerationError
 from morning_brief.llm_provider_policy import provider_role_snapshot
+from morning_brief.logging_utils import log_structured
 from morning_brief.observability import PipelineObserver
 from morning_brief.public_site import publish_public_brief
 from morning_brief.research_backfill import (
@@ -76,7 +77,12 @@ def run_pipeline(settings: Settings) -> str:
     observer = PipelineObserver(output_dir=settings.output_dir)
     observer.record_cache_status_from_env()
     observer.log_event("provider_role_policy", policies=provider_role_snapshot())
-    logger.info("브리핑 파이프라인을 시작할게요.")
+    log_structured(
+        logger,
+        event="run.start",
+        message="브리핑 파이프라인을 시작할게요.",
+        phase="run",
+    )
     pipeline_started_at = time.perf_counter()
     market_packet: dict = {}
     news_packet: list[dict] = []
@@ -110,7 +116,13 @@ def run_pipeline(settings: Settings) -> str:
                 observer=observer,
                 keywords_by_topic=keywords_by_topic,
             )
-        logger.info("시장 지표와 뉴스 %s건을 모았어요.", len(news_packet))
+        log_structured(
+            logger,
+            event="data.collect.complete",
+            message="시장 지표와 뉴스 묶음을 준비했어요.",
+            phase="news",
+            news_count=len(news_packet),
+        )
 
         packet = {
             **market_packet,
@@ -189,15 +201,22 @@ def run_pipeline(settings: Settings) -> str:
         packet["data_quality"] = quality
         if quality["status"] == "critical":
             status = "degraded"
-            logger.warning(
-                "데이터 품질이 critical이어서 실행 상태를 degraded로 남길게요. 확인할 점은 %s",
-                "; ".join(quality["warnings"]),
+            log_structured(
+                logger,
+                event="quality.degraded",
+                message="데이터 품질이 critical이어서 실행 상태를 degraded로 남길게요.",
+                level=logging.WARNING,
+                quality_status=quality["status"],
+                reason="; ".join(quality["warnings"]),
             )
         elif quality["status"] != "ok":
-            logger.warning(
-                "데이터 품질 상태는 %s예요. 확인할 점은 %s",
-                quality["status"],
-                "; ".join(quality["warnings"]),
+            log_structured(
+                logger,
+                event="quality.warning",
+                message="데이터 품질 경고가 있어 확인이 필요해요.",
+                level=logging.WARNING,
+                quality_status=quality["status"],
+                reason="; ".join(quality["warnings"]),
             )
 
         briefing = generate_briefing(packet=packet, settings=settings, observer=observer)
@@ -238,8 +257,13 @@ def run_pipeline(settings: Settings) -> str:
                 ],
             )
         except Exception as unified_exc:
-            logger.exception("unified_output 생성 실패 — 기존 경로로 계속 진행")
-            observer.log_event("unified_output_failed", reason=str(unified_exc))
+            observer.log_event(
+                "unified_output_failed",
+                level=logging.ERROR,
+                message="unified_output 생성에 실패해 기존 경로로 계속 진행할게요.",
+                reason=str(unified_exc),
+                error_type=type(unified_exc).__name__,
+            )
             unified = None
 
         brief_fallback_used = any(
@@ -248,15 +272,25 @@ def run_pipeline(settings: Settings) -> str:
         )
         if brief_fallback_used and status == "ok":
             status = "brief_fallback"
-            logger.warning(
-                "최종 브리핑이 안전한 기본 브리핑으로 대체돼 실행 상태를 brief_fallback으로 남길게요."
+            log_structured(
+                logger,
+                event="fallback.used",
+                message="최종 브리핑이 안전한 기본 브리핑으로 대체돼 brief_fallback으로 남길게요.",
+                level=logging.WARNING,
+                reason="brief_fallback_used",
             )
 
         now = datetime.now(ZoneInfo(settings.timezone))
         file_name = now.strftime("brief_%Y%m%d_%H%M.md")
         output_path = settings.output_dir / file_name
         output_path.write_text(briefing, encoding="utf-8")
-        logger.info("브리핑을 저장했어요: %s", output_path)
+        log_structured(
+            logger,
+            event="artifact.created",
+            message="브리핑 파일을 저장했어요.",
+            artifact_type="brief_markdown",
+            path=str(output_path),
+        )
 
         # 뉴스레터 렌더링 직전 — 표시 전용 데이터 주입 (감성 파이프라인 제외 항목)
         display_data = fetch_newsletter_display_data(cache_dir=settings.cache_dir)
@@ -292,9 +326,10 @@ def run_pipeline(settings: Settings) -> str:
             status = "skipped"
             observer.log_event(
                 "email_skipped",
+                level=logging.WARNING,
+                message="데이터 품질 critical + 검수 미통과 조합으로 이메일 발송을 건너뛸게요.",
                 reason="데이터 품질 critical + 검수 미통과 조합으로 발송을 건너뛸게요.",
             )
-            logger.warning("데이터 품질 critical + 검수 미통과로 이메일 발송을 건너뛸게요.")
         else:
             with observer.phase("email"):
                 GmailSender(settings).send(subject=subject, body=briefing, packet=render_packet)
@@ -304,20 +339,27 @@ def run_pipeline(settings: Settings) -> str:
         failure_exc = exc
         observer.log_event(
             "openai_alert",
+            level=logging.ERROR,
+            message="OpenAI 브리핑 생성이 중단돼 메일 발송을 건너뛸게요.",
             action="skip_email",
             reason=failure_message,
         )
-        logger.error("OpenAI 브리핑 생성이 중단돼 메일 발송을 건너뛸게요: %s", exc)
     except Exception as exc:
         status = "failed"
         failure_message = str(exc)
         failure_exc = exc
-        observer.log_event("pipeline_error", reason=failure_message)
+        observer.log_event(
+            "pipeline_error",
+            level=logging.ERROR,
+            message="브리핑 파이프라인 실행 중 예외가 발생했어요.",
+            reason=failure_message,
+            error_type=type(exc).__name__,
+        )
         raise
     finally:
         total_duration_ms = int(round((time.perf_counter() - pipeline_started_at) * 1000))
         provider_stats = provider_stats_snapshot()
-        summary = observer.write_outputs(
+        observer.write_outputs(
             status=status,
             provider_stats=provider_stats,
             extra={
@@ -328,12 +370,6 @@ def run_pipeline(settings: Settings) -> str:
                 "failure_message": failure_message or None,
             },
         )
-        if provider_stats:
-            logger.info("이번 실행의 수집 공급자 상태는 %s", provider_stats)
-        logger.info("브리핑 파이프라인을 마쳤어요. status=%s", summary["status"])
-        provider_usage_line = str(summary.get("provider_usage_line") or "").strip()
-        if provider_usage_line:
-            logger.info("이번 실행의 LLM 토큰 사용량은 %s", provider_usage_line)
 
     if failure_exc is not None:
         raise failure_exc

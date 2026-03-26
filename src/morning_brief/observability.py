@@ -1,15 +1,26 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Mapping
 
 from morning_brief.data.sources.domain_utils import normalize_domain
+from morning_brief.logging_utils import (
+    bind_phase,
+    canonical_event_name,
+    get_app_events_path,
+    get_log_context,
+    log_structured,
+    queue_fallback_active,
+    set_run_context,
+    severity_fields,
+)
 
 PREFERRED_PROVIDER_ORDER = (
     "openai",
@@ -51,6 +62,8 @@ LLM_PRICING_USD_PER_1M: dict[str, dict[str, float | None]] = {
         "reasoning": None,
     },
 }
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -134,28 +147,90 @@ class PipelineObserver:
         self.anomalies: list[dict[str, object]] = []
         self.cache_statuses: list[dict[str, object]] = []
         self.perplexity_topic_audit: dict[str, dict[str, object]] = {}
+        self._final_summary_emitted = False
+        set_run_context(self.run_id)
 
-    def _emit(self, event: str, **payload: object) -> None:
+    def _emit(
+        self,
+        event: str,
+        *,
+        level: int = logging.INFO,
+        message: str | None = None,
+        **payload: object,
+    ) -> None:
+        context = get_log_context()
+        severity_text, severity_number = severity_fields(level)
+        canonical_event = canonical_event_name(event, __name__, level)
         record = {
             "ts": datetime.now(timezone.utc).isoformat(),
+            "level": logging.getLevelName(level),
+            "severity_text": severity_text,
+            "severity_number": severity_number,
+            "run_id": self.run_id,
+            "component": __name__,
             "event": event,
+            "canonical_event": canonical_event,
+            "phase": context.get("phase"),
+            "provider": context.get("provider"),
+            "attempt": context.get("attempt"),
+            "message": message or event.replace("_", " "),
+            "attributes": payload,
             **payload,
         }
         self.events.append(record)
-        print(json.dumps(record, ensure_ascii=False, sort_keys=True), flush=True)
+        log_structured(
+            logger,
+            event=event,
+            message=str(record["message"]),
+            level=level,
+            **payload,
+        )
 
-    def log_event(self, event: str, **payload: object) -> None:
-        self._emit(event, **payload)
+    def log_event(
+        self,
+        event: str,
+        *,
+        level: int = logging.INFO,
+        message: str | None = None,
+        **payload: object,
+    ) -> None:
+        self._emit(event, level=level, message=message, **payload)
+
+    def _emit_payload(
+        self,
+        event: str,
+        *,
+        level: int = logging.INFO,
+        message: str | None = None,
+        payload: Mapping[str, object] | None = None,
+        **extra: object,
+    ) -> None:
+        combined: dict[str, object] = {}
+        if payload:
+            combined.update(payload)
+        combined.update(extra)
+        self._emit(event, level=level, message=message, **combined)
 
     @contextmanager
     def phase(self, name: str) -> Iterator[None]:
         started_at = time.perf_counter()
-        try:
-            yield
-        finally:
-            duration_ms = int(round((time.perf_counter() - started_at) * 1000))
-            self.phase_durations_ms[name] = self.phase_durations_ms.get(name, 0) + duration_ms
-            self._emit("phase_duration", phase=name, duration_ms=duration_ms)
+        with bind_phase(name):
+            self._emit(
+                "phase.start",
+                message=f"{name} phase started",
+                phase=name,
+            )
+            try:
+                yield
+            finally:
+                duration_ms = int(round((time.perf_counter() - started_at) * 1000))
+                self.phase_durations_ms[name] = self.phase_durations_ms.get(name, 0) + duration_ms
+                self._emit(
+                    "phase_duration",
+                    message=f"{name} phase completed",
+                    phase=name,
+                    duration_ms=duration_ms,
+                )
 
     def _apply_provider_usage_metrics(
         self,
@@ -191,14 +266,32 @@ class PipelineObserver:
         totals = self.provider_usage.setdefault(provider, ProviderUsageTotals())
         self._apply_provider_usage_metrics(totals, **metrics)
         if not phase:
+            self._emit_payload(
+                "provider_usage_recorded",
+                provider=provider,
+                message=f"{provider} provider usage recorded",
+                payload=metrics,
+            )
             return
         phase_providers = self.provider_usage_by_phase.setdefault(phase, {})
         phase_totals = phase_providers.setdefault(provider, ProviderUsageTotals())
         self._apply_provider_usage_metrics(phase_totals, **metrics)
+        self._emit_payload(
+            "provider_usage_recorded",
+            provider=provider,
+            phase=phase,
+            message=f"{provider} provider usage recorded",
+            payload=metrics,
+        )
 
     def record_phase_duration(self, name: str, duration_ms: int) -> None:
         self.phase_durations_ms[name] = self.phase_durations_ms.get(name, 0) + int(duration_ms)
-        self._emit("phase_duration", phase=name, duration_ms=int(duration_ms))
+        self._emit(
+            "phase_duration",
+            message=f"{name} phase completed",
+            phase=name,
+            duration_ms=int(duration_ms),
+        )
 
     def record_anomaly(self, point: dict) -> None:
         status = str(point.get("validation_status", "")).strip().lower()
@@ -231,6 +324,8 @@ class PipelineObserver:
         if self.anomalies:
             self._emit(
                 "market_anomalies",
+                level=logging.WARNING,
+                message="market anomalies detected",
                 count=len(self.anomalies),
                 items=self.anomalies,
             )
@@ -249,7 +344,9 @@ class PipelineObserver:
             status = os.getenv(status_env, "").strip() or ("primary_hit" if hit else "miss")
             payload = {"cache": cache_name, "key": key, "hit": hit, "status": status}
             self.cache_statuses.append(payload)
-            self._emit("cache_status", **payload)
+            self._emit_payload(
+                "cache_status", message=f"{cache_name} cache {status}", payload=payload
+            )
 
     def record_perplexity_topic_results(self, topic: str, urls: list[str]) -> None:
         topic_audit = self.perplexity_topic_audit.setdefault(
@@ -284,7 +381,7 @@ class PipelineObserver:
             payload["reason"] = reason
         if raw_items:
             payload["raw_items"] = raw_items[:COLLECTED_ITEM_LOG_LIMIT]
-        self._emit("perplexity_items_collected", **payload)
+        self._emit_payload("perplexity_items_collected", payload=payload)
 
     def record_grok_signals_collected(
         self,
@@ -298,7 +395,7 @@ class PipelineObserver:
         }
         if not items and reason:
             payload["reason"] = reason
-        self._emit("grok_signals_collected", **payload)
+        self._emit_payload("grok_signals_collected", payload=payload)
 
     def record_perplexity_final_selection(self, packet: list[dict]) -> None:
         final_by_topic: dict[str, list[str]] = {}
@@ -419,6 +516,7 @@ class PipelineObserver:
         usage_summary = self.provider_usage_summary_payload()
         phase_usage_summary = self.provider_usage_by_phase_payload()
         usage_summary_line = self.provider_usage_summary_line()
+        app_events_path = get_app_events_path(observability_dir.parent, self.run_id)
         summary: dict[str, object] = {
             "run_id": self.run_id,
             "status": status,
@@ -433,6 +531,8 @@ class PipelineObserver:
             "anomalies": self.anomalies,
             "cache_statuses": self.cache_statuses,
             "total_cost_usd": _total_cost_usd(usage_summary),
+            "app_events_path": str(app_events_path),
+            "queue_fallback_active": queue_fallback_active(),
         }
         if extra:
             summary.update(extra)
@@ -445,13 +545,28 @@ class PipelineObserver:
                 phases=phase_usage_summary,
             )
 
+        audit_file = observability_dir / f"perplexity-audit-{self.run_id}.json"
         run_file = observability_dir / f"pipeline-run-{self.run_id}.json"
+
+        self._emit("perplexity_audit_file", path=str(audit_file))
+        self._emit("pipeline_log_file", path=str(run_file))
+        if not self._final_summary_emitted:
+            self._emit(
+                "pipeline_summary",
+                message=f"pipeline completed with status={status}",
+                status=status,
+                total_duration_ms=summary.get("total_duration_ms"),
+                provider_usage_line=usage_summary_line or None,
+                app_events_path=str(app_events_path),
+                pipeline_run_path=str(run_file),
+                perplexity_audit_path=str(audit_file),
+                summary=summary,
+            )
+            self._final_summary_emitted = True
         run_file.write_text(
             json.dumps({"events": self.events, "summary": summary}, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-
-        audit_file = observability_dir / f"perplexity-audit-{self.run_id}.json"
         audit_file.write_text(
             json.dumps(
                 {"run_id": self.run_id, "topics": self.perplexity_topic_audit},
@@ -460,8 +575,9 @@ class PipelineObserver:
             ),
             encoding="utf-8",
         )
-
-        self._emit("pipeline_summary", summary=summary)
-        self._emit("perplexity_audit_file", path=str(audit_file))
-        self._emit("pipeline_log_file", path=str(run_file))
+        if not app_events_path.exists():
+            with app_events_path.open("w", encoding="utf-8") as handle:
+                for event in self.events:
+                    handle.write(json.dumps(event, ensure_ascii=False, sort_keys=True))
+                    handle.write("\n")
         return summary
