@@ -6,7 +6,20 @@ from pathlib import Path
 from typing import TypedDict
 
 REGISTRY_PATH = Path(__file__).resolve().parent / "registry" / "official_signal_registry.json"
+DYNAMIC_REGISTRY_PATH = (
+    Path(__file__).resolve().parent / "registry" / "dynamic_signal_registry.json"
+)
 MAX_X_HANDLES_PER_GROUP = 12
+_GROK_MAX_HANDLES = 10
+
+
+class DynamicSignalEntity(TypedDict):
+    handle: str
+    x_search_group: str
+    x_search_priority: int
+    trust_score: int
+    rationale: str
+    x_verified: bool
 
 
 class OfficialSignalEntity(TypedDict):
@@ -42,6 +55,20 @@ def _grouped_verified_x_entries() -> dict[str, list[tuple[int, str]]]:
 @lru_cache(maxsize=1)
 def load_official_signal_registry() -> dict:
     return json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
+
+
+@lru_cache(maxsize=1)
+def load_dynamic_signal_registry() -> list[DynamicSignalEntity]:
+    """Dynamic Layer를 로드한다. 파일 없으면 빈 리스트 반환 (Base Layer fallback)."""
+    if not DYNAMIC_REGISTRY_PATH.exists():
+        return []
+    try:
+        data = json.loads(DYNAMIC_REGISTRY_PATH.read_text(encoding="utf-8"))
+        if not isinstance(data, list):
+            return []
+        return [entity for entity in data if isinstance(entity, dict)]
+    except Exception:
+        return []
 
 
 def list_official_signal_entities(*, enabled_only: bool = True) -> list[OfficialSignalEntity]:
