@@ -327,13 +327,16 @@ def _filter_new_handles(
 def _save_dynamic_registry(entities: list[DynamicSignalEntity]) -> None:
     """검증된 Dynamic 엔티티를 dynamic_signal_registry.json에 저장한다.
 
+    tmp 파일에 먼저 쓴 후 rename으로 원자적 교체하여 읽기 중 손상을 방지한다.
     저장 후 lru_cache를 클리어하여 다음 호출 시 새 파일을 읽도록 한다.
     """
     DYNAMIC_REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    DYNAMIC_REGISTRY_PATH.write_text(
+    tmp = DYNAMIC_REGISTRY_PATH.with_suffix(".tmp")
+    tmp.write_text(
         json.dumps([dict(e) for e in entities], ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    tmp.replace(DYNAMIC_REGISTRY_PATH)  # 원자적 교체
     # 캐시 무효화 — 갱신된 파일을 즉시 반영
     load_dynamic_signal_registry.cache_clear()
     logger.info(
