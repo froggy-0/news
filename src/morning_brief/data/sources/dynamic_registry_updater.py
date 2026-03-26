@@ -119,12 +119,7 @@ def _build_registry_client(api_key: str) -> Client:
 
 def _build_user_prompt(today: date) -> str:
     """날짜만 포함한 최소 동적 User Prompt."""
-    return (
-        f"Today's date: {today.isoformat()}\n\n"
-        "Please recommend up to 10 x_verified: true handles per group "
-        "that are currently most influential for professional investors monitoring these markets. "
-        "Focus on accounts that post original, market-moving content — not just reposts."
-    )
+    return f"Today's date: {today.isoformat()}. Please generate recommendations now."
 
 
 def _build_messages(today: date) -> list[dict[str, str]]:
