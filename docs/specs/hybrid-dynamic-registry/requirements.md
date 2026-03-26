@@ -33,6 +33,8 @@
   2. 주요 금융/기술 미디어 공식 계정 (Bloomberg, Reuters, CNBC 등)
   3. 팔로워 수 기준 영향력 있는 전문가 계정 (애널리스트, 이코노미스트 등) — 최저 신뢰도
 
+  `trust_score 3 미만 항목은 Merged Registry에서 제외된다.`
+
 2.7 WHEN Grok이 추천 결과를 JSON으로 반환할 때 THEN 각 핸들에 대해 신뢰성 점수(`trust_score`: 1~5, 높을수록 우선)와 추천 근거(`rationale`: 문자열)를 포함해야 한다
 
 ### Merged Registry 생성
@@ -45,9 +47,26 @@
 
 3.4 WHEN Merged Registry를 저장할 때 THEN 기존 채널 데이터 수집 로직은 최소한의 변경으로 유지되어야 한다
 
+3.5 WHEN Dynamic 엔티티 추가 후 그룹 핸들 수가 `_GROK_MAX_HANDLES(10)`을 초과할 때 THEN `x_search_priority=0`인 Dynamic 엔티티가 정렬 우선순위를 가지므로, `sorted(key=x_search_priority ASC)[:10]` 슬라이스 결과에서 Base 하위 priority(높은 priority 숫자) 항목이 탈락할 수 있다. 이 동작을 허용하며, Base Layer 전체 유지는 보장하지 않는다.
+
 ### 데이터 수집 쿼리 방식
 
 4.1 WHEN 각 그룹에서 `x_search`로 데이터를 수집할 때 THEN 시스템은 그룹당 최대 10개의 핸들을 `allowed_x_handles` 파라미터로 전달해야 하며, 모든 그룹은 Parallel Tool Calling으로 동시에 실행되어야 한다. `from:handle OR ...` OR 쿼리 방식은 xAI에서 지원하지 않으므로 사용하지 않는다
+
+### Dynamic 엔티티 저장 스키마
+
+4.2 WHEN Grok 추천 핸들을 `dynamic_signal_registry.json`에 저장할 때 THEN 각 엔티티는 다음 6개 필드로 구성된 경량 스키마를 사용해야 한다:
+
+| 필드 | 타입 | 값 | 비고 |
+|------|------|----|------|
+| `handle` | str | X 핸들 (`@` 제외) | 동적 |
+| `x_search_group` | str | 소속 그룹 상수값 (예: `"crypto_and_etf"`) | 동적 |
+| `x_search_priority` | int | `0` 고정 | Base 최솟값보다 낮게 고정 |
+| `trust_score` | int | Grok 신뢰성 점수 (1~5) | 동적 |
+| `rationale` | str | Grok 추천 근거 문자열 | 동적 |
+| `x_verified` | bool | `true` 고정 | 비인증 계정 저장 금지 |
+
+이 스키마는 `official_signal_registry.json`의 `OfficialSignalEntity`보다 경량화된 별도 스키마이며, `dynamic_signal_registry.json` 전용으로 사용한다.
 
 ### 비용 최적화
 

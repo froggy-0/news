@@ -24,14 +24,24 @@
   - User Prompt 템플릿 작성 (날짜 등 최소 동적 정보만 포함)
   - messages 배열 구성 함수 작성 (System Prompt → User Prompt 순서 고정)
   - messages 수정·삭제·재정렬 금지 로직 검증
-  - _Requirements: 2.5, 2.6, 2.7, 5.2, 5.3, 5.4_
+  - `DynamicSignalEntity` TypedDict 정의 (6개 필드):
+    ```python
+    class DynamicSignalEntity(TypedDict):
+        handle: str            # X 핸들 (@제외)
+        x_search_group: str    # 소속 그룹 상수값 (예: "crypto_and_etf")
+        x_search_priority: int # 항상 0으로 고정
+        trust_score: int       # Grok 신뢰성 점수 (1~5)
+        rationale: str         # Grok 추천 근거 문자열
+        x_verified: bool       # 항상 True로 고정
+    ```
+  - _Requirements: 2.5, 2.6, 2.7, 4.2, 5.2, 5.3, 5.4_
 
-- [ ] 4. x_search Tool 호출 전략 구현 (Parallel Tool Calling)
-  - 각 그룹별 독립 `x_search` 호출을 Parallel Tool Calling으로 동시 실행하는 함수 작성
+- [ ] 4. x_search Tool 호출 전략 구현 (그룹당 순차 API 호출)
+  - xai_sdk `x_search` 도구의 `allowed_x_handles`는 tool 등록 시 고정되므로, 그룹당 별도 API 요청으로 순차 실행하는 함수 작성 (`grok_official_signals.py` 패턴 참조)
   - 그룹당 핸들 수 상한 `_GROK_MAX_HANDLES = 10` 적용. `allowed_x_handles` 단독 사용 (max 10)
   - `from:handle1 OR from:handle2 ...` OR 쿼리 방식 사용 금지 (xAI 미지원)
-  - 모든 그룹을 하나의 API 요청으로 처리하여 하루 1회 단일 호출로 제한
-  - _Requirements: 2.3, 2.4, 4.1_
+  - 하루 1회 실행 제한 (N그룹 = N회 API 호출, 중복 실행 방지)
+  - _Requirements: 4.1_
 
 - [ ] 5. Grok 응답 파싱 및 검증 모듈 구현
   - JSON 응답 파싱 함수 작성 (그룹별 핸들 목록 추출)
@@ -44,7 +54,7 @@
 
 - [ ] 6. Dynamic Registry 저장 로직 구현
   - Base에 없는 신규 핸들만 Dynamic Layer로 추가하는 함수 작성
-  - 그룹당 상한 `_GROK_MAX_HANDLES = 10` 적용 (Base가 상한 초과 시 Base 전체 유지)
+  - 그룹당 상한 `_GROK_MAX_HANDLES = 10` 적용. Dynamic(priority=0) 우선 정렬 후 슬라이스하며, Base 하위 priority 항목 탈락 허용 (Requirements 3.5)
   - Dynamic 엔티티 `x_search_priority = 0` 고정 설정 코드 구현
   - `x_verified: true`가 아닌 핸들은 저장 금지 (`dynamic_verified` 별도 필드 추가 금지)
   - 검증 통과한 결과를 `dynamic_signal_registry.json`에 자동 저장 (수동 승인 없음)
@@ -76,7 +86,7 @@
     - Base 핸들이 항상 포함되는지 테스트 (Property 1)
     - Grok 추천 신규 핸들만 추가되는지 테스트
     - 그룹당 상한 10개(`_GROK_MAX_HANDLES = 10`) 적용되는지 테스트 (Property 5)
-    - Base가 상한 초과 시 Base 전체 유지되는지 테스트
+    - Dynamic+Base 합계 초과 시 Base 하위 priority 항목 탈락 허용 확인 (Property 5, Requirements 3.5)
     - _Requirements: 1.3, 3.1, 3.2_
 
   - [ ] 10.2 x_verified 필터 이중 검증 테스트
