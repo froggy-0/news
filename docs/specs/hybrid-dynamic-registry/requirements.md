@@ -24,9 +24,20 @@
 
 2.4 WHEN Grok API를 호출할 때 THEN 시스템은 모든 그룹을 하나의 API 요청으로 처리하여 하루 1회 단일 호출로 제한해야 한다
 
+### Grok 추천 신뢰성 기준
+
+2.5 WHEN Grok이 핸들을 추천할 때 THEN 프롬프트에 `x_verified: true`인 공식 인증 계정만 추천하도록 명시해야 하며, 비인증 계정은 추천 자체를 하지 않아야 한다
+
+2.6 WHEN Grok이 추천 핸들의 신뢰성을 평가할 때 THEN 다음 우선순위 계층에 따라 높을수록 우선 추천해야 한다:
+  1. 기관/기업 공식 계정 (Fed, SEC, 상장사 IR 등) — 최고 신뢰도
+  2. 주요 금융/기술 미디어 공식 계정 (Bloomberg, Reuters, CNBC 등)
+  3. 팔로워 수 기준 영향력 있는 전문가 계정 (애널리스트, 이코노미스트 등) — 최저 신뢰도
+
+2.7 WHEN Grok이 추천 결과를 JSON으로 반환할 때 THEN 각 핸들에 대해 신뢰성 점수(`trust_score`: 1~5, 높을수록 우선)와 추천 근거(`rationale`: 문자열)를 포함해야 한다
+
 ### Merged Registry 생성
 
-3.1 WHEN Grok 추천 결과를 처리할 때 THEN 시스템은 Base 핸들을 우선 포함하고, Grok 추천 중 Base에 없는 신규·유용한 핸들만 추가해야 한다
+3.1 WHEN Grok 추천 결과를 처리할 때 THEN 시스템은 Base에 없는 신규 핸들만 Dynamic Layer로 추가하며, Dynamic 엔티티의 `x_search_priority`는 Base 엔티티 최솟값보다 낮은 `0`으로 고정 설정해야 한다. 이를 통해 기존 `sorted(key=x_search_priority ASC)[:12]` 로직 변경 없이 Dynamic 엔티티가 자동으로 상위에 배치된다
 
 3.2 WHEN Merged Registry를 생성할 때 THEN 커버리지 확대는 그룹별 Parallel Tool Calling으로 달성한다. 그룹당 핸들 수 상한은 `_GROK_MAX_HANDLES = 10` (현재 12)을 유지하며, 그룹 수를 늘리는 방식으로 전체 커버리지를 확대한다
 
@@ -62,7 +73,7 @@
 
 ### 커버리지 개선
 
-8.1 WHEN Dynamic Layer가 핸들을 추천할 때 THEN AI/bigtech 편향을 완화해야 하며, Apple 공식 계정 및 TSMC proxy(`@mingchikuo` 등) 비인증 계정이 `x_search` 결과에 포함될 수 있도록 `x_verified` 필터를 적용하지 않아야 한다. Base Layer와 Dynamic Layer의 출처 구분은 **파일 분리(Option B)**로 확정한다: Grok 추천 결과는 `dynamic_signal_registry.json`에 자동 저장되고, 런타임에 `official_signal_registry.json`(Base)과 merge된다. 수동 승인은 없다
+8.1 WHEN Dynamic Layer가 핸들을 추천할 때 THEN AI/bigtech 편향을 완화하되, Dynamic 엔티티도 `x_verified: true` 필수 조건을 동일하게 적용해야 한다. 비인증 계정은 Grok 프롬프트 단계에서 사전 차단하며(추천 자체를 받지 않음), 파이프라인 진입 시 기존 `list_verified_x_entities()` 필터를 그대로 통과해야 한다. 별도의 `dynamic_verified` 필드는 추가하지 않으며 `x_verified: true`로 통일한다. Base Layer와 Dynamic Layer의 출처 구분은 **파일 분리(Option B)**로 확정한다: Grok 추천 결과는 `dynamic_signal_registry.json`에 자동 저장되고, 런타임에 `official_signal_registry.json`(Base)과 merge된다
 
 8.2 WHEN Dynamic Layer가 커버리지를 확대할 때 THEN 그룹별 Parallel Tool Calling으로 각 그룹을 독립적으로 호출하여 더 넓은 시그널 수집이 가능해야 한다. 그룹당 핸들 수 상한 `_GROK_MAX_HANDLES = 10`은 유지하며, 그룹 수 확대로 전체 커버리지를 늘린다
 

@@ -45,8 +45,10 @@
 ### Runtime Merge 규칙
 
 1. Base Layer 핸들 → 무조건 포함 (최고 우선순위)
-2. Dynamic Layer 신규 핸들 → Base에 없는 것만 추가
+2. Dynamic Layer 신규 핸들 → Base에 없는 것만 추가. `x_verified: true`인 핸들만 진입 허용 (`list_verified_x_entities()` 필터 통과 필수)
+   - `x_verified` 필드는 Base/Dynamic 구분 없이 동일하게 `True` 조건 적용. 별도 `dynamic_verified` 필드는 추가하지 않는다.
 3. 그룹당 상한 `_GROK_MAX_HANDLES = 10` 적용 (Base가 상한 초과 시 Base 전체 유지, 상한은 신규 추가에만 적용)
+4. **Dynamic 엔티티 `x_search_priority = 0` 고정** — Base 엔티티 최솟값보다 낮게 설정하여 기존 `sorted(key=x_search_priority ASC)[:12]` 로직 변경 없이 자동 상위 배치
 
 ## Grok API 호출 설계
 
@@ -74,6 +76,7 @@ client = Client(
     api_key=api_key,
     metadata=(("x-grok-conv-id", "registry-update-daily-2026"),),  # 고정 — 동일 서버 라우팅 보장
 )
+```
 
 ### x_search Tool + Parallel Tool Calling (xai_sdk v1.10.0+)
 
@@ -89,6 +92,38 @@ client = Client(
     "query": "crypto bitcoin influential"
 }
 # → 모든 그룹(crypto, ai_bigtech, semicon, ...)에 대해 위 형태로 병렬 실행
+```
+
+### 신뢰성 기준 및 JSON 출력 스키마
+
+Grok 프롬프트에 다음 신뢰성 기준을 명시하여 추천 품질을 제어한다:
+
+**필수 조건 (프롬프트에 명시)**:
+- `x_verified: true` 공식 인증 계정만 추천. 비인증 계정은 추천 제외
+
+**신뢰성 점수 계층 (높을수록 우선 추천)**:
+
+| trust_score | 계정 유형 | 예시 |
+|-------------|-----------|------|
+| 5 | 기관/기업 공식 계정 | Fed, SEC, Apple IR, TSMC IR |
+| 4 | 주요 금융/기술 미디어 공식 계정 | Bloomberg, Reuters, CNBC |
+| 3 | 팔로워 기준 영향력 있는 전문가 | 애널리스트, 이코노미스트 |
+
+**JSON 출력 스키마 (그룹별 핸들 목록)**:
+
+```json
+{
+  "groups": {
+    "crypto": [
+      {
+        "handle": "Saylor",
+        "trust_score": 3,
+        "rationale": "MicroStrategy CEO, 주요 BTC 보유 기관 대표"
+      }
+    ],
+    "ai_bigtech": [ ... ]
+  }
+}
 ```
 
 ## 일 단위 업데이트 흐름
@@ -108,11 +143,14 @@ client = Client(
    - 그룹별 x_search Parallel Tool Calling 자동 실행
         │
         ▼
-3. 응답 파싱
+3. 응답 파싱 및 신뢰성 검증
    - Grok JSON 파싱 → 그룹별 핸들 목록 추출
+   - x_verified: true 필터 재확인 (list_verified_x_entities() 통과 여부)
+   - trust_score 기준 정렬 (높은 순)
         │
         ▼
 4. dynamic_signal_registry.json 자동 저장
+   - x_search_priority = 0 으로 각 Dynamic 엔티티 설정
    - 수동 승인 없이 즉시 덮어쓰기
    - 저장 실패 시 기존 파일 유지 (안전)
 
@@ -172,6 +210,7 @@ messages[1]: User Prompt (날짜만 변경)
 | 추천 품질 저하 (관련성 낮은 핸들 포함) | Few-shot 예시 추가 + Base 우선 Merge로 핵심 핸들 보호 |
 | Parallel Tool Calling 과다 호출 | 그룹 수 사전 확정 + 하루 1회 단일 API 호출 제한 |
 | Grok API 장애 | Base Layer fallback → 기존 동작 유지 |
+| `dynamic_signal_registry.json` 3일 이상 미갱신 | Base Layer fallback으로 정상 동작 보장. `official_x_lookback_hours` 기본값 48h(최대 72h)로 데이터 허용 기간 제어 |
 
 ## Correctness Properties
 
@@ -205,8 +244,26 @@ _For any_ Merged Registry에서, 각 그룹의 핸들 수는 `_GROK_MAX_HANDLES 
 
 **Validates: Requirements 3.2**
 
-### Property 6: 기존 데이터 수집 로직 보존
+### Property 6: x_verified 필터 보장
 
-_For any_ 채널 데이터 수집 실행에서, 기존 수집 로직은 Merged Registry 파일 경로만 변경되고 내부 로직은 그대로 유지되어야 한다 (SHALL). OR 쿼리 (`from:handle OR ...`)는 어떤 경우에도 사용하지 않아야 한다.
+_For any_ Dynamic Layer 엔티티에서, 시스템은 `x_verified: true`가 아닌 핸들을 `dynamic_signal_registry.json`에 저장하지 않아야 한다 (SHALL). Grok 프롬프트 단계(사전 차단)와 파이프라인 진입 단계(`list_verified_x_entities()`)에서 이중으로 검증된다.
+
+**Validates: Requirements 2.5, 8.1**
+
+### Property 7: Dynamic 엔티티 x_search_priority 보장
+
+_For any_ Dynamic 엔티티에서, `x_search_priority` 값은 `0`으로 설정되어야 한다 (SHALL). 기존 `sorted(key=x_search_priority ASC)[:12]` 로직의 변경 없이 Dynamic 엔티티가 상위에 배치되어야 한다.
+
+**Validates: Requirements 3.1**
+
+### Property 8: 기존 데이터 수집 로직 보존
+
+_For any_ 채널 데이터 수집 실행에서, 기존 수집 로직은 Runtime Merge 진입점 추가 외에 내부 로직(sort, slice 포함)은 그대로 유지되어야 한다 (SHALL). OR 쿼리 (`from:handle OR ...`)는 어떤 경우에도 사용하지 않아야 한다.
 
 **Validates: Requirements 3.4, 4.1**
+
+### Property 9: 신뢰성 스키마 보장
+
+_For any_ Dynamic Layer Grok API 응답에서, 모든 추천 핸들 항목은 `trust_score` (정수 1~5) 및 `rationale` (문자열) 필드를 포함해야 한다 (SHALL). `trust_score < 3`인 항목은 Merged Registry에 포함되지 않아야 한다 (SHALL).
+
+**Validates: Requirements 2.6, 2.7**
