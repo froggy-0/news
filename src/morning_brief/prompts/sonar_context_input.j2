@@ -1,14 +1,7 @@
-Analyze these top market news articles from {{ time_range }} and provide cross-sector context:
+Top market news from {{ time_range }}:
 
 {% for article in articles %}
-[{{ article.topic }}] {{ article.title }}
-{{ article.summary }}
+[{{ article.topic }}] {{ article.title }} | {{ article.summary }}
 {% endfor %}
 
-Return JSON with this structure:
-{
-  "analyses": [
-    {"topic": "...", "context": "deeper background for this story", "cross_sector_link": "how it connects to other sectors"}
-  ],
-  "key_narrative": "the single most important market theme today in 1-2 sentences"
-}
+Return JSON with cross-sector analysis only.

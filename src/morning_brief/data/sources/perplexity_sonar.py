@@ -6,6 +6,7 @@ Search API(링크 나열)가 아닌 Sonar Chat Completions(LLM 종합 요약)를
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import logging
 import re
@@ -400,9 +401,9 @@ def _sonar_chat_once(
             exc,
             delay,
         ),
-        retry_after_seconds_for_error=lambda exc: exc.retry_after_seconds
-        if isinstance(exc, HttpFetchError)
-        else None,
+        retry_after_seconds_for_error=lambda exc: (
+            exc.retry_after_seconds if isinstance(exc, HttpFetchError) else None
+        ),
     )
 
 
@@ -433,15 +434,14 @@ def fetch_sonar_summaries(
     topics: tuple[str, ...] = TOPIC_NAMES,
     observer: PipelineObserver | None = None,
 ) -> dict[str, TopicSummary]:
-    """모든 토픽에 대해 Sonar 요약을 수집한다."""
+    """모든 토픽에 대해 Sonar 요약을 병렬로 수집한다."""
     if not api_key.strip():
         logger.warning("Perplexity API 키가 없어서 Sonar 요약을 건너뛸게요.")
         return {}
 
     client = _build_sonar_client(api_key)
-    results: dict[str, TopicSummary] = {}
 
-    for topic in topics:
+    def _fetch_topic(topic: str) -> tuple[str, TopicSummary | None]:
         try:
             parsed, citations, usage = _sonar_chat_once(
                 client=client,
@@ -450,7 +450,6 @@ def fetch_sonar_summaries(
                 max_tokens=max_tokens,
             )
             _record_sonar_usage(observer, topic, usage)
-
             summary = TopicSummary(
                 topic=topic,
                 summary_text=str(parsed.get("summary_text", "")),
@@ -460,17 +459,26 @@ def fetch_sonar_summaries(
                 citations=citations,
                 news_items=_citations_to_news_items(citations, topic),
             )
-            results[topic] = summary
             logger.info(
                 "Sonar %s 요약 수집 완료: data_points=%d, citations=%d",
                 topic,
                 len(summary.key_data_points),
                 len(citations),
             )
+            return topic, summary
         except HttpFetchError as exc:
             logger.warning("Sonar %s 토픽 수집 실패: %s", topic, exc)
             if observer:
                 observer.log_event("sonar_topic_failed", topic=topic, reason=str(exc))
+            return topic, None
+
+    results: dict[str, TopicSummary] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(topics)) as executor:
+        futures = {executor.submit(_fetch_topic, topic): topic for topic in topics}
+        for future in concurrent.futures.as_completed(futures):
+            topic_name, summary = future.result()
+            if summary is not None:
+                results[topic_name] = summary
 
     return results
 
@@ -534,6 +542,7 @@ SONAR_CONTEXT_SCHEMA: dict[str, Any] = {
 }
 
 MAX_CONTEXT_ARTICLES = 12  # 섹터별 3건 × 4섹터
+_CONTEXT_SUMMARY_MAX = 90  # 기사 요약 최대 길이 (토큰 절감)
 
 
 def _load_context_prompts(articles: list[dict[str, str]]) -> tuple[str, str]:
@@ -542,12 +551,12 @@ def _load_context_prompts(articles: list[dict[str, str]]) -> tuple[str, str]:
     template_dir = Path(__file__).resolve().parent.parent.parent / "prompts"
     system = (template_dir / "sonar_context_system.j2").read_text(encoding="utf-8").strip()
     raw_input = (template_dir / "sonar_context_input.j2").read_text(encoding="utf-8")
-    # 간단한 Jinja 치환
     time_range = _time_range()
     raw_input = raw_input.replace("{{ time_range }}", time_range)
     article_block = ""
     for a in articles:
-        article_block += f"[{a.get('topic', '')}] {a.get('title', '')}\n{a.get('summary', '')}\n\n"
+        summary = (a.get("summary", "") or "")[:_CONTEXT_SUMMARY_MAX]
+        article_block += f"[{a.get('topic', '')}] {a.get('title', '')} | {summary}\n"
     raw_input = raw_input.replace(
         "{% for article in articles %}\n[{{ article.topic }}] {{ article.title }}\n{{ article.summary }}\n{% endfor %}\n",
         article_block,
