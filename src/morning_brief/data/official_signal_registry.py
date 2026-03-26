@@ -6,7 +6,20 @@ from pathlib import Path
 from typing import TypedDict
 
 REGISTRY_PATH = Path(__file__).resolve().parent / "registry" / "official_signal_registry.json"
+DYNAMIC_REGISTRY_PATH = (
+    Path(__file__).resolve().parent / "registry" / "dynamic_signal_registry.json"
+)
 MAX_X_HANDLES_PER_GROUP = 12
+_GROK_MAX_HANDLES = 10
+
+
+class DynamicSignalEntity(TypedDict):
+    handle: str
+    x_search_group: str
+    x_search_priority: int
+    trust_score: int
+    rationale: str
+    x_verified: bool
 
 
 class OfficialSignalEntity(TypedDict):
@@ -44,6 +57,20 @@ def load_official_signal_registry() -> dict:
     return json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
 
 
+@lru_cache(maxsize=1)
+def load_dynamic_signal_registry() -> list[DynamicSignalEntity]:
+    """Dynamic Layer를 로드한다. 파일 없으면 빈 리스트 반환 (Base Layer fallback)."""
+    if not DYNAMIC_REGISTRY_PATH.exists():
+        return []
+    try:
+        data = json.loads(DYNAMIC_REGISTRY_PATH.read_text(encoding="utf-8"))
+        if not isinstance(data, list):
+            return []
+        return [entity for entity in data if isinstance(entity, dict)]
+    except Exception:
+        return []
+
+
 def list_official_signal_entities(*, enabled_only: bool = True) -> list[OfficialSignalEntity]:
     registry = load_official_signal_registry()
     entities = registry.get("entities", [])
@@ -69,7 +96,30 @@ def list_verified_x_entities() -> list[OfficialSignalEntity]:
     ]
 
 
+def _dynamic_entity_to_official(entity: DynamicSignalEntity) -> OfficialSignalEntity:
+    """DynamicSignalEntity를 OfficialSignalEntity 호환 형식으로 변환한다."""
+    handle = str(entity.get("handle", "")).strip().lstrip("@")
+    return {  # type: ignore[return-value]
+        "entity_id": f"dynamic_{handle.lower()}",
+        "entity_name": handle,
+        "ticker": "",
+        "category": "dynamic",
+        "primary_domain": "",
+        "newsroom_or_ir_url": "",
+        "x_handle": handle,
+        "x_verified": True,
+        "verification_source_url": "",
+        "verification_method": "grok_dynamic",
+        "verified_at": "",
+        "x_search_group": str(entity.get("x_search_group", "")),
+        "x_search_priority": int(entity.get("x_search_priority", 0)),
+        "enabled": True,
+        "notes": str(entity.get("rationale", "")),
+    }
+
+
 def grouped_verified_x_entities() -> dict[str, list[OfficialSignalEntity]]:
+    # Base Layer
     grouped: dict[str, list[OfficialSignalEntity]] = {}
     for entity in list_verified_x_entities():
         group = str(entity.get("x_search_group", "")).strip()
@@ -77,6 +127,26 @@ def grouped_verified_x_entities() -> dict[str, list[OfficialSignalEntity]]:
             continue
         grouped.setdefault(group, []).append(entity)
 
+    # Runtime Merge — Dynamic Layer (Base에 없는 신규 핸들만, x_verified=true 이중 확인)
+    # dynamic_signal_registry.json 없으면 load_dynamic_signal_registry()가 [] 반환 (fallback)
+    base_handles: set[str] = {
+        str(e.get("x_handle", "")).strip().lstrip("@").lower()
+        for group_list in grouped.values()
+        for e in group_list
+    }
+
+    for dynamic_entity in load_dynamic_signal_registry():
+        if not bool(dynamic_entity.get("x_verified")):
+            continue
+        handle = str(dynamic_entity.get("handle", "")).strip().lstrip("@")
+        if not handle or handle.lower() in base_handles:
+            continue
+        group = str(dynamic_entity.get("x_search_group", "")).strip()
+        if not group:
+            continue
+        grouped.setdefault(group, []).append(_dynamic_entity_to_official(dynamic_entity))
+
+    # 기존 sort + slice 로직 유지 (변경 없음)
     for group, entities in grouped.items():
         grouped[group] = sorted(
             entities,
