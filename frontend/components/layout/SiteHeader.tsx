@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { formatIssueDate, formatIssueTime } from "@/lib/format";
 
 export function SiteHeader({
@@ -28,43 +30,43 @@ export function SiteHeader({
           <div className="hidden items-center gap-7 lg:flex">
             {isArchive ? (
               <>
-                <a className="nav-link" href="/">
+                <Link className="nav-link" href="/">
                   실시간 홈
-                </a>
-                <a className="nav-link" href="/archive">
+                </Link>
+                <Link className="nav-link" href="/archive">
                   발행 아카이브
-                </a>
+                </Link>
               </>
             ) : (
               <>
-                <a className="nav-link" href="#brief">
+                <Link className="nav-link" href="#brief">
                   오늘의 판단
-                </a>
-                <a className="nav-link" href="#map">
+                </Link>
+                <Link className="nav-link" href="#map">
                   브리핑 지도
-                </a>
+                </Link>
                 {showNews ? (
-                  <a className="nav-link" href="#news">
+                  <Link className="nav-link" href="#news">
                     핵심 뉴스
-                  </a>
+                  </Link>
                 ) : null}
                 {showSignals ? (
-                  <a className="nav-link" href="#signals">
+                  <Link className="nav-link" href="#signals">
                     공식 X 시그널
-                  </a>
+                  </Link>
                 ) : null}
-                <a className="nav-link" href="/archive">
+                <Link className="nav-link" href="/archive">
                   발행 아카이브
-                </a>
+                </Link>
               </>
             )}
           </div>
           <div className="top-time-block">
             <p className="numeric nav-time">{issueTime}</p>
           </div>
-          <a className="hero-shortcut-link lg:hidden" href={isArchive ? "/" : "/archive"}>
+          <Link className="hero-shortcut-link lg:hidden" href={isArchive ? "/" : "/archive"}>
             {isArchive ? "실시간 홈" : "발행 아카이브"}
-          </a>
+          </Link>
         </div>
       </nav>
 
@@ -106,21 +108,21 @@ export function SiteHeader({
           </p>
           {!isArchive ? (
             <div className="hero-shortcuts lg:hidden">
-              <a className="hero-shortcut-link" href="#brief">
+              <Link className="hero-shortcut-link" href="#brief">
                 오늘의 판단
-              </a>
-              <a className="hero-shortcut-link" href="#map">
+              </Link>
+              <Link className="hero-shortcut-link" href="#map">
                 브리핑 지도
-              </a>
+              </Link>
               {showNews ? (
-                <a className="hero-shortcut-link" href="#news">
+                <Link className="hero-shortcut-link" href="#news">
                   핵심 뉴스
-                </a>
+                </Link>
               ) : null}
               {showSignals ? (
-                <a className="hero-shortcut-link" href="#signals">
+                <Link className="hero-shortcut-link" href="#signals">
                   공식 X 시그널
-                </a>
+                </Link>
               ) : null}
             </div>
           ) : null}
