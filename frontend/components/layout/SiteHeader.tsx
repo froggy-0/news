@@ -82,7 +82,7 @@ export function SiteHeader({
 
         <div className="hero-copy">
           <p className="hero-kicker">
-            {isArchive ? "저장된 발행본 아카이브" : "주도권 있는 투자자를 위한 데이터 인텔리전스"}
+            {isArchive ? "저장된 발행본 아카이브" : "노이즈는 우리가, 판단은 당신이"}
           </p>
           <h1 className="display-headline">
             {isArchive ? (
@@ -93,9 +93,9 @@ export function SiteHeader({
               </>
             ) : (
               <>
-                아침 한 번으로
+                주도권 있는 투자자를 위한
                 <br />
-                오늘 장의 확신을
+                데이터 인텔리전스
               </>
             )}
           </h1>
