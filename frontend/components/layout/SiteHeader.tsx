@@ -82,7 +82,7 @@ export function SiteHeader({
 
         <div className="hero-copy">
           <p className="hero-kicker">
-            {isArchive ? "저장된 발행본 아카이브" : "노이즈는 우리가, 판단은 당신이"}
+            {isArchive ? "저장된 발행본 아카이브" : "주도권 있는 투자자를 위한 데이터 인텔리전스"}
           </p>
           <h1 className="display-headline">
             {isArchive ? (
