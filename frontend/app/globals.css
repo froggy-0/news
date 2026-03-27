@@ -365,9 +365,9 @@ section[id] {
   font-family:
     var(--font-space-grotesk),
     sans-serif;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--accent-primary);
 }
@@ -664,8 +664,8 @@ section[id] {
   }
 
   .nav-subtitle {
-    font-size: 6px;
-    letter-spacing: 0.1em;
+    font-size: 11px;
+    letter-spacing: 0.14em;
   }
 
   .top-time-block {
@@ -698,7 +698,8 @@ section[id] {
 
   .hero-support,
   .hero-summary-copy {
-    padding-left: 18px;
+    padding-left: 0;
+    border-left: none;
     font-size: 0.9rem;
     line-height: 1.68;
   }
@@ -726,8 +727,9 @@ section[id] {
   }
 
   .hero-shortcut-link {
-    padding: 7px 11px;
-    font-size: 8px;
+    min-height: 44px;
+    padding: 10px 14px;
+    font-size: 10px;
     letter-spacing: 0.1em;
   }
 

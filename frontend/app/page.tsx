@@ -63,7 +63,7 @@ export default async function HomePage() {
             </div>
             <Link
               href={`/archive/${brief.meta.date}`}
-              className="inline-flex items-center justify-center rounded-full border border-[var(--accent-primary)]/35 bg-[var(--accent-primary)]/10 px-5 py-3 font-mono text-[11px] tracking-[0.18em] text-[var(--accent-primary)] transition hover:bg-[var(--accent-primary)]/18"
+              className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-[var(--accent-primary)]/35 bg-[var(--accent-primary)]/10 px-5 py-3 font-mono text-[11px] tracking-[0.18em] text-[var(--accent-primary)] transition hover:bg-[var(--accent-primary)]/18"
             >
               전체 발행본 보기 →
             </Link>
