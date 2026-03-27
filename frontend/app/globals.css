@@ -1,4 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,700&family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@400;600;700&display=swap");
 @import "tailwindcss";
 
 :root {
@@ -38,7 +37,7 @@ body {
   color: var(--text-primary);
   overflow-x: clip;
   font-family:
-    "Noto Sans KR",
+    var(--font-noto-sans-kr),
     "Pretendard",
     "Apple SD Gothic Neo",
     sans-serif;
@@ -65,7 +64,11 @@ a {
 .page-inner {
   width: min(1600px, calc(100% - 32px));
   margin: 0 auto;
-  padding: 110px 0 96px;
+  padding: 78px 0 96px;
+}
+
+section[id] {
+  scroll-margin-top: 80px;
 }
 
 .section-shell {
@@ -77,7 +80,7 @@ a {
 
 .section-title {
   font-family:
-    "IBM Plex Mono",
+    var(--font-ibm-plex-mono),
     "SFMono-Regular",
     monospace;
   font-size: 9px;
@@ -88,8 +91,8 @@ a {
 
 .serif-display {
   font-family:
-    "Newsreader",
-    "Noto Serif KR",
+    var(--font-newsreader),
+    var(--font-noto-serif-kr),
     "Iowan Old Style",
     serif;
 }
@@ -101,7 +104,7 @@ a {
 .eyebrow {
   color: var(--text-muted);
   font-family:
-    "IBM Plex Mono",
+    var(--font-ibm-plex-mono),
     monospace;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -110,8 +113,8 @@ a {
 
 .display-headline {
   font-family:
-    "Newsreader",
-    "Noto Serif KR",
+    var(--font-newsreader),
+    var(--font-noto-serif-kr),
     serif;
   font-size: clamp(2rem, 4.8vw, 4rem);
   line-height: 1.02;
@@ -126,8 +129,8 @@ a {
 
 .section-headline {
   font-family:
-    "Newsreader",
-    "Noto Serif KR",
+    var(--font-newsreader),
+    var(--font-noto-serif-kr),
     serif;
   font-size: clamp(1.7rem, 3.6vw, 2.9rem);
   line-height: 1.1;
@@ -151,7 +154,7 @@ a {
   border-radius: 4px;
   padding: 7px 12px;
   font-family:
-    "IBM Plex Mono",
+    var(--font-ibm-plex-mono),
     monospace;
   font-size: 9px;
   letter-spacing: 0.22em;
@@ -246,82 +249,6 @@ a {
   pointer-events: none;
 }
 
-.top-ticker-shell {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 70;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  overflow: hidden;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(28, 27, 27, 0.88);
-  backdrop-filter: blur(12px);
-  contain: layout paint;
-}
-
-.ticker-marquee {
-  display: flex;
-  position: absolute;
-  top: 0;
-  left: 0;
-  min-width: max-content;
-  height: 100%;
-  white-space: nowrap;
-  animation: marquee 60s linear infinite;
-  will-change: transform;
-}
-
-.ticker-track {
-  display: inline-flex;
-  min-width: max-content;
-}
-
-.ticker-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 22px;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  line-height: 1;
-  font-family:
-    "IBM Plex Mono",
-    monospace;
-}
-
-.ticker-symbol {
-  color: rgba(198, 198, 198, 0.72);
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.ticker-value {
-  color: var(--text-primary);
-  font-size: 11px;
-}
-
-.ticker-change {
-  font-size: 10px;
-  color: rgba(198, 198, 198, 0.72);
-}
-
-.ticker-change.is-up {
-  color: var(--accent-up);
-}
-
-.ticker-change.is-down {
-  color: var(--accent-down);
-}
-
-.ticker-label {
-  color: rgba(198, 198, 198, 0.46);
-  font-size: 9px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
 
 .top-nav-shell {
   position: fixed;
@@ -355,8 +282,8 @@ a {
 .nav-brand {
   margin: 0;
   font-family:
-    "Newsreader",
-    "Noto Serif KR",
+    var(--font-newsreader),
+    var(--font-noto-serif-kr),
     serif;
   font-size: 1.18rem;
   line-height: 1;
@@ -368,8 +295,8 @@ a {
 .nav-subtitle {
   margin: 0;
   font-family:
-    "Space Grotesk",
-    "Noto Sans KR",
+    var(--font-space-grotesk),
+    var(--font-noto-sans-kr),
     sans-serif;
   font-size: 8px;
   font-weight: 500;
@@ -382,8 +309,8 @@ a {
 .nav-link {
   position: relative;
   font-family:
-    "Space Grotesk",
-    "Noto Sans KR",
+    var(--font-space-grotesk),
+    var(--font-noto-sans-kr),
     sans-serif;
   font-size: 9px;
   font-weight: 500;
@@ -436,7 +363,7 @@ a {
 .hero-kicker {
   margin: 0 0 18px;
   font-family:
-    "Space Grotesk",
+    var(--font-space-grotesk),
     sans-serif;
   font-size: 9px;
   font-weight: 700;
@@ -470,8 +397,8 @@ a {
   border-radius: 9999px;
   padding: 8px 14px;
   font-family:
-    "Space Grotesk",
-    "Noto Sans KR",
+    var(--font-space-grotesk),
+    var(--font-noto-sans-kr),
     sans-serif;
   font-size: 10px;
   font-weight: 600;
@@ -515,7 +442,7 @@ a {
 
 .hero-support-note {
   font-family:
-    "IBM Plex Mono",
+    var(--font-ibm-plex-mono),
     monospace;
   font-size: 9px;
   letter-spacing: 0.13em;
@@ -553,7 +480,7 @@ a {
 .posture-label,
 .posture-meta {
   font-family:
-    "IBM Plex Mono",
+    var(--font-ibm-plex-mono),
     monospace;
   font-size: 10px;
   letter-spacing: 0.16em;
@@ -563,7 +490,7 @@ a {
 
 .posture-value {
   font-family:
-    "Space Grotesk",
+    var(--font-space-grotesk),
     sans-serif;
   font-size: 11px;
   font-weight: 700;
@@ -639,7 +566,7 @@ a {
 
 .site-footer-heading {
   margin: 12px 0 0;
-  font-family: "Newsreader", "Noto Serif KR", serif;
+  font-family: var(--font-newsreader), var(--font-noto-serif-kr), serif;
   font-size: clamp(1.55rem, 2.2vw, 2.1rem);
   line-height: 1.14;
   letter-spacing: -0.04em;
@@ -669,7 +596,7 @@ a {
 }
 
 .site-footer-links a {
-  font-family: "Space Grotesk", "Noto Sans KR", sans-serif;
+  font-family: var(--font-space-grotesk), var(--font-noto-sans-kr), sans-serif;
   font-size: 0.92rem;
   letter-spacing: 0.04em;
   color: var(--text-secondary);
@@ -689,15 +616,6 @@ a {
   padding-top: 16px;
   color: var(--text-muted);
   font-size: 0.9rem;
-}
-
-@keyframes marquee {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(-50%);
-  }
 }
 
 @keyframes scanline {

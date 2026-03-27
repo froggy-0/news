@@ -3,20 +3,7 @@ import type { NewsItem } from "@schema/brief.types";
 import { DataState } from "@/components/ui/DataState";
 import { Reveal } from "@/components/ui/Reveal";
 import { formatRelativeTime } from "@/lib/format";
-
-const HANGUL_RE = /[가-힣]/;
-
-function containsKorean(text: string | null | undefined): boolean {
-  return Boolean(text && HANGUL_RE.test(text));
-}
-
-// LLM이 "없음" 같은 무의미 플레이스홀더를 반환하는 경우 null로 처리
-const MEANINGLESS_KO = new Set(["없음", "해당없음", "없음.", "없음,", "N/A", "n/a", "null"]);
-function filterMeaningless(s: string | null | undefined): string | null {
-  const t = s?.trim();
-  if (!t || MEANINGLESS_KO.has(t)) return null;
-  return t;
-}
+import { containsKorean, filterMeaningless } from "@/lib/text";
 
 function urgencyLabel(value: NewsItem["urgency"]): string {
   if (value === "high") {
@@ -76,7 +63,7 @@ export function NewsFeed({
             return (
               <article key={item.id} className="news-card-glass group relative overflow-hidden px-1 py-8 md:px-3 md:py-10">
                 <div className="news-card-glow" aria-hidden="true" />
-                <div className="flex flex-col gap-6 md:flex-row md:gap-10">
+                <a href={item.url} target="_blank" rel="noreferrer" className="flex flex-col gap-6 md:flex-row md:gap-10">
                   <div className="md:w-32 md:shrink-0">
                     <div className="flex flex-wrap items-center gap-2 md:flex-col md:items-start">
                       <span className="font-mono text-sm font-semibold text-[var(--accent-primary)]">
@@ -111,11 +98,9 @@ export function NewsFeed({
                       ) : null}
                     </div>
 
-                    <a href={item.url} target="_blank" rel="noreferrer" className="block">
-                      <h4 className="serif-display text-[1.45rem] leading-[1.22] tracking-[-0.03em] text-[var(--text-primary)] transition-colors group-hover:text-[var(--accent-primary)] md:text-[2rem]">
-                        {displayTitle}
-                      </h4>
-                    </a>
+                    <h4 className="serif-display text-[1.45rem] leading-[1.22] tracking-[-0.03em] text-[var(--text-primary)] transition-colors group-hover:text-[var(--accent-primary)] md:text-[2rem]">
+                      {displayTitle}
+                    </h4>
 
                     {showRawTitle && rawTitle && rawTitle !== displayTitle ? (
                       <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--text-muted)]">
@@ -143,7 +128,7 @@ export function NewsFeed({
                       ))}
                     </div>
                   </div>
-                </div>
+                </a>
               </article>
             );
           })}

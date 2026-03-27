@@ -4,6 +4,7 @@ import { DataState } from "@/components/ui/DataState";
 
 const HANGUL_RE = /[가-힣]/;
 const MACHINE_PAYLOAD_RE = /^\s*[\[{].*[:].*[\]}]\s*$/;
+const ERROR_PATTERNS = /\b(UNABLE|NOT ACCESSIBLE|CANNOT PROVIDE|NO DATA AVAILABLE|DATA NOT|IDENTIFY DATA)\b/i;
 
 function formatKeyMetric(value: string | null | undefined): string | null {
   if (!value) {
@@ -38,7 +39,10 @@ function displaySummary(item: TopicSummary): string | null {
     if (MACHINE_PAYLOAD_RE.test(line) || line.startsWith("{'") || line.startsWith('{"')) {
       continue;
     }
-    if (!containsKorean(line) && /[A-Za-z]/.test(line) && line.split(/\s+/).length >= 7) {
+    if (!containsKorean(line) && /[A-Za-z]/.test(line) && line.split(/\s+/).length >= 5) {
+      continue;
+    }
+    if (ERROR_PATTERNS.test(line)) {
       continue;
     }
     normalizedLines.push(line);

@@ -1,4 +1,5 @@
 const dateFormatter = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: "Asia/Seoul",
   year: "numeric",
   month: "long",
   day: "numeric",
@@ -6,6 +7,7 @@ const dateFormatter = new Intl.DateTimeFormat("ko-KR", {
 });
 
 const timeFormatter = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: "Asia/Seoul",
   hour: "2-digit",
   minute: "2-digit",
   hour12: false,
