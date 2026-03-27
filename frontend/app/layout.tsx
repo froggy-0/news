@@ -8,7 +8,6 @@ import "./globals.css";
 
 const newsreader = Newsreader({
   subsets: ["latin"],
-  weight: ["400", "700"],
   style: ["normal", "italic"],
   variable: "--font-newsreader",
   display: "swap",
