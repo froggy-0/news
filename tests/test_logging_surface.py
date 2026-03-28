@@ -26,6 +26,7 @@ EXPECTED_GET_LOGGER_FILES = {
     "src/morning_brief/logging_utils.py",
     "src/morning_brief/observability.py",
     "src/morning_brief/pipeline.py",
+    "src/morning_brief/public_news_analysis.py",
     "src/morning_brief/public_site.py",
     "src/morning_brief/research_backfill.py",
     "src/morning_brief/scheduler.py",
@@ -44,6 +45,7 @@ EXPECTED_OBSERVER_CALL_FILES = {
     "src/morning_brief/data/sources/perplexity_search.py",
     "src/morning_brief/data/sources/perplexity_sonar.py",
     "src/morning_brief/pipeline.py",
+    "src/morning_brief/public_news_analysis.py",
     "src/morning_brief/public_site.py",
     "src/morning_brief/research_backfill.py",
 }
