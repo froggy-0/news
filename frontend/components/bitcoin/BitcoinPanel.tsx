@@ -1,11 +1,9 @@
-"use client";
-
-import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import type { BitcoinSection } from "@schema/brief.types";
 
 import { DataState } from "@/components/ui/DataState";
+import { RevealSection } from "@/components/ui/RevealSection";
 
 function compactBitcoinTone(kind: "bitcoin" | "fear" | "etf"): CSSProperties {
   if (kind === "bitcoin") {
@@ -58,46 +56,11 @@ export function BitcoinPanel({
   bitcoin: BitcoinSection;
   variant?: "home" | "detail";
 }) {
-  const sectionRef = useRef<HTMLElement | null>(null);
-  const [cardsActivated, setCardsActivated] = useState(false);
   const etf = bitcoin.etf;
   const compactHome = variant === "home";
 
-  useEffect(() => {
-    if (!compactHome) {
-      return;
-    }
-
-    const node = sectionRef.current;
-    if (!node || cardsActivated) {
-      return;
-    }
-
-    let activationTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          activationTimer = setTimeout(() => {
-            setCardsActivated(true);
-          }, 220);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.38 },
-    );
-
-    observer.observe(node);
-    return () => {
-      observer.disconnect();
-      if (activationTimer) {
-        clearTimeout(activationTimer);
-      }
-    };
-  }, [cardsActivated, compactHome]);
-
   return (
-    <section ref={sectionRef} className="border-b border-white/10 px-6 py-16">
+    <RevealSection className="border-b border-white/10 px-6 py-16" threshold={0.38} delayMs={220}>
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="space-y-1">
@@ -118,7 +81,7 @@ export function BitcoinPanel({
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               {bitcoin.price ? (
                 <div
-                  className={cardsActivated ? "card-data market-heat-card market-heat-card--active" : "card-data market-heat-card"}
+                  className="card-data market-heat-card"
                   data-trend={trendFromChange(bitcoin.change)}
                   style={{ animationDelay: bitcoinCardDelayFor(0) }}
                 >
@@ -134,7 +97,7 @@ export function BitcoinPanel({
 
               {bitcoin.fearGreedIndex ? (
                 <div
-                  className={cardsActivated ? "card-data market-heat-card market-heat-card--active" : "card-data market-heat-card"}
+                  className="card-data market-heat-card"
                   data-trend="neutral"
                   style={{ animationDelay: bitcoinCardDelayFor(1) }}
                 >
@@ -150,7 +113,7 @@ export function BitcoinPanel({
 
               {etf?.totalHolding ? (
                 <div
-                  className={cardsActivated ? "card-data market-heat-card market-heat-card--active" : "card-data market-heat-card"}
+                  className="card-data market-heat-card"
                   data-trend="neutral"
                   style={{ animationDelay: bitcoinCardDelayFor(2) }}
                 >
@@ -165,7 +128,7 @@ export function BitcoinPanel({
 
               {etf?.totalAum ? (
                 <div
-                  className={cardsActivated ? "card-data market-heat-card market-heat-card--active" : "card-data market-heat-card"}
+                  className="card-data market-heat-card"
                   data-trend="neutral"
                   style={{ animationDelay: bitcoinCardDelayFor(3) }}
                 >
@@ -294,7 +257,7 @@ export function BitcoinPanel({
           </div>
         )}
       </div>
-    </section>
+    </RevealSection>
   );
 }
 

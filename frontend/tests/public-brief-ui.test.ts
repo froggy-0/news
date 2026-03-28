@@ -43,7 +43,6 @@ test("judgment block renders degraded quality notes in static markup", async () 
       summaryLead: brief.aiJudgment.summaryLead,
       summarySupport: brief.aiJudgment.summarySupport,
       issueDate: brief.meta.date,
-      generatedAt: brief.meta.generatedAt,
       variant: "home",
     }),
   );
@@ -53,8 +52,8 @@ test("judgment block renders degraded quality notes in static markup", async () 
 });
 
 test("topic grid returns null when topic summaries are absent", () => {
-  const element = TopicGrid({ items: [], variant: "home" });
-  assert.equal(element, null);
+  const markup = renderToStaticMarkup(createElement(TopicGrid, { items: [], variant: "home" }));
+  assert.equal(markup, "");
 });
 
 test("news feed detail renders all news cards from fixture", async () => {

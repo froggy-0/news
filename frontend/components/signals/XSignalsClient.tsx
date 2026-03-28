@@ -1,5 +1,3 @@
-"use client";
-
 import type { XSignal } from "@schema/brief.types";
 
 import { XSignalsList } from "./XSignalsList";

@@ -32,7 +32,6 @@ export default async function HomePage() {
         summaryLead={brief.aiJudgment.summaryLead}
         summarySupport={brief.aiJudgment.summarySupport}
         issueDate={brief.meta.date}
-        generatedAt={brief.meta.generatedAt}
         variant="home"
       />
       <StocksBoard snapshot={brief.marketSnapshot} stocks={brief.techStocks} variant="home" />

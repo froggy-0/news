@@ -1,11 +1,9 @@
-"use client";
-
-import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import type { MarketSnapshot, TechStock, TickerItem } from "@schema/brief.types";
 
 import { DataState } from "@/components/ui/DataState";
+import { RevealSection } from "@/components/ui/RevealSection";
 
 function toneClass(trend: "up" | "down" | "neutral" | null): string {
   if (trend === "up") return "text-[#00ffff]";
@@ -123,42 +121,10 @@ export function StocksBoard({
   stocks: TechStock[];
   variant?: "home" | "detail";
 }) {
-  const sectionRef = useRef<HTMLElement | null>(null);
-  const [metricsActivated, setMetricsActivated] = useState(false);
-
-  useEffect(() => {
-    const node = sectionRef.current;
-    if (!node || metricsActivated) {
-      return;
-    }
-
-    let activationTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          activationTimer = setTimeout(() => {
-            setMetricsActivated(true);
-          }, 220);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.38 },
-    );
-
-    observer.observe(node);
-    return () => {
-      observer.disconnect();
-      if (activationTimer) {
-        clearTimeout(activationTimer);
-      }
-    };
-  }, [metricsActivated]);
-
   const compactMetrics = variant === "home" ? snapshot.items.slice(0, 4) : snapshot.items;
   const compactStocks = variant === "home" ? stocks.slice(0, 6) : stocks;
   return (
-    <section ref={sectionRef} className="border-b border-white/10 px-6 py-16">
+    <RevealSection className="border-b border-white/10 px-6 py-16" threshold={0.38} delayMs={220}>
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="space-y-1">
@@ -198,7 +164,7 @@ export function StocksBoard({
             {compactMetrics.map((item, index) => (
               <div
                 key={item.symbol}
-                className={metricsActivated ? "card-data market-heat-card market-heat-card--active" : "card-data market-heat-card"}
+                className="card-data market-heat-card"
                 data-trend={item.trend ?? "neutral"}
                 style={{ animationDelay: metricDelayFor(index) }}
               >
@@ -227,7 +193,7 @@ export function StocksBoard({
               {compactStocks.map((stock, index) => (
                 <div
                   key={stock.symbol}
-                  className={metricsActivated ? "card-data market-heat-card market-heat-card--active" : "card-data market-heat-card"}
+                  className="card-data market-heat-card"
                   data-trend={stock.trend ?? "neutral"}
                   style={{ animationDelay: stockDelayFor(index) }}
                 >
@@ -238,6 +204,6 @@ export function StocksBoard({
           )}
         </div>
       </div>
-    </section>
+    </RevealSection>
   );
 }

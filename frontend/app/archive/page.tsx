@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { ArchiveDateList } from "@/components/archive/ArchiveDateList";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { buildHistoryEntries, buildMetaStatusCards } from "@/lib/history";
-import { fetchBriefByDate, fetchIndex } from "@/lib/r2";
+import { fetchArchiveSummaryByDate, fetchBriefByDate, fetchIndex } from "@/lib/r2";
 
 export const metadata: Metadata = {
   title: "브리핑 아카이브",
@@ -12,18 +12,10 @@ export const metadata: Metadata = {
 
 export default async function ArchivePage() {
   const index = await fetchIndex();
-  const briefs = await Promise.all(index.dates.map((date) => fetchBriefByDate(date)));
-  const latestBrief = briefs[0] ?? null;
-  const items = briefs.map((brief) => ({
-    date: brief.meta.date,
-    generatedAt: brief.meta.generatedAt,
-    quality: brief.meta.dataQuality,
-    headline: brief.aiJudgment.headline,
-    displayHeadline: brief.meta.displayHeadline,
-    translationStatus: brief.meta.translationStatus,
-    newsAll: brief.meta.sourceCounts.newsAll,
-    xSignalAll: brief.meta.sourceCounts.xSignalAll,
-  }));
+  const [latestBrief, items] = await Promise.all([
+    index.dates[0] ? fetchBriefByDate(index.dates[0]) : Promise.resolve(null),
+    Promise.all(index.dates.map((date) => fetchArchiveSummaryByDate(date))),
+  ]);
 
   return (
     <main className="pb-6">

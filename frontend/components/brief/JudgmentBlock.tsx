@@ -1,20 +1,18 @@
 import React from "react";
 
-import { displayHeadline, formatIssueTime, formatPublicationDate, hasUsableHeadline } from "@/lib/format";
+import { displayHeadline, formatPublicationDate, hasUsableHeadline } from "@/lib/format";
 
 export function JudgmentBlock({
   headline,
   summaryLead,
   summarySupport,
   issueDate,
-  generatedAt,
   variant = "detail",
 }: {
   headline: string;
   summaryLead: string;
   summarySupport: string | null;
   issueDate: string;
-  generatedAt: string;
   variant?: "home" | "detail";
 }) {
   const cleanHeadline = hasUsableHeadline(headline)

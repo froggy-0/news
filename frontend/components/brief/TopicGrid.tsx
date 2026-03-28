@@ -1,9 +1,8 @@
-"use client";
-
-import React, { useEffect, useRef, useState } from "react";
+import React from "react";
 import { Activity, Coins, Cpu, Globe, TrendingUp } from "lucide-react";
 
 import type { TopicSummary } from "@schema/brief.types";
+import { RevealSection } from "@/components/ui/RevealSection";
 
 const HANGUL_RE = /[가-힣]/;
 const MACHINE_PAYLOAD_RE = /^\s*[\[{].*[:].*[\]}]\s*$/;
@@ -94,38 +93,6 @@ export function TopicGrid({
   items: TopicSummary[];
   variant?: "home" | "detail";
 }) {
-  const sectionRef = useRef<HTMLElement | null>(null);
-  const [cardsActivated, setCardsActivated] = useState(false);
-
-  useEffect(() => {
-    const node = sectionRef.current;
-    if (!node || cardsActivated) {
-      return;
-    }
-
-    let activationTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          activationTimer = setTimeout(() => {
-            setCardsActivated(true);
-          }, 180);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.34 },
-    );
-
-    observer.observe(node);
-    return () => {
-      observer.disconnect();
-      if (activationTimer) {
-        clearTimeout(activationTimer);
-      }
-    };
-  }, [cardsActivated]);
-
   const visibleItems = items
     .map((item) => ({
       item,
@@ -140,7 +107,7 @@ export function TopicGrid({
   }
 
   return (
-    <section ref={sectionRef} id="map" className="border-b border-white/10 px-6 py-16">
+    <RevealSection id="map" className="border-b border-white/10 px-6 py-16" threshold={0.34} delayMs={180}>
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-10">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="flex flex-col gap-1">
@@ -157,7 +124,7 @@ export function TopicGrid({
           {visibleItems.map(({ item, summary, keyMetric, relatedStocks }, index) => (
             <article
               key={item.topic}
-              className={`card-reading theme-card ${cardsActivated ? "theme-card--active" : ""} group relative overflow-hidden rounded-[26px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.015))] transition-colors duration-300 hover:border-white/22 ${
+              className={`card-reading theme-card group relative overflow-hidden rounded-[26px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.015))] transition-colors duration-300 hover:border-white/22 ${
                 variant === "home" && index === 0 ? "md:col-span-2 xl:col-span-2" : ""
               }`}
               style={{ animationDelay: animationDelayFor(index) }}
@@ -226,6 +193,6 @@ export function TopicGrid({
           ))}
         </div>
       </div>
-    </section>
+    </RevealSection>
   );
 }

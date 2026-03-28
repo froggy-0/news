@@ -53,7 +53,6 @@ export default async function ArchiveDetailPage({
           summaryLead={brief.aiJudgment.summaryLead}
           summarySupport={brief.aiJudgment.summarySupport}
           issueDate={brief.meta.date}
-          generatedAt={brief.meta.generatedAt}
         />
         <StocksBoard snapshot={brief.marketSnapshot} stocks={brief.techStocks} variant="detail" />
         <BitcoinPanel bitcoin={brief.bitcoin} />
