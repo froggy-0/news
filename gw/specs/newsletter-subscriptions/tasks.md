@@ -1,0 +1,309 @@
+# Implementation Plan: newsletter-subscriptions
+
+## Overview
+
+이번 구현은 네 축으로 나눈다. 첫째, Python 파이프라인에서 수신자 source를 환경변수에서 저장소 기반으로 전환한다. 둘째, Cloudflare API와 프론트 구독/확인/해지 흐름을 추가한다. 셋째, Supabase 및 비밀값 설정을 포함한 운영 구성을 정리한다. 넷째, 새 구독 lifecycle과 발송 경계가 회귀하지 않도록 Python/TypeScript 테스트를 함께 추가한다.
+
+구현 순서는 `저장소와 데이터 계약 -> Python newsletter 개별 발송 경계 변경 -> Cloudflare confirmation/API 흐름 추가 -> 운영 설정 문서화 -> 통합 테스트`로 진행한다. 각 단계는 requirements와 design의 경계를 그대로 반영하며, 중간마다 checkpoint에서 최소 범위 검증을 수행한다.
+
+## Tasks
+
+- [ ] 1. 구독 저장소 데이터 계약과 설정 경계를 추가한다
+  - [ ] 1.1 Python 설정 모델에 Supabase 구독 저장소용 환경변수를 추가한다
+    - 수정 파일: `src/morning_brief/config.py`
+    - 작업 내용:
+      - `gmail_recipient` 의존 제거 방향에 맞춰 Supabase URL, service role key, newsletter key, unsubscribe/public base URL 등 필요한 설정 필드를 추가한다.
+      - `GMAIL_RECIPIENT`는 신규 경로에서 더 이상 정상 발송 필수값이 아니도록 설정 유효성 경계를 재설계한다.
+      - Python 파이프라인과 newsletter용 unsubscribe/public 링크 생성에 필요한 base URL 계약을 명시한다.
+    - _Requirements: 1.1, 1.4, 2.1, 7.1, 7.2_
+  - [ ] 1.2 Python 구독 도메인 모델과 repository interface를 추가한다
+    - 신규 파일 후보:
+      - `src/morning_brief/subscriptions.py`
+      - 또는 `src/morning_brief/subscriptions/models.py`
+      - 또는 `src/morning_brief/subscriptions/repository.py`
+    - 작업 내용:
+      - `ActiveRecipient`, `SubscriptionRecord`, `SubscriptionStatus` 등 공용 모델을 정의한다.
+      - `SubscriptionRepository` protocol/interface를 만든다.
+      - 최소 read contract는 `list_active_recipients(newsletter)`를 포함한다.
+    - _Requirements: 1.1, 2.1, 5.1_
+  - [ ] 1.3 Supabase Python adapter를 추가한다
+    - 신규 파일 후보:
+      - `src/morning_brief/subscriptions/supabase_repository.py`
+    - 작업 내용:
+      - Python 의존성에 Supabase client를 추가한다.
+      - Supabase Python client 초기화 코드를 추가한다.
+      - active recipient 조회를 adapter 내부로 캡슐화한다.
+      - 상위 계층에 Supabase 전용 응답 구조가 노출되지 않도록 변환한다.
+    - _Requirements: 1.1, 2.2, 7.2, 7.4_
+  - [ ] 1.4 Property 1, 5에 대한 저장소 계약 테스트를 추가한다
+    - 테스트 파일 후보:
+      - `tests/test_subscriptions_repository.py`
+      - `tests/test_config.py`
+    - 작업 내용:
+      - active recipient 필터링 계약 검증
+      - 설정 누락/필수값 검증
+      - repository abstraction mock 기반 동작 검증
+    - **Property 1: active recipient만 발송 대상에 포함된다**
+    - **Property 5: repository contract가 유지되면 저장소 구현이 바뀌어도 lifecycle 의미가 유지된다**
+    - 테스트 파일: `tests/test_subscriptions_repository.py`
+    - **Validates: Requirements 1.2, 2.1, 2.3, 5.2**
+
+- [ ] 2. Python 메일 발송 경계를 repository 기반으로 전환한다
+  - [ ] 2.1 `GmailSender.send()`가 저장소 기반 recipient resolver를 사용하도록 변경한다
+    - 수정 파일:
+      - `src/morning_brief/emailer.py`
+      - 필요 시 `src/morning_brief/pipeline.py`
+    - 작업 내용:
+      - `src/morning_brief/emailer.py:1962`의 `self.settings.gmail_recipient` 의존을 제거한다.
+      - `send()` 내부 또는 상위 계층에서 active recipient 목록을 조회해 주입한다.
+      - 기존 BCC 단건 발송을 제거하고 수신자별 개별 메시지 생성/전송 구조로 바꾼다.
+      - active recipient가 0명일 때 skip + log 처리 경로를 구현한다.
+      - 오류 시 환경변수 fallback 없이 명시적 실패를 유지한다.
+    - _Requirements: 1.1, 1.2, 1.3, 1.5, 5.2_
+  - [ ] 2.2 newsletter용 unsubscribe URL 생성 로직을 토큰 기반 public URL 구조로 바꾼다
+    - 수정 파일:
+      - `src/morning_brief/emailer.py`
+      - `src/morning_brief/templates/email_footer.html.j2`
+      - `src/morning_brief/templates/email.html.j2`
+      - `src/morning_brief/templates/email_v2.txt.j2`
+    - 작업 내용:
+      - `src/morning_brief/emailer.py:797`의 `mailto:` unsubscribe 생성 함수를 제거 또는 대체한다.
+      - 구독자별 unsubscribe token/public URL builder를 추가한다.
+      - HTML/Text 이메일 모두 실제 unsubscribe 링크를 사용하도록 반영한다.
+    - _Requirements: 4.1, 4.2, 8.3, 8.4_
+  - [ ] 2.3 newsletter 개별 발송 로깅과 실패 집계 경계를 정리한다
+    - 수정 파일:
+      - `src/morning_brief/emailer.py`
+      - 신규 파일 후보 `src/morning_brief/mail_transport.py`
+    - 작업 내용:
+      - recipient별 전송 결과를 기록할 수 있도록 transport 또는 sender 경계를 정리한다.
+      - mail intent와 recipient 단위 로깅 필드를 구분할 수 있게 구조를 정리한다.
+    - _Requirements: 8.3, 8.5_
+  - [ ] 2.4 Python 발송 경계 회귀 테스트를 추가한다
+    - 테스트 파일 후보:
+      - `tests/test_emailer.py`
+      - `tests/test_pipeline_observability.py`
+      - `tests/test_config.py`
+    - 작업 내용:
+      - active recipients만 발송 대상으로 쓰이는지 검증
+      - recipient별 개별 발송이 수행되는지 검증
+      - 0명일 때 skip 동작 검증
+      - unsubscribe URL이 mailto가 아니라 실제 public URL 형식을 따르는지 검증
+    - **Property 4: unsubscribed 상태는 발송 대상에 포함되지 않는다**
+    - 테스트 파일: `tests/test_emailer.py`
+    - **Validates: Requirements 1.2, 1.3, 4.5, 5.2, 8.3, 8.4, 10.1, 10.5**
+
+- [ ] 3. Checkpoint - Python 설정과 recipient source 전환 검증
+  - [ ] 3.1 아래 범위의 검증 명령을 실행한다
+    - `python -m pytest tests/test_config.py tests/test_emailer.py tests/test_subscriptions_repository.py`
+    - 필요한 경우 `python -m pytest tests/test_pipeline_observability.py`
+    - 결과를 tasks.md checkpoint에 기록한다
+    - _Requirements: 10.1, 10.5_
+
+- [ ] 4. Cloudflare API용 구독 서비스, confirmation 메일 발송, TypeScript Supabase adapter를 구현한다
+  - [ ] 4.1 프론트/Cloudflare용 구독 도메인 계약을 추가한다
+    - 신규 파일 후보:
+      - `frontend/lib/subscriptions/types.ts`
+      - `frontend/lib/subscriptions/contracts.ts`
+    - 작업 내용:
+      - `SubscriptionStatus`, API request/response 타입, 페이지 상태 모델을 정의한다.
+      - frontend와 API가 공통 타입 계약을 사용하도록 정리한다.
+    - _Requirements: 2.4, 5.1, 6.3_
+  - [ ] 4.2 TypeScript Supabase adapter를 추가한다
+    - 신규 파일 후보:
+      - `frontend/lib/subscriptions/supabase.ts`
+      - `frontend/lib/subscriptions/repository.ts`
+    - 작업 내용:
+      - `frontend/package.json`에 필요한 Supabase client 의존성을 추가한다.
+      - Cloudflare runtime에서 사용할 Supabase adapter를 추가한다.
+      - subscription, token 조회/생성/소비/update를 adapter 내부에 캡슐화한다.
+      - secrets는 함수 호출부의 env에서만 받아오게 한다.
+    - _Requirements: 2.2, 6.4, 7.1, 7.2, 7.4_
+  - [ ] 4.3 Subscription service를 구현한다
+    - 신규 파일 후보:
+      - `frontend/lib/subscriptions/service.ts`
+      - `frontend/lib/subscriptions/tokens.ts`
+      - `frontend/lib/subscriptions/validation.ts`
+    - 작업 내용:
+      - request subscription -> pending 생성/upsert
+      - confirm token -> active 전환
+      - unsubscribe token -> unsubscribed 전환
+      - 토큰 만료/재사용/invalid 처리
+      - 이메일 normalize 및 멱등 규칙 구현
+      - confirmation 메일 발송 성공 후에만 구독 요청 성공을 반환하도록 순서를 고정한다.
+    - _Requirements: 3.1, 3.3, 3.5, 3.6, 4.3, 4.4, 5.3, 9.1, 9.2, 9.3_
+  - [ ] 4.4 Cloudflare confirmation mail sender를 추가한다
+    - 신규 파일 후보:
+      - `frontend/lib/subscriptions/confirmation-mail.ts`
+      - `frontend/lib/subscriptions/mail-sender.ts`
+    - 작업 내용:
+      - Cloudflare Functions 환경에서 실제로 사용할 confirmation 메일 인증 방식을 확정하고 문서화한다.
+      - confirmation 메일 subject/body/link builder를 구현한다.
+      - Cloudflare API 계층에서 직접 사용할 mail sender를 구현한다.
+      - confirmation 메일 발송 실패 시 active 전환이 일어나지 않도록 service 순서를 고정한다.
+    - _Requirements: 3.2, 8.1, 8.2, 8.5_
+  - [ ] 4.5 Cloudflare API route를 추가한다
+    - 신규 파일 후보:
+      - `frontend/functions/api/subscriptions/request.ts`
+      - `frontend/functions/api/subscriptions/confirm.ts`
+      - `frontend/functions/api/subscriptions/unsubscribe.ts`
+      - 필요 시 `frontend/functions/api/subscriptions/confirm/[[token]].ts`
+      - 필요 시 `frontend/functions/api/subscriptions/unsubscribe/[[token]].ts`
+    - 작업 내용:
+      - `POST /api/subscriptions/request`
+      - `POST /api/subscriptions/confirm`
+      - `POST /api/subscriptions/unsubscribe`
+      - `GET` 기반 상태 조회 엔드포인트를 구현한다.
+      - env secrets에서 Supabase 및 confirmation mail 관련 값을 읽고 browser에는 노출하지 않는다.
+      - local dev 및 preview 배포에서 Functions가 실제로 동작하는지 검증할 수 있는 실행 경로를 함께 추가한다.
+    - _Requirements: 3.1, 3.2, 3.4, 4.3, 4.4, 6.3, 6.4, 9.4_
+  - [ ] 4.6 Property 2, 3에 대한 서비스 레벨 테스트를 추가한다
+    - 테스트 파일 후보:
+      - `frontend/tests/subscriptions-api.test.ts`
+      - 신규 `frontend/tests/subscription-service.test.ts`
+    - 작업 내용:
+      - duplicate request 멱등성
+      - expired/consumed token replay 방지
+      - invalid token 처리
+      - confirmation 메일 발송 실패 시 active 전환이 일어나지 않는지 검증
+    - **Property 2: 동일 이메일 재구독 시 active 레코드가 중복되지 않는다**
+    - **Property 3: 만료되었거나 소비된 토큰은 상태 전이를 일으키지 않는다**
+    - 테스트 파일: `frontend/tests/subscription-service.test.ts`
+    - **Validates: Requirements 3.4, 3.5, 4.4, 9.2, 9.3, 10.4**
+
+- [ ] 5. 공개 프론트 구독/확인/해지 흐름을 구현한다
+  - [ ] 5.1 공개 구독 입력 UI를 추가한다
+    - 수정 파일 후보:
+      - `frontend/app/page.tsx`
+      - 신규 `frontend/components/layout/SubscriptionForm.tsx`
+      - 신규 `frontend/components/ui/SubscriptionState.tsx`
+    - 작업 내용:
+      - 이메일 입력 폼 추가
+      - request API 호출
+      - pending 상태 안내 메시지 노출
+      - 성공/실패/검증 에러 UI 분리
+    - _Requirements: 3.1, 6.3, 9.1_
+  - [ ] 5.2 `/subscribe/confirm` 페이지를 구현한다
+    - 신규 파일 후보:
+      - `frontend/app/subscribe/confirm/page.tsx`
+      - 신규 `frontend/components/layout/SubscriptionConfirmResult.tsx`
+    - 작업 내용:
+      - query token 파싱
+      - confirm API 호출
+      - active 성공, 만료, 이미 처리됨, invalid 상태 렌더링
+    - _Requirements: 3.3, 3.4, 6.1_
+  - [ ] 5.3 `/unsubscribe` 페이지를 실제 해지 페이지로 교체한다
+    - 수정 파일:
+      - `frontend/app/unsubscribe/page.tsx`
+      - 신규 `frontend/components/layout/UnsubscribeResult.tsx`
+    - 작업 내용:
+      - placeholder 안내 제거
+      - GET 상태 조회 -> 버튼 노출 -> POST unsubscribe 처리 흐름 구현
+      - 결과 메시지와 재구독 유도 메시지 정리
+    - _Requirements: 4.2, 4.3, 4.4, 6.2_
+  - [ ] 5.4 프론트 구독 페이지 회귀 테스트를 추가한다
+    - 테스트 파일 후보:
+      - `frontend/tests/unsubscribe-page.test.ts`
+      - `frontend/tests/confirm-page.test.ts`
+      - `frontend/tests/subscription-form.test.ts`
+    - 작업 내용:
+      - token 상태 분기
+      - 확인 버튼/해지 버튼 동작
+      - invalid token UX
+    - _Requirements: 6.1, 6.2, 10.2, 10.3_
+
+- [ ] 6. Checkpoint - API와 공개 페이지 흐름 검증
+  - [ ] 6.1 아래 범위의 검증 명령을 실행한다
+    - `cd frontend && npm run test`
+    - `cd frontend && npm run lint`
+    - `cd frontend && npx wrangler pages dev out`
+    - 필요 시 preview 배포로 Functions 포함 동작을 확인한다
+    - 필요한 경우 구독 관련 테스트 파일만 선택 실행
+    - 결과를 tasks.md checkpoint에 기록한다
+    - _Requirements: 10.2, 10.3, 10.4_
+
+- [ ] 7. Supabase 스키마와 운영 설정 산출물을 추가한다
+  - [ ] 7.1 Supabase schema/migration 파일을 추가한다
+    - 신규 파일 후보:
+      - `infra/supabase/subscriptions.sql`
+      - 또는 `supabase/migrations/<timestamp>_newsletter_subscriptions.sql`
+    - 작업 내용:
+      - `subscriptions`
+      - `subscription_tokens`
+      - 필요 시 `mail_events`
+      - unique constraint, index, status 제약조건, token lookup index 설계
+    - _Requirements: 5.1, 7.1, 7.3_
+  - [ ] 7.2 Cloudflare runtime 설정 문서를 추가 또는 갱신한다
+    - 수정 파일 후보:
+      - `frontend/README.md`
+      - `README.md`
+      - 필요 시 신규 `docs/subscriptions-ops.md`
+    - 작업 내용:
+      - Cloudflare secrets 목록
+      - Pages Functions 배치 방식
+      - local dev 시 필요한 bindings/wrangler 실행 흐름
+      - confirmation 메일 발송에 필요한 secret 목록
+      - Functions 로컬 검증 및 preview 배포 검증 절차
+    - _Requirements: 6.4, 7.5, 8.1_
+  - [ ] 7.3 GitHub Actions / Python 런타임 설정 문서를 갱신한다
+    - 수정 파일 후보:
+      - `README.md`
+      - 필요 시 `.github/workflows/*` 관련 문서
+    - 작업 내용:
+      - Python 파이프라인용 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` 설명
+      - `GMAIL_RECIPIENT` 제거 또는 deprecated 처리 명시
+      - newsletter가 BCC 단건이 아니라 recipient별 개별 발송으로 바뀌었다는 점을 설명
+    - _Requirements: 1.4, 7.2, 7.5, 8.3_
+  - [ ] 7.4 선택적 MCP 개발 설정 가이드를 문서화한다
+    - 수정 파일 후보:
+      - 신규 `docs/subscriptions-ops.md`
+      - 또는 `docs/codex-ops.md`
+    - 작업 내용:
+      - Supabase MCP는 선택적 개발 도구임을 명시
+      - 런타임과 무관함을 설명
+      - 개발용 dev project/branch 연결 권장사항 정리
+    - _Requirements: 2.3, 7.5_
+  - [ ] 7.5 operational setup validation 태스크를 추가한다
+    - 작업 내용:
+      - schema 파일, secret 목록, 문서가 design의 operational setup과 일치하는지 점검
+      - `bounced` 상태를 운영자가 수동으로 변경하는 최소 절차 또는 예시 SQL을 문서에 포함한다
+    - **Property 5 연계 검증: 런타임 설정은 특정 개발 도구에 의존하지 않는다**
+    - 테스트 파일: 문서/설정 검토 태스크
+    - **Validates: Requirements 6.4, 7.2, 7.5**
+
+- [ ] 8. Checkpoint - 운영 설정과 문서 반영 검증
+  - [ ] 8.1 문서 및 설정 계약 검토를 수행한다
+    - `README.md`
+    - `frontend/README.md`
+    - 신규 운영 문서
+    - Supabase schema 파일
+    - 필요한 secret 목록이 누락 없이 정리됐는지 확인한다
+    - _Requirements: 7.5_
+
+- [ ] 9. 통합 회귀 테스트와 마무리 정리를 수행한다
+  - [ ] 9.1 Python 전체 관련 테스트를 재실행한다
+    - `python -m pytest tests/test_config.py tests/test_emailer.py tests/test_subscriptions_repository.py`
+    - 필요한 경우 `python -m pytest tests/test_pipeline_observability.py`
+    - _Requirements: 10.1, 10.5_
+  - [ ] 9.2 frontend 구독 흐름 테스트를 재실행한다
+    - `cd frontend && npm run test`
+    - `cd frontend && npm run lint`
+    - _Requirements: 10.2, 10.3, 10.4_
+  - [ ] 9.3 end-to-end 수동 점검 체크리스트를 문서화한다
+    - 점검 항목:
+      - 구독 신청 후 pending 안내
+      - confirmation 메일 수신
+      - 확인 링크 클릭 후 active 전환
+      - newsletter 발송 시 active만 포함
+      - recipient별 unsubscribe 링크 포함 여부
+      - unsubscribe 클릭 후 unsubscribed 전환
+      - 이후 재발송 제외
+    - _Requirements: 3.2, 3.3, 4.3, 4.5, 8.1, 8.3, 10.2, 10.3_
+
+- [ ] 10. Checkpoint - 최종 검증 기록
+  - [ ] 10.1 최종 검증 결과를 tasks.md에 기록한다
+    - Python 테스트 결과
+    - frontend 테스트 결과
+    - 문서/설정 점검 결과
+    - 남은 운영 준비 항목이 있으면 명시한다
+    - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_

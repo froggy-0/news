@@ -1,0 +1,5 @@
+name = "sovereign-brief-frontend"
+compatibility_date = "2026-03-28"
+
+[assets]
+directory = "./out"
