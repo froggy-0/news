@@ -11,8 +11,6 @@ from morning_brief.subscriptions.models import ActiveRecipient
 def _configure_mail_settings(monkeypatch):
     monkeypatch.setenv("GMAIL_SENDER", "brief@example.com")
     monkeypatch.setenv("PUBLIC_APP_BASE_URL", "https://brief.example.com")
-    monkeypatch.setenv("SUBSCRIPTION_UNSUBSCRIBE_PATH", "/unsubscribe")
-    monkeypatch.setenv("SUBSCRIPTION_NEWSLETTER_KEY", "morning-brief")
     monkeypatch.setenv("SUBSCRIPTION_TOKEN_SECRET", "token-secret")
     return load_settings()
 
@@ -25,7 +23,7 @@ def test_unsubscribe_url_uses_public_url_and_signed_token(monkeypatch):
         newsletter="morning-brief",
     )
 
-    unsubscribe_url = _unsubscribe_url(settings=settings, recipient=recipient, sender="")
+    unsubscribe_url = _unsubscribe_url(settings=settings, recipient=recipient)
 
     assert unsubscribe_url.startswith("https://brief.example.com/unsubscribe?token=")
     assert "reader%40example.com" not in unsubscribe_url
@@ -38,7 +36,7 @@ def test_build_briefing_message_renders_recipient_specific_unsubscribe_url(monke
         subscriber_id="sub_123",
         newsletter="morning-brief",
     )
-    unsubscribe_url = _unsubscribe_url(settings=settings, recipient=recipient, sender="")
+    unsubscribe_url = _unsubscribe_url(settings=settings, recipient=recipient)
 
     msg = build_briefing_message(
         subject="테스트 브리핑",

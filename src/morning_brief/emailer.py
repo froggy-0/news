@@ -13,7 +13,7 @@ from email.mime.text import MIMEText
 from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from urllib.parse import quote, urlencode, urlparse
+from urllib.parse import urlencode, urlparse
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
@@ -57,7 +57,6 @@ DOWN_TOKENS = ("내렸", "하락", "약세", "밀렸", "낮아졌", "감소", "�
 FLAT_TOKENS = ("보합", "유지", "비슷", "변동이 크지", "큰 변화는 없")
 EMAIL_TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 PROJECT_GITHUB_URL = "https://github.com/froggy-0/news"
-DEFAULT_UNSUBSCRIBE_EMAIL = "unsubscribe@example.com"
 DEFAULT_UNSUBSCRIBE_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30
 UNSUBSCRIBE_TOKEN_VERSION = 1
 NONE_LIKE_TEXTS = {"", "none", "null", "n/a", "na"}
@@ -126,21 +125,6 @@ def _gmail_dependencies() -> tuple[Any, Any, Any, Any]:
             "requirements.txt를 설치한 뒤 다시 실행해 주세요."
         ) from exc
     return Request, GoogleCredentials, InstalledAppFlow, build
-
-
-def _split_recipients(raw: str) -> list[str]:
-    recipients: list[str] = []
-    seen: set[str] = set()
-    for part in raw.replace("\n", ",").split(","):
-        candidate = part.strip()
-        if not candidate:
-            continue
-        normalized = candidate.lower()
-        if normalized in seen:
-            continue
-        seen.add(normalized)
-        recipients.append(candidate)
-    return recipients
 
 
 def _first_non_empty_paragraph(text: str) -> str:
@@ -808,13 +792,6 @@ def _market_source_lines() -> list[str]:
     ]
 
 
-def _unsubscribe_mailto_url(sender: str) -> str:
-    target = sender.strip() or DEFAULT_UNSUBSCRIBE_EMAIL
-    subject = quote("SOVEREIGN BRIEF 구독 해지")
-    body = quote("구독 해지를 요청합니다.")
-    return f"mailto:{target}?subject={subject}&body={body}"
-
-
 def _urlsafe_token(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode("utf-8").rstrip("=")
 
@@ -841,18 +818,9 @@ def _build_unsubscribe_token(*, settings: Settings, recipient: ActiveRecipient) 
 
 def _unsubscribe_url(
     *,
-    settings: Settings | None = None,
-    recipient: ActiveRecipient | None = None,
-    sender: str = "",
+    settings: Settings,
+    recipient: ActiveRecipient,
 ) -> str:
-    if (
-        settings is None
-        or recipient is None
-        or not settings.public_app_base_url
-        or not settings.subscription_token_secret
-    ):
-        return _unsubscribe_mailto_url(sender)
-
     path = settings.subscription_unsubscribe_path.strip() or "/unsubscribe"
     if not path.startswith("/"):
         path = f"/{path}"
@@ -1569,7 +1537,6 @@ def _build_email_context_v2(
     body: str,
     packet: dict,
     *,
-    sender: str = "",
     unsubscribe_url: str | None = None,
     unified: "UnifiedOutput | None" = None,
 ) -> dict[str, object]:
@@ -1698,114 +1665,7 @@ def _build_email_context_v2(
         ),
         "data_quality_status": data_quality_status,
         "footer_notes": footer_notes if data_quality_status != "ok" else [],
-        "unsubscribe_url": unsubscribe_url or _unsubscribe_mailto_url(sender),
-        "github_url": PROJECT_GITHUB_URL,
-    }
-
-
-# ---------------------------------------------------------------------------
-# V1 레거시 이메일 빌더
-# ---------------------------------------------------------------------------
-
-
-def _build_email_context(
-    subject: str,
-    body: str,
-    *,
-    sender: str = "",
-    unsubscribe_url: str | None = None,
-) -> dict[str, object]:
-    body_without_references, references = _split_reference_block(body)
-    main_body, footer_notes = _split_footer_note_block(body_without_references)
-    title, notice, sections = _extract_brief_structure(main_body)
-    parsed_sections = _build_email_sections(sections)
-    layer_one_section = _find_layer_section(parsed_sections, contains_heading="LAYER 1")
-    layer_two_section = _find_layer_section(
-        parsed_sections,
-        exact_heading="중요한 뉴스",
-    ) or _find_layer_section(parsed_sections, contains_heading="LAYER 2")
-    layer_three_section = _find_layer_section(parsed_sections, contains_heading="LAYER 3")
-    display_date = _format_display_date(title=title, subject=subject)
-    top_summary_lines = _build_top_summary_lines(parsed_sections)
-    layer_one_text = _extract_layer_one_text(parsed_sections, notice, title)
-    reference_items = _build_reference_items(references)
-    news_items = _build_news_items(parsed_sections, references)
-    stock_rows = _build_stock_rows(parsed_sections)
-    macro_rows = _build_macro_rows(parsed_sections)
-    news_source_items = _build_news_source_items(news_items, reference_items)
-
-    # B-2: 신규 컨텍스트 변수
-    key_metrics: list[str] = []
-    kospi_impact = ""
-    news_context = ""
-    watch_items: list[str] = []
-    summary_labels = ["시장 판단", "뉴스", "종목"]
-
-    if layer_one_section is not None:
-        key_metrics = _first_metric_lines(layer_one_section.groups["metrics"][1], limit=3)
-        for line in layer_one_section.groups["insight"][1].splitlines():
-            if "코스피" in line:
-                kospi_impact = line.strip().lstrip("- ").strip()
-                break
-
-    if layer_two_section is not None:
-        news_context = _first_sentence(layer_two_section.groups["insight"][1])
-
-    for section in parsed_sections:
-        for line in section.groups["watch"][1].splitlines():
-            stripped = line.strip()
-            if stripped.startswith("- "):
-                stripped = stripped[2:].strip()
-            if stripped and stripped not in watch_items:
-                watch_items.append(stripped)
-            if len(watch_items) >= 5:
-                break
-        if len(watch_items) >= 5:
-            break
-
-    # B-3: 상승/하락 분리
-    stock_up_rows = [r for r in stock_rows if r.tone == "up"]
-    stock_down_rows = [r for r in stock_rows if r.tone != "up"]
-
-    # B-6: preheader 최적화
-    if key_metrics:
-        preheader = " · ".join(m.lstrip("- ") for m in key_metrics[:3])[:140]
-    else:
-        preheader = " / ".join(top_summary_lines[:2]).strip()[:140] or layer_one_text[:140].strip()
-
-    # B-7: fallback 개선
-    news_fallback = ""
-    if not news_items:
-        raw = _fallback_section_text(layer_two_section)
-        news_fallback = raw or "주말/휴일로 주요 뉴스 업데이트가 없습니다."
-
-    return {
-        "subject": subject,
-        "title": title,
-        "display_date": display_date,
-        "preheader": preheader,
-        "notice": notice,
-        "top_summary_lines": top_summary_lines,
-        "summary_labels": summary_labels,
-        "key_metrics": key_metrics,
-        "kospi_impact": kospi_impact,
-        "news_context": news_context,
-        "watch_items": watch_items,
-        "layer_one_text": layer_one_text,
-        "layer_one_html": Markup(_render_body_line(layer_one_text)),
-        "news_items": news_items,
-        "news_fallback_text": news_fallback,
-        "stock_rows": stock_rows,
-        "stock_up_rows": stock_up_rows,
-        "stock_down_rows": stock_down_rows,
-        "stock_fallback_text": "" if stock_rows else _fallback_section_text(layer_three_section),
-        "macro_rows": macro_rows,
-        "footer_notes": footer_notes,
-        "reference_items": reference_items,
-        "news_source_items": news_source_items,
-        "market_source_lines": _market_source_lines(),
-        "primary_cta": _primary_cta(reference_items),
-        "unsubscribe_url": unsubscribe_url or _unsubscribe_mailto_url(sender),
+        "unsubscribe_url": unsubscribe_url or "",
         "github_url": PROJECT_GITHUB_URL,
     }
 
@@ -1894,7 +1754,6 @@ def render_briefing_email_html(
     subject: str,
     body: str,
     *,
-    sender: str = "",
     unsubscribe_url: str | None = None,
     packet: dict | None = None,
     unified: "UnifiedOutput | None" = None,
@@ -1905,7 +1764,6 @@ def render_briefing_email_html(
         subject=subject,
         body=body,
         packet=packet or {},
-        sender=sender,
         unsubscribe_url=unsubscribe_url,
         unified=unified,
     )
@@ -1916,7 +1774,6 @@ def render_briefing_email_text(
     subject: str,
     body: str,
     *,
-    sender: str = "",
     unsubscribe_url: str | None = None,
     packet: dict | None = None,
     unified: "UnifiedOutput | None" = None,
@@ -1927,7 +1784,6 @@ def render_briefing_email_text(
         subject=subject,
         body=body,
         packet=packet or {},
-        sender=sender,
         unsubscribe_url=unsubscribe_url,
         unified=unified,
     )
@@ -1947,7 +1803,6 @@ def build_briefing_message(
     html_body = render_briefing_email_html(
         subject=subject,
         body=body,
-        sender=sender,
         unsubscribe_url=unsubscribe_url,
         packet=packet,
         unified=unified,
@@ -1955,7 +1810,6 @@ def build_briefing_message(
     text_body = render_briefing_email_text(
         subject=subject,
         body=body,
-        sender=sender,
         unsubscribe_url=unsubscribe_url,
         packet=packet,
         unified=unified,
@@ -2072,7 +1926,6 @@ class GmailSender:
             unsubscribe_url = _unsubscribe_url(
                 settings=self.settings,
                 recipient=recipient,
-                sender=self.settings.gmail_sender,
             )
             msg = build_briefing_message(
                 subject=subject,
