@@ -11,10 +11,6 @@ export function HomeHero({ brief }: { brief: BriefData }) {
       <div className="mx-auto w-full max-w-4xl px-6">
         <div className="space-y-10">
           <div className="space-y-6">
-            <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/[0.02] px-4 py-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#00ff66] shadow-[0_0_10px_rgba(0,255,102,0.65)]" />
-              <span className="text-[10px] font-mono uppercase tracking-[0.32em] text-white/50">오늘 발행본</span>
-            </div>
             <h1 className="text-[1.75rem] font-black leading-[1.05] tracking-[-0.08em] text-white md:text-[3.4rem]">
               <span>주권 있는</span>
               <br />

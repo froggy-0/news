@@ -140,6 +140,7 @@ test("requestSubscription creates pending subscription and sends confirmation ma
 
   assert.equal(result.status, "pending");
   assert.equal(sentMails.length, 1);
+  assert.equal(sentMails[0].subject, "[SOVEREIGN BRIEF] 구독 확인이 필요합니다");
   assert.match(sentMails[0].text, /subscribe\/confirm\?token=/);
   assert.equal(repository.subscriptions.size, 1);
   assert.equal(repository.confirmationTokens.size, 1);

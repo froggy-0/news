@@ -29,6 +29,7 @@ export function ScatterText({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isInView = useInView(containerRef, { once: true, margin: "-100px" });
   const [reducedMotion, setReducedMotion] = useState(false);
+  const [animationReady, setAnimationReady] = useState(false);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -37,6 +38,23 @@ export function ScatterText({
     mediaQuery.addEventListener("change", handleChange);
     return () => mediaQuery.removeEventListener("change", handleChange);
   }, []);
+
+  useEffect(() => {
+    if (reducedMotion) {
+      setAnimationReady(true);
+      return;
+    }
+
+    if (!isInView) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setAnimationReady(true);
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [isInView, reducedMotion]);
 
   useEffect(() => {
     if (reducedMotion || !canvasRef.current || !containerRef.current) {
@@ -128,7 +146,7 @@ export function ScatterText({
         ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
         particles.forEach((particle) => {
-          if (isInView && particle.active) {
+          if (animationReady && particle.active) {
             const dx = particle.originX - particle.x;
             const dy = particle.originY - particle.y;
             const distance = Math.sqrt(dx * dx + dy * dy);
@@ -146,7 +164,7 @@ export function ScatterText({
           const distFromOrigin = Math.sqrt(
             (particle.originX - particle.x) ** 2 + (particle.originY - particle.y) ** 2,
           );
-          const opacity = isInView ? Math.min(1, 2.4 - distFromOrigin / 150) : 0;
+          const opacity = animationReady ? Math.min(1, 2.4 - distFromOrigin / 150) : 1;
 
           ctx.globalAlpha = opacity;
           ctx.fillStyle = particle.color;
@@ -175,7 +193,7 @@ export function ScatterText({
       cancelAnimationFrame(animationFrameId);
       resizeObserver?.disconnect();
     };
-  }, [color, fontSize, isInView, reducedMotion, text]);
+  }, [animationReady, color, fontSize, reducedMotion, text]);
 
   return (
     <div ref={containerRef} className={`scatter-text-shell ${className ?? ""}`}>

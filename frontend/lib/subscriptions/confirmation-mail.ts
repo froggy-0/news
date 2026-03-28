@@ -1,9 +1,9 @@
 export function buildConfirmationMail(input: {
   confirmUrl: string;
 }): { subject: string; text: string; html: string } {
-  const subject = "SOVEREIGN BRIEF 구독 확인";
+  const subject = "[SOVEREIGN BRIEF] 구독 확인이 필요합니다";
   const text = [
-    "SOVEREIGN BRIEF 구독 확인",
+    "[SOVEREIGN BRIEF] 구독 확인이 필요합니다",
     "",
     "아래 링크를 눌러 구독을 완료해 주세요.",
     input.confirmUrl,

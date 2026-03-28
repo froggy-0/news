@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function SubscribeConfirmPage() {
   return (
-    <main className="space-y-6">
+    <main className="px-6 py-16 md:py-24">
       <Suspense fallback={null}>
         <SubscriptionConfirmResult />
       </Suspense>

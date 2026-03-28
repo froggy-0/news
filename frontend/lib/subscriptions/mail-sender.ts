@@ -8,6 +8,15 @@ function encodeBase64Url(value: string): string {
   return btoa(binary).replace(/\+/gu, "-").replace(/\//gu, "_").replace(/=+$/u, "");
 }
 
+function encodeMimeHeader(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return `=?UTF-8?B?${btoa(binary)}?=`;
+}
+
 async function fetchAccessToken(env: SubscriptionEnv): Promise<string> {
   const body = new URLSearchParams({
     client_id: env.CONFIRMATION_GMAIL_CLIENT_ID,
@@ -44,7 +53,7 @@ function buildRawMessage(input: {
   const lines = [
     `From: ${input.from}`,
     `To: ${input.to}`,
-    `Subject: ${input.subject}`,
+    `Subject: ${encodeMimeHeader(input.subject)}`,
     "MIME-Version: 1.0",
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
     "",

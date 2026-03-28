@@ -169,7 +169,11 @@ export function StocksBoard({
         {snapshot.items.length === 0 ? (
           <DataState message="이번 집계에서는 시장 지표를 확인하지 못했어요." />
         ) : (
-          <div className={`grid gap-3 ${variant === "home" ? "sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7" : "sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7"}`}>
+          <div
+            className={`grid grid-cols-2 gap-3 ${
+              variant === "home" ? "sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7" : "lg:grid-cols-4 xl:grid-cols-7"
+            }`}
+          >
             {snapshot.items.map((item) => (
               <MetricCard key={item.symbol} item={item} />
             ))}
@@ -189,7 +193,7 @@ export function StocksBoard({
           {stocks.length === 0 ? (
             <DataState message="이번 집계에서는 주요 기술주를 확인하지 못했어요." />
           ) : (
-            <div className={`grid gap-3 ${variant === "home" ? "md:grid-cols-2 xl:grid-cols-5" : "md:grid-cols-2 xl:grid-cols-5"}`}>
+            <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
               {stocks.map((stock) => (
                 <StockCard key={stock.symbol} stock={stock} />
               ))}
