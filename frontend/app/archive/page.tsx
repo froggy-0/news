@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { ArchiveDateList } from "@/components/archive/ArchiveDateList";
 import { SiteHeader } from "@/components/layout/SiteHeader";
+import { buildHistoryEntries, buildMetaStatusCards } from "@/lib/history";
 import { fetchBriefByDate, fetchIndex } from "@/lib/r2";
 
 export const metadata: Metadata = {
@@ -11,22 +12,33 @@ export const metadata: Metadata = {
 
 export default async function ArchivePage() {
   const index = await fetchIndex();
-  const items = await Promise.all(
-    index.dates.map(async (date) => {
-      const brief = await fetchBriefByDate(date);
-      return {
-        date,
-        generatedAt: brief.meta.generatedAt,
-        quality: brief.meta.dataQuality,
-        headline: brief.aiJudgment.headline,
-        displayHeadline: brief.meta.displayHeadline,
-      };
-    }),
-  );
+  const briefs = await Promise.all(index.dates.map((date) => fetchBriefByDate(date)));
+  const latestBrief = briefs[0] ?? null;
+  const items = briefs.map((brief) => ({
+    date: brief.meta.date,
+    generatedAt: brief.meta.generatedAt,
+    quality: brief.meta.dataQuality,
+    headline: brief.aiJudgment.headline,
+    displayHeadline: brief.meta.displayHeadline,
+    translationStatus: brief.meta.translationStatus,
+    newsAll: brief.meta.sourceCounts.newsAll,
+    xSignalAll: brief.meta.sourceCounts.xSignalAll,
+  }));
 
   return (
-    <main className="space-y-8">
-      <SiteHeader generatedAt={index.updatedAt} variant="archive" />
+    <main className="pb-6">
+      <SiteHeader
+        variant="archive-list"
+        historyEntries={buildHistoryEntries(index.dates)}
+        statusCards={
+          latestBrief
+            ? buildMetaStatusCards(latestBrief.meta)
+            : [
+                { label: "Archive", value: `${index.dates.length}건`, tone: "muted" },
+                { label: "Updated", value: index.updatedAt, tone: "muted" },
+              ]
+        }
+      />
       <ArchiveDateList items={items} />
     </main>
   );

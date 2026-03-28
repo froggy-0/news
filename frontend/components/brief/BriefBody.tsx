@@ -40,7 +40,10 @@ function sanitizePublicBody(body: string): string {
     if (stripped && !HANGUL_RE.test(stripped) && /[A-Za-z]/.test(stripped) && stripped.split(/\s+/).length >= 7) {
       continue;
     }
-    const normalized = BODY_REPLACEMENTS.reduce((acc, [pattern, replacement]) => acc.replace(pattern, replacement), line);
+    const normalized = BODY_REPLACEMENTS.reduce(
+      (accumulator, [pattern, replacement]) => accumulator.replace(pattern, replacement),
+      line,
+    );
     kept.push(normalized);
   }
 
@@ -57,19 +60,23 @@ export function BriefBody({
   const sanitizedBody = sanitizePublicBody(body);
 
   return (
-    <section className="panel rounded-[32px] px-6 py-7 md:px-8">
-      <div className="mb-6 flex flex-col gap-4 border-b border-white/8 pb-6 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="section-title">전체 발행본</p>
-          <h2 className="section-headline mt-4">브리핑 본문</h2>
-          <p className="section-intro mt-3 max-w-2xl">
-            홈에서 먼저 본 시장 카드와 중복되는 수치 블록은 덜어내고, 판단의 근거와 전체 발행 맥락을 읽게 합니다.
-          </p>
+    <section className="border-b border-white/10 px-6 py-16">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="space-y-2">
+            <p className="section-title">전체 발행본</p>
+            <h2 className="section-headline">브리핑 본문</h2>
+            <p className="max-w-2xl text-sm leading-7 text-white/56">
+              홈에서 먼저 본 요약을 넘어, 판단의 근거와 전체 맥락을 정리한 장문 레이어입니다.
+            </p>
+          </div>
+          <MarkdownDownloadButton body={body} date={date} />
         </div>
-        <MarkdownDownloadButton body={body} date={date} />
-      </div>
-      <div className="markdown-body">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{sanitizedBody}</ReactMarkdown>
+        <div className="section-shell rounded-[28px] p-6 md:p-8">
+          <div className="markdown-body">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{sanitizedBody}</ReactMarkdown>
+          </div>
+        </div>
       </div>
     </section>
   );

@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 
-import { displayHeadline, formatIssueTime, hasUsableHeadline, qualityLabel } from "@/lib/format";
+import { displayHeadline, formatIssueTime, hasUsableHeadline, qualityLabel, translationLabel } from "@/lib/format";
 
 type ArchiveItem = {
   date: string;
@@ -8,47 +9,71 @@ type ArchiveItem = {
   quality?: "ok" | "degraded" | "critical";
   headline?: string;
   displayHeadline?: string;
+  translationStatus?: "ok" | "partial" | "failed";
+  newsAll?: number;
+  xSignalAll?: number;
 };
 
 export function ArchiveDateList({ items }: { items: ArchiveItem[] }) {
   return (
-    <section className="panel rounded-[32px] px-6 py-7 md:px-8">
-      <div className="mb-8 grid gap-5 border-b border-white/8 pb-7 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div>
-          <p className="section-title">아카이브</p>
-          <h1 className="section-headline mt-4">날짜별 브리핑 아카이브</h1>
+    <section className="px-6 py-16">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-10">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div className="space-y-2">
+            <p className="section-title">아카이브</p>
+            <h1 className="section-headline max-w-4xl">날짜별 브리핑을 정적 발행본 그대로 다시 읽습니다.</h1>
+          </div>
+          <p className="max-w-md text-sm leading-7 text-white/52">
+            홈의 실시간 톤을 유지하면서도, 발행일 기준 저장본을 한 번에 훑을 수 있는 인덱스입니다.
+          </p>
         </div>
-        <p className="section-intro max-w-sm">
-          홈 화면의 실시간 티커 없이, 발행일 기준으로 저장된 브리핑을 다시 읽을 수 있는 정적 인덱스입니다.
-        </p>
-      </div>
-      <div className="divide-y divide-white/8">
-        {items.map((item) => (
-          <Link
-            key={item.date}
-            href={`/archive/${item.date}`}
-            className="grid gap-5 py-6 transition hover:bg-white/[0.02] md:grid-cols-[170px_minmax(0,1fr)_110px] md:px-2"
-          >
-            <div className="space-y-2">
-              <p className="font-mono text-[11px] tracking-[0.22em] text-[var(--accent-primary)] uppercase">{item.date}</p>
-              <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--text-muted)] uppercase">
-                {item.generatedAt ? `${formatIssueTime(item.generatedAt)} KST` : "시각 없음"}
-              </p>
-            </div>
-            <p className="text-[1rem] leading-7 text-[var(--text-primary)] md:text-[1.12rem] md:leading-8">
-              {item.displayHeadline && hasUsableHeadline(item.displayHeadline)
-                ? item.displayHeadline
-                : item.headline && hasUsableHeadline(item.headline)
-                  ? displayHeadline(item.headline)
-                  : `${item.date} 발행본`}
-            </p>
-            <div className="md:text-right">
-              <span className="inline-flex rounded-full border border-white/10 px-3 py-1 font-mono text-[10px] tracking-[0.18em] text-[var(--text-secondary)] uppercase">
-                {qualityLabel(item.quality ?? "ok")}
-              </span>
-            </div>
-          </Link>
-        ))}
+
+        <div className="grid gap-4">
+          {items.map((item) => (
+            <Link
+              key={item.date}
+              href={`/archive/${item.date}`}
+              className="group rounded-[24px] border border-white/10 bg-white/[0.02] p-6 transition-all duration-300 hover:border-white/24 hover:bg-white/[0.04]"
+            >
+              <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-sm font-mono tracking-tight text-[#00ffff]">{item.date}</span>
+                    <span className="text-[10px] font-mono uppercase tracking-[0.22em] text-white/34">
+                      {item.generatedAt ? `${formatIssueTime(item.generatedAt)} KST` : "시각 없음"}
+                    </span>
+                  </div>
+                  <p className="max-w-4xl text-[1.05rem] leading-8 text-white md:text-[1.15rem]">
+                    {item.displayHeadline && hasUsableHeadline(item.displayHeadline)
+                      ? item.displayHeadline
+                      : item.headline && hasUsableHeadline(item.headline)
+                        ? displayHeadline(item.headline)
+                        : `${item.date} 발행본`}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="rounded-full border border-white/10 px-3 py-1 text-[9px] font-mono uppercase tracking-[0.18em] text-white/56">
+                      {qualityLabel(item.quality ?? "ok")}
+                    </span>
+                    {item.translationStatus ? (
+                      <span className="rounded-full border border-white/10 px-3 py-1 text-[9px] font-mono uppercase tracking-[0.18em] text-white/42">
+                        {translationLabel(item.translationStatus)}
+                      </span>
+                    ) : null}
+                    {(item.newsAll ?? 0) > 0 || (item.xSignalAll ?? 0) > 0 ? (
+                      <span className="rounded-full border border-white/10 px-3 py-1 text-[9px] font-mono uppercase tracking-[0.18em] text-white/42">
+                        뉴스 {item.newsAll ?? 0} · X {item.xSignalAll ?? 0}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 self-end text-[10px] font-mono uppercase tracking-[0.22em] text-white/34 transition group-hover:text-white">
+                  <span>열기</span>
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
       </div>
     </section>
   );

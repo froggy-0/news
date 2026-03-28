@@ -19,6 +19,14 @@ export function formatIssueDate(value: string): string {
   return dateFormatter.format(new Date(value));
 }
 
+export function formatPublicationDate(value: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return dateFormatter.format(new Date(`${value}T09:00:00+09:00`));
+  }
+
+  return dateFormatter.format(new Date(value));
+}
+
 export function formatIssueTime(value: string): string {
   return timeFormatter.format(new Date(value));
 }
@@ -48,6 +56,16 @@ export function qualityLabel(value: "ok" | "degraded" | "critical"): string {
     return "신뢰도 낮음";
   }
   return "정상 수집";
+}
+
+export function translationLabel(value: "ok" | "partial" | "failed"): string {
+  if (value === "partial") {
+    return "일부 번역";
+  }
+  if (value === "failed") {
+    return "번역 실패";
+  }
+  return "번역 정상";
 }
 
 export function displayHeadline(value: string): string {

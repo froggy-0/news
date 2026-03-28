@@ -1,9 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { ArrowRight, Loader2, Mail } from "lucide-react";
 
 import { SubscriptionState } from "@/components/ui/SubscriptionState";
-import type { RequestSubscriptionPayload, RequestSubscriptionResponse } from "@/lib/subscriptions/contracts";
+import type {
+  RequestSubscriptionPayload,
+  RequestSubscriptionResponse,
+} from "@/lib/subscriptions/contracts";
 
 export function SubscriptionForm() {
   const [email, setEmail] = useState("");
@@ -41,41 +45,44 @@ export function SubscriptionForm() {
   }
 
   return (
-    <section className="section-shell rounded-[8px] px-5 py-6 md:px-8 md:py-8">
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-2">
-          <p className="section-title">Newsletter</p>
-          <h2 className="section-headline max-w-3xl">발행 즉시 메일로 받아보세요.</h2>
-          <p className="copy-block max-w-2xl">
-            이메일을 남기면 확인 메일을 보냅니다. 메일 안의 링크를 눌러야 다음 발송부터 받아볼 수 있습니다.
-          </p>
-        </div>
-        <form onSubmit={handleSubmit} className="flex w-full max-w-xl flex-col gap-3">
-          <label className="eyebrow" htmlFor="newsletter-email">
-            이메일 주소
-          </label>
-          <div className="flex flex-col gap-3 md:flex-row">
-            <input
-              id="newsletter-email"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@example.com"
-              className="min-h-[48px] flex-1 rounded-full border border-white/12 bg-white/5 px-5 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
-              required
-            />
-            <button
-              type="submit"
-              disabled={submitting}
-              className="min-h-[48px] rounded-full bg-[var(--accent-primary)] px-5 py-3 font-mono text-[11px] tracking-[0.18em] text-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {submitting ? "보내는 중" : "구독 신청"}
-            </button>
-          </div>
-          {message ? <SubscriptionState tone="success">{message}</SubscriptionState> : null}
-          {error ? <SubscriptionState tone="danger">{error}</SubscriptionState> : null}
-        </form>
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <div className="relative group">
+        <label className="sr-only" htmlFor="newsletter-email">
+          이메일 주소
+        </label>
+        <input
+          id="newsletter-email"
+          type="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          placeholder="이메일 주소"
+          className="h-14 w-full border border-white/20 bg-black px-4 pr-11 text-sm tracking-tight text-white outline-none transition placeholder:text-white/28 focus:border-[#00ffff] focus:ring-1 focus:ring-[#00ffff]"
+          required
+        />
+        <Mail className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/20 transition group-focus-within:text-[#00ffff]" />
       </div>
-    </section>
+      <button
+        type="submit"
+        disabled={submitting}
+        className="group flex h-14 w-full items-center justify-center gap-2 bg-white px-4 text-sm font-bold tracking-tight text-black transition hover:bg-[#00ffff] disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {submitting ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            처리 중
+          </>
+        ) : (
+          <>
+            무료로 주권 확보하기
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+          </>
+        )}
+      </button>
+      <p className="text-[11px] leading-5 text-white/45">
+        확인 메일의 링크를 눌러야 다음 발송부터 브리프를 받을 수 있습니다.
+      </p>
+      {message ? <SubscriptionState tone="success">{message}</SubscriptionState> : null}
+      {error ? <SubscriptionState tone="danger">{error}</SubscriptionState> : null}
+    </form>
   );
 }

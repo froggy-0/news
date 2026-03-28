@@ -1,99 +1,53 @@
 import type { XSignal } from "@schema/brief.types";
 
-import { DataState } from "@/components/ui/DataState";
-import { Reveal } from "@/components/ui/Reveal";
-import { formatRelativeTime } from "@/lib/format";
-
-const HANGUL_RE = /[가-힣]/;
-
-function containsKorean(text: string | null | undefined): boolean {
-  return Boolean(text && HANGUL_RE.test(text));
-}
-
-function sentimentLabel(value: XSignal["sentiment"]): string {
-  if (value === "bullish") {
-    return "상방";
-  }
-  if (value === "bearish") {
-    return "하방";
-  }
-  return "중립";
-}
+import { XSignalsClient } from "./XSignalsClient";
+import { XSignalsList } from "./XSignalsList";
 
 export function XSignals({
-  items,
-  limit,
+  featuredItems,
+  allItems,
+  variant = "home",
   showRawToggle = false,
 }: {
-  items: XSignal[] | null;
-  limit?: number;
+  featuredItems: XSignal[] | null;
+  allItems: XSignal[] | null;
+  variant?: "home" | "detail";
   showRawToggle?: boolean;
 }) {
-  if (!items || items.length === 0) {
+  const featured = featuredItems ?? [];
+  const all = allItems ?? [];
+
+  if (featured.length === 0 && all.length === 0) {
     return null;
   }
 
-  const visibleItems = typeof limit === "number" ? items.slice(0, limit) : items;
+  if (variant === "home") {
+    return <XSignalsClient featuredItems={featured} allItems={all} />;
+  }
 
   return (
-    <Reveal className="section-shell rounded-[8px] px-5 py-6 md:px-8 md:py-8">
-      <div className="mb-8 flex flex-col gap-3 border-b border-white/10 pb-6 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="section-title">공식 X 시그널</p>
-          <h2 className="section-headline mt-4 max-w-4xl">
-            공식 채널에서 먼저 나온 문장을 짧게 읽고, 시장 영향만 남깁니다.
-          </h2>
+    <section id="signals" className="border-b border-white/10 px-6 py-16">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-10">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div className="space-y-1">
+            <h2 className="text-[11px] font-mono uppercase tracking-[0.4em] text-white/60">
+              전체 X 시그널
+            </h2>
+            <span className="text-[9px] font-mono uppercase tracking-[0.26em] text-white/28">
+              Full Signal Flow
+            </span>
+          </div>
+          <p className="max-w-md text-sm leading-7 text-white/52">
+            상세 페이지에서는 전체 시그널을 다시 읽고, 필요하면 원문 표현도 함께 확인할 수 있습니다.
+          </p>
         </div>
-        <p className="section-intro max-w-sm">
-          {typeof limit === "number"
-            ? "홈에서는 방향을 바꿀 수 있는 핵심 시그널만 선별해 이어서 읽게 합니다."
-            : "상세에서는 전체 시그널을 다시 읽고, 필요하면 원문 표현도 함께 확인할 수 있습니다."}
-        </p>
+
+        <XSignalsList
+          items={all}
+          showRawToggle={showRawToggle}
+          emptyMessage="이번 집계에서는 전체 X 시그널을 확인하지 못했어요."
+        />
       </div>
-
-      {visibleItems.length === 0 ? (
-        <DataState message="이번 집계에서는 공식 X 시그널을 확인하지 못했어요." />
-      ) : (
-        <div className="divide-y divide-white/8">
-          {visibleItems.map((item) => {
-            const displayContent = item.content?.trim() || item.rawContent?.trim() || "";
-            const displayImpact = item.impact?.trim() || null;
-            const rawContent = item.rawContent ?? (!containsKorean(item.content) ? item.content : null);
-
-            return (
-              <article key={item.id} className="grid gap-5 py-6 md:grid-cols-[156px_1fr]">
-                <div className="space-y-3">
-                  <p className="font-mono text-[11px] tracking-[0.22em] text-[var(--accent-primary)] uppercase">
-                    {formatRelativeTime(item.postedAt)}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <span className="inline-flex rounded-full border border-white/10 px-3 py-1 font-mono text-[10px] tracking-[0.18em] text-[var(--text-secondary)] uppercase">
-                      {sentimentLabel(item.sentiment)}
-                    </span>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <p className="text-[1rem] leading-7 text-[var(--text-primary)] md:text-[1.05rem] md:leading-8">{displayContent}</p>
-                  {displayImpact ? (
-                    <div className="rounded-[8px] border border-white/8 bg-white/[0.03] px-4 py-4">
-                      <p className="section-title">시장 영향</p>
-                      <p className="copy-block mt-3">{displayImpact}</p>
-                    </div>
-                  ) : null}
-                  {showRawToggle && rawContent && rawContent !== displayContent ? (
-                    <details className="rounded-[8px] border border-white/8 bg-white/[0.02] px-4 py-4">
-                      <summary className="cursor-pointer font-mono text-[10px] tracking-[0.18em] text-[var(--text-muted)]">
-                        영문 원문 보기
-                      </summary>
-                      <p className="mt-3 text-sm leading-7 text-[var(--text-secondary)]">{rawContent}</p>
-                    </details>
-                  ) : null}
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      )}
-    </Reveal>
+    </section>
   );
 }
