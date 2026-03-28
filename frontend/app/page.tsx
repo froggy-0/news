@@ -6,7 +6,6 @@ import { TopicGrid } from "@/components/brief/TopicGrid";
 import { HomeHero } from "@/components/hero/HomeHero";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { StocksBoard } from "@/components/market/StocksBoard";
-import { MetadataSection } from "@/components/meta/MetadataSection";
 import { NewsFeed } from "@/components/news/NewsFeed";
 import { XSignals } from "@/components/signals/XSignals";
 import { buildHistoryEntries, buildMetaStatusCards } from "@/lib/history";
@@ -41,7 +40,6 @@ export default async function HomePage() {
       <TopicGrid items={brief.topicSummaries} variant="home" />
       <NewsFeed featuredItems={brief.featuredNews} allItems={brief.allNews} variant="home" />
       <XSignals featuredItems={brief.featuredXSignals} allItems={brief.allXSignals} variant="home" />
-      <MetadataSection meta={brief.meta} archiveHref={`/archive/${brief.meta.date}`} />
     </main>
   );
 }

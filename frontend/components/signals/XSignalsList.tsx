@@ -15,6 +15,12 @@ function sentimentTone(value: XSignal["sentiment"]): string {
   return "bg-white/10 text-white/56";
 }
 
+function sentimentLabel(value: XSignal["sentiment"]): string {
+  if (value === "bullish") return "상방";
+  if (value === "bearish") return "하방";
+  return "중립";
+}
+
 export function XSignalsList({
   items,
   showRawToggle = false,
@@ -37,10 +43,10 @@ export function XSignalsList({
         return (
           <article
             key={signal.id}
-            className="group relative flex min-h-[280px] flex-col justify-between overflow-hidden rounded-[22px] border border-white/10 bg-white/[0.02] p-6 transition-all duration-300 hover:bg-white/[0.04]"
+            className="card-signal group relative flex min-h-[240px] flex-col justify-between overflow-hidden rounded-[22px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.028),rgba(255,255,255,0.014))] p-6 transition-all duration-300 hover:bg-white/[0.04]"
           >
             <div
-              className={`absolute left-0 top-0 h-0.5 w-full ${
+              className={`card-signal-line absolute left-0 top-0 h-0.5 w-full ${
                 signal.sentiment === "bullish"
                   ? "bg-[#00ffff]/45"
                   : signal.sentiment === "bearish"
@@ -50,39 +56,35 @@ export function XSignalsList({
             />
 
             <div className="space-y-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04]">
-                    <XIcon className="h-4 w-4 text-white/42" />
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-xs font-bold tracking-tight text-white">Intelligence Node</span>
-                    <span className="text-[10px] font-mono text-white/42">@x_intel</span>
-                  </div>
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.03]">
+                  <XIcon className="h-3.5 w-3.5 text-white/34" />
                 </div>
-                <div className="flex flex-col items-end gap-2">
-                  <span className="text-[9px] font-mono uppercase tracking-[0.18em] text-white/32">
-                    {formatRelativeTime(signal.postedAt)}
-                  </span>
-                  <span className={`rounded-full px-2 py-1 text-[8px] font-mono uppercase tracking-[0.16em] ${sentimentTone(signal.sentiment)}`}>
-                    {signal.sentiment}
-                  </span>
-                </div>
+                <span className="text-[10px] font-mono uppercase tracking-[0.22em] text-white/28">
+                  Market Radar
+                </span>
               </div>
 
-              <p className="text-[13.5px] leading-7 text-white/88 transition-colors group-hover:text-white">
+              <p className="card-signal-copy text-[14px] leading-7 text-white/88 transition-colors group-hover:text-white">
                 {displayContent}
               </p>
             </div>
 
             <div className="mt-6 space-y-3 border-t border-white/10 pt-5">
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-1 rounded-full bg-[#00ffff]/60" />
-                <span className="text-[9px] font-mono uppercase tracking-[0.24em] text-white/32">
-                  영향력 분석
+              <div>
+                <span className="text-[9px] font-mono uppercase tracking-[0.24em] text-white/28">
+                  시장 함의
+                </span>
+                <p className="mt-2 text-[12px] leading-6 text-white/64">{signal.impact}</p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[10px] font-mono uppercase tracking-[0.18em] text-white/36">
+                <span>{formatRelativeTime(signal.postedAt)}</span>
+                <span className={`card-signal-pill rounded-full px-2 py-1 text-[8px] font-mono uppercase tracking-[0.16em] ${sentimentTone(signal.sentiment)}`}>
+                  {sentimentLabel(signal.sentiment)}
                 </span>
               </div>
-              <p className="text-[12px] leading-6 text-white/60">{signal.impact}</p>
+
               {showRawToggle && rawContent && rawContent !== displayContent ? (
                 <details className="rounded-[16px] border border-white/8 bg-black/25 px-4 py-3">
                   <summary className="cursor-pointer text-[10px] font-mono uppercase tracking-[0.18em] text-white/42">

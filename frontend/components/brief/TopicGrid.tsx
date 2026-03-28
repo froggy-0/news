@@ -1,4 +1,6 @@
-import React from "react";
+"use client";
+
+import React, { useEffect, useRef, useState } from "react";
 import { Activity, Coins, Cpu, Globe, TrendingUp } from "lucide-react";
 
 import type { TopicSummary } from "@schema/brief.types";
@@ -70,6 +72,21 @@ function themeIcon(topic: TopicSummary["topic"]) {
   return <Activity className="h-4 w-4" />;
 }
 
+function themeAccent(topic: TopicSummary["topic"]): string {
+  if (topic === "macro") return "from-[#9dff73]/90 to-[#00ff66]/18";
+  if (topic === "us-stocks") return "from-[#00ffff]/90 to-[#00ffff]/18";
+  if (topic === "bigtech") return "from-[#ffd36b]/88 to-[#ffd36b]/16";
+  if (topic === "bitcoin") return "from-[#ffb45c]/88 to-[#ff8a3d]/16";
+  return "from-white/55 to-white/10";
+}
+
+function animationDelayFor(index: number): string {
+  if (index === 0) return "100ms";
+  if (index === 1) return "760ms";
+  if (index === 2) return "1180ms";
+  return "1380ms";
+}
+
 export function TopicGrid({
   items,
   variant = "detail",
@@ -77,6 +94,38 @@ export function TopicGrid({
   items: TopicSummary[];
   variant?: "home" | "detail";
 }) {
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const [cardsActivated, setCardsActivated] = useState(false);
+
+  useEffect(() => {
+    const node = sectionRef.current;
+    if (!node || cardsActivated) {
+      return;
+    }
+
+    let activationTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          activationTimer = setTimeout(() => {
+            setCardsActivated(true);
+          }, 180);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.34 },
+    );
+
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      if (activationTimer) {
+        clearTimeout(activationTimer);
+      }
+    };
+  }, [cardsActivated]);
+
   const visibleItems = items
     .map((item) => ({
       item,
@@ -91,7 +140,7 @@ export function TopicGrid({
   }
 
   return (
-    <section id="map" className="border-b border-white/10 px-6 py-16">
+    <section ref={sectionRef} id="map" className="border-b border-white/10 px-6 py-16">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-10">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="flex flex-col gap-1">
@@ -100,62 +149,78 @@ export function TopicGrid({
               Contextual Analysis
             </span>
           </div>
-          <p className="max-w-md text-sm leading-7 text-white/52">
-            숫자와 기사보다 먼저, 오늘 장을 어떤 축으로 읽어야 하는지 해석 레이어를 먼저 제시합니다.
+          <p className="max-w-md text-[15px] leading-7 text-white/66">
+            오늘 장을 해석하는 네 개의 축을 먼저 제시하고, 그 뒤에 숫자와 기사로 내려갑니다.
           </p>
         </div>
         <div className={`grid gap-6 ${variant === "home" ? "md:grid-cols-2 xl:grid-cols-3" : "md:grid-cols-2"}`}>
           {visibleItems.map(({ item, summary, keyMetric, relatedStocks }, index) => (
             <article
               key={item.topic}
-              className="group relative overflow-hidden rounded-[22px] border border-white/10 bg-white/[0.02] transition-colors duration-300 hover:border-white/22"
+              className={`card-reading theme-card ${cardsActivated ? "theme-card--active" : ""} group relative overflow-hidden rounded-[26px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.015))] transition-colors duration-300 hover:border-white/22 ${
+                variant === "home" && index === 0 ? "md:col-span-2 xl:col-span-2" : ""
+              }`}
+              style={{ animationDelay: animationDelayFor(index) }}
             >
-              <div className="flex items-center justify-between border-b border-white/6 bg-white/[0.02] px-6 py-4">
+              <div className={`theme-card-accent-x absolute left-0 top-0 h-px w-full bg-gradient-to-r ${themeAccent(item.topic)}`} />
+              <div className={`theme-card-accent-y absolute left-0 top-0 h-full w-px bg-gradient-to-b ${themeAccent(item.topic)}`} />
+
+              <div className={`space-y-6 p-6 md:p-7 ${variant === "home" && index === 0 ? "xl:p-8" : ""}`}>
                 <div className="flex items-center gap-3">
-                  <div className="rounded-full border border-white/10 bg-white/[0.04] p-2 text-white/42 transition-colors group-hover:text-white/80">
+                  <div className="rounded-full border border-white/10 bg-white/[0.03] p-2 text-white/38 transition-colors group-hover:text-white/70">
                     {themeIcon(item.topic)}
                   </div>
-                  <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/60 transition-colors group-hover:text-white">
-                    {item.label}
-                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-mono uppercase tracking-[0.26em] text-white/28">
+                      {String(index + 1).padStart(2, "0")}
+                    </p>
+                    <h3 className="card-reading-meta mt-1 text-[12px] font-mono uppercase tracking-[0.24em] text-white/70">
+                      {item.label}
+                    </h3>
+                  </div>
                 </div>
-                <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-white/16">{String(index + 1).padStart(2, "0")}</span>
-              </div>
 
-              <div className="space-y-6 p-6">
-                <div className="space-y-2">
-                  <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/34">전략적 맥락</span>
-                  <p className="text-[13.5px] leading-7 text-white/78 transition-colors group-hover:text-white/92">
+                <div className={`space-y-3 ${variant === "home" && index === 0 ? "max-w-2xl" : ""}`}>
+                  <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/30">전략적 맥락</span>
+                  <p
+                    className={`card-reading-copy theme-card-copy text-white/90 transition-colors group-hover:text-white ${
+                      variant === "home" && index === 0
+                        ? "text-[16px] leading-8 md:text-[18px] md:leading-9"
+                        : "text-[15px] leading-8"
+                    }`}
+                  >
                     {summary}
                   </p>
                 </div>
 
-                {keyMetric ? (
-                  <div className="rounded-[18px] border border-white/10 bg-black/40 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-[9px] font-mono uppercase tracking-[0.26em] text-white/34">
-                        주요 지표
-                      </span>
-                      <div className="h-1 w-14 overflow-hidden rounded-full bg-white/10">
-                        <div className="h-full w-2/3 bg-[#00ffff]/60" />
+                {(keyMetric || relatedStocks.length > 0) && (
+                  <div className="flex flex-col gap-3 border-t border-white/8 pt-4">
+                    {keyMetric ? (
+                      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <span className="text-[9px] font-mono uppercase tracking-[0.26em] text-white/30">
+                          핵심 수치
+                        </span>
+                        <p className="card-reading-meta text-[12px] font-mono leading-6 text-white/76">{keyMetric}</p>
                       </div>
-                    </div>
-                    <p className="mt-3 text-[12px] font-mono font-bold leading-6 text-[#00ffff]">{keyMetric}</p>
-                  </div>
-                ) : null}
+                    ) : null}
 
-                {relatedStocks.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {relatedStocks.map((stock) => (
-                      <span
-                        key={stock}
-                        className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[9px] font-mono uppercase tracking-[0.14em] text-white/46"
-                      >
-                        {stock}
-                      </span>
-                    ))}
+                    {relatedStocks.length > 0 ? (
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                        <span className="text-[9px] font-mono uppercase tracking-[0.26em] text-white/24">
+                          Related
+                        </span>
+                        {relatedStocks.map((stock) => (
+                          <span
+                            key={stock}
+                            className="card-reading-meta text-[10px] font-mono uppercase tracking-[0.16em] text-white/44"
+                          >
+                            {stock}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
-                ) : null}
+                )}
               </div>
             </article>
           ))}

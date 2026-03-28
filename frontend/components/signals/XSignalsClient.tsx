@@ -1,8 +1,5 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
-
 import type { XSignal } from "@schema/brief.types";
 
 import { XSignalsList } from "./XSignalsList";
@@ -20,37 +17,32 @@ export function XSignalsClient({
   featuredItems: XSignal[];
   allItems: XSignal[];
 }) {
-  const [showAll, setShowAll] = useState(featuredItems.length === 0);
+  const items = featuredItems.length > 0 ? featuredItems : allItems;
 
   return (
     <section id="signals" className="border-b border-white/10 px-6 py-16">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-10">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="rounded-full bg-white/6 p-2">
+        <div className="flex flex-col gap-4">
+          <div className="flex items-start gap-3">
+            <div className="rounded-full bg-white/6 p-2.5">
               <XIcon />
             </div>
-            <div className="flex flex-col">
+            <div className="flex max-w-xl flex-col gap-1">
               <h2 className="text-[11px] font-mono uppercase tracking-[0.4em] text-white/60">
                 실시간 X 시그널
               </h2>
               <span className="text-[9px] font-mono uppercase tracking-[0.26em] text-white/28">
                 Fast-moving Commentary
               </span>
+              <p className="pt-2 text-[15px] leading-7 text-white/66">
+                기사보다 빠른 감도 변화와 시장 반응을 짧은 레이더 메모처럼 압축합니다.
+              </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowAll((value) => !value)}
-            className="flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-[10px] font-mono uppercase tracking-[0.22em] text-white/48 transition hover:border-white/24 hover:text-white"
-          >
-            {showAll ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-            <span>{showAll ? "추천 시그널" : "전체 보기"}</span>
-          </button>
         </div>
 
         <XSignalsList
-          items={showAll ? allItems : featuredItems}
+          items={items}
           emptyMessage="이번 집계에서는 공식 X 시그널을 확인하지 못했어요."
         />
       </div>

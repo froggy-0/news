@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import type { BitcoinSection } from "@schema/brief.types";
@@ -25,6 +28,29 @@ function compactBitcoinTone(kind: "bitcoin" | "fear" | "etf"): CSSProperties {
   };
 }
 
+function trendFromChange(change: string | null | undefined): "up" | "down" | "neutral" {
+  if (!change) {
+    return "neutral";
+  }
+
+  if (change.includes("-")) {
+    return "down";
+  }
+
+  if (change.includes("+")) {
+    return "up";
+  }
+
+  return "neutral";
+}
+
+function bitcoinCardDelayFor(index: number): string {
+  if (index === 0) return "160ms";
+  if (index === 1) return "620ms";
+  if (index === 2) return "920ms";
+  return "1140ms";
+}
+
 export function BitcoinPanel({
   bitcoin,
   variant = "detail",
@@ -32,11 +58,46 @@ export function BitcoinPanel({
   bitcoin: BitcoinSection;
   variant?: "home" | "detail";
 }) {
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const [cardsActivated, setCardsActivated] = useState(false);
   const etf = bitcoin.etf;
   const compactHome = variant === "home";
 
+  useEffect(() => {
+    if (!compactHome) {
+      return;
+    }
+
+    const node = sectionRef.current;
+    if (!node || cardsActivated) {
+      return;
+    }
+
+    let activationTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          activationTimer = setTimeout(() => {
+            setCardsActivated(true);
+          }, 220);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.38 },
+    );
+
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      if (activationTimer) {
+        clearTimeout(activationTimer);
+      }
+    };
+  }, [cardsActivated, compactHome]);
+
   return (
-    <section className="border-b border-white/10 px-6 py-16">
+    <section ref={sectionRef} className="border-b border-white/10 px-6 py-16">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="space-y-1">
@@ -56,39 +117,63 @@ export function BitcoinPanel({
           bitcoin.price || bitcoin.fearGreedIndex || etf ? (
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               {bitcoin.price ? (
-                <div className="border px-3 py-2.5" style={compactBitcoinTone("bitcoin")}>
-                  <p className="section-title">비트코인 현물</p>
-                  <div className="mt-2 flex items-center justify-between gap-3">
-                    <p className="numeric text-base text-white">{bitcoin.price}</p>
-                    <p className="text-[9px] font-mono text-[#00ffff]">{bitcoin.change ?? "보합"}</p>
+                <div
+                  className={cardsActivated ? "card-data market-heat-card market-heat-card--active" : "card-data market-heat-card"}
+                  data-trend={trendFromChange(bitcoin.change)}
+                  style={{ animationDelay: bitcoinCardDelayFor(0) }}
+                >
+                  <div className="border px-3 py-2.5" style={compactBitcoinTone("bitcoin")}>
+                    <p className="section-title">비트코인 현물</p>
+                    <div className="mt-2 flex items-center justify-between gap-3">
+                      <p className="numeric text-base text-white">{bitcoin.price}</p>
+                      <p className="text-[9px] font-mono text-[#00ffff]">{bitcoin.change ?? "보합"}</p>
+                    </div>
                   </div>
                 </div>
               ) : null}
 
               {bitcoin.fearGreedIndex ? (
-                <div className="border px-3 py-2.5" style={compactBitcoinTone("fear")}>
-                  <p className="section-title">공포탐욕</p>
-                  <div className="mt-2 flex items-center justify-between gap-3">
-                    <p className="numeric text-base text-white">{bitcoin.fearGreedIndex.value}/100</p>
-                    <p className="text-[9px] font-mono text-[#00ffff]">{bitcoin.fearGreedIndex.label}</p>
+                <div
+                  className={cardsActivated ? "card-data market-heat-card market-heat-card--active" : "card-data market-heat-card"}
+                  data-trend="neutral"
+                  style={{ animationDelay: bitcoinCardDelayFor(1) }}
+                >
+                  <div className="border px-3 py-2.5" style={compactBitcoinTone("fear")}>
+                    <p className="section-title">공포탐욕</p>
+                    <div className="mt-2 flex items-center justify-between gap-3">
+                      <p className="numeric text-base text-white">{bitcoin.fearGreedIndex.value}/100</p>
+                      <p className="text-[9px] font-mono text-[#00ffff]">{bitcoin.fearGreedIndex.label}</p>
+                    </div>
                   </div>
                 </div>
               ) : null}
 
               {etf?.totalHolding ? (
-                <div className="border px-3 py-2.5" style={compactBitcoinTone("etf")}>
-                  <p className="section-title">ETF 총 보유량</p>
-                  <div className="mt-2">
-                    <p className="numeric text-base text-white">{etf.totalHolding}</p>
+                <div
+                  className={cardsActivated ? "card-data market-heat-card market-heat-card--active" : "card-data market-heat-card"}
+                  data-trend="neutral"
+                  style={{ animationDelay: bitcoinCardDelayFor(2) }}
+                >
+                  <div className="border px-3 py-2.5" style={compactBitcoinTone("etf")}>
+                    <p className="section-title">ETF 총 보유량</p>
+                    <div className="mt-2">
+                      <p className="numeric text-base text-white">{etf.totalHolding}</p>
+                    </div>
                   </div>
                 </div>
               ) : null}
 
               {etf?.totalAum ? (
-                <div className="border px-3 py-2.5" style={compactBitcoinTone("etf")}>
-                  <p className="section-title">ETF 총 AUM</p>
-                  <div className="mt-2">
-                    <p className="numeric text-base text-white">{etf.totalAum}</p>
+                <div
+                  className={cardsActivated ? "card-data market-heat-card market-heat-card--active" : "card-data market-heat-card"}
+                  data-trend="neutral"
+                  style={{ animationDelay: bitcoinCardDelayFor(3) }}
+                >
+                  <div className="border px-3 py-2.5" style={compactBitcoinTone("etf")}>
+                    <p className="section-title">ETF 총 AUM</p>
+                    <div className="mt-2">
+                      <p className="numeric text-base text-white">{etf.totalAum}</p>
+                    </div>
                   </div>
                 </div>
               ) : null}

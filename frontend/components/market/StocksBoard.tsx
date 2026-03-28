@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import type { MarketSnapshot, TechStock, TickerItem } from "@schema/brief.types";
@@ -99,6 +102,18 @@ function StockCard({ stock }: { stock: TechStock }) {
   );
 }
 
+function metricDelayFor(index: number): string {
+  if (index === 0) return "140ms";
+  if (index === 1) return "620ms";
+  if (index === 2) return "920ms";
+  return "1140ms";
+}
+
+function stockDelayFor(index: number): string {
+  const delays = ["180ms", "560ms", "760ms", "930ms", "1090ms", "1240ms"];
+  return delays[index] ?? `${1240 + index * 120}ms`;
+}
+
 export function StocksBoard({
   snapshot,
   stocks,
@@ -108,10 +123,42 @@ export function StocksBoard({
   stocks: TechStock[];
   variant?: "home" | "detail";
 }) {
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const [metricsActivated, setMetricsActivated] = useState(false);
+
+  useEffect(() => {
+    const node = sectionRef.current;
+    if (!node || metricsActivated) {
+      return;
+    }
+
+    let activationTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          activationTimer = setTimeout(() => {
+            setMetricsActivated(true);
+          }, 220);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.38 },
+    );
+
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      if (activationTimer) {
+        clearTimeout(activationTimer);
+      }
+    };
+  }, [metricsActivated]);
+
   const compactMetrics = variant === "home" ? snapshot.items.slice(0, 4) : snapshot.items;
   const compactStocks = variant === "home" ? stocks.slice(0, 6) : stocks;
   return (
-    <section className="border-b border-white/10 px-6 py-16">
+    <section ref={sectionRef} className="border-b border-white/10 px-6 py-16">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="space-y-1">
@@ -148,8 +195,15 @@ export function StocksBoard({
               variant === "home" ? "lg:grid-cols-4" : "lg:grid-cols-4 xl:grid-cols-7"
             }`}
           >
-            {compactMetrics.map((item) => (
-              <MetricCard key={item.symbol} item={item} />
+            {compactMetrics.map((item, index) => (
+              <div
+                key={item.symbol}
+                className={metricsActivated ? "card-data market-heat-card market-heat-card--active" : "card-data market-heat-card"}
+                data-trend={item.trend ?? "neutral"}
+                style={{ animationDelay: metricDelayFor(index) }}
+              >
+                <MetricCard item={item} />
+              </div>
             ))}
           </div>
         )}
@@ -170,8 +224,15 @@ export function StocksBoard({
             <DataState message="이번 집계에서는 주요 기술주를 확인하지 못했어요." />
           ) : (
             <div className={`grid grid-cols-2 gap-3 ${variant === "home" ? "lg:grid-cols-3" : "xl:grid-cols-5"}`}>
-              {compactStocks.map((stock) => (
-                <StockCard key={stock.symbol} stock={stock} />
+              {compactStocks.map((stock, index) => (
+                <div
+                  key={stock.symbol}
+                  className={metricsActivated ? "card-data market-heat-card market-heat-card--active" : "card-data market-heat-card"}
+                  data-trend={stock.trend ?? "neutral"}
+                  style={{ animationDelay: stockDelayFor(index) }}
+                >
+                  <StockCard stock={stock} />
+                </div>
               ))}
             </div>
           )}

@@ -7,7 +7,6 @@ import { JudgmentBlock } from "@/components/brief/JudgmentBlock";
 import { TopicGrid } from "@/components/brief/TopicGrid";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { StocksBoard } from "@/components/market/StocksBoard";
-import { MetadataSection } from "@/components/meta/MetadataSection";
 import { NewsFeed } from "@/components/news/NewsFeed";
 import { XSignals } from "@/components/signals/XSignals";
 import { buildHistoryEntries, buildMetaStatusCards } from "@/lib/history";
@@ -72,7 +71,6 @@ export default async function ArchiveDetailPage({
           variant="detail"
           showRawToggle
         />
-        <MetadataSection meta={brief.meta} />
       </main>
     );
   } catch {
