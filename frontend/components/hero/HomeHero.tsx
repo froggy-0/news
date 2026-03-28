@@ -9,7 +9,7 @@ export function HomeHero({ brief }: { brief: BriefData }) {
   return (
     <section className="hero-stage">
       <div className="mx-auto w-full max-w-4xl px-6">
-        <div className="space-y-10">
+        <div className="mx-auto max-w-[44rem] space-y-10">
           <div className="space-y-6">
             <h1 className="text-[1.75rem] font-black leading-[1.05] tracking-[-0.08em] text-white md:text-[3.4rem]">
               <span>주권 있는</span>

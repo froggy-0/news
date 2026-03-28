@@ -18,7 +18,7 @@ function changeMagnitude(change: string | null | undefined): number {
   return match ? Math.abs(Number(match[0])) : 0;
 }
 
-function heatToneStyle(
+function compactHeatTone(
   trend: "up" | "down" | "neutral" | null,
   magnitude: number,
   maxMagnitude: number,
@@ -27,107 +27,73 @@ function heatToneStyle(
 
   if (trend === "up") {
     return {
-      background: `linear-gradient(135deg, rgba(0, 255, 255, ${0.08 + strength * 0.24}), rgba(10, 10, 10, 0.94) 74%)`,
-      borderColor: `rgba(0, 255, 255, ${0.16 + strength * 0.22})`,
+      borderColor: `rgba(0,255,170,${0.24 + strength * 0.22})`,
+      background: `linear-gradient(135deg, rgba(0,255,170,${0.2 + strength * 0.22}), rgba(6,20,18,0.96) 82%)`,
     };
   }
 
   if (trend === "down") {
     return {
-      background: `linear-gradient(135deg, rgba(255, 107, 107, ${0.08 + strength * 0.24}), rgba(10, 10, 10, 0.94) 74%)`,
-      borderColor: `rgba(255, 107, 107, ${0.16 + strength * 0.22})`,
+      borderColor: `rgba(255,107,107,${0.24 + strength * 0.22})`,
+      background: `linear-gradient(135deg, rgba(255,107,107,${0.2 + strength * 0.22}), rgba(24,8,8,0.96) 82%)`,
     };
   }
 
   return {
-    background: "linear-gradient(135deg, rgba(255,255,255,0.04), rgba(10,10,10,0.94) 74%)",
     borderColor: "rgba(255,255,255,0.08)",
+    background: "linear-gradient(135deg, rgba(255,255,255,0.05), rgba(10,10,10,0.96) 82%)",
   };
 }
 
-function sparklineColor(trend: "up" | "down" | "neutral" | null): string {
-  if (trend === "up") return "rgba(0,255,255,0.95)";
-  if (trend === "down") return "rgba(255,107,107,0.95)";
-  return "rgba(255,255,255,0.6)";
-}
-
-function Sparkline({ data, color }: { data: number[]; color: string }) {
-  if (data.length < 2) {
-    return null;
-  }
-
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const range = max - min || 1;
-  const width = 84;
-  const height = 24;
-  const points = data
-    .map((value, index) => {
-      const x = (index / (data.length - 1)) * width;
-      const y = height - ((value - min) / range) * height;
-      return `${x},${y}`;
-    })
-    .join(" ");
-
-  return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
-      <polyline
-        fill="none"
-        stroke={color}
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        points={points}
-      />
-    </svg>
-  );
-}
-
 function MetricCard({ item }: { item: TickerItem }) {
+  const direction = item.trend === "up" ? "상승" : item.trend === "down" ? "하락" : "보합";
   return (
     <div
-      className="overflow-hidden border p-4 transition-transform duration-300 hover:scale-[1.01]"
-      style={heatToneStyle(item.trend, changeMagnitude(item.change), 3.5)}
+      className="border px-3 py-2.5"
+      style={compactHeatTone(item.trend, changeMagnitude(item.change), 3.5)}
     >
-      <div className="flex flex-col gap-0.5">
-        <span className="truncate text-[8px] font-mono uppercase tracking-[0.16em] text-white/52">
-          {item.label}
-        </span>
-        <span className="text-lg font-mono leading-tight text-white">{item.value ?? "N/A"}</span>
-        <div className={`flex items-center gap-1 text-[9px] font-mono ${toneClass(item.trend)}`}>
-          <span>{item.change ?? "변동 없음"}</span>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <span className="truncate text-[8px] font-mono uppercase tracking-[0.16em] text-white/46">
+            {item.symbol}
+          </span>
+          <p className="truncate text-[11px] text-white/72">{item.label}</p>
+        </div>
+        <div className="text-right">
+          <span className="block text-base font-mono leading-tight text-white">{item.value ?? "N/A"}</span>
+          <div className={`mt-0.5 text-[9px] font-mono ${toneClass(item.trend)}`}>
+            <span>{item.change ?? direction}</span>
+          </div>
         </div>
       </div>
-      {item.history.length >= 2 ? (
-        <div className="mt-4">
-          <Sparkline data={item.history} color={sparklineColor(item.trend)} />
-        </div>
-      ) : null}
       {item.isCached ? (
-        <p className="mt-3 text-[8px] font-mono uppercase tracking-[0.22em] text-white/28">cached</p>
+        <p className="mt-2 text-[7px] font-mono uppercase tracking-[0.22em] text-white/28">cached</p>
       ) : null}
     </div>
   );
 }
 
 function StockCard({ stock }: { stock: TechStock }) {
+  const direction = stock.trend === "up" ? "상승" : stock.trend === "down" ? "하락" : "보합";
   return (
     <div
-      className="border p-4 transition-transform duration-300 hover:scale-[1.01]"
-      style={heatToneStyle(stock.trend, stock.absChangeNum ?? changeMagnitude(stock.change), 4)}
+      className="border px-3 py-2.5"
+      style={compactHeatTone(stock.trend, stock.absChangeNum ?? changeMagnitude(stock.change), 4)}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/36">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[9px] font-mono uppercase tracking-[0.18em] text-white/42">
             {stock.symbol}
           </p>
-          <p className="mt-1 text-sm text-white/72">{stock.name}</p>
+          <p className="truncate text-[11px] text-white/70">{stock.name}</p>
         </div>
-        <p className={`text-[10px] font-mono ${toneClass(stock.trend)}`}>{stock.change ?? "0.00%"}</p>
+        <div className="text-right">
+          <p className="numeric text-base text-white">{stock.price ?? "N/A"}</p>
+          <p className={`text-[9px] font-mono ${toneClass(stock.trend)}`}>{stock.change ?? direction}</p>
+        </div>
       </div>
-      <p className="numeric mt-3 text-xl text-white">{stock.price ?? "N/A"}</p>
       {stock.isCached ? (
-        <p className="mt-3 text-[8px] font-mono uppercase tracking-[0.22em] text-white/28">cached</p>
+        <p className="mt-2 text-[7px] font-mono uppercase tracking-[0.22em] text-white/28">cached</p>
       ) : null}
     </div>
   );
@@ -142,6 +108,8 @@ export function StocksBoard({
   stocks: TechStock[];
   variant?: "home" | "detail";
 }) {
+  const compactMetrics = variant === "home" ? snapshot.items.slice(0, 4) : snapshot.items;
+  const compactStocks = variant === "home" ? stocks.slice(0, 6) : stocks;
   return (
     <section className="border-b border-white/10 px-6 py-16">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
@@ -154,47 +122,55 @@ export function StocksBoard({
               Quantitative Pulse
             </p>
           </div>
-          <div className="flex items-center gap-4 text-[10px] font-mono uppercase tracking-[0.18em] text-white/42">
-            <span className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[#00ffff]" />
-              상승
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[#ff6b6b]" />
-              하락
-            </span>
-          </div>
+          {variant === "detail" ? (
+            <div className="flex items-center gap-4 text-[10px] font-mono uppercase tracking-[0.18em] text-white/42">
+              <span className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-[#00ffff]" />
+                상승
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-[#ff6b6b]" />
+                하락
+              </span>
+            </div>
+          ) : (
+            <p className="max-w-md text-sm leading-7 text-white/52">
+              티커와 방향만 빠르게 훑고, 자세한 맥락은 뉴스에서 읽도록 압축했습니다.
+            </p>
+          )}
         </div>
 
-        {snapshot.items.length === 0 ? (
+        {compactMetrics.length === 0 ? (
           <DataState message="이번 집계에서는 시장 지표를 확인하지 못했어요." />
         ) : (
           <div
             className={`grid grid-cols-2 gap-3 ${
-              variant === "home" ? "sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7" : "lg:grid-cols-4 xl:grid-cols-7"
+              variant === "home" ? "lg:grid-cols-4" : "lg:grid-cols-4 xl:grid-cols-7"
             }`}
           >
-            {snapshot.items.map((item) => (
+            {compactMetrics.map((item) => (
               <MetricCard key={item.symbol} item={item} />
             ))}
           </div>
         )}
 
-        <div className="section-shell rounded-[28px] p-6">
-          <div className="mb-6 flex items-center justify-between gap-4">
+        <div>
+          <div className="mb-4 flex items-center justify-between gap-4">
             <div>
               <p className="section-title">주요 기술주</p>
-              <p className="mt-2 text-sm leading-7 text-white/58">
-                홈에서는 고빈도 종목만 빠르게 스캔하고, 상세에서도 동일한 보드 체계를 유지합니다.
+              <p className="mt-1 text-[12px] leading-5 text-white/58">
+                {variant === "home"
+                  ? "대표 종목의 가격과 방향만 빠르게 확인합니다."
+                  : "홈에서는 고빈도 종목만 빠르게 스캔하고, 상세에서도 동일한 보드 체계를 유지합니다."}
               </p>
             </div>
             <span className="text-[9px] font-mono uppercase tracking-[0.22em] text-white/26">Tech Board</span>
           </div>
-          {stocks.length === 0 ? (
+          {compactStocks.length === 0 ? (
             <DataState message="이번 집계에서는 주요 기술주를 확인하지 못했어요." />
           ) : (
-            <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
-              {stocks.map((stock) => (
+            <div className={`grid grid-cols-2 gap-3 ${variant === "home" ? "lg:grid-cols-3" : "xl:grid-cols-5"}`}>
+              {compactStocks.map((stock) => (
                 <StockCard key={stock.symbol} stock={stock} />
               ))}
             </div>

@@ -52,11 +52,24 @@ export function TerminalPanel({ meta }: { meta: BriefMeta }) {
   const [lineTexts, setLineTexts] = useState<string[]>(lines.map(() => ""));
   const [currentLineIndex, setCurrentLineIndex] = useState(-1);
   const [showPrompt, setShowPrompt] = useState(false);
+  const [isActivated, setIsActivated] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const isInView = useInView(containerRef, { once: true, amount: 0.4 });
 
   useEffect(() => {
-    if (!isInView || currentLineIndex !== -1) {
+    const handleScroll = () => {
+      if (window.scrollY > 48) {
+        setIsActivated(true);
+      }
+    };
+
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    if (!isActivated || !isInView || currentLineIndex !== -1) {
       return;
     }
 
@@ -64,7 +77,7 @@ export function TerminalPanel({ meta }: { meta: BriefMeta }) {
       setCurrentLineIndex(0);
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [currentLineIndex, isInView]);
+  }, [currentLineIndex, isActivated, isInView]);
 
   useEffect(() => {
     if (currentLineIndex < 0 || currentLineIndex >= lines.length) {
@@ -110,7 +123,11 @@ export function TerminalPanel({ meta }: { meta: BriefMeta }) {
         <div className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/20">Terminal Session</div>
         <div className="w-10" />
       </div>
-      <div className="min-h-[170px] space-y-2 p-6 font-mono text-[11px] leading-relaxed">
+      <div
+        className={`min-h-[170px] space-y-2 p-6 font-mono text-[11px] leading-relaxed transition-opacity duration-300 ${
+          currentLineIndex >= 0 ? "opacity-100" : "opacity-0"
+        }`}
+      >
         {lines.map((line, index) => (
           <div
             key={`${line.text}-${index}`}

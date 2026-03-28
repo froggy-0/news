@@ -1,18 +1,52 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const frontendDir = process.cwd();
 const fixtureDir = path.join(frontendDir, "fixtures");
+const outputDir = path.resolve(frontendDir, "..", "output");
 const publicDir = path.join(frontendDir, "public");
 const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://example.com").replace(/\/$/, "");
 const dataBaseUrl = process.env.NEXT_PUBLIC_R2_BASE_URL ?? process.env.R2_BASE_URL ?? null;
 const useFixtureData = process.env.BRIEF_DATA_SOURCE === "fixture";
+const useOutputData = process.env.BRIEF_DATA_SOURCE === "output";
 const buildVersion =
   process.env.BRIEF_DATA_BUILD_ID ?? process.env.GITHUB_SHA ?? `local-${Date.now()}`;
+const outputBriefPattern = /^briefs_(\d{4}-\d{2}-\d{2})\.json$/;
 
 async function readLocalJson(name) {
   const raw = await readFile(path.join(fixtureDir, name), "utf8");
   return JSON.parse(raw);
+}
+
+async function readOutputJson(date) {
+  const raw = await readFile(path.join(outputDir, `briefs_${date}.json`), "utf8");
+  return JSON.parse(raw);
+}
+
+async function readOutputIndex() {
+  const entries = await readdir(outputDir, { withFileTypes: true });
+  const candidates = entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => outputBriefPattern.exec(entry.name)?.[1] ?? null)
+    .filter((date) => date !== null);
+  const validated = await Promise.all(
+    candidates.map(async (date) => {
+      try {
+        await readOutputJson(date);
+        return date;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const dates = validated
+    .filter((date) => date !== null)
+    .sort((left, right) => right.localeCompare(left));
+
+  return {
+    dates,
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 async function readRemoteJson(url) {
@@ -29,8 +63,13 @@ async function readIndex() {
   if (useFixtureData) {
     return readLocalJson("index.json");
   }
+  if (useOutputData) {
+    return readOutputIndex();
+  }
   if (!dataBaseUrl) {
-    throw new Error("NEXT_PUBLIC_R2_BASE_URL is required. Set BRIEF_DATA_SOURCE=fixture only for explicit fixture builds.");
+    throw new Error(
+      "NEXT_PUBLIC_R2_BASE_URL is required. Set BRIEF_DATA_SOURCE=fixture or output only for explicit local builds.",
+    );
   }
   return readRemoteJson(`${dataBaseUrl.replace(/\/$/, "")}/index.json`);
 }
@@ -39,8 +78,13 @@ async function readBrief(date) {
   if (useFixtureData) {
     return readLocalJson(`${date}.json`);
   }
+  if (useOutputData) {
+    return readOutputJson(date);
+  }
   if (!dataBaseUrl) {
-    throw new Error("NEXT_PUBLIC_R2_BASE_URL is required. Set BRIEF_DATA_SOURCE=fixture only for explicit fixture builds.");
+    throw new Error(
+      "NEXT_PUBLIC_R2_BASE_URL is required. Set BRIEF_DATA_SOURCE=fixture or output only for explicit local builds.",
+    );
   }
   return readRemoteJson(`${dataBaseUrl.replace(/\/$/, "")}/briefs/${date}.json`);
 }

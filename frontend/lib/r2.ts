@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { BriefData, BriefIndex } from "@schema/brief.types";
@@ -7,16 +7,50 @@ import type { BriefData, BriefIndex } from "@schema/brief.types";
 import { parseBriefData, parseBriefIndex } from "./brief-schema";
 
 const fixtureDir = path.join(process.cwd(), "fixtures");
+const outputDir = path.resolve(process.cwd(), "..", "output");
 const requestVersion =
   process.env.BRIEF_DATA_BUILD_ID ??
   process.env.GITHUB_SHA ??
   process.env.VERCEL_GIT_COMMIT_SHA ??
   `local-${Date.now()}`;
+const outputBriefPattern = /^briefs_(\d{4}-\d{2}-\d{2})\.json$/;
 
 async function readFixture<T>(name: string): Promise<T> {
   const fullPath = path.join(fixtureDir, name);
   const raw = await readFile(fullPath, "utf8");
   return JSON.parse(raw) as T;
+}
+
+async function readOutputBrief<T>(date: string): Promise<T> {
+  const fullPath = path.join(outputDir, `briefs_${date}.json`);
+  const raw = await readFile(fullPath, "utf8");
+  return JSON.parse(raw) as T;
+}
+
+async function readOutputIndex(): Promise<BriefIndex> {
+  const entries = await readdir(outputDir, { withFileTypes: true });
+  const candidates = entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => outputBriefPattern.exec(entry.name)?.[1] ?? null)
+    .filter((date): date is string => date !== null);
+  const validated = await Promise.all(
+    candidates.map(async (date) => {
+      try {
+        await readOutputBrief<unknown>(date);
+        return date;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const dates = validated
+    .filter((date): date is string => date !== null)
+    .sort((left, right) => right.localeCompare(left));
+
+  return {
+    dates,
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -42,6 +76,10 @@ function useFixtureData(): boolean {
   return process.env.BRIEF_DATA_SOURCE === "fixture";
 }
 
+function useOutputData(): boolean {
+  return process.env.BRIEF_DATA_SOURCE === "output";
+}
+
 function requirePublicBaseUrl(): string {
   const baseUrl = publicBaseUrl();
   if (!baseUrl) {
@@ -53,17 +91,27 @@ function requirePublicBaseUrl(): string {
 }
 
 export async function loadIndex(): Promise<BriefIndex> {
-  const payload = useFixtureData()
-    ? await readFixture<unknown>("index.json")
-    : await fetchJson<unknown>(`${requirePublicBaseUrl()}/index.json`);
-  return parseBriefIndex(payload);
+  if (useFixtureData()) {
+    return parseBriefIndex(await readFixture<unknown>("index.json"));
+  }
+
+  if (useOutputData()) {
+    return readOutputIndex();
+  }
+
+  return parseBriefIndex(await fetchJson<unknown>(`${requirePublicBaseUrl()}/index.json`));
 }
 
 export async function loadBriefByDate(date: string): Promise<BriefData> {
-  const payload = useFixtureData()
-    ? await readFixture<unknown>(`${date}.json`)
-    : await fetchJson<unknown>(`${requirePublicBaseUrl()}/briefs/${date}.json`);
-  return parseBriefData(payload);
+  if (useFixtureData()) {
+    return parseBriefData(await readFixture<unknown>(`${date}.json`));
+  }
+
+  if (useOutputData()) {
+    return parseBriefData(await readOutputBrief<unknown>(date));
+  }
+
+  return parseBriefData(await fetchJson<unknown>(`${requirePublicBaseUrl()}/briefs/${date}.json`));
 }
 
 export async function loadLatest(): Promise<BriefData> {

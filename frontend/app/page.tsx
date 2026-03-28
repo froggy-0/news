@@ -37,7 +37,7 @@ export default async function HomePage() {
         variant="home"
       />
       <StocksBoard snapshot={brief.marketSnapshot} stocks={brief.techStocks} variant="home" />
-      <BitcoinPanel bitcoin={brief.bitcoin} />
+      <BitcoinPanel bitcoin={brief.bitcoin} variant="home" />
       <TopicGrid items={brief.topicSummaries} variant="home" />
       <NewsFeed featuredItems={brief.featuredNews} allItems={brief.allNews} variant="home" />
       <XSignals featuredItems={brief.featuredXSignals} allItems={brief.allXSignals} variant="home" />

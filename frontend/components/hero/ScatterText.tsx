@@ -93,12 +93,16 @@ export function ScatterText({
         tempCtx.font = `900 ${resolvedFontSize}px Pretendard, Inter, sans-serif`;
       }
 
-      const measuredWidth = tempCtx.measureText(text).width;
-      const canvasWidth = Math.max(targetWidth + 120, Math.ceil(measuredWidth) + 120);
-      const canvasHeight = Math.max(180, Math.round(resolvedFontSize * 2.8));
+      const viewportWidth = Math.max(window.innerWidth, Math.ceil(rect.right) + 80);
+      const viewportHeight = Math.max(
+        Math.round(window.innerHeight * 0.52),
+        Math.round(resolvedFontSize * 4.4),
+      );
+      const canvasWidth = viewportWidth;
+      const canvasHeight = viewportHeight;
       const gap = 1.15;
-      const spreadX = Math.max(240, canvasWidth * 0.75);
-      const spreadY = Math.max(180, canvasHeight * 1.05);
+      const spreadX = Math.max(window.innerWidth * 1.8, canvasWidth * 1.4);
+      const spreadY = Math.max(window.innerHeight * 1.3, canvasHeight * 1.15);
 
       canvas.width = canvasWidth * dpr;
       canvas.height = canvasHeight * dpr;
@@ -118,16 +122,18 @@ export function ScatterText({
       offscreenCtx.clearRect(0, 0, canvasWidth, canvasHeight);
       offscreenCtx.font = `900 ${resolvedFontSize}px Pretendard, Inter, sans-serif`;
       offscreenCtx.fillStyle = color;
-      offscreenCtx.textAlign = "center";
+      offscreenCtx.textAlign = "left";
       offscreenCtx.textBaseline = "middle";
-      offscreenCtx.fillText(text, canvasWidth / 2, canvasHeight / 2);
+      offscreenCtx.fillText(text, rect.left, canvasHeight / 2);
 
       const pixels = offscreenCtx.getImageData(0, 0, canvasWidth, canvasHeight).data;
+      let minOriginX = Number.POSITIVE_INFINITY;
 
       for (let y = 0; y < canvasHeight; y += gap) {
         for (let x = 0; x < canvasWidth; x += gap) {
           const index = (Math.floor(y) * canvasWidth + Math.floor(x)) * 4;
           if (pixels[index + 3] > 128) {
+            minOriginX = Math.min(minOriginX, x);
             particles.push({
               x: x + (Math.random() * spreadX - spreadX / 2),
               y: y + (Math.random() * spreadY - spreadY / 2),
@@ -141,6 +147,16 @@ export function ScatterText({
           }
         }
       }
+
+      const originOffsetX = Number.isFinite(minOriginX) ? rect.left - minOriginX : 0;
+      particles.forEach((particle) => {
+        particle.x += originOffsetX;
+        particle.originX += originOffsetX;
+      });
+
+      canvas.style.width = `${canvasWidth}px`;
+      canvas.style.height = `${canvasHeight}px`;
+      canvas.style.left = `${-rect.left}px`;
 
       const animate = () => {
         ctx.clearRect(0, 0, canvasWidth, canvasHeight);
@@ -164,7 +180,7 @@ export function ScatterText({
           const distFromOrigin = Math.sqrt(
             (particle.originX - particle.x) ** 2 + (particle.originY - particle.y) ** 2,
           );
-          const opacity = animationReady ? Math.min(1, 2.4 - distFromOrigin / 150) : 1;
+          const opacity = animationReady ? Math.min(1, 2.4 - distFromOrigin / 150) : 0;
 
           ctx.globalAlpha = opacity;
           ctx.fillStyle = particle.color;

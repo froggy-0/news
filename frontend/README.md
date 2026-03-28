@@ -44,11 +44,14 @@
 - 계약 기준은 `../schema/brief.types.ts` 입니다.
 - 기본 동작은 공개 R2 JSON 기준입니다. `NEXT_PUBLIC_R2_BASE_URL` 없이 앱을 빌드하거나 실행하지 않습니다.
 - fixture 는 테스트/디자인 확인용으로만 남기며, `BRIEF_DATA_SOURCE=fixture` 를 명시했을 때만 사용합니다.
+- 실제 생성 JSON을 로컬에서 직접 확인할 때는 `BRIEF_DATA_SOURCE=output` 으로 `../output/briefs_YYYY-MM-DD.json` 파일을 읽습니다.
 - 구독/확인/해지 흐름은 `functions/api/subscriptions/*` 에서 처리하며, 브라우저는 Supabase에 직접 접근하지 않습니다.
 - 예시:
   - 실데이터 개발: `NEXT_PUBLIC_R2_BASE_URL='https://pub-...r2.dev' npm run dev`
   - fixture 개발: `npm run dev:fixture`
+  - output 개발: `npm run dev:output`
   - fixture build: `npm run build:fixture`
+  - output build: `npm run build:output`
 
 ## 구독 기능 운영
 

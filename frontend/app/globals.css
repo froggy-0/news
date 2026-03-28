@@ -243,7 +243,8 @@ section[id] {
   position: relative;
   display: inline-flex;
   min-height: 86px;
-  width: 100%;
+  width: max-content;
+  max-width: 100%;
   align-items: center;
   overflow: visible;
 }
@@ -267,10 +268,10 @@ section[id] {
 .scatter-text-canvas {
   pointer-events: none;
   position: absolute;
-  left: 50%;
+  left: 0;
   top: 50%;
   max-width: none;
-  transform: translate(-50%, -50%);
+  transform: translateY(-50%);
 }
 
 .markdown-body {

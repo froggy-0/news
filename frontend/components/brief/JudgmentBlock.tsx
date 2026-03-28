@@ -35,20 +35,17 @@ export function JudgmentBlock({
   return (
     <section id="brief" className={`${variant === "home" ? "px-6 py-16" : "border-b border-white/10 px-6 py-16"}`}>
       <div className={`mx-auto w-full ${variant === "home" ? "max-w-4xl" : "max-w-6xl"} space-y-12`}>
-        <div className="space-y-5">
-          <div className="flex flex-wrap items-center gap-3 text-[10px] font-mono uppercase tracking-[0.36em] text-white/40">
-            <div className="flex items-center gap-2">
-              <div className="h-1.5 w-1.5 rounded-full bg-[#00ff66] shadow-[0_0_10px_rgba(0,255,102,0.65)]" />
-              <span className="font-bold text-white/62">실시간 인텔리전스</span>
+        <div className="space-y-6">
+          <div className={`relative pl-6 md:pl-10 ${variant === "home" ? "max-w-3xl" : "max-w-4xl"}`}>
+            <div className="absolute left-0 top-0 h-full w-px bg-gradient-to-b from-[#00ff66] via-[#00ff66]/40 to-transparent" />
+            <div className="absolute left-0 top-0 h-px w-4 bg-[#00ff66]" />
+            <div className="space-y-4">
+              <h2 className="text-[9px] font-mono uppercase tracking-[0.38em] text-[#00ff66]/80">
+                브리프 헤드라인
+              </h2>
+              <p className="text-base leading-8 text-white/88 md:text-lg md:leading-9">{cleanHeadline}</p>
             </div>
-            <span className="h-1 w-1 rounded-full bg-white/10" />
-            <span>{formatPublicationDate(issueDate)}</span>
-            <span className="h-1 w-1 rounded-full bg-white/10" />
-            <span>{formatIssueTime(generatedAt)} KST</span>
           </div>
-          <h2 className={variant === "home" ? "display-headline" : "display-headline max-w-5xl"}>
-            {cleanHeadline}
-          </h2>
         </div>
 
         <div className={`space-y-8 ${variant === "detail" ? "max-w-4xl" : ""}`}>
