@@ -32,8 +32,18 @@ class _FakeClient:
 
 def test_list_active_recipients_returns_mapped_records(monkeypatch):
     fake_data = [
-        {"id": "sub_1", "email": "one@example.com", "newsletter": "morning-brief", "status": "active"},
-        {"id": "sub_2", "email": "two@example.com", "newsletter": "morning-brief", "status": "active"},
+        {
+            "id": "sub_1",
+            "email": "one@example.com",
+            "newsletter": "morning-brief",
+            "status": "active",
+        },
+        {
+            "id": "sub_2",
+            "email": "two@example.com",
+            "newsletter": "morning-brief",
+            "status": "active",
+        },
     ]
 
     monkeypatch.setattr(

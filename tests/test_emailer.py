@@ -108,12 +108,15 @@ def test_gmail_sender_sends_each_active_recipient_individually(monkeypatch):
         lambda: (object(), object(), object(), lambda *args, **kwargs: _FakeService()),
     )
 
-    sender.send(subject="테스트 브리핑", body="## Section 0\n\n시장 점검\n", packet={"date": "2026-03-28"})
+    sender.send(
+        subject="테스트 브리핑", body="## Section 0\n\n시장 점검\n", packet={"date": "2026-03-28"}
+    )
 
     assert len(sent_raw_messages) == 2
 
     decoded_messages = [
-        message_from_bytes(base64.urlsafe_b64decode(raw.encode("utf-8"))) for raw in sent_raw_messages
+        message_from_bytes(base64.urlsafe_b64decode(raw.encode("utf-8")))
+        for raw in sent_raw_messages
     ]
 
     assert decoded_messages[0]["to"] == "reader1@example.com"
@@ -136,4 +139,6 @@ def test_gmail_sender_skips_when_no_active_recipients(monkeypatch):
     monkeypatch.setattr(sender, "_subscription_repository", lambda: FakeRepository())
     monkeypatch.setattr(sender, "_load_credentials", _unexpected_credentials_load)
 
-    sender.send(subject="테스트 브리핑", body="## Section 0\n\n시장 점검\n", packet={"date": "2026-03-28"})
+    sender.send(
+        subject="테스트 브리핑", body="## Section 0\n\n시장 점검\n", packet={"date": "2026-03-28"}
+    )
