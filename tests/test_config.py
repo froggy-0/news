@@ -3,6 +3,8 @@ from __future__ import annotations
 from morning_brief.config import (
     DEFAULT_OPENAI_MODEL,
     DEFAULT_PROMPT_TEMPLATE_VERSION,
+    DEFAULT_SUBSCRIPTION_NEWSLETTER_KEY,
+    DEFAULT_SUBSCRIPTION_UNSUBSCRIBE_PATH,
     load_settings,
 )
 
@@ -118,3 +120,19 @@ def test_r2_public_settings_loaded(monkeypatch):
     assert settings.r2_s3_endpoint == "https://example.r2.cloudflarestorage.com"
     assert settings.r2_access_key_id == "key-id"
     assert settings.r2_secret_access_key == "secret"
+
+
+def test_subscription_settings_loaded(monkeypatch):
+    monkeypatch.setenv("PUBLIC_APP_BASE_URL", "https://brief.example.com/")
+    monkeypatch.setenv("SUBSCRIPTION_TOKEN_SECRET", "token-secret")
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service-role-key")
+
+    settings = load_settings()
+
+    assert settings.public_app_base_url == "https://brief.example.com"
+    assert settings.subscription_newsletter_key == DEFAULT_SUBSCRIPTION_NEWSLETTER_KEY
+    assert settings.subscription_unsubscribe_path == DEFAULT_SUBSCRIPTION_UNSUBSCRIBE_PATH
+    assert settings.subscription_token_secret == "token-secret"
+    assert settings.supabase_url == "https://example.supabase.co"
+    assert settings.supabase_service_role_key == "service-role-key"

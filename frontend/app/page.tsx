@@ -5,6 +5,7 @@ import { JudgmentBlock } from "@/components/brief/JudgmentBlock";
 import { TopicGrid } from "@/components/brief/TopicGrid";
 import { QualityBanner } from "@/components/layout/QualityBanner";
 import { SiteHeader } from "@/components/layout/SiteHeader";
+import { SubscriptionForm } from "@/components/layout/SubscriptionForm";
 import { NewsFeed } from "@/components/news/NewsFeed";
 import { XSignals } from "@/components/signals/XSignals";
 import { fetchLatest } from "@/lib/r2";
@@ -69,6 +70,7 @@ export default async function HomePage() {
             </Link>
           </div>
         </section>
+        <SubscriptionForm />
       </section>
     </main>
   );

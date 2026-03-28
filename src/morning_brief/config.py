@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 
 DEFAULT_OPENAI_MODEL = "gpt-5-mini-2025-08-07"
 DEFAULT_PROMPT_TEMPLATE_VERSION = "market_brief_v4"
+DEFAULT_SUBSCRIPTION_NEWSLETTER_KEY = "morning-brief"
+DEFAULT_SUBSCRIPTION_UNSUBSCRIBE_PATH = "/unsubscribe"
 
 
 @dataclass(frozen=True)
@@ -47,10 +49,15 @@ class Settings:
     official_x_lookback_hours: int
     official_x_max_items: int
     gmail_sender: str
-    gmail_recipient: str
     gmail_credentials_file: Path
     gmail_token_file: Path
     gmail_oauth_interactive: bool
+    public_app_base_url: str
+    subscription_newsletter_key: str
+    subscription_unsubscribe_path: str
+    subscription_token_secret: str
+    supabase_url: str
+    supabase_service_role_key: str
     newsapi_key: str
     max_news_items: int
     output_dir: Path
@@ -178,7 +185,6 @@ def load_settings() -> Settings:
             maximum=6,
         ),
         gmail_sender=os.getenv("GMAIL_SENDER", "").strip(),
-        gmail_recipient=os.getenv("GMAIL_RECIPIENT", "").strip(),
         gmail_credentials_file=Path(
             os.getenv("GMAIL_CREDENTIALS_FILE", "credentials.json")
         ).resolve(),
@@ -187,6 +193,12 @@ def load_settings() -> Settings:
             "GMAIL_OAUTH_INTERACTIVE",
             default=not _env_bool("CI", False),
         ),
+        public_app_base_url=os.getenv("PUBLIC_APP_BASE_URL", "").strip().rstrip("/"),
+        subscription_newsletter_key=DEFAULT_SUBSCRIPTION_NEWSLETTER_KEY,
+        subscription_unsubscribe_path=DEFAULT_SUBSCRIPTION_UNSUBSCRIBE_PATH,
+        subscription_token_secret=os.getenv("SUBSCRIPTION_TOKEN_SECRET", "").strip(),
+        supabase_url=os.getenv("SUPABASE_URL", "").strip(),
+        supabase_service_role_key=os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip(),
         newsapi_key=os.getenv("NEWSAPI_KEY", "").strip(),
         max_news_items=_env_bounded_int("MAX_NEWS_ITEMS", default=5, minimum=3, maximum=5),
         output_dir=output_dir,
