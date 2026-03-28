@@ -8,6 +8,12 @@ from zoneinfo import ZoneInfo
 import morning_brief.public_site as public_site
 from morning_brief.config import load_settings
 from morning_brief.public_site import build_public_brief, build_public_index, publish_public_brief
+from morning_brief.unified_output import (
+    MetaLayer,
+    UnifiedOutput,
+    briefing_to_narrative,
+    packet_to_quantitative,
+)
 
 
 def _packet() -> dict:
@@ -219,7 +225,8 @@ def test_build_public_brief_matches_frontend_contract_shape() -> None:
     assert payload["featuredXSignals"][0]["rawContent"] is None
     assert payload["allNews"][0]["sourceTier"] == "tier1"
     assert payload["allNews"][0]["category"] == "macro"
-    assert payload["allNews"][0]["summaryKo"] == "고금리 환경이 성장주 할인율 부담을 키웁니다."
+    assert payload["allNews"][0]["summaryKo"] == "장기 금리가 다시 올랐습니다."
+    assert payload["allNews"][0]["interpretation"] == "고금리 환경이 성장주 할인율 부담을 키웁니다."
     assert payload["allNews"][0]["rawTitle"] is None
     assert payload["meta"]["sourceCounts"]["newsAll"] == 1
     assert payload["meta"]["sourceCounts"]["xSignalAll"] == 1
@@ -311,6 +318,119 @@ def test_build_public_brief_prefers_public_context_for_full_lists() -> None:
     assert len(payload["allXSignals"]) == 2
     assert payload["meta"]["sourceCounts"]["newsCandidates"] == 14
     assert payload["meta"]["sourceCounts"]["xSignalCandidates"] == 9
+
+
+def test_build_public_brief_drops_placeholder_featured_news_from_public_context() -> None:
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+    public_context = {
+        "all_news": [
+            {
+                "title": "국채 금리 방향성 점검",
+                "url": "https://www.reuters.com/world/us/treasury-yields-check",
+                "source": "Reuters",
+                "published_at": "2026-03-21T07:50:00+09:00",
+                "topic": "macro",
+                "source_tier": 1,
+                "summary": "해당 없음",
+                "why_it_matters": "해당 없음",
+            }
+        ],
+        "all_x_signals": [],
+        "source_counts": {
+            "newsCandidates": 1,
+            "newsRanked": 1,
+            "newsFeatured": 1,
+            "newsAll": 1,
+            "xSignalCandidates": 0,
+            "xSignalRanked": 0,
+            "xSignalFeatured": 0,
+            "xSignalAll": 0,
+        },
+    }
+
+    payload = build_public_brief(
+        packet=_packet(),
+        briefing=_briefing(),
+        run_at=run_at,
+        public_context=public_context,
+    )
+
+    assert payload["allNews"] == []
+    assert payload["featuredNews"] == []
+
+
+def test_build_public_brief_prefers_unified_news_over_polluted_public_context() -> None:
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+    filtered_context = {
+        "all_news": [
+            {
+                "title": "미국 장기 금리 반등으로 성장주 압박",
+                "url": "https://www.reuters.com/world/us/yields-pressure-growth",
+                "source": "Reuters",
+                "published_at": "2026-03-21T07:50:00+09:00",
+                "topic": "macro",
+                "source_tier": 1,
+                "summary": "장기 금리가 다시 오르며 기술주 부담이 커졌습니다.",
+                "why_it_matters": "고금리 환경이 성장주 할인율 부담을 키웁니다.",
+            }
+        ],
+        "all_x_signals": [
+            {
+                "headline": "ETF fee war chatter",
+                "summary": "ETF fee war chatter",
+                "why_it_matters": "단기 심리에 우호적일 수 있습니다.",
+                "sentiment": "bullish",
+                "posted_at": "2026-03-21T07:35:00+09:00",
+            }
+        ],
+        "source_counts": {
+            "newsCandidates": 1,
+            "newsRanked": 1,
+            "newsFeatured": 1,
+            "newsAll": 1,
+            "xSignalCandidates": 1,
+            "xSignalRanked": 1,
+            "xSignalFeatured": 1,
+            "xSignalAll": 1,
+        },
+    }
+    polluted_context = {
+        "all_news": [
+            {
+                "title": "ETF fee war chatter",
+                "url": "https://x.com/EricBalchunas/status/123",
+                "source": "@EricBalchunas",
+                "published_at": "2026-03-21T07:49:00+09:00",
+                "topic": "bitcoin",
+                "source_tier": 1,
+                "summary": "ETF fee war chatter",
+                "why_it_matters": "ETF fee war chatter",
+            }
+        ],
+        "all_x_signals": [],
+        "source_counts": filtered_context["source_counts"],
+    }
+    unified = UnifiedOutput(
+        quantitative=packet_to_quantitative(_packet()),
+        narrative=briefing_to_narrative(_briefing(), _packet(), filtered_context),
+        meta=MetaLayer(
+            run_at=run_at.isoformat(),
+            pipeline_version="2.0",
+            source_counts=filtered_context["source_counts"],
+            translation_status="ok",
+        ),
+    )
+
+    payload = build_public_brief(
+        packet=_packet(),
+        briefing=_briefing(),
+        run_at=run_at,
+        public_context=polluted_context,
+        unified=unified,
+    )
+
+    assert [item["source"] for item in payload["allNews"]] == ["Reuters"]
+    assert payload["featuredNews"][0]["source"] == "Reuters"
 
 
 def test_build_public_brief_hides_sparse_market_snapshot() -> None:
@@ -486,7 +606,7 @@ def test_build_public_brief_translation_batches_recover_from_partial_invalid_jso
     assert FakeOpenAI.calls > 1
     assert payload["meta"]["translationStatus"] == "partial"
     assert any(str(item["title"]).startswith("번역") for item in payload["featuredNews"])
-    assert any(str(item["title"]).startswith("English title") for item in payload["allNews"])
+    assert any(str(item["title"]).startswith("번역") for item in payload["allNews"])
 
 
 def test_publish_public_brief_writes_local_public_bundle(monkeypatch, tmp_path) -> None:
@@ -557,10 +677,94 @@ def test_build_public_brief_uses_source_text_instead_of_generic_copy() -> None:
         == "연준 점도표와 중동 변수로 장중 변동성이 커졌습니다."
     )
     assert payload["featuredNews"] == []
-    assert payload["allNews"][0]["title"] == "English-only title from source"
-    assert payload["featuredNews"] == []
+    assert payload["allNews"] == []
     assert payload["featuredXSignals"] is None
     assert payload["allXSignals"][0]["content"] == "English-only official signal"
+
+
+def test_build_public_brief_uses_generated_public_news_analysis_fields() -> None:
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+    public_context = {
+        "all_news": [
+            {
+                "title": "미국 장기 금리 반등으로 성장주 압박",
+                "url": "https://www.reuters.com/world/us/yields-pressure-growth",
+                "source": "Reuters",
+                "published_at": "2026-03-21T07:50:00+09:00",
+                "topic": "macro",
+                "source_tier": 1,
+                "summary": "Long-end yields rose.",
+                "why_it_matters": "Growth stocks face pressure.",
+                "summary_ko": "장기 금리가 오르면서 성장주 압박이 커졌습니다.",
+                "interpretation_ko": "고금리 부담이 기술주 선호를 약하게 만들 수 있습니다.",
+            }
+        ],
+        "all_x_signals": [],
+        "source_counts": {
+            "newsCandidates": 1,
+            "newsRanked": 1,
+            "newsFeatured": 1,
+            "newsAll": 1,
+            "xSignalCandidates": 0,
+            "xSignalRanked": 0,
+            "xSignalFeatured": 0,
+            "xSignalAll": 0,
+        },
+    }
+
+    payload = build_public_brief(
+        packet=_packet(),
+        briefing=_briefing(),
+        run_at=run_at,
+        public_context=public_context,
+    )
+
+    assert payload["allNews"][0]["summaryKo"] == "장기 금리가 오르면서 성장주 압박이 커졌습니다."
+    assert (
+        payload["allNews"][0]["interpretation"]
+        == "고금리 부담이 기술주 선호를 약하게 만들 수 있습니다."
+    )
+
+
+def test_build_public_brief_filters_all_news_when_summary_or_interpretation_is_missing() -> None:
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+    public_context = {
+        "all_news": [
+            {
+                "title": "미국 장기 금리 반등으로 성장주 압박",
+                "url": "https://www.reuters.com/world/us/yields-pressure-growth",
+                "source": "Reuters",
+                "published_at": "2026-03-21T07:50:00+09:00",
+                "topic": "macro",
+                "source_tier": 1,
+                "summary": "Long-end yields rose.",
+                "why_it_matters": "Growth stocks face pressure.",
+                "summary_ko": "장기 금리가 오르면서 성장주 압박이 커졌습니다.",
+                "interpretation_ko": "해당 없음",
+            }
+        ],
+        "all_x_signals": [],
+        "source_counts": {
+            "newsCandidates": 1,
+            "newsRanked": 1,
+            "newsFeatured": 1,
+            "newsAll": 1,
+            "xSignalCandidates": 0,
+            "xSignalRanked": 0,
+            "xSignalFeatured": 0,
+            "xSignalAll": 0,
+        },
+    }
+
+    payload = build_public_brief(
+        packet=_packet(),
+        briefing=_briefing(),
+        run_at=run_at,
+        public_context=public_context,
+    )
+
+    assert payload["allNews"] == []
+    assert payload["featuredNews"] == []
 
 
 def test_build_public_brief_skips_translation_when_only_single_low_value_topic_summary_remains(

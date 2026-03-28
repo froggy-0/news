@@ -21,6 +21,8 @@ class Settings:
     openai_brief_validation_enabled: bool
     openai_brief_validation_model: str
     openai_public_translation_model: str
+    openai_public_news_analysis_enabled: bool
+    openai_public_news_analysis_model: str
     openai_brief_max_rewrites: int
     gemini_api_key: str
     gemini_model: str
@@ -112,6 +114,10 @@ def load_settings() -> Settings:
         openai_brief_validation_model=os.getenv("OPENAI_BRIEF_VALIDATION_MODEL", "").strip()
         or os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL).strip(),
         openai_public_translation_model=os.getenv("OPENAI_PUBLIC_TRANSLATION_MODEL", "").strip()
+        or os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL).strip(),
+        openai_public_news_analysis_enabled=_env_bool("OPENAI_PUBLIC_NEWS_ANALYSIS_ENABLED", True),
+        openai_public_news_analysis_model=os.getenv("OPENAI_PUBLIC_NEWS_ANALYSIS_MODEL", "").strip()
+        or os.getenv("OPENAI_PUBLIC_TRANSLATION_MODEL", "").strip()
         or os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL).strip(),
         openai_brief_max_rewrites=_env_bounded_int(
             "OPENAI_BRIEF_MAX_REWRITES",

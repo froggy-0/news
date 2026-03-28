@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from morning_brief import research_backfill as rb
 from morning_brief.config import load_settings
+from morning_brief.data import news_selection
 from morning_brief.observability import PipelineObserver
 from morning_brief.research_backfill import (
     _extract_web_citations,
@@ -313,6 +314,147 @@ def test_backfill_news_with_web_search_uses_source_only_fallback(monkeypatch, tm
     assert events[0]["reason"] == "source_only_fallback"
     assert events[0]["extra_item_count"] == 1
     assert events[0]["items"][0]["domain"] == "reuters.com"
+
+
+def test_backfill_news_with_web_search_keeps_using_generic_publish_filter(monkeypatch, tmp_path):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_WEB_SEARCH_ENABLED", "true")
+    settings = load_settings()
+    observer = PipelineObserver(output_dir=tmp_path)
+    packet = {
+        "news": [],
+        "macro": [],
+        "us_indices": [],
+        "tech_stocks": [],
+        "bitcoin": {
+            "spot": {},
+            "official_etf_total_btc": None,
+            "official_etf_daily_flow_btc": None,
+        },
+    }
+    quality = {
+        "status": "degraded",
+        "news_count": 0,
+        "preferred_news_count": 0,
+        "tier_1_news_count": 0,
+        "unique_news_domains": 0,
+        "fresh_news_count": 0,
+    }
+    response = SimpleNamespace(
+        output_text="",
+        output=[
+            SimpleNamespace(
+                type="web_search_call",
+                action=SimpleNamespace(
+                    sources=[
+                        SimpleNamespace(
+                            title="Fed officials keep rate path open",
+                            url="https://www.reuters.com/world/us/fed-officials-keep-rate-path-open/",
+                        )
+                    ]
+                ),
+            )
+        ],
+    )
+    calls: list[list[str]] = []
+
+    def tracked_filter(items):
+        calls.append([item.url for item in items])
+        return news_selection.filter_publish_news_candidates(items)
+
+    monkeypatch.setattr(rb, "OpenAI", lambda api_key: _FakeOpenAIClient(response))
+    monkeypatch.setattr(
+        rb,
+        "render_web_search_prompts",
+        lambda **kwargs: ("instructions", "user prompt"),
+    )
+    monkeypatch.setattr(rb, "build_prompt_cache_key", lambda **kwargs: "cache-key")
+    monkeypatch.setattr(rb, "filter_publish_news_candidates", tracked_filter)
+
+    merged_news, references = backfill_news_with_web_search(
+        packet=packet,
+        quality=quality,
+        settings=settings,
+        observer=observer,
+    )
+
+    assert len(merged_news) == 1
+    assert references == [
+        {
+            "title": "Fed officials keep rate path open",
+            "url": "https://www.reuters.com/world/us/fed-officials-keep-rate-path-open/",
+        }
+    ]
+    assert calls == [["https://www.reuters.com/world/us/fed-officials-keep-rate-path-open/"]]
+
+
+def test_backfill_news_with_web_search_does_not_call_public_news_analysis(monkeypatch, tmp_path):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_WEB_SEARCH_ENABLED", "true")
+    settings = load_settings()
+    observer = PipelineObserver(output_dir=tmp_path)
+    packet = {
+        "news": [],
+        "macro": [],
+        "us_indices": [],
+        "tech_stocks": [],
+        "bitcoin": {
+            "spot": {},
+            "official_etf_total_btc": None,
+            "official_etf_daily_flow_btc": None,
+        },
+    }
+    quality = {
+        "status": "degraded",
+        "news_count": 0,
+        "preferred_news_count": 0,
+        "tier_1_news_count": 0,
+        "unique_news_domains": 0,
+        "fresh_news_count": 0,
+    }
+    response = SimpleNamespace(
+        output_text="",
+        output=[
+            SimpleNamespace(
+                type="web_search_call",
+                action=SimpleNamespace(
+                    sources=[
+                        SimpleNamespace(
+                            title="Fed officials keep rate path open",
+                            url="https://www.reuters.com/world/us/fed-officials-keep-rate-path-open/",
+                        )
+                    ]
+                ),
+            )
+        ],
+    )
+
+    monkeypatch.setattr(rb, "OpenAI", lambda api_key: _FakeOpenAIClient(response))
+    monkeypatch.setattr(
+        rb,
+        "render_web_search_prompts",
+        lambda **kwargs: ("instructions", "user prompt"),
+    )
+    monkeypatch.setattr(rb, "build_prompt_cache_key", lambda **kwargs: "cache-key")
+    monkeypatch.setattr(
+        "morning_brief.public_news_analysis.enrich_public_news_packet",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not be called")),
+    )
+
+    merged_news, references = backfill_news_with_web_search(
+        packet=packet,
+        quality=quality,
+        settings=settings,
+        observer=observer,
+    )
+
+    assert len(merged_news) == 1
+    assert references == [
+        {
+            "title": "Fed officials keep rate path open",
+            "url": "https://www.reuters.com/world/us/fed-officials-keep-rate-path-open/",
+        }
+    ]
 
 
 def test_backfill_news_with_web_search_skips_source_only_fallback_when_publish_quality_is_weak(

@@ -18,6 +18,8 @@ REWRITE_INSTRUCTIONS_TEMPLATE = "brief_rewrite_instructions.j2"
 REWRITE_INPUT_TEMPLATE = "brief_rewrite_input.j2"
 WEB_SEARCH_INSTRUCTIONS_TEMPLATE = "web_search_instructions.j2"
 WEB_SEARCH_INPUT_TEMPLATE = "web_search_input.j2"
+PUBLIC_NEWS_ANALYSIS_INSTRUCTIONS_TEMPLATE = "public_news_analysis_instructions.j2"
+PUBLIC_NEWS_ANALYSIS_INPUT_TEMPLATE = "public_news_analysis_input.j2"
 DEFAULT_CACHE_KEY = "morning-market-brief"
 MAX_CACHE_KEY_LEN = 64
 MAX_NAMESPACE_SEGMENT_LEN = 20
@@ -131,6 +133,24 @@ def render_web_search_prompts(
         template_dir=settings.prompt_template_dir,
         template_name=WEB_SEARCH_INPUT_TEMPLATE,
         search_context_json=search_context_json,
+    )
+    return instructions, user_prompt
+
+
+def render_public_news_analysis_prompts(
+    *,
+    items_json: str,
+    settings: Settings,
+) -> tuple[str, str]:
+    instructions = _render_template(
+        template_dir=settings.prompt_template_dir,
+        template_name=PUBLIC_NEWS_ANALYSIS_INSTRUCTIONS_TEMPLATE,
+        prompt_template_version=settings.prompt_template_version,
+    )
+    user_prompt = _render_template(
+        template_dir=settings.prompt_template_dir,
+        template_name=PUBLIC_NEWS_ANALYSIS_INPUT_TEMPLATE,
+        items_json=items_json,
     )
     return instructions, user_prompt
 

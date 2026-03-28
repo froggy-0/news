@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 from morning_brief.config import load_settings
 from morning_brief.data import news
@@ -369,6 +370,83 @@ def test_filter_publish_news_keeps_preferred_domains_when_quality_is_sufficient(
     assert audit["below_minimum"] is False
 
 
+def test_filter_public_article_news_candidates_drop_x_items_and_keep_articles():
+    now = datetime.now(timezone.utc)
+    items = [
+        NewsItem(
+            title="ETF analyst highlights fee pressure",
+            url="https://x.com/analyst/status/123",
+            source="@ETFAnalyst",
+            published_at=now,
+            why_it_matters="ETF fee pressure commentary",
+        ),
+        NewsItem(
+            title="Market chatter points to positioning reset",
+            url="https://twitter.com/marketdesk/status/456",
+            source="Market Desk",
+            published_at=now,
+            why_it_matters="포지셔닝 조정 가능성을 시사합니다.",
+        ),
+        NewsItem(
+            title="Treasury yields rise as Fed holds optionality",
+            url="https://www.reuters.com/world/us/treasury-yields-rise-fed-optionality",
+            source="Reuters",
+            published_at=now,
+            why_it_matters="장기 금리 상승이 성장주 할인율 부담을 키웁니다.",
+        ),
+    ]
+
+    kept, audit = news.filter_public_article_news_candidates(items)
+
+    assert [item.source for item in kept] == ["Reuters"]
+    assert audit["below_minimum"] is False
+    assert audit["dropped"]["x_handle_source"] == 1
+    assert audit["dropped"]["x_domain_url"] == 1
+
+
+def test_filter_public_article_news_drops_placeholder_interpretation():
+    now = datetime.now(timezone.utc)
+    items = [
+        NewsItem(
+            title="Macro update from Reuters",
+            url="https://www.reuters.com/world/us/macro-update",
+            source="Reuters",
+            published_at=now,
+            why_it_matters="해당 없음",
+        ),
+        NewsItem(
+            title="Chip demand remains firm",
+            url="https://www.cnbc.com/2026/03/22/chip-demand-remains-firm.html",
+            source="CNBC",
+            published_at=now,
+            why_it_matters="반도체 수요가 유지돼 위험 선호를 받칠 수 있습니다.",
+        ),
+    ]
+
+    kept, audit = news.filter_public_article_news(items)
+
+    assert [item.source for item in kept] == ["CNBC"]
+    assert audit["dropped"]["placeholder_public_interpretation"] == 1
+
+
+def test_filter_public_article_news_allows_reduced_article_count():
+    now = datetime.now(timezone.utc)
+    items = [
+        NewsItem(
+            title="Bitcoin ETF flows remain positive",
+            url="https://www.coindesk.com/markets/2026/03/22/bitcoin-etf-flows-remain-positive/",
+            source="CoinDesk",
+            published_at=now,
+            why_it_matters="기관 수요가 유지되고 있음을 시사합니다.",
+        )
+    ]
+
+    kept, audit = news.filter_public_article_news(items)
+
+    assert [item.source for item in kept] == ["CoinDesk"]
+    assert audit["below_minimum"] is False
+
+
 def test_build_news_packet_prefers_perplexity_search_over_sonar_news(monkeypatch):
     now = datetime.now(timezone.utc)
     monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")
@@ -412,6 +490,129 @@ def test_build_news_packet_prefers_perplexity_search_over_sonar_news(monkeypatch
     assert len(packet) == 1
     assert packet[0]["provider"] == "perplexity_search"
     assert packet[0]["title"] == "Fed keeps markets steady"
+
+
+def test_build_news_packet_public_context_keeps_articles_and_x_signals_separate(monkeypatch):
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")
+    monkeypatch.setenv("ENABLE_LEGACY_NEWS_FALLBACK", "false")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news_from_perplexity",
+        lambda **_: [
+            NewsItem(
+                title="Treasury yields rise as growth stocks wobble",
+                url="https://www.reuters.com/world/us/treasury-yields-rise-growth-stocks-wobble",
+                source="Reuters",
+                published_at=now,
+                topic="macro",
+                provider="perplexity_search",
+                summary="Yields moved higher after the latest Fed messaging.",
+                why_it_matters="장기 금리 상승이 성장주 밸류에이션 부담을 키웁니다.",
+                citations=[
+                    "https://www.reuters.com/world/us/treasury-yields-rise-growth-stocks-wobble"
+                ],
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news._collect_sonar_summaries", lambda *_, **__: ({}, [])
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news._collect_x_keyword_signals",
+        lambda *_, **__: (
+            [
+                news.XSignal(
+                    headline="ETF fee war chatter is accelerating",
+                    summary="Analysts say a fee war is starting.",
+                    why_it_matters="수수료 경쟁 기대가 단기 심리에 우호적일 수 있습니다.",
+                    sentiment="bullish",
+                    source_handle="EricBalchunas",
+                    posted_at=now,
+                    topic="bitcoin",
+                    citations=["https://x.com/EricBalchunas/status/123"],
+                )
+            ],
+            [
+                NewsItem(
+                    title="ETF fee war chatter is accelerating",
+                    url="https://x.com/EricBalchunas/status/123",
+                    source="@EricBalchunas",
+                    published_at=now,
+                    topic="bitcoin",
+                    provider="grok_x_keyword",
+                    summary="Analysts say a fee war is starting.",
+                    why_it_matters="수수료 경쟁 기대가 단기 심리에 우호적일 수 있습니다.",
+                    citations=["https://x.com/EricBalchunas/status/123"],
+                )
+            ],
+            {},
+        ),
+    )
+    monkeypatch.setattr("morning_brief.data.news._collect_grok_web_news", lambda *_, **__: [])
+
+    _, _, _, public_context = news.build_news_packet(settings=load_settings())
+
+    assert [item["source"] for item in public_context["all_news"]] == ["Reuters"]
+    assert public_context["source_counts"]["newsAll"] == 1
+    assert public_context["source_counts"]["xSignalAll"] == 1
+    assert public_context["all_x_signals"][0]["source_handle"] == "EricBalchunas"
+
+
+def test_build_news_packet_enriches_public_article_news(monkeypatch):
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")
+    monkeypatch.setenv("ENABLE_LEGACY_NEWS_FALLBACK", "false")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news_from_perplexity",
+        lambda **_: [
+            NewsItem(
+                title="Treasury yields rise as growth stocks wobble",
+                url="https://www.reuters.com/world/us/treasury-yields-rise-growth-stocks-wobble",
+                source="Reuters",
+                published_at=now,
+                topic="macro",
+                provider="perplexity_search",
+                summary="Yields moved higher after the latest Fed messaging.",
+                why_it_matters="Growth stocks face a higher discount-rate burden.",
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news._collect_sonar_summaries", lambda *_, **__: ({}, [])
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news.enrich_public_news_packet",
+        lambda *, items, settings, observer=None: (
+            [
+                {
+                    **item,
+                    "summary_ko": "장기 금리가 올라 기술주 부담이 커졌습니다.",
+                    "interpretation_ko": "고금리 부담이 성장주 선호를 약하게 만들 수 있습니다.",
+                }
+                for item in items
+            ],
+            SimpleNamespace(
+                candidate_count=len(items),
+                requested_count=len(items),
+                success_count=len(items),
+                skipped_count=0,
+                failed_count=0,
+                status="ok",
+            ),
+        ),
+    )
+
+    _, _, _, public_context = news.build_news_packet(settings=load_settings())
+
+    assert (
+        public_context["all_news"][0]["summary_ko"] == "장기 금리가 올라 기술주 부담이 커졌습니다."
+    )
+    assert (
+        public_context["all_news"][0]["interpretation_ko"]
+        == "고금리 부담이 성장주 선호를 약하게 만들 수 있습니다."
+    )
 
 
 def test_build_news_packet_uses_sonar_news_only_when_search_is_empty(monkeypatch):
@@ -569,7 +770,8 @@ def test_build_news_packet_triggers_legacy_when_public_publish_candidates_are_fi
 
     assert any(item["source"] == "Reuters" for item in packet)
     assert public_context["source_counts"]["newsCandidates"] == 4
-    assert public_context["source_counts"]["newsAll"] == 0
+    assert public_context["source_counts"]["newsAll"] == 1
+    assert [item["source"] for item in public_context["all_news"]] == ["Reuters"]
 
 
 def test_build_news_packet_does_not_trigger_legacy_fallback_for_uncited_grok_items(monkeypatch):

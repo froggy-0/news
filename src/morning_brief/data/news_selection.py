@@ -31,6 +31,23 @@ _PUBLISH_PLACEHOLDER_TITLE_RE = re.compile(
 )
 _PUBLISH_FILELIKE_TITLE_RE = re.compile(r"\.(?:pdf|html?|xml|json|txt|csv)(?:$|\s)", re.IGNORECASE)
 _PUBLISH_BLOCKED_DOMAINS = {"example.com", "example.net", "example.org", "localhost"}
+_PUBLIC_NEWS_BLOCKED_DOMAINS = {"x.com", "twitter.com"}
+_PUBLIC_NEWS_MEANINGLESS_INTERPRETATIONS = frozenset(
+    {
+        "",
+        "없음",
+        "없음.",
+        "없음,",
+        "해당없음",
+        "해당 없음",
+        "해당없음.",
+        "해당 없음.",
+        "해당없음,",
+        "해당 없음,",
+        "n/a",
+        "null",
+    }
+)
 
 
 def _normalized_publish_text(value: str) -> str:
@@ -51,10 +68,29 @@ def _looks_like_file_title(title: str) -> bool:
     return bool(_PUBLISH_FILELIKE_TITLE_RE.search(normalized))
 
 
-def filter_publish_news(
+def _is_x_handle_source(item: NewsItem) -> bool:
+    return item.source.strip().startswith("@")
+
+
+def _is_x_domain_url(url: str) -> bool:
+    domain = extract_domain(url)
+    return any(
+        domain == blocked_domain or domain.endswith(f".{blocked_domain}")
+        for blocked_domain in _PUBLIC_NEWS_BLOCKED_DOMAINS
+    )
+
+
+def _has_meaningful_public_interpretation(item: NewsItem) -> bool:
+    interpretation = item.why_it_matters.strip() or item.summary.strip()
+    normalized = _normalized_publish_text(interpretation)
+    return bool(normalized) and normalized not in _PUBLIC_NEWS_MEANINGLESS_INTERPRETATIONS
+
+
+def _filter_news_items(
     items: list[NewsItem],
     *,
-    min_items: int = MIN_NEWS_ITEMS,
+    min_items: int,
+    public_article_only: bool = False,
 ) -> tuple[list[NewsItem], dict[str, Any]]:
     kept: list[NewsItem] = []
     dropped: dict[str, int] = {}
@@ -67,7 +103,15 @@ def filter_publish_news(
         is_official_signal = item.provider == OFFICIAL_SIGNAL_PROVIDER
         reason: str | None = None
 
-        if not title or not url:
+        if public_article_only and _is_x_handle_source(item):
+            reason = "x_handle_source"
+        elif public_article_only and _is_x_domain_url(url):
+            reason = "x_domain_url"
+        elif public_article_only and not interpretation:
+            reason = "missing_public_interpretation"
+        elif public_article_only and not _has_meaningful_public_interpretation(item):
+            reason = "placeholder_public_interpretation"
+        elif not title or not url:
             reason = "missing_title_or_url"
         elif domain in _PUBLISH_BLOCKED_DOMAINS:
             reason = "blocked_domain"
@@ -100,8 +144,30 @@ def filter_publish_news(
     }
 
 
+def filter_publish_news(
+    items: list[NewsItem],
+    *,
+    min_items: int = MIN_NEWS_ITEMS,
+) -> tuple[list[NewsItem], dict[str, Any]]:
+    return _filter_news_items(items, min_items=min_items)
+
+
 def filter_publish_news_candidates(items: list[NewsItem]) -> tuple[list[NewsItem], dict[str, Any]]:
     return filter_publish_news(items, min_items=0)
+
+
+def filter_public_article_news(
+    items: list[NewsItem],
+    *,
+    min_items: int = 0,
+) -> tuple[list[NewsItem], dict[str, Any]]:
+    return _filter_news_items(items, min_items=min_items, public_article_only=True)
+
+
+def filter_public_article_news_candidates(
+    items: list[NewsItem],
+) -> tuple[list[NewsItem], dict[str, Any]]:
+    return filter_public_article_news(items, min_items=0)
 
 
 def filter_publish_x_signals(

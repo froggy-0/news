@@ -15,7 +15,7 @@ export function XSignalsClient({
   featuredItems: XSignal[];
   allItems: XSignal[];
 }) {
-  const items = featuredItems.length > 0 ? featuredItems : allItems;
+  const items = allItems.length > 0 ? allItems : featuredItems;
 
   return (
     <section id="signals" className="border-b border-white/10 px-6 py-16">

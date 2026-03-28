@@ -193,7 +193,8 @@ def build_public_brief(
         settings=settings,
         observer=observer,
     )
-    featured_news = _filter_public_news_for_display(all_news[:_PUBLIC_FEATURED_NEWS_LIMIT])
+    display_news = _filter_public_news_for_display(all_news)
+    featured_news = display_news[:_PUBLIC_FEATURED_NEWS_LIMIT]
     featured_x_signals = _filter_public_signals_for_display(
         all_x_signals[:_PUBLIC_FEATURED_X_LIMIT]
     )
@@ -246,7 +247,7 @@ def build_public_brief(
         "featuredXSignals": featured_x_signals_payload,
         "allXSignals": all_x_signals or None,
         "featuredNews": featured_news,
-        "allNews": all_news,
+        "allNews": display_news,
         "xSignals": featured_x_signals_payload,
         "news": featured_news,
     }
@@ -469,7 +470,20 @@ def _is_machine_payload(text: str) -> bool:
 
 # LLM이 "없음" 같은 무의미 한국어 플레이스홀더를 반환하는 경우를 필터링
 _MEANINGLESS_KO: frozenset[str] = frozenset(
-    {"없음", "해당없음", "없음.", "없음,", "N/A", "n/a", "null"}
+    {
+        "없음",
+        "없음.",
+        "없음,",
+        "해당없음",
+        "해당 없음",
+        "해당없음.",
+        "해당 없음.",
+        "해당없음,",
+        "해당 없음,",
+        "N/A",
+        "n/a",
+        "null",
+    }
 )
 
 
@@ -1062,6 +1076,12 @@ def _news_items(
             continue
         topic = _normalize_news_topic(item.get("topic"))
         summary_ko = _best_korean_text(
+            str(item.get("summary_ko", "")).strip(),
+            str(item.get("summary", "")).strip(),
+            str(item.get("why_it_matters", "")).strip(),
+        )
+        interpretation_ko = _best_korean_text(
+            str(item.get("interpretation_ko", "")).strip(),
             str(item.get("why_it_matters", "")).strip(),
             str(item.get("summary", "")).strip(),
         )
@@ -1071,7 +1091,7 @@ def _news_items(
                 "publishedAt": str(item.get("published_at", "")).strip() or run_at.isoformat(),
                 "category": topic,
                 "title": title,
-                "interpretation": summary_ko,
+                "interpretation": interpretation_ko,
                 "summaryKo": summary_ko,
                 "rawTitle": title if not _contains_korean(title) else None,
                 "source": str(item.get("source", "")).strip() or _source_from_url(url),
@@ -1154,6 +1174,12 @@ def _news_items_v2(
             continue
         topic = _normalize_news_topic(item.get("topic"))
         summary_ko = _best_korean_text(
+            str(item.get("summary_ko", "")).strip(),
+            str(item.get("summary", "")).strip(),
+            str(item.get("why_it_matters", "")).strip(),
+        )
+        interpretation_ko = _best_korean_text(
+            str(item.get("interpretation_ko", "")).strip(),
             str(item.get("why_it_matters", "")).strip(),
             str(item.get("summary", "")).strip(),
         )
@@ -1163,7 +1189,7 @@ def _news_items_v2(
                 "publishedAt": str(item.get("published_at", "")).strip() or run_at.isoformat(),
                 "category": topic,
                 "title": title,
-                "interpretation": summary_ko,
+                "interpretation": interpretation_ko,
                 "summaryKo": summary_ko,
                 "rawTitle": title if not _contains_korean(title) else None,
                 "source": str(item.get("source", "")).strip() or _source_from_url(url),
@@ -1182,12 +1208,14 @@ def _filter_public_news_for_display(items: list[dict[str, Any]]) -> list[dict[st
         title = _best_korean_text(str(item.get("title", "")).strip())
         if not title:
             continue
+        summary_ko = _best_korean_text(str(item.get("summaryKo", "")).strip())
         interpretation = _best_korean_text(
             str(item.get("interpretation", "")).strip(),
-            str(item.get("summaryKo", "")).strip(),
         )
+        if not summary_ko or not interpretation:
+            continue
         item["title"] = title
-        item["summaryKo"] = interpretation
+        item["summaryKo"] = summary_ko
         item["interpretation"] = interpretation
         filtered.append(item)
     return filtered

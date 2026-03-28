@@ -39,6 +39,7 @@ from morning_brief.data.sources.perplexity_sonar import (
 from morning_brief.logging_utils import log_structured
 from morning_brief.models import NewsItem
 from morning_brief.observability import PipelineObserver
+from morning_brief.public_news_analysis import enrich_public_news_packet
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,8 @@ _provider_breakdown = news_selection._provider_breakdown
 _provider_counts = news_selection._provider_counts
 filter_publish_news = news_selection.filter_publish_news
 filter_publish_news_candidates = news_selection.filter_publish_news_candidates
+filter_public_article_news = news_selection.filter_public_article_news
+filter_public_article_news_candidates = news_selection.filter_public_article_news_candidates
 filter_publish_x_signals = news_selection.filter_publish_x_signals
 filter_publish_x_signal_candidates = news_selection.filter_publish_x_signal_candidates
 summarize_news_packet_quality = data_quality.summarize_news_packet_quality
@@ -488,9 +491,9 @@ def build_news_packet(
         if grok_web_news:
             items = _merge_rank(items, grok_web_news, max_items=public_merge_limit)
 
-    public_candidate_items, publish_candidate_audit = filter_publish_news_candidates(items)
+    public_candidate_items, publish_candidate_audit = filter_public_article_news_candidates(items)
     public_ranked_items = _dedup_and_rank(public_candidate_items, max_items=PUBLIC_ALL_NEWS_ITEMS)
-    publish_news_items, publish_news_audit = filter_publish_news(public_ranked_items)
+    publish_news_items, publish_news_audit = filter_public_article_news(public_ranked_items)
     email_ranked_items = _dedup_and_rank(items, max_items=settings.max_news_items)
     public_ranked_signals = x_signals[:PUBLIC_ALL_X_SIGNALS]
     public_candidate_signals, publish_signal_candidate_audit = filter_publish_x_signal_candidates(
@@ -521,9 +524,27 @@ def build_news_packet(
             dropped=publish_signal_audit["dropped"],
         )
 
+    public_news_packet = _news_items_to_packet(publish_news_items)
+    public_news_packet, public_news_analysis_audit = enrich_public_news_packet(
+        items=public_news_packet,
+        settings=settings,
+        observer=observer,
+    )
+
+    if observer is not None:
+        observer.log_event(
+            "public_news_analysis_selection",
+            candidate_count=public_news_analysis_audit.candidate_count,
+            requested_count=public_news_analysis_audit.requested_count,
+            success_count=public_news_analysis_audit.success_count,
+            skipped_count=public_news_analysis_audit.skipped_count,
+            failed_count=public_news_analysis_audit.failed_count,
+            status=public_news_analysis_audit.status,
+        )
+
     public_context: dict[str, object] = {
-        "featured_news": _news_items_to_packet(publish_news_items[:PUBLIC_FEATURED_NEWS_ITEMS]),
-        "all_news": _news_items_to_packet(publish_news_items),
+        "featured_news": public_news_packet[:PUBLIC_FEATURED_NEWS_ITEMS],
+        "all_news": public_news_packet,
         "featured_x_signals": [
             {
                 "headline": signal.headline,
