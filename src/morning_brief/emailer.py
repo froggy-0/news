@@ -29,15 +29,6 @@ from morning_brief.brief_formatting import (
     parse_sector_mapping,
 )
 from morning_brief.brief_formatting import (
-    extract_brief_structure as _extract_brief_structure,
-)
-from morning_brief.brief_formatting import (
-    split_footer_note_block as _split_footer_note_block,
-)
-from morning_brief.brief_formatting import (
-    split_reference_block as _split_reference_block,
-)
-from morning_brief.brief_formatting import (
     split_section_groups as _split_section_groups,
 )
 from morning_brief.config import Settings
