@@ -3,6 +3,8 @@ from __future__ import annotations
 from morning_brief.config import (
     DEFAULT_OPENAI_MODEL,
     DEFAULT_PROMPT_TEMPLATE_VERSION,
+    DEFAULT_SES_REGION,
+    DEFAULT_SES_SENDER,
     DEFAULT_SUBSCRIPTION_NEWSLETTER_KEY,
     DEFAULT_SUBSCRIPTION_UNSUBSCRIBE_PATH,
     load_settings,
@@ -136,3 +138,25 @@ def test_subscription_settings_loaded(monkeypatch):
     assert settings.subscription_token_secret == "token-secret"
     assert settings.supabase_url == "https://example.supabase.co"
     assert settings.supabase_service_role_key == "service-role-key"
+
+
+def test_ses_settings_loaded(monkeypatch):
+    monkeypatch.setenv("SES_SENDER", "no-reply@sovereignbriefing.com")
+    monkeypatch.setenv("AWS_REGION", "ap-northeast-2")
+    monkeypatch.setenv("SES_CONFIGURATION_SET", "brief-config")
+
+    settings = load_settings()
+
+    assert settings.ses_sender == "no-reply@sovereignbriefing.com"
+    assert settings.ses_region == "ap-northeast-2"
+    assert settings.ses_configuration_set == "brief-config"
+
+
+def test_ses_settings_default_to_operating_values(monkeypatch):
+    monkeypatch.delenv("SES_SENDER", raising=False)
+    monkeypatch.delenv("AWS_REGION", raising=False)
+
+    settings = load_settings()
+
+    assert settings.ses_sender == DEFAULT_SES_SENDER
+    assert settings.ses_region == DEFAULT_SES_REGION

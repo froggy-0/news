@@ -52,12 +52,11 @@ EXPECTED_OBSERVER_CALL_FILES = {
 
 OUT_OF_SCOPE_PRINT_FILES = {
     "main.py",
-    "generate_gmail_token.py",
 }
 
 
 def _runtime_python_files() -> list[Path]:
-    files = [ROOT / "main.py", ROOT / "generate_gmail_token.py"]
+    files = [ROOT / "main.py"]
     files.extend(sorted((ROOT / "src" / "morning_brief").rglob("*.py")))
     return files
 

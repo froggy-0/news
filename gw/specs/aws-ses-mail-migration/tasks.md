@@ -1,0 +1,230 @@
+# Implementation Plan: aws-ses-mail-migration
+
+## Overview
+
+구현은 `Python newsletter transport 전환 -> Python 회귀 테스트 -> GitHub Actions OIDC/workflow 정리 -> checkpoint -> Cloudflare confirmation transport 전환 -> frontend 회귀 테스트 -> Gmail 잔존물 정리 -> 최종 checkpoint` 순서로 진행합니다. 먼저 Python 런타임에서 Gmail 의존을 제거하고 SES raw email 전송을 안정화한 뒤, 같은 sender/region 정책을 Cloudflare confirmation 경로에 맞춥니다.
+
+핵심 전략은 메일 콘텐츠 생성과 구독 상태 전이 로직은 유지하고, provider/auth/config 경계만 바꾸는 것입니다. 각 단계는 requirements와 design의 경계를 그대로 따르며, 체크포인트에서는 좁은 범위 테스트를 먼저 실행하고 마지막에 문서와 운영 검증 절차까지 묶어 확인합니다.
+
+## Tasks
+
+- [x] 1. Python newsletter SES transport와 설정 경계를 전환한다
+  - [x] 1.1 `Settings`를 Gmail 중심에서 SES 중심으로 바꾼다
+    - 수정 파일:
+      - `src/morning_brief/config.py`
+    - 작업 내용:
+      - `gmail_sender`, `gmail_credentials_file`, `gmail_token_file`, `gmail_oauth_interactive` 필드를 제거한다.
+      - `ses_sender`, `ses_region`, `ses_configuration_set`를 추가한다.
+      - 운영 기본 경로가 `SES_SENDER=no-reply@sovereignbriefing.com`, `AWS_REGION=ap-northeast-2`를 사용하도록 로딩 규칙을 정리한다.
+      - GitHub Actions OIDC 경로에서는 애플리케이션이 access key 값을 직접 읽지 않고 `boto3` 기본 자격증명 체인을 사용하도록 설정 경계를 명확히 한다.
+    - _Requirements: 1.4, 2.5, 4.1, 4.2, 4.3, 4.4_
+  - [x] 1.2 `GmailSender`를 `SesSender`로 교체한다
+    - 수정 파일:
+      - `src/morning_brief/emailer.py`
+      - `src/morning_brief/pipeline.py`
+    - 작업 내용:
+      - Gmail credential 로딩, refresh, interactive OAuth 분기를 제거한다.
+      - 기존 `build_briefing_message()`와 `_unsubscribe_url()`를 유지한 채 SES `send_raw_email` 호출로 바꾼다.
+      - recipient별 개별 전송, `List-Unsubscribe`, HTML/plain-text multipart 구조를 그대로 유지한다.
+      - provider 로깅 값을 `gmail`에서 `ses`로 바꾸고 실패 recipient 집계 규칙을 유지한다.
+      - `pipeline.py`의 발송 호출 지점을 `SesSender` 기준으로 바꾼다.
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 5.1, 5.2_
+  - [x] 1.3 Python 쪽 SES sender/region 불일치 방어를 추가한다
+    - 수정 파일 후보:
+      - `src/morning_brief/emailer.py`
+      - 필요 시 `src/morning_brief/config.py`
+    - 작업 내용:
+      - sender가 비어 있거나 `no-reply@sovereignbriefing.com`와 다른 경우 명시적으로 실패시키는 경계를 둔다.
+      - region이 비어 있거나 `ap-northeast-2`와 다른 경우 운영 설정 오류로 드러나도록 한다.
+      - SES identity 미검증/권한 부족/일부 recipient 실패를 로그에서 구분할 수 있게 에러 메시지 구조를 정리한다.
+    - _Requirements: 1.4, 2.5, 4.2, 4.3, 5.1, 5.2_
+
+- [x] 2. Python newsletter SES 회귀 테스트를 추가한다
+  - [x] 2.1 `tests/test_config.py`를 SES 설정 기준으로 갱신한다
+    - 작업 내용:
+      - `SES_SENDER`, `AWS_REGION` 로딩 테스트를 추가한다.
+      - Gmail 설정 필드 제거 또는 deprecated 처리 이후 예상 계약을 검증한다.
+      - `ap-northeast-2`, `no-reply@sovereignbriefing.com` 고정값이 설정에 반영되는지 확인한다.
+    - _Requirements: 4.1, 4.2, 4.3, 5.3_
+  - [x] 2.2 `tests/test_emailer.py`를 `SesSender` 기준으로 갱신한다
+    - 작업 내용:
+      - SES client mock을 사용해 recipient별 `send_raw_email` 호출 수를 검증한다.
+      - raw MIME을 decode해 `To`, `List-Unsubscribe`, sender가 recipient별/운영값 기준으로 유지되는지 확인한다.
+      - active recipient가 0명일 때 SES 호출 없이 skip되는지 검증한다.
+    - **Property 1: active recipient 수와 SES 전송 횟수는 항상 일치한다**
+    - **Property 2: newsletter MIME 구조와 unsubscribe 링크는 provider 전환 후에도 유지된다**
+    - 테스트 파일: `tests/test_emailer.py`
+    - **Validates: Requirements 1.2, 1.3, 1.4, 1.5, 1.6, 5.3**
+  - [x] 2.3 `tests/test_pipeline_observability.py`와 관련 회귀 테스트를 갱신한다
+    - 작업 내용:
+      - `morning_brief.pipeline.GmailSender` monkeypatch 경로를 `SesSender` 기준으로 바꾼다.
+      - pipeline이 여전히 브리핑 실패 시 발송을 건너뛰고, 정상 실행 시 `email` phase를 기록하는지 유지한다.
+      - 필요 시 `tests/test_logging_surface.py`를 갱신해 sender 이름 변경이나 Gmail bootstrap 스크립트 제거에 따른 회귀를 반영한다.
+    - _Requirements: 1.5, 1.6, 5.1, 5.2, 5.3_
+
+- [x] 3. GitHub Actions OIDC workflow와 newsletter 운영 문서를 정리한다
+  - [x] 3.1 `.github/workflows/morning-brief.yml`을 SES + OIDC 경로로 수정한다
+    - 작업 내용:
+      - job permissions에 `id-token: write`를 추가한다.
+      - `aws-actions/configure-aws-credentials` 단계로 `arn:aws:iam::254849613915:role/kr-pr-ses-news-v1a`를 Assume한다.
+      - Gmail OAuth 파일 복원 단계와 관련 secret/env 사용을 제거한다.
+      - workflow env를 `AWS_REGION=ap-northeast-2`, `SES_SENDER=no-reply@sovereignbriefing.com` 기준으로 바꾼다.
+      - OIDC 실패 시 메일 발송 단계 진입 전 실패하도록 단계 순서를 고정한다.
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 4.4_
+  - [x] 3.2 Python newsletter 운영 문서를 SES 기준으로 갱신한다
+    - 수정 파일 후보:
+      - `README.md`
+      - `docs/subscriptions-ops.md`
+    - 작업 내용:
+      - Gmail secret, `credentials.json`, `token.json` 설명을 제거한다.
+      - newsletter 발송이 OIDC role + SES sender/region을 사용한다는 점을 명시한다.
+      - GitHub Actions 쪽 필수값을 `AWS_REGION`, `SES_SENDER`, OIDC role 중심으로 정리한다.
+      - 로컬 개발은 실제 SES 발송 smoke test를 지원하지 않고 단위 테스트/비발송 검증만 공식 경로라는 점을 명시한다.
+      - `aws sts get-caller-identity`와 SES smoke test를 검증 절차에 추가한다.
+    - _Requirements: 4.1, 4.2, 4.3, 4.6, 4.7, 5.4_
+
+- [x] 4. Checkpoint - Python newsletter와 GitHub Actions OIDC 경로를 검증한다
+  - [x] 4.1 좁은 범위 Python 테스트와 정적 검증을 먼저 실행한다
+    - `python -m pytest tests/test_config.py tests/test_emailer.py tests/test_pipeline_observability.py tests/test_logging_surface.py`
+    - 필요한 경우 `python -m pytest tests/test_config.py -q`처럼 더 좁게 분리 실행한다.
+    - 결과를 이 checkpoint에 기록한다.
+    - _Requirements: 5.3_
+  - [x] 4.2 Python 변경 파일 범위 lint를 실행한다
+    - `ruff check src/morning_brief/config.py src/morning_brief/emailer.py src/morning_brief/pipeline.py tests/test_config.py tests/test_emailer.py tests/test_pipeline_observability.py tests/test_logging_surface.py`
+    - 필요 시 formatter 경고를 분리해서 기록한다.
+    - _Requirements: 5.3_
+  - [x] 4.3 workflow 계약과 문서 검증 절차를 확인한다
+    - `.github/workflows/morning-brief.yml`에 `id-token: write`, `configure-aws-credentials`, `AWS_REGION=ap-northeast-2`, `SES_SENDER=no-reply@sovereignbriefing.com`가 반영됐는지 확인한다.
+    - 문서에 OIDC role, sender, region, SES smoke test 절차가 빠짐없이 적혔는지 확인한다.
+    - _Requirements: 2.1, 2.5, 4.7, 5.4_
+
+- [x] 5. Cloudflare confirmation mail transport를 SES 기준으로 전환한다
+  - [x] 5.1 frontend 런타임 계약과 의존성을 SES 기준으로 바꾼다
+    - 수정 파일:
+      - `frontend/lib/subscriptions/types.ts`
+      - `frontend/package.json`
+      - `frontend/wrangler.toml`
+    - 작업 내용:
+      - `SubscriptionEnv`에서 `CONFIRMATION_GMAIL_*` 필드를 제거하고 `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `CONFIRMATION_SES_SENDER`를 추가한다.
+      - `@aws-sdk/client-sesv2` 의존성을 추가한다.
+      - `frontend/wrangler.toml`에 `nodejs_compat`를 추가해 SDK 사용 경계를 명시한다.
+      - Cloudflare 운영값이 `AWS_REGION=ap-northeast-2`, `CONFIRMATION_SES_SENDER=no-reply@sovereignbriefing.com`임을 문서와 코드 계약에 맞춘다.
+    - _Requirements: 3.3, 3.4, 3.5, 4.1, 4.2, 4.3, 4.5_
+  - [x] 5.2 `sendConfirmationMail()`를 SES API 호출로 교체한다
+    - 수정 파일:
+      - `frontend/lib/subscriptions/mail-sender.ts`
+    - 작업 내용:
+      - Gmail access token refresh와 Gmail API 호출 로직을 제거한다.
+      - SES v2 `SendEmailCommand`로 subject/text/html을 그대로 전송하는 구현으로 바꾼다.
+      - sender는 `CONFIRMATION_SES_SENDER`, region은 `AWS_REGION`를 사용한다.
+      - Cloudflare secret 누락/권한 부족/identity 오류를 구분 가능한 예외로 표면화한다.
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 5.2_
+  - [x] 5.3 `SubscriptionService`와 API route 계약을 유지하면서 env 이름만 전환한다
+    - 수정 파일:
+      - `frontend/lib/subscriptions/service.ts`
+      - 필요 시 `frontend/functions/api/subscriptions/request.ts`
+      - 필요 시 `frontend/functions/api/subscriptions/confirm.ts`
+      - 필요 시 `frontend/functions/api/subscriptions/unsubscribe.ts`
+    - 작업 내용:
+      - `requestSubscription()`의 pending 생성 -> 메일 발송 -> 응답 순서를 유지한다.
+      - sendMail 함수 시그니처는 유지하고 호출부만 SES env 기준으로 맞춘다.
+      - browser에는 AWS secret가 노출되지 않고 Functions env에서만 접근되도록 유지한다.
+    - _Requirements: 3.4, 3.5, 3.6, 3.7, 4.5_
+
+- [x] 6. Cloudflare confirmation SES 회귀 테스트를 추가한다
+  - [x] 6.1 `frontend/tests/subscription-service.test.ts`를 SES env 기준으로 갱신한다
+    - 작업 내용:
+      - env fixture를 `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `CONFIRMATION_SES_SENDER` 기준으로 바꾼다.
+      - confirmation mail 실패 시 subscription이 `pending`으로 유지되는지 계속 검증한다.
+      - 성공 시 pending 응답 계약이 유지되는지 확인한다.
+    - **Property 3: confirmation mail provider가 바뀌어도 pending/active 상태 전이 규칙은 유지된다**
+    - 테스트 파일: `frontend/tests/subscription-service.test.ts`
+    - **Validates: Requirements 3.4, 3.6, 3.7, 5.3**
+  - [x] 6.2 `frontend/tests/subscriptions-api.test.ts`를 SES env 기준으로 갱신한다
+    - 작업 내용:
+      - route 테스트 fixture의 Gmail env를 AWS secret/env로 바꾼다.
+      - invalid email, missing token, invalid token 경로가 provider 전환 후에도 유지되는지 검증한다.
+    - _Requirements: 3.4, 3.5, 3.7, 5.3_
+  - [x] 6.3 confirmation SES transport 단위 테스트를 추가한다
+    - 신규 테스트 파일 후보:
+      - `frontend/tests/mail-sender.test.ts`
+    - 작업 내용:
+      - SES client 호출 payload에 `from=no-reply@sovereignbriefing.com`, `region=ap-northeast-2`, subject/text/html이 올바르게 반영되는지 검증한다.
+      - secret 누락 시 명시적 설정 오류가 발생하는지 확인한다.
+    - **Property 4: confirmation SES 요청은 sender/region/content를 항상 같은 계약으로 보낸다**
+    - 테스트 파일: `frontend/tests/mail-sender.test.ts`
+    - **Validates: Requirements 3.1, 3.2, 3.3, 3.4, 5.3**
+
+- [x] 7. Gmail 잔존물과 운영 문서를 완전히 정리한다
+  - [x] 7.1 live 문서와 설정 가이드에서 Gmail 의존을 제거한다
+    - 수정 파일 후보:
+      - `docs/subscriptions-ops.md`
+      - `README.md`
+      - 필요 시 `CLAUDE.md`
+    - 작업 내용:
+      - `GMAIL_SENDER`, `CONFIRMATION_GMAIL_*`, OAuth token 파일, Gmail API 설명을 제거한다.
+      - Cloudflare secret 목록을 `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `CONFIRMATION_SES_SENDER`로 교체한다.
+      - newsletter와 confirmation 모두 `no-reply@sovereignbriefing.com` / `ap-northeast-2`를 쓴다는 점을 명시한다.
+    - _Requirements: 4.1, 4.2, 4.3, 4.5, 4.7, 4.8_
+  - [x] 7.2 더 이상 쓰지 않는 Gmail bootstrap 산출물을 정리한다
+    - 삭제 또는 정리 후보:
+      - `generate_gmail_token.py`
+      - `generate_confirmation_gmail_refresh_token.py`
+      - 관련 테스트/문서 참조
+    - 작업 내용:
+      - 현재 구현 경로에서 사용되지 않는 Gmail bootstrap 스크립트와 관련 설명을 제거한다.
+      - 제거 후 `tests/test_logging_surface.py`나 문서 링크가 깨지지 않도록 함께 정리한다.
+    - _Requirements: 4.8, 5.3_
+  - [x] 7.3 SES 운영 검증 절차를 문서에 고정한다
+    - 수정 파일 후보:
+      - `docs/subscriptions-ops.md`
+      - `README.md`
+    - 작업 내용:
+      - GitHub Actions OIDC 검증: `aws sts get-caller-identity`
+      - newsletter smoke test: workflow 실행 후 SES 발송 확인
+      - Cloudflare preview smoke test: `/api/subscriptions/request`와 confirmation 메일 수신 확인
+      - 로컬 환경은 실제 SES 발송 대상이 아니며 mock/route 초기화 확인만 수행한다는 점을 명시한다.
+      - sender/region/verified identity 사전 조건을 문서에 분명히 남긴다.
+    - _Requirements: 4.6, 4.7, 5.4_
+
+- [x] 8. Checkpoint - frontend와 전체 migration 완료 상태를 검증한다
+  - [x] 8.1 frontend 테스트와 타입 검증을 실행한다
+    - `cd frontend && npm run test`
+    - `cd frontend && npm run lint`
+    - 필요 시 `cd frontend && npm run build:fixture`
+    - 결과를 이 checkpoint에 기록한다.
+    - _Requirements: 5.3_
+  - [x] 8.2 전체 저장소 기본 검증 순서를 실행한다
+    - `make fmt`
+    - `make lint`
+    - `make test`
+    - `make typecheck`
+    - 필요 시 마지막으로 `make check`
+    - 실패 시 formatter/lint/test/typecheck 중 어느 단계에서 깨졌는지 먼저 기록한다.
+    - _Requirements: 5.3_
+  - [x] 8.3 문서와 운영 절차까지 포함한 최종 완료 상태를 기록한다
+    - 모든 체크박스를 실제 완료 상태에 맞게 갱신한다.
+    - 구현 중 조정된 범위가 있으면 `requirements.md`, `design.md`와 정합성을 다시 확인한다.
+    - 완료 시점과 수동 smoke test 결과를 Overview 또는 하단 메모에 기록한다.
+    - _Requirements: 4.7, 5.4_
+
+## Execution Notes
+
+- 완료 시점: 2026-03-29 Asia/Seoul
+- 수동 smoke test:
+  - GitHub Actions OIDC 기반 실발송 smoke test는 아직 실행하지 않았습니다.
+  - Cloudflare preview 실발송 smoke test도 아직 실행하지 않았습니다.
+- 검증 결과:
+  - `ruff check src/morning_brief/config.py src/morning_brief/emailer.py src/morning_brief/logging_utils.py src/morning_brief/pipeline.py tests/test_config.py tests/test_emailer.py tests/test_pipeline_observability.py tests/test_logging_surface.py`
+  - `uv run pytest tests/test_config.py -q`
+  - `uv run pytest tests/test_emailer.py -q`
+  - `uv run pytest tests/test_logging_surface.py -q`
+  - `uv run pytest tests/test_pipeline_observability.py -vv`
+  - `cd frontend && npm run lint`
+  - `cd frontend && npm run test`
+  - `PYTHON=.venv/bin/python make lint`
+  - `PYTHON=.venv/bin/python make test`
+  - `PYTHON=.venv/bin/python make typecheck`
+- 메모:
+  - `make fmt`는 현재 dirty worktree에서 사용자 변경까지 재포맷할 위험이 있어 실행하지 않았습니다.
+  - 대신 `make lint`의 `ruff format --check .`로 저장소 포맷 상태를 확인했습니다.

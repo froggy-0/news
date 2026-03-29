@@ -1,33 +1,68 @@
-{# 컬러 배지 매크로 — 모든 파셜에서 import하여 사용 #}
-{% macro badge(value, direction) %}
-<span style="display:inline-block;background:{% if direction == 'up' %}#142313{% elif direction == 'down' %}#2a1717{% else %}#151515{% endif %};border:1px solid {% if direction == 'up' %}#244322{% elif direction == 'down' %}#4d2626{% else %}#2b2b2b{% endif %};color:{% if direction == 'up' %}#7ef466{% elif direction == 'down' %}#f4a4a4{% else %}#b1b1b1{% endif %};padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;letter-spacing:0.02em;" class="{% if direction == 'up' %}badge-up{% elif direction == 'down' %}badge-down{% else %}badge-flat{% endif %}">{% if direction == 'up' %}&#9650;{% elif direction == 'down' %}&#9660;{% else %}&#8212;{% endif %} {{ value }}</span>
-{% endmacro %}
+{% macro eyebrow(text, accent='muted') -%}
+<div style="font-family:{{ mail_theme.typography.labelMono }};color:{% if accent == 'green' %}{{ mail_theme.colors.accentGreen }}{% elif accent == 'cyan' %}{{ mail_theme.colors.accentCyan }}{% else %}{{ mail_theme.colors.textMuted }}{% endif %};font-size:10px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;">
+  {{ text }}
+</div>
+{%- endmacro %}
 
-{# KR 라벨 매크로 #}
-{% macro kr_label() %}
-<span class="kr-label" style="display:inline-block;border:1px solid #166534;border-radius:3px;padding:1px 5px;color:#166534;font-size:11px;font-weight:700;">KR</span>
-{% endmacro %}
+{% macro section_label(text, accent='green') -%}
+<div style="font-family:{{ mail_theme.typography.labelMono }};color:{% if accent == 'cyan' %}{{ mail_theme.colors.accentCyan }}{% else %}{{ mail_theme.colors.accentGreen }}{% endif %};font-size:10px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;">
+  {{ text }}
+</div>
+{%- endmacro %}
 
-{# 섹션 라벨 매크로 #}
-{% macro section_label(text, color) %}
-<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:{{ color }};font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;">{{ text }}</div>
-{% endmacro %}
-
-{# 데이터 품질 인라인 마크 #}
-{% macro quality_mark(text) %}
-<span style="font-size:11px;color:#94a3b8;">({{ text }})</span>
-{% endmacro %}
-
-{% macro delta_text(value, direction) %}
-<span style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;font-size:11px;font-weight:700;color:{% if direction == 'up' %}#7ef466{% elif direction == 'down' %}#f4a4a4{% else %}#b1b1b1{% endif %};letter-spacing:0.02em;">
-{% if direction == 'up' %}&#9650;{% elif direction == 'down' %}&#9660;{% else %}&#8212;{% endif %} {{ value }}
-</span>
-{% endmacro %}
-
-{% macro pill(text, tone='flat', href=None) %}
-{% if href %}
-<a href="{{ href }}" style="display:inline-block;padding:5px 9px;border-radius:999px;border:1px solid {% if tone == 'up' %}#244322{% elif tone == 'down' %}#4d2626{% else %}#2b2b2b{% endif %};background:{% if tone == 'up' %}#142313{% elif tone == 'down' %}#2a1717{% else %}#151515{% endif %};color:{% if tone == 'up' %}#7ef466{% elif tone == 'down' %}#f4a4a4{% else %}#d9d9d9{% endif %};font-size:10px;font-weight:700;text-decoration:none;letter-spacing:0.12em;text-transform:uppercase;">{{ text }}</a>
-{% else %}
-<span style="display:inline-block;padding:5px 9px;border-radius:999px;border:1px solid {% if tone == 'up' %}#244322{% elif tone == 'down' %}#4d2626{% else %}#2b2b2b{% endif %};background:{% if tone == 'up' %}#142313{% elif tone == 'down' %}#2a1717{% else %}#151515{% endif %};color:{% if tone == 'up' %}#7ef466{% elif tone == 'down' %}#f4a4a4{% else %}#d9d9d9{% endif %};font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;">{{ text }}</span>
+{% macro signal_pill(text, tone='flat', href=None) -%}
+{% set border = mail_theme.colors.border %}
+{% set background = mail_theme.colors.badgeFlatBg %}
+{% set color = mail_theme.colors.accentNeutral %}
+{% if tone == 'up' %}
+  {% set border = mail_theme.colors.accentGreen %}
+  {% set background = mail_theme.colors.badgeUpBg %}
+  {% set color = mail_theme.colors.accentGreen %}
+{% elif tone == 'down' %}
+  {% set border = mail_theme.colors.accentDown %}
+  {% set background = mail_theme.colors.badgeDownBg %}
+  {% set color = mail_theme.colors.accentDown %}
+{% elif tone == 'cyan' %}
+  {% set border = mail_theme.colors.accentCyan %}
+  {% set background = mail_theme.colors.panelBgStrong %}
+  {% set color = mail_theme.colors.accentCyan %}
 {% endif %}
-{% endmacro %}
+{% set pill_style -%}
+display:inline-block;border:1px solid {{ border }};background:{{ background }};color:{{ color }};border-radius:{{ mail_theme.components.pill.radius }};padding:{{ mail_theme.components.pill.padding }};font-family:{{ mail_theme.typography.labelMono }};font-size:{{ mail_theme.components.pill.fontSize }};font-weight:700;letter-spacing:{{ mail_theme.components.pill.letterSpacing }};text-transform:uppercase;text-decoration:none;
+{%- endset %}
+{% if href %}
+<a href="{{ href }}" style="{{ pill_style|trim }}">{{ text }}</a>
+{% else %}
+<span style="{{ pill_style|trim }}">{{ text }}</span>
+{% endif %}
+{%- endmacro %}
+
+{% macro delta_badge(value, direction) -%}
+{% set border = mail_theme.colors.border %}
+{% set background = mail_theme.colors.badgeFlatBg %}
+{% set color = mail_theme.colors.accentNeutral %}
+{% set symbol = '&#8212;' %}
+{% set klass = 'badge-flat' %}
+{% if direction == 'up' %}
+  {% set border = mail_theme.colors.accentGreen %}
+  {% set background = mail_theme.colors.badgeUpBg %}
+  {% set color = mail_theme.colors.accentGreen %}
+  {% set symbol = '&#9650;' %}
+  {% set klass = 'badge-up' %}
+{% elif direction == 'down' %}
+  {% set border = mail_theme.colors.accentDown %}
+  {% set background = mail_theme.colors.badgeDownBg %}
+  {% set color = mail_theme.colors.accentDown %}
+  {% set symbol = '&#9660;' %}
+  {% set klass = 'badge-down' %}
+{% endif %}
+<span class="{{ klass }}" style="display:inline-block;border:1px solid {{ border }};background:{{ background }};color:{{ color }};border-radius:{{ mail_theme.components.badge.radius }};padding:{{ mail_theme.components.badge.padding }};font-family:{{ mail_theme.typography.labelMono }};font-size:{{ mail_theme.components.badge.fontSize }};font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;letter-spacing:0.02em;">{{ symbol|safe }} {{ value }}</span>
+{%- endmacro %}
+
+{% macro utility_link(text, href) -%}
+<a href="{{ href }}" style="color:{{ mail_theme.colors.textMuted }};font-family:{{ mail_theme.typography.labelMono }};font-size:{{ mail_theme.components.footerLink.fontSize }};letter-spacing:{{ mail_theme.components.footerLink.letterSpacing }};text-transform:uppercase;text-decoration:none;">{{ text }}</a>
+{%- endmacro %}
+
+{% macro cta_button(text, href) -%}
+<a href="{{ href }}" style="display:inline-block;min-height:{{ mail_theme.layout.ctaMinHeight }};padding:{{ mail_theme.components.cta.padding }};border-radius:{{ mail_theme.components.cta.radius }};border:1px solid {{ mail_theme.components.cta.accentBorder }};background:{{ mail_theme.components.cta.background }};color:{{ mail_theme.components.cta.text }};font-family:{{ mail_theme.typography.bodySans }};font-size:14px;font-weight:800;line-height:1.2;text-decoration:none;">{{ text }}</a>
+{%- endmacro %}

@@ -11,11 +11,14 @@ from pathlib import Path
 import pytest
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from morning_brief.emailer import _load_mail_theme
+
 # ---------------------------------------------------------------------------
 # Jinja2 환경 설정
 # ---------------------------------------------------------------------------
 
 EMAIL_TEMPLATE_DIR = Path("src/morning_brief/templates")
+MAIL_THEME = _load_mail_theme()
 
 env = Environment(
     loader=FileSystemLoader(str(EMAIL_TEMPLATE_DIR)),
@@ -30,6 +33,7 @@ env = Environment(
 
 SAMPLE_CONTEXT = {
     "subject": "테스트 브리핑",
+    "mail_theme": MAIL_THEME,
     "preheader": "미국 10년물 4.20% · DXY 103.50 · VIX 18.5",
     "display_date": "2026년 3월 18일 수요일",
     "read_time": "3분 읽기",
@@ -291,7 +295,7 @@ def test_each_partial_renders_independently(template_name: str, context: dict) -
     Validates: Requirements 16.3
     """
     tmpl = env.get_template(template_name)
-    html = tmpl.render(**context)
+    html = tmpl.render(mail_theme=MAIL_THEME, **context)
     assert len(html.strip()) > 0, f"{template_name} 렌더링 결과가 비어있음"
 
 
@@ -372,21 +376,31 @@ def test_direction_symbols_accompany_colors() -> None:
     assert "&#8212;" in html, "보합 방향 기호(—, &#8212;) 누락"
 
     # 상승 배경색 근처에 ▲ 기호가 있는지 확인
-    up_badge_pattern = re.compile(r"#142313.*?&#9650;|&#9650;.*?#142313", re.DOTALL)
-    assert up_badge_pattern.search(html), (
-        "상승 배지: 녹색 배경(#123526)과 ▲ 기호가 함께 사용되지 않음"
+    up_badge_color = re.escape(MAIL_THEME["colors"]["badgeUpBg"])
+    up_badge_pattern = re.compile(
+        rf"{up_badge_color}.*?&#9650;|&#9650;.*?{up_badge_color}",
+        re.DOTALL,
     )
+    assert up_badge_pattern.search(html), "상승 배지: 녹색 계열 배경과 ▲ 기호가 함께 사용되지 않음"
 
     # 하락 배경색 근처에 ▼ 기호가 있는지 확인
-    down_badge_pattern = re.compile(r"#2a1717.*?&#9660;|&#9660;.*?#2a1717", re.DOTALL)
+    down_badge_color = re.escape(MAIL_THEME["colors"]["badgeDownBg"])
+    down_badge_pattern = re.compile(
+        rf"{down_badge_color}.*?&#9660;|&#9660;.*?{down_badge_color}",
+        re.DOTALL,
+    )
     assert down_badge_pattern.search(html), (
-        "하락 배지: 적색 배경(#3c1b25)과 ▼ 기호가 함께 사용되지 않음"
+        "하락 배지: 적색 계열 배경과 ▼ 기호가 함께 사용되지 않음"
     )
 
     # 보합 배경색 근처에 — 기호가 있는지 확인
-    flat_badge_pattern = re.compile(r"#151515.*?&#8212;|&#8212;.*?#151515", re.DOTALL)
+    flat_badge_color = re.escape(MAIL_THEME["colors"]["badgeFlatBg"])
+    flat_badge_pattern = re.compile(
+        rf"{flat_badge_color}.*?&#8212;|&#8212;.*?{flat_badge_color}",
+        re.DOTALL,
+    )
     assert flat_badge_pattern.search(html), (
-        "보합 배지: 회색 배경(#18253a)과 — 기호가 함께 사용되지 않음"
+        "보합 배지: 중립 계열 배경과 — 기호가 함께 사용되지 않음"
     )
 
 
@@ -466,16 +480,33 @@ class TestSnapshotFullHtmlOutput:
         assert "</html>" in rendered_html
         assert "<head>" in rendered_html
         assert "<body" in rendered_html
+        assert 'data-mail-shell="quiet-signal"' in rendered_html
 
     # -- 라이트 모드 CSS 클래스 존재 --
 
     @pytest.mark.parametrize(
         "css_class",
-        ["card", "text-strong", "text-body", "text-muted", "badge-up", "badge-down", "badge-flat"],
+        [
+            "panel",
+            "panel-strong",
+            "text-strong",
+            "text-body",
+            "text-muted",
+            "badge-up",
+            "badge-down",
+            "badge-flat",
+            "signal-rail",
+        ],
     )
     def test_light_mode_css_classes_exist(self, rendered_html: str, css_class: str) -> None:
         """라이트 모드 CSS 클래스가 HTML 출력에 존재한다."""
         assert css_class in rendered_html, f"라이트 모드 CSS 클래스 '{css_class}' 누락"
+
+    def test_contains_quiet_signal_rhythm_markers(self, rendered_html: str) -> None:
+        assert 'data-mail-rhythm="hero"' in rendered_html
+        assert 'data-mail-rhythm="narrative"' in rendered_html
+        assert 'data-mail-rhythm="data"' in rendered_html
+        assert 'data-mail-rhythm="utility"' in rendered_html
 
     # -- 다크 모드 CSS 규칙 --
 
@@ -488,9 +519,9 @@ class TestSnapshotFullHtmlOutput:
     @pytest.mark.parametrize(
         "dark_color,description",
         [
-            ("#142313", "다크 모드 상승 배경색"),
-            ("#2a1717", "다크 모드 하락 배경색"),
-            ("#151515", "다크 모드 보합 배경색"),
+            (MAIL_THEME["colors"]["badgeUpBg"], "다크 모드 상승 배경색"),
+            (MAIL_THEME["colors"]["badgeDownBg"], "다크 모드 하락 배경색"),
+            (MAIL_THEME["colors"]["badgeFlatBg"], "다크 모드 보합 배경색"),
         ],
     )
     def test_dark_mode_color_overrides(

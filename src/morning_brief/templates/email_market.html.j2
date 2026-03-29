@@ -1,54 +1,71 @@
-{# 변수: stock_indices, stock_tech, macro_indicators, market_status_text #}
-{% from "email_macros.html.j2" import badge, quality_mark, section_label %}
-<tr><td style="padding:0;">
+{% from "email_macros.html.j2" import delta_badge, section_label with context %}
+<tr data-mail-rhythm="data"><td style="padding:0;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr>
-<td class="section-pad" style="padding:34px 40px 36px 40px;border-bottom:1px solid #1c1b1b;">
-{{ section_label("미국 증시 흐름", "#02e600") }}
+<td class="section-pad" style="padding:{{ mail_theme.spacing.sectionGap }} {{ mail_theme.spacing.shellX }};border-bottom:1px solid {{ mail_theme.colors.border }};">
+{{ section_label("미국 증시 흐름", "green") }}
 {% if not stock_indices and not stock_tech and not macro_indicators %}
-<div style="padding-top:18px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#888888;font-size:15px;line-height:1.9;" class="text-muted">{{ market_status_text or "이번 집계에서는 시장 지표를 확인하지 못했어요." }}</div>
+<div class="text-muted" style="padding-top:18px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textMuted }};font-size:15px;line-height:1.9;">
+  {{ market_status_text or "이번 집계에서는 시장 지표를 확인하지 못했어요." }}
+</div>
 {% endif %}
 
 {% if stock_indices %}
-<div style="padding-top:22px;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#888888;font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;" class="text-muted">주요 지수</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-mail-rhythm="data" style="margin-top:20px;">
+<tr class="ticker-row">
+{% for s in stock_indices[:3] %}
+<td class="ticker-cell panel panel-strong" valign="top" style="width:{% if stock_indices|length > 1 %}33.333%{% else %}100%{% endif %};padding:16px;{% if not loop.last %}padding-right:12px;{% endif %}background:{{ mail_theme.colors.panelBgStrong }};{% if not loop.last %}border-right:1px solid {{ mail_theme.colors.border }};{% endif %};border:1px solid {{ mail_theme.colors.border }};">
+<div class="text-muted" style="font-family:{{ mail_theme.typography.labelMono }};color:{{ mail_theme.colors.textMuted }};font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;">{{ s.ticker }}</div>
+<div class="text-strong" style="padding-top:8px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textStrong }};font-size:22px;font-weight:800;line-height:1.14;letter-spacing:-0.04em;">{{ s.price }}</div>
+<div class="text-body" style="padding-top:6px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textBody }};font-size:13px;line-height:1.7;">{{ s.name }}</div>
+<div style="padding-top:10px;">{{ delta_badge(s.change_pct, s.direction) }}</div>
+</td>
+{% endfor %}
+</tr>
+</table>
+{% endif %}
+
+{% if stock_indices %}
+<div style="padding-top:24px;">{{ section_label("주요 지수", "cyan") }}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:8px;">
 {% for s in stock_indices %}
 <tr>
-<td style="padding:14px 0;border-top:1px solid #1c1b1b;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#ffffff;font-size:13px;font-weight:700;" class="text-strong">{{ s.ticker }}</td>
-<td style="padding:14px 12px;border-top:1px solid #1c1b1b;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#888888;font-size:13px;line-height:1.7;" class="text-muted">{{ s.name }}</td>
-<td align="right" style="padding:14px 0;border-top:1px solid #1c1b1b;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#ffffff;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;" class="text-strong">{{ s.price }}</td>
-<td align="right" style="padding:14px 0 14px 12px;border-top:1px solid #1c1b1b;">{{ badge(s.change_pct, s.direction) }}</td>
+<td style="padding:14px 0;border-top:1px solid {{ mail_theme.colors.border }};font-family:{{ mail_theme.typography.labelMono }};color:{{ mail_theme.colors.textMuted }};font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;" class="text-muted">{{ s.ticker }}</td>
+<td class="text-body" style="padding:14px 12px;border-top:1px solid {{ mail_theme.colors.border }};font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textBody }};font-size:13px;line-height:1.7;">{{ s.name }}</td>
+<td align="right" class="text-strong" style="padding:14px 0;border-top:1px solid {{ mail_theme.colors.border }};font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textStrong }};font-size:14px;font-weight:800;letter-spacing:-0.02em;">{{ s.price }}</td>
+<td align="right" style="padding:14px 0 14px 12px;border-top:1px solid {{ mail_theme.colors.border }};">{{ delta_badge(s.change_pct, s.direction) }}</td>
 </tr>
 {% endfor %}
 </table>
 {% endif %}
 
 {% if stock_tech %}
-<div style="padding-top:24px;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#888888;font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;" class="text-muted">주요 기술주</div>
+<div style="padding-top:24px;">{{ section_label("주요 기술주", "green") }}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:8px;">
 {% for s in stock_tech %}
 <tr>
-<td style="padding:12px 0;border-top:1px solid #1c1b1b;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#ffffff;font-size:13px;font-weight:700;" class="text-strong">{{ s.ticker }}</td>
-<td align="right" style="padding:12px 0;border-top:1px solid #1c1b1b;">{{ badge(s.change_pct, s.direction) }}</td>
+<td style="padding:12px 0;border-top:1px solid {{ mail_theme.colors.border }};font-family:{{ mail_theme.typography.labelMono }};color:{{ mail_theme.colors.textMuted }};font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;" class="text-muted">{{ s.ticker }}</td>
+<td class="text-body" style="padding:12px 12px;border-top:1px solid {{ mail_theme.colors.border }};font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textBody }};font-size:13px;line-height:1.7;">{{ s.name }}</td>
+<td align="right" style="padding:12px 0;border-top:1px solid {{ mail_theme.colors.border }};">{{ delta_badge(s.change_pct, s.direction) }}</td>
 </tr>
 {% endfor %}
 </table>
 {% endif %}
 
 {% if macro_indicators %}
-<div style="padding-top:24px;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#888888;font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;" class="text-muted">거시 환경</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:8px;">
+<div style="padding-top:24px;">{{ section_label("거시 환경", "cyan") }}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="panel panel-strong" style="margin-top:8px;background:{{ mail_theme.colors.panelBgStrong }};border:1px solid {{ mail_theme.colors.border }};">
 {% for m in macro_indicators %}
 <tr>
-<td style="padding:14px 0;border-top:1px solid #1c1b1b;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#ffffff;font-size:14px;font-weight:700;" class="text-strong">{{ m.label }}</td>
-<td align="right" style="padding:14px 0;border-top:1px solid #1c1b1b;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#ffffff;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;" class="text-strong">
+<td class="text-strong" style="padding:14px 16px;border-top:{% if loop.first %}0{% else %}1px solid {{ mail_theme.colors.border }}{% endif %};font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textStrong }};font-size:14px;font-weight:800;">{{ m.label }}</td>
+<td align="right" class="text-body" style="padding:14px 0;border-top:{% if loop.first %}0{% else %}1px solid {{ mail_theme.colors.border }}{% endif %};font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textBody }};font-size:13px;line-height:1.75;">
 {% if m.is_anomaly %}
-<span class="text-muted" style="color:#888888;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;font-size:13px;line-height:1.7;">{{ m.status_text or "이번 집계에서는 확인되지 않았어요." }}</span>
+{{ m.status_text or "이번 집계에서는 확인되지 않았어요." }}
 {% else %}
-{{ m.value }}{% if m.is_previous %} {{ quality_mark("전일") }}{% endif %}
+{{ m.value }}
 {% endif %}
 </td>
-<td align="right" style="padding:14px 0 14px 12px;border-top:1px solid #1c1b1b;">{% if not m.is_anomaly and m.change %}{{ badge(m.change, m.direction) }}{% endif %}</td>
+<td align="right" style="padding:14px 16px 14px 12px;border-top:{% if loop.first %}0{% else %}1px solid {{ mail_theme.colors.border }}{% endif %};">{% if not m.is_anomaly and m.change %}{{ delta_badge(m.change, m.direction) }}{% endif %}</td>
 </tr>
 {% endfor %}
 </table>

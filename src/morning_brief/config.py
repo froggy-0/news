@@ -10,6 +10,8 @@ DEFAULT_OPENAI_MODEL = "gpt-5-mini-2025-08-07"
 DEFAULT_PROMPT_TEMPLATE_VERSION = "market_brief_v4"
 DEFAULT_SUBSCRIPTION_NEWSLETTER_KEY = "morning-brief"
 DEFAULT_SUBSCRIPTION_UNSUBSCRIBE_PATH = "/unsubscribe"
+DEFAULT_SES_REGION = "ap-northeast-2"
+DEFAULT_SES_SENDER = "no-reply@sovereignbriefing.com"
 
 
 @dataclass(frozen=True)
@@ -50,10 +52,9 @@ class Settings:
     enable_official_x_signals: bool
     official_x_lookback_hours: int
     official_x_max_items: int
-    gmail_sender: str
-    gmail_credentials_file: Path
-    gmail_token_file: Path
-    gmail_oauth_interactive: bool
+    ses_sender: str
+    ses_region: str
+    ses_configuration_set: str
     public_app_base_url: str
     subscription_newsletter_key: str
     subscription_unsubscribe_path: str
@@ -190,15 +191,9 @@ def load_settings() -> Settings:
             minimum=1,
             maximum=6,
         ),
-        gmail_sender=os.getenv("GMAIL_SENDER", "").strip(),
-        gmail_credentials_file=Path(
-            os.getenv("GMAIL_CREDENTIALS_FILE", "credentials.json")
-        ).resolve(),
-        gmail_token_file=Path(os.getenv("GMAIL_TOKEN_FILE", "token.json")).resolve(),
-        gmail_oauth_interactive=_env_bool(
-            "GMAIL_OAUTH_INTERACTIVE",
-            default=not _env_bool("CI", False),
-        ),
+        ses_sender=os.getenv("SES_SENDER", DEFAULT_SES_SENDER).strip() or DEFAULT_SES_SENDER,
+        ses_region=os.getenv("AWS_REGION", DEFAULT_SES_REGION).strip() or DEFAULT_SES_REGION,
+        ses_configuration_set=os.getenv("SES_CONFIGURATION_SET", "").strip(),
         public_app_base_url=os.getenv("PUBLIC_APP_BASE_URL", "").strip().rstrip("/"),
         subscription_newsletter_key=DEFAULT_SUBSCRIPTION_NEWSLETTER_KEY,
         subscription_unsubscribe_path=DEFAULT_SUBSCRIPTION_UNSUBSCRIBE_PATH,

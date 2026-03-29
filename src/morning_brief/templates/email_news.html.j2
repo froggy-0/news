@@ -1,29 +1,45 @@
-{# 변수: news_items, news_status_text #}
-{% from "email_macros.html.j2" import section_label %}
-<tr><td style="padding:0;">
+{% from "email_macros.html.j2" import section_label with context %}
+<tr data-mail-rhythm="narrative"><td style="padding:0;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr>
-<td class="section-pad" style="padding:34px 40px 36px 40px;border-bottom:1px solid #1c1b1b;">
-{{ section_label("주요 뉴스", "#02e600") }}
+<td class="section-pad" style="padding:{{ mail_theme.spacing.sectionGap }} {{ mail_theme.spacing.shellX }};border-bottom:1px solid {{ mail_theme.colors.border }};">
+{{ section_label("주요 뉴스", "green") }}
 {% if not news_items %}
-<div style="padding-top:18px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#888888;font-size:15px;line-height:1.9;" class="text-muted">{{ news_status_text or "이번 집계에서는 주요 뉴스를 확인하지 못했어요." }}</div>
+<div class="text-muted" style="padding-top:18px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textMuted }};font-size:15px;line-height:1.9;">
+  {{ news_status_text or "이번 집계에서는 주요 뉴스를 확인하지 못했어요." }}
+</div>
 {% endif %}
 {% for item in news_items %}
-<div style="padding-top:{% if loop.first %}22px{% else %}26px{% endif %};{% if not loop.first %}margin-top:22px;border-top:1px solid #1c1b1b;{% endif %}">
-<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;font-size:10px;line-height:1.8;letter-spacing:0.14em;text-transform:uppercase;" class="text-muted">
-<span class="accent" style="color:#02e600;">{{ item.source_kind or "뉴스" }}</span>{% if item.source_name %} <span style="color:#888888;">&#183;</span> <span style="color:#ffffff;" class="text-strong">{% if item.source_url %}<a href="{{ item.source_url }}" style="color:#ffffff;text-decoration:none;">{{ item.source_name }}</a>{% else %}{{ item.source_name }}{% endif %}</span>{% endif %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-mail-rhythm="narrative" style="margin-top:{% if loop.first %}22px{% else %}26px{% endif %};{% if not loop.first %}border-top:1px solid {{ mail_theme.colors.border }};{% endif %}">
+<tr>
+<td style="padding-top:{% if loop.first %}0{% else %}22px{% endif %};">
+<div class="text-muted" style="font-family:{{ mail_theme.typography.labelMono }};color:{{ mail_theme.colors.textMuted }};font-size:10px;line-height:1.8;letter-spacing:0.16em;text-transform:uppercase;">
+  <span class="accent-cyan" style="color:{{ mail_theme.colors.accentCyan }};">{{ item.source_kind or "뉴스" }}</span>
+  {% if item.source_name %}<span style="color:{{ mail_theme.colors.textMuted }};"> &#183; </span><span class="text-strong" style="color:{{ mail_theme.colors.textStrong }};">{% if item.source_url %}<a href="{{ item.source_url }}" style="color:{{ mail_theme.colors.textStrong }};text-decoration:none;">{{ item.source_name }}</a>{% else %}{{ item.source_name }}{% endif %}</span>{% endif %}
 </div>
-<div style="padding-top:12px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#ffffff;font-size:25px;line-height:1.48;font-weight:800;letter-spacing:-0.04em;" class="text-strong">{{ item.number }} {{ item.headline }}</div>
+<div class="text-strong" style="padding-top:12px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textStrong }};font-size:26px;line-height:1.42;font-weight:900;letter-spacing:-0.05em;">
+  {{ item.number }} {{ item.headline }}
+</div>
 {% if item.body %}
-<div style="padding-top:14px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#c6c6c6;font-size:15px;line-height:1.95;white-space:pre-line;" class="text-body">{{ item.body }}</div>
+<div class="text-body" style="padding-top:14px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textBody }};font-size:15px;line-height:1.92;white-space:pre-line;">
+  {{ item.body }}
+</div>
 {% endif %}
 {% if item.tldr %}
-<div style="padding-top:14px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#c6c6c6;font-size:14px;line-height:1.9;" class="text-body">
-<span style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#888888;font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;" class="text-muted">시장 의미</span>
-<span style="display:inline-block;padding-left:10px;color:#ffffff;" class="text-strong">{{ item.tldr }}</span>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="panel panel-strong" style="margin-top:16px;background:{{ mail_theme.colors.panelBgStrong }};border:1px solid {{ mail_theme.colors.border }};">
+<tr>
+<td style="padding:14px 16px;">
+{{ section_label("시장 의미", "cyan") }}
+<div class="text-strong" style="padding-top:10px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textStrong }};font-size:14px;line-height:1.84;font-weight:700;">
+  {{ item.tldr }}
 </div>
+</td>
+</tr>
+</table>
 {% endif %}
-</div>
+</td>
+</tr>
+</table>
 {% endfor %}
 </td>
 </tr>

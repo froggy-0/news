@@ -17,6 +17,7 @@
     "test": "node --test --import tsx ./tests/*.test.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-sesv2": "^3.940.0",
     "@supabase/supabase-js": "^2.100.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.546.0",

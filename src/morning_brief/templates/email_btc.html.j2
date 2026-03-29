@@ -1,69 +1,68 @@
-{# 변수: btc_data (BTCData) #}
-{% from "email_macros.html.j2" import badge, section_label %}
-<tr><td style="padding:0;">
+{% from "email_macros.html.j2" import delta_badge, section_label with context %}
+<tr data-mail-rhythm="data"><td style="padding:0;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr>
-<td class="section-pad" style="padding:34px 40px 36px 40px;border-bottom:1px solid #1c1b1b;">
-{{ section_label("비트코인과 ETF", "#02e600") }}
+<td class="section-pad" style="padding:{{ mail_theme.spacing.sectionGap }} {{ mail_theme.spacing.shellX }};border-bottom:1px solid {{ mail_theme.colors.border }};">
+{{ section_label("비트코인과 ETF", "green") }}
 {% if btc_data.status_text %}
-<div style="padding-top:18px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#888888;font-size:15px;line-height:1.9;" class="text-muted">{{ btc_data.status_text }}</div>
+<div class="text-muted" style="padding-top:18px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textMuted }};font-size:15px;line-height:1.9;">{{ btc_data.status_text }}</div>
 {% endif %}
 
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:18px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-mail-rhythm="data" style="margin-top:20px;">
 <tr>
-<td class="stack-col stack-col-left" valign="top" style="width:58%;padding:0 14px 0 0;">
-<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#888888;font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;" class="text-muted">BTC 현물</div>
-<div style="padding-top:10px;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#ffffff;font-size:30px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums;" class="text-strong">{{ btc_data.spot_price }}</div>
+<td class="stack-col stack-col-left panel panel-strong" valign="top" style="width:58%;padding:18px 18px 18px 18px;background:{{ mail_theme.colors.panelBgStrong }};border:1px solid {{ mail_theme.colors.border }};">
+{{ section_label("BTC 현물", "cyan") }}
+<div class="text-strong" style="padding-top:10px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textStrong }};font-size:30px;font-weight:900;line-height:1.06;letter-spacing:-0.05em;">{{ btc_data.spot_price }}</div>
 {% if btc_data.spot_change %}
-<div style="padding-top:10px;">{{ badge(btc_data.spot_change, btc_data.spot_direction) }}</div>
+<div style="padding-top:12px;">{{ delta_badge(btc_data.spot_change, btc_data.spot_direction) }}</div>
 {% endif %}
 </td>
-<td class="stack-col stack-col-right" valign="top" style="width:42%;padding:0 0 0 14px;border-left:1px solid #1c1b1b;">
-<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#888888;font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;" class="text-muted">공포탐욕지수</div>
-<div style="padding-top:10px;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#ffffff;font-size:28px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums;" class="text-strong">{{ btc_data.fear_greed_value }}/100</div>
-<div style="padding-top:8px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#c6c6c6;font-size:14px;line-height:1.8;" class="text-body">{{ btc_data.fear_greed_label }}</div>
+<td class="stack-col stack-col-right panel" valign="top" style="width:42%;padding:18px;border:1px solid {{ mail_theme.colors.border }};{% if btc_data.spot_price %}border-left:none;{% endif %};background:{{ mail_theme.colors.panelBg }};">
+{{ section_label("공포탐욕지수", "green") }}
+<div class="text-strong" style="padding-top:10px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textStrong }};font-size:28px;font-weight:900;line-height:1.06;letter-spacing:-0.05em;">{{ btc_data.fear_greed_value }}/100</div>
+<div class="text-body" style="padding-top:8px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textBody }};font-size:14px;line-height:1.78;">{{ btc_data.fear_greed_label }}</div>
 </td>
 </tr>
 </table>
 
 {% if btc_data.etf_items %}
-<div style="padding-top:24px;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#888888;font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;" class="text-muted">주요 현물 ETF</div>
+<div style="padding-top:24px;">{{ section_label("주요 현물 ETF", "cyan") }}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:8px;">
 {% for etf in btc_data.etf_items %}
 <tr>
-<td style="padding:12px 0;border-top:1px solid #1c1b1b;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#ffffff;font-size:13px;font-weight:700;" class="text-strong">{{ etf.ticker }}</td>
-<td align="right" style="padding:12px 0;border-top:1px solid #1c1b1b;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#ffffff;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;" class="text-strong">${{ etf.price }}</td>
-<td align="right" style="padding:12px 0 12px 12px;border-top:1px solid #1c1b1b;">{{ badge(etf.change_pct|default('0%'), etf.direction|default('flat')) }}</td>
+<td style="padding:12px 0;border-top:1px solid {{ mail_theme.colors.border }};font-family:{{ mail_theme.typography.labelMono }};color:{{ mail_theme.colors.textMuted }};font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;" class="text-muted">{{ etf.ticker }}</td>
+<td align="right" class="text-strong" style="padding:12px 0;border-top:1px solid {{ mail_theme.colors.border }};font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textStrong }};font-size:14px;font-weight:800;">${{ etf.price }}</td>
+<td align="right" style="padding:12px 0 12px 12px;border-top:1px solid {{ mail_theme.colors.border }};">{{ delta_badge(etf.change_pct|default('0%'), etf.direction|default('flat')) }}</td>
 </tr>
 {% endfor %}
 </table>
 {% endif %}
 
 {% if btc_data.official_snapshots %}
-<div style="padding-top:24px;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#888888;font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;" class="text-muted">기관 보유 현황</div>
+<div style="padding-top:24px;">{{ section_label("기관 보유 현황", "green") }}</div>
 {% if btc_data.official_total_btc or btc_data.official_total_aum %}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:8px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">
 <tr>
 {% if btc_data.official_total_btc %}
-<td class="stack-col stack-col-left" valign="top" style="width:50%;padding:12px 14px 0 0;border-top:1px solid #1c1b1b;">
-<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#888888;font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;" class="text-muted">총 BTC 보유량</div>
-<div style="padding-top:8px;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#ffffff;font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;" class="text-strong">{{ btc_data.official_total_btc }}</div>
+<td class="stack-col stack-col-left panel panel-strong" valign="top" style="width:50%;padding:14px 16px;background:{{ mail_theme.colors.panelBgStrong }};border:1px solid {{ mail_theme.colors.border }};">
+{{ section_label("총 BTC 보유량", "cyan") }}
+<div class="text-strong" style="padding-top:8px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textStrong }};font-size:18px;font-weight:800;">{{ btc_data.official_total_btc }}</div>
 </td>
 {% endif %}
 {% if btc_data.official_total_aum %}
-<td class="stack-col stack-col-right" valign="top" style="width:50%;padding:12px 0 0 14px;border-top:1px solid #1c1b1b;{% if btc_data.official_total_btc %}border-left:1px solid #1c1b1b;{% endif %}">
-<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#888888;font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;" class="text-muted">총 AUM</div>
-<div style="padding-top:8px;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#ffffff;font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;" class="text-strong">{{ btc_data.official_total_aum }}</div>
+<td class="stack-col stack-col-right panel" valign="top" style="width:50%;padding:14px 16px;background:{{ mail_theme.colors.panelBg }};border:1px solid {{ mail_theme.colors.border }};{% if btc_data.official_total_btc %}border-left:none;{% endif %};">
+{{ section_label("총 AUM", "green") }}
+<div class="text-strong" style="padding-top:8px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textStrong }};font-size:18px;font-weight:800;">{{ btc_data.official_total_aum }}</div>
 </td>
 {% endif %}
 </tr>
 </table>
 {% endif %}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:8px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="panel panel-strong" style="margin-top:8px;background:{{ mail_theme.colors.panelBgStrong }};border:1px solid {{ mail_theme.colors.border }};">
 {% for snap in btc_data.official_snapshots %}
 <tr>
-<td style="padding:12px 0;border-top:1px solid #1c1b1b;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#ffffff;font-size:14px;font-weight:700;" class="text-strong">{{ snap.issuer }} {{ snap.ticker }}</td>
-<td align="right" style="padding:12px 0;border-top:1px solid #1c1b1b;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#c6c6c6;font-size:13px;line-height:1.8;" class="text-body">{{ snap.btc_held }} BTC &#183; AUM {{ snap.aum }}</td>
+<td class="text-strong" style="padding:12px 16px;border-top:{% if loop.first %}0{% else %}1px solid {{ mail_theme.colors.border }}{% endif %};font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textStrong }};font-size:14px;font-weight:800;">{{ snap.issuer }} {{ snap.ticker }}</td>
+<td align="right" class="text-body" style="padding:12px 16px;border-top:{% if loop.first %}0{% else %}1px solid {{ mail_theme.colors.border }}{% endif %};font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textBody }};font-size:13px;line-height:1.8;">{{ snap.btc_held }} BTC &#183; AUM {{ snap.aum }}</td>
 </tr>
 {% endfor %}
 </table>

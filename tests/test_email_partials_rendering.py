@@ -11,11 +11,14 @@ from pathlib import Path
 import pytest
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from morning_brief.emailer import _load_mail_theme
+
 # ---------------------------------------------------------------------------
 # Jinja2 환경 설정
 # ---------------------------------------------------------------------------
 
 TEMPLATE_DIR = Path("src/morning_brief/templates")
+MAIL_THEME = _load_mail_theme()
 env = Environment(
     loader=FileSystemLoader(str(TEMPLATE_DIR)),
     autoescape=select_autoescape(("html", "xml")),
@@ -170,6 +173,7 @@ def test_header_partial_renders_independently() -> None:
     """email_header.html.j2가 필요한 변수만으로 독립 렌더링 가능한지 확인."""
     tmpl = env.get_template("email_header.html.j2")
     html = tmpl.render(
+        mail_theme=MAIL_THEME,
         display_date="2026년 3월 18일 화요일",
         read_time="3분 읽기",
         snapshot_badges=SAMPLE_SNAPSHOT_BADGES,
@@ -182,6 +186,7 @@ def test_header_partial_renders_independently() -> None:
     assert "뉴욕 마감 기준" in html
     assert "2026년 3월 18일 화요일" in html
     assert "3분 읽기" in html
+    assert 'data-mail-rhythm="hero"' in html
     assert "미국 10년물" in html
     assert "원/달러" in html
     assert "나스닥 선물" in html
@@ -199,6 +204,7 @@ def test_hero_partial_renders_independently() -> None:
     """email_hero.html.j2가 hero_summary 텍스트로 독립 렌더링 가능한지 확인."""
     tmpl = env.get_template("email_hero.html.j2")
     html = tmpl.render(
+        mail_theme=MAIL_THEME,
         hero_summary="오늘 시장은 혼조세를 보였어요.",
         hero_alerts=["추가 메모"],
         hero_verdict="오늘은 관망 국면입니다.",
@@ -209,6 +215,7 @@ def test_hero_partial_renders_independently() -> None:
     assert "오늘은 관망 국면입니다." in html
     assert "변동성은 남아 있지만 추세가 엇갈립니다." in html
     assert "미국 기술주 흐름이 코스피 대형주에 선별적으로 반영될 수 있습니다." in html
+    assert 'data-mail-rhythm="hero"' in html
     assert 'role="presentation"' in html
 
 
@@ -220,12 +227,13 @@ def test_hero_partial_renders_independently() -> None:
 def test_news_partial_renders_independently() -> None:
     """email_news.html.j2가 샘플 뉴스 아이템으로 독립 렌더링 가능한지 확인."""
     tmpl = env.get_template("email_news.html.j2")
-    html = tmpl.render(news_items=SAMPLE_NEWS_ITEMS, news_status_text="")
+    html = tmpl.render(mail_theme=MAIL_THEME, news_items=SAMPLE_NEWS_ITEMS, news_status_text="")
     assert "테스트 뉴스 헤드라인" in html
     assert "뉴스 본문 내용입니다." in html
     assert "원문 기사" in html
     assert "Reuters" in html
     assert "핵심 요약" in html
+    assert 'data-mail-rhythm="narrative"' in html
     assert 'role="presentation"' in html
 
 
@@ -237,11 +245,12 @@ def test_news_partial_renders_independently() -> None:
 def test_btc_partial_renders_independently() -> None:
     """email_btc.html.j2가 샘플 btc_data로 독립 렌더링 가능한지 확인."""
     tmpl = env.get_template("email_btc.html.j2")
-    html = tmpl.render(btc_data=SAMPLE_BTC_DATA)
+    html = tmpl.render(mail_theme=MAIL_THEME, btc_data=SAMPLE_BTC_DATA)
     assert "$87,200" in html
     assert "탐욕" in html
     assert "IBIT" in html
     assert "비트코인과 ETF" in html
+    assert 'data-mail-rhythm="data"' in html
     assert 'role="presentation"' in html
 
 
@@ -254,6 +263,7 @@ def test_market_partial_renders_independently() -> None:
     """email_market.html.j2가 샘플 종목/거시 데이터로 독립 렌더링 가능한지 확인."""
     tmpl = env.get_template("email_market.html.j2")
     html = tmpl.render(
+        mail_theme=MAIL_THEME,
         stock_indices=SAMPLE_STOCK_INDICES,
         stock_tech=SAMPLE_STOCK_TECH,
         macro_indicators=SAMPLE_MACRO_INDICATORS,
@@ -266,6 +276,7 @@ def test_market_partial_renders_independently() -> None:
     assert "NVDA" in html
     assert "10년물" in html
     assert "4.20%" in html
+    assert 'data-mail-rhythm="data"' in html
     assert 'role="presentation"' in html
 
 
@@ -277,7 +288,7 @@ def test_market_partial_renders_independently() -> None:
 def test_sector_partial_renders_independently() -> None:
     """email_sector.html.j2가 샘플 sector_mapping으로 독립 렌더링 가능한지 확인."""
     tmpl = env.get_template("email_sector.html.j2")
-    html = tmpl.render(sector_mapping=SAMPLE_SECTOR_MAPPING)
+    html = tmpl.render(mail_theme=MAIL_THEME, sector_mapping=SAMPLE_SECTOR_MAPPING)
     assert "NVDA" in html
     assert "AI 수요 확대" in html
     assert "XLE" in html
@@ -285,6 +296,7 @@ def test_sector_partial_renders_independently() -> None:
     assert "GLD" in html
     assert "금리 동결 시 중립" in html
     assert "전반적으로 기술주 중심 수혜 예상" in html
+    assert 'data-mail-rhythm="data"' in html
     assert 'role="presentation"' in html
 
 
@@ -296,13 +308,14 @@ def test_sector_partial_renders_independently() -> None:
 def test_calendar_partial_renders_independently() -> None:
     """email_calendar.html.j2가 샘플 이벤트로 독립 렌더링 가능한지 확인."""
     tmpl = env.get_template("email_calendar.html.j2")
-    html = tmpl.render(event_calendar=SAMPLE_EVENTS)
+    html = tmpl.render(mail_theme=MAIL_THEME, event_calendar=SAMPLE_EVENTS)
     assert "소매판매" in html
     assert "FOMC 결정" in html
     assert "+0.3%" in html
     # 영향도 ■□ 표시 확인 (HTML 엔티티)
     assert "&#9632;" in html
     assert "&#9633;" in html
+    assert 'data-mail-rhythm="data"' in html
     assert 'role="presentation"' in html
 
 
@@ -315,6 +328,7 @@ def test_footer_partial_renders_independently() -> None:
     """email_footer.html.j2가 최소 변수로 독립 렌더링 가능한지 확인."""
     tmpl = env.get_template("email_footer.html.j2")
     html = tmpl.render(
+        mail_theme=MAIL_THEME,
         news_source_items=[
             {
                 "headline": "테스트 뉴스 헤드라인",
@@ -338,6 +352,7 @@ def test_footer_partial_renders_independently() -> None:
     assert "Reuters" in html
     assert "시장 데이터" in html
     assert "FRED" in html or "&#xB370;&#xC774;&#xD130;" in html
+    assert 'data-mail-rhythm="utility"' in html
 
 
 # ---------------------------------------------------------------------------
@@ -349,6 +364,7 @@ def _build_full_context() -> dict:
     """email_base.html.j2 렌더링에 필요한 전체 컨텍스트."""
     return {
         "subject": "테스트 브리핑",
+        "mail_theme": MAIL_THEME,
         "preheader": "S&P +0.5% · BTC $87,200",
         "display_date": "2026년 3월 18일 화요일",
         "read_time": "3분 읽기",
@@ -501,7 +517,7 @@ def test_partials_no_emoji() -> None:
     """V2 파셜들이 이모지를 사용하지 않고 HTML 엔티티만 사용하는지 확인."""
     for template_name, context in _V2_PARTIALS:
         tmpl = env.get_template(template_name)
-        html = tmpl.render(**context)
+        html = tmpl.render(mail_theme=MAIL_THEME, **context)
         match = EMOJI_PATTERN.search(html)
         assert match is None, (
             f"{template_name}에서 이모지 발견: {match.group()!r} (U+{ord(match.group()):04X})"
@@ -538,7 +554,7 @@ def test_v2_partial_korean_labels(template_name: str, expected_labels: list[str]
     """
     context = _V2_PARTIAL_CONTEXT[template_name]
     tmpl = env.get_template(template_name)
-    html = tmpl.render(**context)
+    html = tmpl.render(mail_theme=MAIL_THEME, **context)
     for label in expected_labels:
         assert label in html, f"{template_name}: 한국어 라벨 '{label}'이 렌더링 결과에 없음"
 
@@ -561,6 +577,6 @@ def test_v2_partials_no_korean_hex_entities() -> None:
     """
     for template_name, context in _V2_PARTIALS:
         tmpl = env.get_template(template_name)
-        html = tmpl.render(**context)
+        html = tmpl.render(mail_theme=MAIL_THEME, **context)
         match = _KOREAN_HEX_ENTITY_RE.search(html)
         assert match is None, f"{template_name}: 한국어 hex 엔티티 잔존 — {match.group()!r}"

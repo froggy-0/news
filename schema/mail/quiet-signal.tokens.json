@@ -1,0 +1,73 @@
+{
+  "name": "quiet-signal",
+  "colors": {
+    "shellBg": "#050505",
+    "panelBg": "#090909",
+    "panelBgStrong": "rgba(255,255,255,0.04)",
+    "border": "rgba(255,255,255,0.10)",
+    "borderStrong": "rgba(255,255,255,0.18)",
+    "textStrong": "#ffffff",
+    "textBody": "rgba(255,255,255,0.72)",
+    "textMuted": "rgba(255,255,255,0.42)",
+    "accentCyan": "#00ffff",
+    "accentGreen": "#00ff66",
+    "accentDown": "#ff6b6b",
+    "accentNeutral": "rgba(255,255,255,0.62)",
+    "badgeUpBg": "rgba(0,255,102,0.10)",
+    "badgeDownBg": "rgba(255,107,107,0.12)",
+    "badgeFlatBg": "rgba(255,255,255,0.05)"
+  },
+  "typography": {
+    "labelMono": "'SFMono-Regular','Menlo','Consolas',monospace",
+    "bodySans": "'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif",
+    "displaySerif": "Georgia,'Times New Roman',serif"
+  },
+  "spacing": {
+    "shellX": "40px",
+    "shellY": "30px",
+    "sectionGap": "34px",
+    "blockGap": "18px",
+    "mobileShellX": "20px",
+    "mobileShellY": "18px"
+  },
+  "layout": {
+    "containerWidth": "600",
+    "confirmationWidth": "560px",
+    "ctaMinHeight": "44px"
+  },
+  "rhythm": {
+    "hero": "signal-rail",
+    "narrative": "open-stack",
+    "data": "panel-split",
+    "utility": "compressed"
+  },
+  "components": {
+    "pill": {
+      "radius": "999px",
+      "padding": "6px 10px",
+      "fontSize": "10px",
+      "letterSpacing": "0.16em"
+    },
+    "badge": {
+      "radius": "999px",
+      "padding": "4px 8px",
+      "fontSize": "11px"
+    },
+    "cta": {
+      "radius": "999px",
+      "padding": "14px 22px",
+      "background": "#ffffff",
+      "text": "#050505",
+      "accentBorder": "#00ffff"
+    },
+    "footerLink": {
+      "fontSize": "11px",
+      "letterSpacing": "0.18em"
+    }
+  },
+  "mood": {
+    "signalRail": true,
+    "panelDepth": true,
+    "subtleGlow": false
+  }
+}

@@ -16,6 +16,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - name: Checkout
@@ -27,6 +28,12 @@ jobs:
         uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
         with:
           python-version: "3.11"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@61815dc82798b048eb01e659b2b80c39cfe9698 # v5.1.1
+        with:
+          aws-region: ap-northeast-2
+          role-to-assume: arn:aws:iam::254849613915:role/kr-pr-ses-news-v1a
 
       - name: Compute cache keys
         id: cache-meta
@@ -92,19 +99,6 @@ jobs:
             echo "pip_status=miss" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Restore Gmail OAuth files
-        shell: bash
-        run: |
-          if [ -z "${GMAIL_CREDENTIALS_JSON_B64}" ] || [ -z "${GMAIL_TOKEN_JSON_B64}" ]; then
-            echo "Missing Gmail OAuth secrets." >&2
-            exit 1
-          fi
-          echo "${GMAIL_CREDENTIALS_JSON_B64}" | base64 -d > credentials.json
-          echo "${GMAIL_TOKEN_JSON_B64}" | base64 -d > token.json
-        env:
-          GMAIL_CREDENTIALS_JSON_B64: ${{ secrets.GMAIL_CREDENTIALS_JSON_B64 }}
-          GMAIL_TOKEN_JSON_B64: ${{ secrets.GMAIL_TOKEN_JSON_B64 }}
-
       - name: Run pipeline
         shell: bash
         run: |
@@ -155,10 +149,8 @@ jobs:
           R2_S3_ENDPOINT: ${{ vars.R2_S3_ENDPOINT || '' }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID || '' }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY || '' }}
-          GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
-          GMAIL_CREDENTIALS_FILE: credentials.json
-          GMAIL_TOKEN_FILE: token.json
-          GMAIL_OAUTH_INTERACTIVE: "false"
+          AWS_REGION: ap-northeast-2
+          SES_SENDER: no-reply@sovereignbriefing.com
           PUBLIC_APP_BASE_URL: ${{ vars.PUBLIC_APP_BASE_URL || '' }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL || '' }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || '' }}

@@ -24,7 +24,7 @@ from morning_brief.data.sources.provider_runtime import (
     provider_stats_snapshot,
     reset_provider_runtime_state,
 )
-from morning_brief.emailer import GmailSender
+from morning_brief.emailer import SesSender
 from morning_brief.llm_errors import BriefGenerationError
 from morning_brief.llm_provider_policy import provider_role_snapshot
 from morning_brief.logging_utils import log_structured
@@ -332,7 +332,7 @@ def run_pipeline(settings: Settings) -> str:
             )
         else:
             with observer.phase("email"):
-                GmailSender(settings).send(subject=subject, body=briefing, packet=render_packet)
+                SesSender(settings).send(subject=subject, body=briefing, packet=render_packet)
     except BriefGenerationError as exc:
         status = "openai_failed"
         failure_message = str(exc)
