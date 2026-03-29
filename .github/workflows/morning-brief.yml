@@ -30,7 +30,7 @@ jobs:
           python-version: "3.11"
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dc82798b048eb01e659b2b80c39cfe9698 # v5.1.1
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
         with:
           aws-region: ap-northeast-2
           role-to-assume: arn:aws:iam::254849613915:role/kr-pr-ses-news-v1a
