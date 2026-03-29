@@ -1,48 +1,52 @@
-{# 변수: news_source_items, market_source_lines, data_quality_status, footer_notes, unsubscribe_url, github_url #}
-{% from "email_macros.html.j2" import section_label %}
-<tr><td style="padding:0;">
+{% from "email_macros.html.j2" import eyebrow, section_label, utility_link with context %}
+<tr data-mail-rhythm="utility"><td style="padding:0;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr>
-<td class="section-pad" style="padding:34px 40px 20px 40px;">
-{{ section_label("출처와 데이터", "#02e600") }}
+<td class="section-pad" style="padding:{{ mail_theme.spacing.sectionGap }} {{ mail_theme.spacing.shellX }} 22px {{ mail_theme.spacing.shellX }};">
+{{ section_label("출처와 데이터", "green") }}
 {% if news_source_items %}
-<div style="padding-top:20px;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#888888;font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;" class="text-muted">뉴스 출처</div>
+<div style="padding-top:18px;">{{ eyebrow("뉴스 출처", "muted") }}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:8px;">
 {% for item in news_source_items %}
 <tr>
-<td style="padding:10px 0;border-top:1px solid #1c1b1b;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#888888;font-size:13px;line-height:1.7;" class="text-muted">{{ item.source_kind }}</td>
-<td align="right" style="padding:10px 0;border-top:1px solid #1c1b1b;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#ffffff;font-size:14px;line-height:1.7;font-weight:700;" class="text-strong">{% if item.safe_url %}<a href="{{ item.safe_url }}" style="color:#ffffff;text-decoration:none;">{{ item.source_name }}</a>{% else %}{{ item.source_name }}{% endif %}</td>
+<td class="text-muted" style="padding:10px 0;border-top:1px solid {{ mail_theme.colors.border }};font-family:{{ mail_theme.typography.labelMono }};color:{{ mail_theme.colors.textMuted }};font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;">{{ item.source_kind }}</td>
+<td align="right" class="text-strong" style="padding:10px 0;border-top:1px solid {{ mail_theme.colors.border }};font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textStrong }};font-size:14px;line-height:1.7;font-weight:800;">{% if item.safe_url %}<a href="{{ item.safe_url }}" style="color:{{ mail_theme.colors.textStrong }};text-decoration:none;">{{ item.source_name }}</a>{% else %}{{ item.source_name }}{% endif %}</td>
 </tr>
 {% endfor %}
 </table>
 {% endif %}
 
-<div style="padding-top:22px;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#888888;font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;" class="text-muted">시장 데이터</div>
+<div style="padding-top:20px;">{{ eyebrow("시장 데이터", "muted") }}</div>
 {% for line in market_source_lines %}
-<div style="padding-top:10px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#c6c6c6;font-size:14px;line-height:1.8;" class="text-body">· {{ line }}</div>
+<div class="text-body" style="padding-top:8px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textBody }};font-size:14px;line-height:1.8;">· {{ line }}</div>
 {% endfor %}
 
-<div style="padding-top:22px;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#888888;font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;" class="text-muted">수집 기준</div>
-<div style="padding-top:10px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#c6c6c6;font-size:14px;line-height:1.85;" class="text-body">뉴욕 마감 이후 공개 시장 데이터와 검증된 뉴스, 공식 X 시그널을 바탕으로 요약했습니다.</div>
+<div style="padding-top:20px;">{{ eyebrow("수집 기준", "muted") }}</div>
+<div class="text-body" style="padding-top:8px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textBody }};font-size:14px;line-height:1.82;">뉴욕 마감 이후 공개 시장 데이터와 검증된 뉴스, 공식 X 시그널을 바탕으로 요약했습니다.</div>
 
 {% if data_quality_status != "ok" and footer_notes %}
-<div style="padding-top:22px;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#888888;font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;" class="text-muted">데이터 처리 메모</div>
+<div style="padding-top:20px;">{{ eyebrow("데이터 처리 메모", "muted") }}</div>
 {% for note in footer_notes %}
-<div style="padding-top:8px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#888888;font-size:13px;line-height:1.8;" class="text-muted">· {{ note }}</div>
+<div class="text-muted" style="padding-top:8px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textMuted }};font-size:13px;line-height:1.8;">· {{ note }}</div>
 {% endfor %}
 {% endif %}
 </td>
 </tr>
 <tr>
-<td class="section-pad" style="padding:0 40px 30px 40px;">
-<div style="padding-top:18px;border-top:1px solid #1c1b1b;text-align:center;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;">
-<div class="text-muted" style="color:#888888;font-size:11px;line-height:1.8;">본 메일은 공개 시장 데이터 기반 정보성 브리핑이며 투자 권유가 아닙니다.</div>
-<div style="padding-top:6px;">
-<a href="{{ unsubscribe_url }}" style="color:#888888;font-size:11px;text-decoration:underline;">구독 해지</a>
-<span style="color:#555555;font-size:11px;"> &#183; </span>
-<a href="{{ github_url }}" style="color:#888888;font-size:11px;text-decoration:underline;">GitHub</a>
+<td class="section-pad" style="padding:0 {{ mail_theme.spacing.shellX }} {{ mail_theme.spacing.shellY }} {{ mail_theme.spacing.shellX }};">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="panel" style="background:{{ mail_theme.colors.panelBg }};border:1px solid {{ mail_theme.colors.border }};">
+<tr>
+<td align="center" style="padding:18px 20px;">
+{{ eyebrow("SOVEREIGN BRIEF", "green") }}
+<div class="text-muted" style="padding-top:8px;color:{{ mail_theme.colors.textMuted }};font-family:{{ mail_theme.typography.bodySans }};font-size:11px;line-height:1.8;">본 메일은 공개 시장 데이터 기반 정보성 브리핑이며 투자 권유가 아닙니다.</div>
+<div style="padding-top:10px;">
+{{ utility_link("구독 해지", unsubscribe_url) }}
+<span style="color:{{ mail_theme.colors.textMuted }};font-size:11px;"> &#183; </span>
+{{ utility_link("GitHub", github_url) }}
 </div>
-</div>
+</td>
+</tr>
+</table>
 </td>
 </tr>
 </table>

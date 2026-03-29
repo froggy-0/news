@@ -1,31 +1,32 @@
-{# 변수: display_date, read_time, snapshot_badges, header_signal_label, header_signal_tone #}
-{% from "email_macros.html.j2" import delta_text, pill %}
-<tr><td style="padding:0;">
+{% from "email_macros.html.j2" import eyebrow, signal_pill, delta_badge with context %}
+<tr data-mail-rhythm="hero"><td style="padding:0;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr>
-<td class="section-pad" style="padding:30px 40px 26px 40px;border-bottom:1px solid #1c1b1b;">
+<td class="section-pad" style="padding:{{ mail_theme.spacing.shellY }} {{ mail_theme.spacing.shellX }} 22px {{ mail_theme.spacing.shellX }};border-bottom:1px solid {{ mail_theme.colors.border }};">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr>
 <td class="meta-stack" valign="top" style="padding:0 12px 0 0;">
-<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#888888;font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;" class="text-muted">SOVEREIGN BRIEF</div>
-<div class="headline-main text-strong" style="padding-top:14px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#ffffff;font-size:40px;line-height:1.02;font-weight:800;letter-spacing:-0.06em;">미국 기술주·비트코인</div>
-<div style="padding-top:6px;font-family:Georgia,'Times New Roman',serif;color:#ffffff;font-size:24px;line-height:1.05;font-style:italic;letter-spacing:0.02em;" class="text-strong">시장 브리핑</div>
+{{ eyebrow("SOVEREIGN BRIEF", "green") }}
 </td>
-<td class="meta-stack" valign="top" align="right" style="padding:4px 0 0 12px;white-space:nowrap;">
-{{ pill(header_signal_label or "시장 점검", header_signal_tone or "flat") }}
+<td class="meta-stack" valign="top" align="right" style="padding:0 0 0 12px;white-space:nowrap;">
+{{ signal_pill(header_signal_label or "시장 점검", header_signal_tone or "flat") }}
 </td>
 </tr>
 </table>
-</td>
-</tr>
+
+<div class="headline-main text-strong" style="padding-top:18px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textStrong }};font-size:40px;line-height:1.02;font-weight:900;letter-spacing:-0.07em;">
+  미국 기술주·비트코인
+</div>
+<div class="headline-serif accent-cyan" style="padding-top:8px;font-family:{{ mail_theme.typography.displaySerif }};color:{{ mail_theme.colors.accentCyan }};font-size:23px;line-height:1.1;font-style:italic;letter-spacing:-0.02em;">
+  시장 브리핑
+</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:20px;">
 <tr>
-<td class="section-pad" style="padding:28px 40px 12px 40px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-<tr>
-<td class="meta-stack" valign="top" style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#888888;font-size:11px;line-height:1.7;letter-spacing:0.08em;text-transform:uppercase;" class="text-muted">
+<td class="meta-stack text-muted" valign="top" style="font-family:{{ mail_theme.typography.labelMono }};color:{{ mail_theme.colors.textMuted }};font-size:11px;line-height:1.8;letter-spacing:0.12em;text-transform:uppercase;">
 {{ display_date }}<br>뉴욕 마감 기준
 </td>
-<td class="meta-stack" valign="top" align="right" style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#888888;font-size:11px;line-height:1.7;letter-spacing:0.08em;text-transform:uppercase;" class="text-muted">
+<td class="meta-stack text-muted" valign="top" align="right" style="font-family:{{ mail_theme.typography.labelMono }};color:{{ mail_theme.colors.textMuted }};font-size:11px;line-height:1.8;letter-spacing:0.12em;text-transform:uppercase;">
 {{ read_time }}
 </td>
 </tr>
@@ -34,25 +35,25 @@
 </tr>
 {% if snapshot_badges %}
 <tr>
-<td class="section-pad" style="padding:8px 40px 34px 40px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #1c1b1b;border-bottom:1px solid #1c1b1b;">
+<td class="section-pad" style="padding:0 {{ mail_theme.spacing.shellX }} 28px {{ mail_theme.spacing.shellX }};">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="panel panel-strong" data-mail-rhythm="data" style="background:{{ mail_theme.colors.panelBgStrong }};border:1px solid {{ mail_theme.colors.border }};">
 {% for row in snapshot_badges|batch(3, none) %}
+{% set row_index = loop.index0 %}
 <tr class="ticker-row">
 {% for b in row if b %}
-<td class="ticker-cell" valign="top" style="width:33.333%;padding:14px 14px 14px 0;{% if not loop.last %}border-right:1px solid #1c1b1b;{% endif %}">
-<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#888888;font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;" class="text-muted">{{ b.label }}</div>
-<div style="padding-top:8px;font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#ffffff;font-size:22px;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;" class="text-strong">{{ b.value }}</div>
+<td class="ticker-cell" valign="top" style="width:33.333%;padding:16px 16px 16px 0;{% if not loop.last %}border-right:1px solid {{ mail_theme.colors.border }};{% endif %}{% if row_index > 0 %}border-top:1px solid {{ mail_theme.colors.border }};{% endif %}">
+<div class="text-muted" style="font-family:{{ mail_theme.typography.labelMono }};color:{{ mail_theme.colors.textMuted }};font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;">{{ b.label }}</div>
+<div class="text-strong" style="padding-top:8px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textStrong }};font-size:22px;font-weight:800;line-height:1.1;letter-spacing:-0.04em;">{{ b.value }}</div>
 {% if b.change %}
-<div style="padding-top:8px;">{{ delta_text(b.change, b.direction) }}</div>
+<div style="padding-top:10px;">{{ delta_badge(b.change, b.direction) }}</div>
 {% elif b.status_text %}
-<div style="padding-top:7px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#888888;font-size:12px;line-height:1.65;" class="text-muted">{{ b.status_text }}</div>
+<div class="text-body" style="padding-top:9px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textBody }};font-size:13px;line-height:1.7;">{{ b.status_text }}</div>
 {% else %}
-<div style="padding-top:8px;">{{ delta_text("보합", "flat") }}</div>
+<div style="padding-top:10px;">{{ delta_badge("보합", "flat") }}</div>
 {% endif %}
 </td>
 {% endfor %}
 </tr>
-{% if not loop.last %}<tr><td colspan="3" style="height:1px;background:#1c1b1b;"></td></tr>{% endif %}
 {% endfor %}
 </table>
 </td>

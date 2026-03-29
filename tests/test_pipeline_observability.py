@@ -43,7 +43,7 @@ def test_run_pipeline_skips_email_when_openai_generation_fails(monkeypatch, tmp_
         lambda **_: (_ for _ in ()).throw(BriefGenerationError("openai down")),
     )
     monkeypatch.setattr(
-        "morning_brief.pipeline.GmailSender",
+        "morning_brief.pipeline.SesSender",
         lambda _settings: SimpleNamespace(
             send=lambda **_: sent.__setitem__("called", True),
         ),
@@ -137,7 +137,7 @@ def test_run_pipeline_writes_observability_and_perplexity_audit(monkeypatch, tmp
         lambda **_: "SOVEREIGN BRIEF (2026-03-14)\n\n1. 거시 환경\n본문",
     )
     monkeypatch.setattr(
-        "morning_brief.pipeline.GmailSender",
+        "morning_brief.pipeline.SesSender",
         lambda _settings: SimpleNamespace(send=lambda **_: None),
     )
 
@@ -185,7 +185,7 @@ def test_run_pipeline_marks_brief_fallback_status_when_safe_brief_is_used(monkey
     monkeypatch.setattr("morning_brief.pipeline.build_news_packet", lambda **_: ([], {}, [], {}))
     monkeypatch.setattr("morning_brief.pipeline.generate_briefing", fake_generate_briefing)
     monkeypatch.setattr(
-        "morning_brief.pipeline.GmailSender",
+        "morning_brief.pipeline.SesSender",
         lambda _settings: SimpleNamespace(send=lambda **_: None),
     )
 
@@ -279,7 +279,7 @@ def test_run_pipeline_uses_openai_backfill_only_when_quality_is_degraded(monkeyp
         ),
     )
     monkeypatch.setattr(
-        "morning_brief.pipeline.GmailSender",
+        "morning_brief.pipeline.SesSender",
         lambda _settings: SimpleNamespace(send=lambda **_: None),
     )
 
@@ -353,7 +353,7 @@ def test_run_pipeline_skips_openai_backfill_when_public_featured_news_is_already
         lambda **_: "SOVEREIGN BRIEF (2026-03-14)",
     )
     monkeypatch.setattr(
-        "morning_brief.pipeline.GmailSender",
+        "morning_brief.pipeline.SesSender",
         lambda _settings: SimpleNamespace(send=lambda **_: None),
     )
 
@@ -397,7 +397,7 @@ def test_run_pipeline_skips_backfill_when_email_trust_signals_are_already_suffic
         lambda **_: "SOVEREIGN BRIEF (2026-03-14)\n\nSection 0. 오늘의 판단\n본문",
     )
     monkeypatch.setattr(
-        "morning_brief.pipeline.GmailSender",
+        "morning_brief.pipeline.SesSender",
         lambda _settings: SimpleNamespace(send=lambda **_: None),
     )
 

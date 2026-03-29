@@ -118,10 +118,10 @@ function env(): SubscriptionEnv {
     SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
     PUBLIC_APP_BASE_URL: "https://brief.example.com",
     SUBSCRIPTION_TOKEN_SECRET: "token-secret",
-    CONFIRMATION_GMAIL_CLIENT_ID: "client-id",
-    CONFIRMATION_GMAIL_CLIENT_SECRET: "client-secret",
-    CONFIRMATION_GMAIL_REFRESH_TOKEN: "refresh-token",
-    CONFIRMATION_GMAIL_SENDER: "brief@example.com",
+    AWS_ACCESS_KEY_ID: "test-access-key",
+    AWS_SECRET_ACCESS_KEY: "test-secret-key",
+    AWS_REGION: "ap-northeast-2",
+    CONFIRMATION_SES_SENDER: "no-reply@sovereignbriefing.com",
   };
 }
 
@@ -142,6 +142,10 @@ test("requestSubscription creates pending subscription and sends confirmation ma
   assert.equal(sentMails.length, 1);
   assert.equal(sentMails[0].subject, "[SOVEREIGN BRIEF] 구독 확인이 필요합니다");
   assert.match(sentMails[0].text, /subscribe\/confirm\?token=/);
+  assert.match(sentMails[0].html, /data-mail-shell="quiet-signal"/);
+  assert.match(sentMails[0].html, /구독 확인하기/);
+  assert.match(sentMails[0].html, /data-mail-rhythm="hero"/);
+  assert.match(sentMails[0].html, /data-mail-rhythm="utility"/);
   assert.equal(repository.subscriptions.size, 1);
   assert.equal(repository.confirmationTokens.size, 1);
 });

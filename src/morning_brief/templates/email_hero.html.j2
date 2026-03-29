@@ -1,36 +1,54 @@
-{# 변수: hero_verdict, hero_reason, hero_kospi_impact, hero_alerts, hero_tone #}
-{% from "email_macros.html.j2" import section_label %}
-<tr><td style="padding:0;">
+{% from "email_macros.html.j2" import section_label with context %}
+<tr data-mail-rhythm="hero"><td style="padding:0;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr>
-<td class="section-pad" style="padding:0 40px 36px 40px;border-bottom:1px solid #1c1b1b;">
-{{ section_label("오늘의 판단", "#02e600") }}
-<div class="hero-title text-strong" style="padding-top:18px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#ffffff;font-size:34px;line-height:1.58;font-weight:800;letter-spacing:-0.05em;">“{{ hero_verdict }}”</div>
+<td class="section-pad" style="padding:0 {{ mail_theme.spacing.shellX }} {{ mail_theme.spacing.sectionGap }} {{ mail_theme.spacing.shellX }};border-bottom:1px solid {{ mail_theme.colors.border }};">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="panel" style="background:{{ mail_theme.colors.panelBg }};border:1px solid {{ mail_theme.colors.border }};">
+<tr>
+<td class="hero-rail-pad signal-rail" style="padding:22px 24px 24px 22px;border-left:3px solid {{ mail_theme.colors.accentGreen }};">
+{{ section_label("오늘의 판단", "green") }}
+<div class="hero-title text-strong" style="padding-top:16px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textStrong }};font-size:32px;line-height:1.24;font-weight:900;letter-spacing:-0.06em;">
+  {{ hero_verdict }}
+</div>
+{% if hero_summary %}
+<div class="text-body" style="padding-top:12px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textBody }};font-size:15px;line-height:1.85;">
+  {{ hero_summary }}
+</div>
+{% endif %}
 {% if hero_reason or hero_kospi_impact %}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:22px;border-top:1px solid #1c1b1b;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:20px;border-top:1px solid {{ mail_theme.colors.border }};">
 <tr>
 {% if hero_reason %}
-<td class="stack-col stack-col-left" valign="top" style="width:{% if hero_kospi_impact %}50%{% else %}100%{% endif %};padding:16px 14px 0 0;">
-<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#888888;font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;" class="text-muted">판단 근거</div>
-<div style="padding-top:10px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#c6c6c6;font-size:15px;line-height:1.9;" class="text-body">{{ hero_reason }}</div>
+<td class="stack-col stack-col-left" valign="top" style="width:{% if hero_kospi_impact %}50%{% else %}100%{% endif %};padding:16px 16px 0 0;">
+{{ section_label("판단 근거", "cyan") }}
+<div class="text-body" style="padding-top:10px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textBody }};font-size:14px;line-height:1.88;">
+  {{ hero_reason }}
+</div>
 </td>
 {% endif %}
 {% if hero_kospi_impact %}
-<td class="stack-col stack-col-right" valign="top" style="width:{% if hero_reason %}50%{% else %}100%{% endif %};padding:16px 0 0 14px;{% if hero_reason %}border-left:1px solid #1c1b1b;{% endif %}">
-<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#888888;font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;" class="text-muted">한국장 시사점</div>
-<div style="padding-top:10px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#c6c6c6;font-size:15px;line-height:1.9;" class="text-body">{{ hero_kospi_impact }}</div>
+<td class="stack-col stack-col-right" valign="top" style="width:{% if hero_reason %}50%{% else %}100%{% endif %};padding:16px 0 0 16px;{% if hero_reason %}border-left:1px solid {{ mail_theme.colors.border }};{% endif %}">
+{{ section_label("한국장 시사점", "green") }}
+<div class="text-body" style="padding-top:10px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textBody }};font-size:14px;line-height:1.88;">
+  {{ hero_kospi_impact }}
+</div>
 </td>
 {% endif %}
 </tr>
 </table>
 {% endif %}
 {% if hero_alerts %}
-<div style="margin-top:18px;padding-top:16px;border-top:1px solid #1c1b1b;">
+<div style="margin-top:18px;padding-top:16px;border-top:1px solid {{ mail_theme.colors.border }};">
 {% for alert in hero_alerts %}
-<div style="{% if not loop.first %}padding-top:8px;{% endif %}font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#888888;font-size:13px;line-height:1.8;" class="text-muted">· {{ alert }}</div>
+<div class="text-muted" style="{% if not loop.first %}padding-top:8px;{% endif %}font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textMuted }};font-size:13px;line-height:1.8;">
+  · {{ alert }}
+</div>
 {% endfor %}
 </div>
 {% endif %}
+</td>
+</tr>
+</table>
 </td>
 </tr>
 </table>

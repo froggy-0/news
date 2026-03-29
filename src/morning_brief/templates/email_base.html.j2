@@ -6,67 +6,75 @@
 <meta name="color-scheme" content="light dark">
 <title>{{ subject }}</title>
 <!--[if mso]><style>
-.shell{background:#0e0e0e!important}
-.container{background:#0e0e0e!important}
+.shell,.container,.panel,.panel-strong{background:{{ mail_theme.colors.shellBg }}!important}
 </style><![endif]-->
 <style>
-body,.shell,.container{background:#0e0e0e!important}
-.card{background:#0e0e0e!important}
-.section-rule{border-color:#1c1b1b!important}
-.text-strong{color:#ffffff!important}
-.text-body{color:#c6c6c6!important}
-.text-muted{color:#888888!important}
-.accent{color:#02e600!important}
-.badge-up{background:#142313!important;color:#7ef466!important}
-.badge-down{background:#2a1717!important;color:#f4a4a4!important}
-.badge-flat{background:#151515!important;color:#b1b1b1!important}
-a{color:#ffffff!important}
+body,.shell,.container{background:{{ mail_theme.colors.shellBg }}!important}
+.container{border:1px solid {{ mail_theme.colors.border }}!important}
+.panel{background:{{ mail_theme.colors.panelBg }}!important}
+.panel-strong{background:{{ mail_theme.colors.panelBgStrong }}!important}
+.section-rule{border-color:{{ mail_theme.colors.border }}!important}
+.section-rule-strong{border-color:{{ mail_theme.colors.borderStrong }}!important}
+.text-strong{color:{{ mail_theme.colors.textStrong }}!important}
+.text-body{color:{{ mail_theme.colors.textBody }}!important}
+.text-muted{color:{{ mail_theme.colors.textMuted }}!important}
+.accent-green{color:{{ mail_theme.colors.accentGreen }}!important}
+.accent-cyan{color:{{ mail_theme.colors.accentCyan }}!important}
+.signal-rail{border-left:3px solid {{ mail_theme.colors.accentGreen }}!important}
+.badge-up{background:{{ mail_theme.colors.badgeUpBg }}!important;color:{{ mail_theme.colors.accentGreen }}!important}
+.badge-down{background:{{ mail_theme.colors.badgeDownBg }}!important;color:{{ mail_theme.colors.accentDown }}!important}
+.badge-flat{background:{{ mail_theme.colors.badgeFlatBg }}!important;color:{{ mail_theme.colors.accentNeutral }}!important}
+a{color:{{ mail_theme.colors.textStrong }}!important}
 @media(prefers-color-scheme:dark){
-body,.shell,.container{background:#0e0e0e!important}
-.card{background:#0e0e0e!important}
-.section-rule{border-color:#1c1b1b!important}
-.text-strong{color:#ffffff!important}
-.text-body{color:#c6c6c6!important}
-.text-muted{color:#888888!important}
-.accent{color:#02e600!important}
-.badge-up{background:#142313!important;color:#7ef466!important}
-.badge-down{background:#2a1717!important;color:#f4a4a4!important}
-.badge-flat{background:#151515!important;color:#b1b1b1!important}
-a{color:#ffffff!important}
+body,.shell,.container{background:{{ mail_theme.colors.shellBg }}!important}
+.container{border-color:{{ mail_theme.colors.border }}!important}
+.panel{background:{{ mail_theme.colors.panelBg }}!important}
+.panel-strong{background:{{ mail_theme.colors.panelBgStrong }}!important}
+.section-rule{border-color:{{ mail_theme.colors.border }}!important}
+.section-rule-strong{border-color:{{ mail_theme.colors.borderStrong }}!important}
+.text-strong{color:{{ mail_theme.colors.textStrong }}!important}
+.text-body{color:{{ mail_theme.colors.textBody }}!important}
+.text-muted{color:{{ mail_theme.colors.textMuted }}!important}
+.accent-green{color:{{ mail_theme.colors.accentGreen }}!important}
+.accent-cyan{color:{{ mail_theme.colors.accentCyan }}!important}
+a{color:{{ mail_theme.colors.textStrong }}!important}
 }
 @media(prefers-color-scheme:light){
-body,.shell,.container{background:#0e0e0e!important}
-.card{background:#0e0e0e!important}
-.section-rule{border-color:#1c1b1b!important}
-.text-strong{color:#ffffff!important}
-.text-body{color:#c6c6c6!important}
-.text-muted{color:#888888!important}
-.accent{color:#02e600!important}
-.badge-up{background:#142313!important;color:#7ef466!important}
-.badge-down{background:#2a1717!important;color:#f4a4a4!important}
-.badge-flat{background:#151515!important;color:#b1b1b1!important}
-a{color:#ffffff!important}
+body,.shell,.container{background:{{ mail_theme.colors.shellBg }}!important}
+.container{border-color:{{ mail_theme.colors.border }}!important}
+.panel{background:{{ mail_theme.colors.panelBg }}!important}
+.panel-strong{background:{{ mail_theme.colors.panelBgStrong }}!important}
+.section-rule{border-color:{{ mail_theme.colors.border }}!important}
+.section-rule-strong{border-color:{{ mail_theme.colors.borderStrong }}!important}
+.text-strong{color:{{ mail_theme.colors.textStrong }}!important}
+.text-body{color:{{ mail_theme.colors.textBody }}!important}
+.text-muted{color:{{ mail_theme.colors.textMuted }}!important}
+.accent-green{color:{{ mail_theme.colors.accentGreen }}!important}
+.accent-cyan{color:{{ mail_theme.colors.accentCyan }}!important}
+a{color:{{ mail_theme.colors.textStrong }}!important}
 }
 @media screen and (max-width:600px){
-.shell-pad{padding:12px 0!important}
-.section-pad{padding-left:20px!important;padding-right:20px!important}
-.headline-main{font-size:30px!important;line-height:1.05!important}
-.hero-title{font-size:28px!important;line-height:1.5!important}
-.meta-stack{display:block!important;width:100%!important}
-.ticker-cell{display:block!important;width:100%!important;padding-right:0!important}
+.shell-pad{padding:{{ mail_theme.spacing.mobileShellY }} 0!important}
+.section-pad{padding-left:{{ mail_theme.spacing.mobileShellX }}!important;padding-right:{{ mail_theme.spacing.mobileShellX }}!important}
+.headline-main{font-size:30px!important;line-height:1.04!important}
+.headline-serif{font-size:20px!important;line-height:1.14!important}
+.hero-title{font-size:28px!important;line-height:1.26!important}
+.hero-rail-pad{padding-left:18px!important}
+.meta-stack{display:block!important;width:100%!important;text-align:left!important;padding-left:0!important;padding-right:0!important}
+.ticker-cell{display:block!important;width:100%!important;padding-right:0!important;border-right:none!important;border-top:1px solid {{ mail_theme.colors.border }}!important}
 .ticker-row{display:block!important}
 .stack-col{display:block!important;width:100%!important}
-.stack-col-left{padding-right:0!important;padding-bottom:12px!important}
-.stack-col-right{padding-left:0!important}
-a{min-height:44px;display:inline-block;line-height:1.4}
+.stack-col-left{padding-right:0!important;padding-bottom:14px!important}
+.stack-col-right{padding-left:0!important;border-left:none!important;padding-top:14px!important}
+.cta-link{min-height:{{ mail_theme.layout.ctaMinHeight }}!important;display:inline-block!important;line-height:1.4!important}
 }
 </style>
 </head>
-<body style="margin:0;padding:0;background:#0e0e0e;">
+<body style="margin:0;padding:0;background:{{ mail_theme.colors.shellBg }};">
 <div style="display:none;max-height:0;overflow:hidden;">{{ preheader }}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="shell" style="width:100%;background:#0e0e0e;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="shell" style="width:100%;background:{{ mail_theme.colors.shellBg }};" data-mail-shell="quiet-signal">
 <tr><td align="center" class="shell-pad" style="padding:20px 0;">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" class="container" style="width:600px;max-width:600px;background:#0e0e0e;border:1px solid #1c1b1b;color:#ffffff;">
+<table role="presentation" width="{{ mail_theme.layout.containerWidth }}" cellpadding="0" cellspacing="0" border="0" class="container" style="width:{{ mail_theme.layout.containerWidth }}px;max-width:{{ mail_theme.layout.containerWidth }}px;background:{{ mail_theme.colors.shellBg }};border:1px solid {{ mail_theme.colors.border }};color:{{ mail_theme.colors.textStrong }};" data-mail-shell="quiet-signal">
 {% include "email_header.html.j2" %}
 {% include "email_hero.html.j2" %}
 {% include "email_news.html.j2" %}

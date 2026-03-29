@@ -10,6 +10,7 @@ import time
 from dataclasses import dataclass
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from functools import lru_cache
 from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -31,14 +32,16 @@ from morning_brief.brief_formatting import (
 from morning_brief.brief_formatting import (
     split_section_groups as _split_section_groups,
 )
-from morning_brief.config import Settings
+from morning_brief.config import (
+    DEFAULT_SES_REGION,
+    DEFAULT_SES_SENDER,
+    Settings,
+)
 from morning_brief.data.market_policy import is_rate_canonical_key
 from morning_brief.logging_utils import log_structured
 from morning_brief.subscriptions.models import ActiveRecipient
 from morning_brief.subscriptions.repository import SubscriptionRepository
 from morning_brief.subscriptions.supabase_repository import SupabaseSubscriptionRepository
-
-SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
 
 logger = logging.getLogger(__name__)
 DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
@@ -47,12 +50,28 @@ UP_TOKENS = ("올랐", "상승", "강세", "반등", "높아졌", "증가", "확
 DOWN_TOKENS = ("내렸", "하락", "약세", "밀렸", "낮아졌", "감소", "축소", "유출", "둔화", "후퇴")
 FLAT_TOKENS = ("보합", "유지", "비슷", "변동이 크지", "큰 변화는 없")
 EMAIL_TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+MAIL_THEME_PATH = REPO_ROOT / "schema" / "mail" / "quiet-signal.tokens.json"
 PROJECT_GITHUB_URL = "https://github.com/froggy-0/news"
 DEFAULT_UNSUBSCRIBE_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30
 UNSUBSCRIBE_TOKEN_VERSION = 1
 NONE_LIKE_TEXTS = {"", "none", "null", "n/a", "na"}
 _HERO_KOSPI_HINTS = ("코스피", "코스닥", "한국장", "국내 증시")
 _SOURCE_AGG_HINTS = ("집계", "큐레이션", "요약 출처", "aggregated", "summary")
+_REQUIRED_SES_REGION = DEFAULT_SES_REGION
+_REQUIRED_SES_SENDER = DEFAULT_SES_SENDER
+_SES_AUTH_ERROR_CODES = {
+    "AccessDenied",
+    "AccessDeniedException",
+    "ExpiredToken",
+    "InvalidClientTokenId",
+    "SignatureDoesNotMatch",
+    "UnrecognizedClientException",
+}
+_SES_IDENTITY_ERROR_CODES = {
+    "ConfigurationSetDoesNotExistException",
+    "MailFromDomainNotVerifiedException",
+}
 _SNAPSHOT_LABELS = {
     "us10y": "미국 10년물",
     "dxy": "DXY",
@@ -63,11 +82,7 @@ _SNAPSHOT_LABELS = {
 }
 
 if TYPE_CHECKING:
-    from google.oauth2.credentials import Credentials
-
     from morning_brief.unified_output import UnifiedOutput
-else:  # pragma: no cover - runtime import guard
-    Credentials = Any
 
 
 @dataclass(frozen=True)
@@ -102,20 +117,6 @@ class _EmailSourceItem:
     source_name: str
     source_kind: str
     safe_url: str | None
-
-
-def _gmail_dependencies() -> tuple[Any, Any, Any, Any]:
-    try:
-        from google.auth.transport.requests import Request
-        from google.oauth2.credentials import Credentials as GoogleCredentials
-        from google_auth_oauthlib.flow import InstalledAppFlow
-        from googleapiclient.discovery import build
-    except ModuleNotFoundError as exc:
-        raise RuntimeError(
-            "Gmail 전송 의존성이 설치되지 않았어요. "
-            "requirements.txt를 설치한 뒤 다시 실행해 주세요."
-        ) from exc
-    return Request, GoogleCredentials, InstalledAppFlow, build
 
 
 def _first_non_empty_paragraph(text: str) -> str:
@@ -160,6 +161,61 @@ def _build_email_sections(sections: list[tuple[str, str]]) -> list[_EmailSection
     ]
 
 
+def _ses_failure_context(exc: Exception) -> dict[str, str]:
+    aws_error_code = ""
+    detail = str(exc).strip() or "unknown SES error"
+
+    response = getattr(exc, "response", None)
+    if isinstance(response, dict):
+        error = response.get("Error")
+        if isinstance(error, dict):
+            aws_error_code = str(error.get("Code", "")).strip()
+            detail = str(error.get("Message", "")).strip() or detail
+
+    normalized = f"{aws_error_code} {detail}".lower()
+    if aws_error_code in _SES_AUTH_ERROR_CODES or any(
+        marker in normalized
+        for marker in (
+            "access denied",
+            "security token",
+            "signature",
+            "not authorized",
+        )
+    ):
+        failure_category = "auth_failure"
+    elif aws_error_code in _SES_IDENTITY_ERROR_CODES or any(
+        marker in normalized
+        for marker in (
+            "not verified",
+            "identity",
+            "mail from domain",
+            "configuration set",
+        )
+    ):
+        failure_category = "identity_failure"
+    elif any(
+        marker in normalized
+        for marker in (
+            "recipient",
+            "destination",
+            "address",
+            "blacklist",
+            "suppression",
+        )
+    ):
+        failure_category = "recipient_failure"
+    else:
+        failure_category = "delivery_failure"
+
+    context = {
+        "failure_category": failure_category,
+        "reason": detail,
+    }
+    if aws_error_code:
+        context["aws_error_code"] = aws_error_code
+    return context
+
+
 def _build_top_summary_lines(sections: list[_EmailSection]) -> list[str]:
     lines: list[str] = []
     for section in sections:
@@ -182,6 +238,38 @@ def _load_email_environment() -> Environment:
         trim_blocks=True,
         lstrip_blocks=True,
     )
+
+
+@lru_cache(maxsize=1)
+def _load_mail_theme() -> dict[str, Any]:
+    try:
+        payload = json.loads(MAIL_THEME_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise RuntimeError(f"Quiet Signal theme file is missing: {MAIL_THEME_PATH}") from exc
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Quiet Signal theme file is invalid JSON: {MAIL_THEME_PATH}") from exc
+
+    if not isinstance(payload, dict):
+        raise RuntimeError("Quiet Signal theme payload must be a JSON object.")
+
+    required_keys = {
+        "name",
+        "colors",
+        "typography",
+        "spacing",
+        "layout",
+        "rhythm",
+        "components",
+        "mood",
+    }
+    missing = sorted(required_keys - set(payload))
+    if missing:
+        raise RuntimeError(f"Quiet Signal theme is missing keys: {', '.join(missing)}")
+
+    if payload.get("name") != "quiet-signal":
+        raise RuntimeError("Quiet Signal theme name must be 'quiet-signal'.")
+
+    return payload
 
 
 def _first_metric_lines(text: str, *, limit: int) -> list[str]:
@@ -1611,6 +1699,7 @@ def _build_email_context_v2(
     return {
         "subject": final_subject,
         "preheader": _build_preheader(snapshot_badges, section_map),
+        "mail_theme": _load_mail_theme(),
         "display_date": _format_display_date_v2(packet),
         "read_time": "3분 읽기",
         "snapshot_badges": snapshot_badges,
@@ -1815,7 +1904,7 @@ def build_briefing_message(
     return msg
 
 
-class GmailSender:
+class SesSender:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
@@ -1825,53 +1914,34 @@ class GmailSender:
             service_role_key=self.settings.supabase_service_role_key,
         )
 
-    def _load_credentials(self) -> Credentials:
-        Request, CredentialsType, InstalledAppFlow, _ = _gmail_dependencies()
-        creds: Credentials | None = None
-        if self.settings.gmail_token_file.exists():
-            try:
-                creds = CredentialsType.from_authorized_user_file(
-                    str(self.settings.gmail_token_file), SCOPES
-                )
-            except Exception as exc:
-                log_structured(
-                    logger,
-                    event="error.raised",
-                    message="토큰 파일을 읽는 중 문제가 있어 다시 인증이 필요해요.",
-                    level=logging.WARNING,
-                    provider="gmail",
-                    reason=str(exc),
-                    error_type=type(exc).__name__,
-                )
+    def _configured_sender(self) -> str:
+        sender = self.settings.ses_sender.strip()
+        if not sender:
+            raise ValueError("SES_SENDER is required when SEND_EMAIL=true")
+        if sender != _REQUIRED_SES_SENDER:
+            raise ValueError(
+                f"SES_SENDER must be {_REQUIRED_SES_SENDER} for this deployment, got {sender!r}"
+            )
+        return sender
 
-        if creds and creds.valid:
-            return creds
+    def _configured_region(self) -> str:
+        region = self.settings.ses_region.strip()
+        if not region:
+            raise ValueError("AWS_REGION is required when SEND_EMAIL=true")
+        if region != _REQUIRED_SES_REGION:
+            raise ValueError(
+                f"AWS_REGION must be {_REQUIRED_SES_REGION} for this deployment, got {region!r}"
+            )
+        return region
 
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-            self.settings.gmail_token_file.write_text(creds.to_json(), encoding="utf-8")
-            return creds
-
-        if not self.settings.gmail_oauth_interactive:
+    def _ses_client(self) -> Any:
+        try:
+            import boto3
+        except ModuleNotFoundError as exc:
             raise RuntimeError(
-                "No valid Gmail token found. Set GMAIL_OAUTH_INTERACTIVE=true for local OAuth login, "
-                "or provide a pre-generated token.json in CI."
-            )
-
-        if not self.settings.gmail_credentials_file.exists():
-            raise FileNotFoundError(
-                f"Gmail credentials file not found: {self.settings.gmail_credentials_file}"
-            )
-
-        flow = InstalledAppFlow.from_client_secrets_file(
-            str(self.settings.gmail_credentials_file),
-            SCOPES,
-        )
-        creds = flow.run_local_server(port=0)
-
-        self.settings.gmail_token_file.parent.mkdir(parents=True, exist_ok=True)
-        self.settings.gmail_token_file.write_text(creds.to_json(), encoding="utf-8")
-        return creds
+                "SES 전송 의존성이 설치되지 않았어요. requirements.txt를 설치한 뒤 다시 실행해 주세요."
+            ) from exc
+        return boto3.client("ses", region_name=self._configured_region())
 
     def send(
         self,
@@ -1886,13 +1956,12 @@ class GmailSender:
                 logger,
                 event="phase.skip",
                 message="SEND_EMAIL=false라서 메일 발송은 건너뛸게요.",
-                provider="gmail",
+                provider="ses",
                 reason="send_email_disabled",
             )
             return
 
-        if not self.settings.gmail_sender:
-            raise ValueError("GMAIL_SENDER is required when SEND_EMAIL=true")
+        sender = self._configured_sender()
 
         recipients = self._subscription_repository().list_active_recipients(
             self.settings.subscription_newsletter_key
@@ -1902,14 +1971,12 @@ class GmailSender:
                 logger,
                 event="phase.skip",
                 message="active 구독자가 없어 메일 발송을 건너뛸게요.",
-                provider="gmail",
+                provider="ses",
                 reason="no_active_subscribers",
             )
             return
 
-        creds = self._load_credentials()
-        _, _, _, build = _gmail_dependencies()
-        service = build("gmail", "v1", credentials=creds, cache_discovery=False)
+        service = self._ses_client()
 
         sent_count = 0
         failures: list[str] = []
@@ -1921,35 +1988,42 @@ class GmailSender:
             msg = build_briefing_message(
                 subject=subject,
                 body=body,
-                sender=self.settings.gmail_sender,
+                sender=sender,
                 recipient=recipient.email,
                 unsubscribe_url=unsubscribe_url,
                 packet=packet,
                 unified=unified,
             )
-            raw = base64.urlsafe_b64encode(msg.as_bytes()).decode("utf-8")
             try:
-                service.users().messages().send(userId="me", body={"raw": raw}).execute()
+                payload: dict[str, object] = {
+                    "Source": sender,
+                    "Destinations": [recipient.email],
+                    "RawMessage": {"Data": msg.as_bytes()},
+                }
+                if self.settings.ses_configuration_set:
+                    payload["ConfigurationSetName"] = self.settings.ses_configuration_set
+                service.send_raw_email(**payload)
                 sent_count += 1
                 log_structured(
                     logger,
                     event="publish.delivered",
                     message="구독자에게 브리핑 메일을 보냈어요.",
-                    provider="gmail",
+                    provider="ses",
                     recipient=recipient.email,
                     mail_intent="newsletter",
                 )
             except Exception as exc:
                 failures.append(recipient.email)
+                failure_context = _ses_failure_context(exc)
                 log_structured(
                     logger,
                     event="error.raised",
                     message="구독자별 메일 발송 중 일부 실패가 발생했어요.",
                     level=logging.ERROR,
-                    provider="gmail",
+                    provider="ses",
                     recipient=recipient.email,
-                    reason=str(exc),
                     error_type=type(exc).__name__,
+                    **failure_context,
                 )
 
         if failures:
@@ -1961,6 +2035,6 @@ class GmailSender:
             logger,
             event="publish.complete",
             message="브리핑 메일을 보냈어요.",
-            provider="gmail",
+            provider="ses",
             kept_count=sent_count,
         )

@@ -1,99 +1,132 @@
+import {
+  SendEmailCommand,
+  type SendEmailCommandInput,
+  SESv2Client,
+} from "@aws-sdk/client-sesv2";
+
 import type { SubscriptionEnv } from "./types";
 
-function encodeBase64Url(value: string): string {
-  let binary = "";
-  for (const byte of new TextEncoder().encode(value)) {
-    binary += String.fromCharCode(byte);
+const REQUIRED_REGION = "ap-northeast-2";
+const REQUIRED_SENDER = "no-reply@sovereignbriefing.com";
+
+function classifyConfirmationSesError(error: unknown): {
+  category: "auth_failure" | "identity_failure" | "recipient_failure" | "delivery_failure";
+  detail: string;
+} {
+  const name = error instanceof Error ? error.name : "UnknownSesError";
+  const message = error instanceof Error ? error.message : "unknown SES error";
+  const normalized = `${name} ${message}`.toLowerCase();
+
+  if (
+    ["AccessDenied", "AccessDeniedException", "InvalidClientTokenId"].includes(name) ||
+    normalized.includes("security token") ||
+    normalized.includes("access denied") ||
+    normalized.includes("signature") ||
+    normalized.includes("not authorized")
+  ) {
+    return { category: "auth_failure", detail: `${name}: ${message}` };
   }
-  return btoa(binary).replace(/\+/gu, "-").replace(/\//gu, "_").replace(/=+$/u, "");
+
+  if (
+    ["MailFromDomainNotVerifiedException", "ConfigurationSetDoesNotExistException"].includes(
+      name,
+    ) ||
+    normalized.includes("not verified") ||
+    normalized.includes("identity") ||
+    normalized.includes("mail from domain") ||
+    normalized.includes("configuration set")
+  ) {
+    return { category: "identity_failure", detail: `${name}: ${message}` };
+  }
+
+  if (
+    normalized.includes("recipient") ||
+    normalized.includes("destination") ||
+    normalized.includes("address") ||
+    normalized.includes("blacklist") ||
+    normalized.includes("suppression")
+  ) {
+    return { category: "recipient_failure", detail: `${name}: ${message}` };
+  }
+
+  return { category: "delivery_failure", detail: `${name}: ${message}` };
 }
 
-function encodeMimeHeader(value: string): string {
-  const bytes = new TextEncoder().encode(value);
-  let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
+function requireEnvValue(value: string, name: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new Error(`${name} is required for SES delivery`);
   }
-  return `=?UTF-8?B?${btoa(binary)}?=`;
+  return trimmed;
 }
 
-async function fetchAccessToken(env: SubscriptionEnv): Promise<string> {
-  const body = new URLSearchParams({
-    client_id: env.CONFIRMATION_GMAIL_CLIENT_ID,
-    client_secret: env.CONFIRMATION_GMAIL_CLIENT_SECRET,
-    refresh_token: env.CONFIRMATION_GMAIL_REFRESH_TOKEN,
-    grant_type: "refresh_token",
-  });
+function configuredRegion(env: SubscriptionEnv): string {
+  const region = requireEnvValue(env.AWS_REGION, "AWS_REGION");
+  if (region !== REQUIRED_REGION) {
+    throw new Error(`AWS_REGION must be ${REQUIRED_REGION}, got ${region}`);
+  }
+  return region;
+}
 
-  const response = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: {
-      "content-type": "application/x-www-form-urlencoded",
+function configuredSender(env: SubscriptionEnv): string {
+  const sender = requireEnvValue(env.CONFIRMATION_SES_SENDER, "CONFIRMATION_SES_SENDER");
+  if (sender !== REQUIRED_SENDER) {
+    throw new Error(`CONFIRMATION_SES_SENDER must be ${REQUIRED_SENDER}, got ${sender}`);
+  }
+  return sender;
+}
+
+export function buildConfirmationEmailRequest(
+  env: SubscriptionEnv,
+  input: { to: string; subject: string; text: string; html: string },
+): SendEmailCommandInput {
+  return {
+    FromEmailAddress: configuredSender(env),
+    Destination: {
+      ToAddresses: [input.to],
     },
-    body,
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to refresh Gmail access token: ${response.status}`);
-  }
-  const payload = (await response.json()) as { access_token?: string };
-  if (!payload.access_token) {
-    throw new Error("Gmail access token response did not include access_token");
-  }
-  return payload.access_token;
+    Content: {
+      Simple: {
+        Subject: {
+          Data: input.subject,
+          Charset: "UTF-8",
+        },
+        Body: {
+          Text: {
+            Data: input.text,
+            Charset: "UTF-8",
+          },
+          Html: {
+            Data: input.html,
+            Charset: "UTF-8",
+          },
+        },
+      },
+    },
+  };
 }
 
-function buildRawMessage(input: {
-  from: string;
-  to: string;
-  subject: string;
-  text: string;
-  html: string;
-}): string {
-  const boundary = `boundary_${crypto.randomUUID()}`;
-  const lines = [
-    `From: ${input.from}`,
-    `To: ${input.to}`,
-    `Subject: ${encodeMimeHeader(input.subject)}`,
-    "MIME-Version: 1.0",
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
-    "",
-    `--${boundary}`,
-    "Content-Type: text/plain; charset=UTF-8",
-    "",
-    input.text,
-    "",
-    `--${boundary}`,
-    "Content-Type: text/html; charset=UTF-8",
-    "",
-    input.html,
-    "",
-    `--${boundary}--`,
-  ];
-  return encodeBase64Url(lines.join("\r\n"));
+export function createConfirmationSesClient(env: SubscriptionEnv): SESv2Client {
+  return new SESv2Client({
+    region: configuredRegion(env),
+    credentials: {
+      accessKeyId: requireEnvValue(env.AWS_ACCESS_KEY_ID, "AWS_ACCESS_KEY_ID"),
+      secretAccessKey: requireEnvValue(env.AWS_SECRET_ACCESS_KEY, "AWS_SECRET_ACCESS_KEY"),
+    },
+  });
 }
 
 export async function sendConfirmationMail(
   env: SubscriptionEnv,
   input: { to: string; subject: string; text: string; html: string },
 ): Promise<void> {
-  const accessToken = await fetchAccessToken(env);
-  const raw = buildRawMessage({
-    from: env.CONFIRMATION_GMAIL_SENDER,
-    to: input.to,
-    subject: input.subject,
-    text: input.text,
-    html: input.html,
-  });
-
-  const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${accessToken}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ raw }),
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to send confirmation mail: ${response.status}`);
+  const client = createConfirmationSesClient(env);
+  try {
+    await client.send(new SendEmailCommand(buildConfirmationEmailRequest(env, input)));
+  } catch (error) {
+    const failure = classifyConfirmationSesError(error);
+    throw new Error(`Failed to send confirmation mail (${failure.category}): ${failure.detail}`);
+  } finally {
+    client.destroy();
   }
 }

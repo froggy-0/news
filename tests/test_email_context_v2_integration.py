@@ -129,6 +129,7 @@ def _make_packet(
 EXPECTED_KEYS = {
     "subject",
     "preheader",
+    "mail_theme",
     "display_date",
     "read_time",
     "snapshot_badges",
@@ -171,6 +172,15 @@ def test_build_email_context_v2_all_keys_present() -> None:
     """모든 변수 키가 반환 딕셔너리에 존재하는지 확인."""
     ctx = _build_email_context_v2("테스트 제목", SAMPLE_BODY, _make_packet())
     assert set(ctx.keys()) == EXPECTED_KEYS
+
+
+def test_build_email_context_v2_includes_quiet_signal_theme() -> None:
+    ctx = _build_email_context_v2("테스트 제목", SAMPLE_BODY, _make_packet())
+    theme = ctx["mail_theme"]
+    assert isinstance(theme, dict)
+    assert theme["name"] == "quiet-signal"
+    assert theme["colors"]["accentCyan"] == "#00ffff"
+    assert theme["colors"]["accentGreen"] == "#00ff66"
 
 
 def test_build_email_context_v2_ok_status_empty_footer_notes() -> None:

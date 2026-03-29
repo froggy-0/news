@@ -1,5 +1,6 @@
 name = "sovereign-brief-frontend"
 compatibility_date = "2026-03-28"
+compatibility_flags = ["nodejs_compat"]
 
 [assets]
 directory = "./out"

@@ -1,34 +1,37 @@
-{# 변수: sector_mapping (SectorMapping) #}
-{% from "email_macros.html.j2" import section_label %}
-<tr><td style="padding:0;">
+{% from "email_macros.html.j2" import section_label with context %}
+<tr data-mail-rhythm="data"><td style="padding:0;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr>
-<td class="section-pad" style="padding:34px 40px 36px 40px;border-bottom:1px solid #1c1b1b;">
-{{ section_label("오늘 주목 흐름", "#02e600") }}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-top:10px;">
+<td class="section-pad" style="padding:{{ mail_theme.spacing.sectionGap }} {{ mail_theme.spacing.shellX }};border-bottom:1px solid {{ mail_theme.colors.border }};">
+{{ section_label("오늘 주목 흐름", "green") }}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px;">
 <tr>
-<td class="stack-col stack-col-left" valign="top" style="width:33.333%;padding:0 14px 0 0;">
-<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#7ef466;font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;">상단 수혜</div>
+<td class="stack-col stack-col-left panel panel-strong" valign="top" style="width:33.333%;padding:16px;background:{{ mail_theme.colors.panelBgStrong }};border:1px solid {{ mail_theme.colors.border }};">
+{{ section_label("상단 수혜", "green") }}
 {% for item in sector_mapping.positive %}
-<div style="padding-top:10px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#c6c6c6;font-size:13px;line-height:1.8;" class="text-body"><span style="color:#ffffff;font-weight:700;" class="text-strong">{{ item.ticker }}</span> {{ item.reason }}</div>
+<div class="text-body" style="padding-top:10px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textBody }};font-size:13px;line-height:1.8;"><span class="text-strong" style="color:{{ mail_theme.colors.textStrong }};font-weight:800;">{{ item.ticker }}</span> {{ item.reason }}</div>
 {% endfor %}
 </td>
-<td class="stack-col" valign="top" style="width:33.333%;padding:0 14px;border-left:1px solid #1c1b1b;">
-<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#f4a4a4;font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;">하단 압력</div>
+<td class="stack-col panel" valign="top" style="width:33.333%;padding:16px;background:{{ mail_theme.colors.panelBg }};border:1px solid {{ mail_theme.colors.border }};border-left:none;">
+{{ section_label("하단 압력", "cyan") }}
 {% for item in sector_mapping.negative %}
-<div style="padding-top:10px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#c6c6c6;font-size:13px;line-height:1.8;" class="text-body"><span style="color:#ffffff;font-weight:700;" class="text-strong">{{ item.ticker }}</span> {{ item.reason }}</div>
+<div class="text-body" style="padding-top:10px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textBody }};font-size:13px;line-height:1.8;"><span class="text-strong" style="color:{{ mail_theme.colors.textStrong }};font-weight:800;">{{ item.ticker }}</span> {{ item.reason }}</div>
 {% endfor %}
 </td>
-<td class="stack-col stack-col-right" valign="top" style="width:33.333%;padding:0 0 0 14px;border-left:1px solid #1c1b1b;">
-<div style="font-family:'SFMono-Regular','Menlo','Consolas',monospace;color:#b1b1b1;font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;">중립 관망</div>
+<td class="stack-col stack-col-right panel panel-strong" valign="top" style="width:33.333%;padding:16px;background:{{ mail_theme.colors.panelBgStrong }};border:1px solid {{ mail_theme.colors.border }};border-left:none;">
+{{ section_label("중립 관망", "green") }}
 {% for item in sector_mapping.neutral %}
-<div style="padding-top:10px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#c6c6c6;font-size:13px;line-height:1.8;" class="text-body"><span style="color:#ffffff;font-weight:700;" class="text-strong">{{ item.ticker }}</span> {{ item.reason }}</div>
+<div class="text-body" style="padding-top:10px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textBody }};font-size:13px;line-height:1.8;"><span class="text-strong" style="color:{{ mail_theme.colors.textStrong }};font-weight:800;">{{ item.ticker }}</span> {{ item.reason }}</div>
 {% endfor %}
 </td>
 </tr>
 </table>
 {% if sector_mapping.commentary %}
-<div style="padding-top:18px;border-top:1px solid #1c1b1b;margin-top:18px;font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;color:#888888;font-size:13px;line-height:1.8;" class="text-muted">{{ sector_mapping.commentary }}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="panel" style="margin-top:16px;background:{{ mail_theme.colors.panelBg }};border:1px solid {{ mail_theme.colors.border }};">
+<tr>
+<td class="text-muted" style="padding:14px 16px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textMuted }};font-size:13px;line-height:1.82;">{{ sector_mapping.commentary }}</td>
+</tr>
+</table>
 {% endif %}
 </td></tr>
 </table>

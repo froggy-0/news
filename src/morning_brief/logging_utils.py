@@ -20,7 +20,6 @@ THIRD_PARTY_LOGGERS = (
     "httpx",
     "openai._base_client",
     "urllib3.connectionpool",
-    "googleapiclient.discovery_cache",
     "perplexity",
     "google.genai",
     "google.auth",
@@ -109,7 +108,7 @@ _PROVIDER_HINTS = {
     "grok_web_search": "grok_keyword",
     "gemini": "gemini",
     "fred": "fred",
-    "gmail": "gmail",
+    "ses": "ses",
     "openai": "openai",
 }
 
