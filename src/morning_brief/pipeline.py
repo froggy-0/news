@@ -331,8 +331,20 @@ def run_pipeline(settings: Settings) -> str:
                 reason="데이터 품질 critical + 검수 미통과 조합으로 발송을 건너뛸게요.",
             )
         else:
-            with observer.phase("email"):
-                SesSender(settings).send(subject=subject, body=briefing, packet=render_packet)
+            try:
+                with observer.phase("email"):
+                    SesSender(settings).send(subject=subject, body=briefing, packet=render_packet)
+            except Exception as exc:
+                if status == "ok":
+                    status = "degraded"
+                failure_message = str(exc)
+                observer.log_event(
+                    "email_send_failed",
+                    level=logging.WARNING,
+                    message="이메일 발송은 실패했지만 공개 산출물은 유지하고 다음 단계를 계속할게요.",
+                    reason=failure_message,
+                    error_type=type(exc).__name__,
+                )
     except BriefGenerationError as exc:
         status = "openai_failed"
         failure_message = str(exc)

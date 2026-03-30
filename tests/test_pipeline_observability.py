@@ -164,6 +164,68 @@ def test_run_pipeline_writes_observability_and_perplexity_audit(monkeypatch, tmp
     ]
 
 
+def test_run_pipeline_continues_when_email_delivery_fails(monkeypatch, tmp_path):
+    from morning_brief.config import load_settings
+    from morning_brief.pipeline import run_pipeline
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
+    settings = load_settings()
+    published = {"called": False}
+
+    monkeypatch.setattr("morning_brief.pipeline.build_market_packet", lambda **_: _market_packet())
+    monkeypatch.setattr("morning_brief.pipeline.build_news_packet", lambda **_: ([], {}, [], {}))
+    monkeypatch.setattr(
+        "morning_brief.pipeline.generate_briefing",
+        lambda **_: "SOVEREIGN BRIEF (2026-03-14)\n\n1. 거시 환경\n본문",
+    )
+    monkeypatch.setattr(
+        "morning_brief.pipeline.fetch_newsletter_display_data",
+        lambda **_: {
+            "korea_watch": [],
+            "tech_stocks": _market_packet()["tech_stocks"],
+            "btc_etf_points": _market_packet()["bitcoin"]["etf_points"],
+        },
+    )
+    monkeypatch.setattr(
+        "morning_brief.pipeline.publish_public_brief",
+        lambda **_: published.__setitem__("called", True),
+    )
+    monkeypatch.setattr(
+        "morning_brief.pipeline.SesSender",
+        lambda _settings: SimpleNamespace(
+            send=lambda **_: (_ for _ in ()).throw(
+                RuntimeError("Failed to send newsletter to 1 recipients: qkrrldnjs7@naver.com")
+            )
+        ),
+    )
+
+    briefing = run_pipeline(settings=settings)
+
+    assert briefing.startswith("SOVEREIGN BRIEF")
+    assert published["called"] is True
+
+    run_files = list((settings.output_dir / "observability").glob("pipeline-run-*.json"))
+    assert len(run_files) == 1
+    payload = json.loads(run_files[0].read_text(encoding="utf-8"))
+    assert payload["summary"]["status"] == "degraded"
+    assert (
+        payload["summary"]["failure_message"]
+        == "Failed to send newsletter to 1 recipients: qkrrldnjs7@naver.com"
+    )
+
+    app_events_files = list((settings.output_dir / "observability").glob("app-events-*.jsonl"))
+    assert len(app_events_files) == 1
+    app_events = [
+        json.loads(line)
+        for line in app_events_files[0].read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    email_failure = next(event for event in app_events if event.get("event") == "email_send_failed")
+    assert email_failure["reason"] == payload["summary"]["failure_message"]
+    assert email_failure["error_type"] == "RuntimeError"
+
+
 def test_run_pipeline_marks_brief_fallback_status_when_safe_brief_is_used(monkeypatch, tmp_path):
     from morning_brief.config import load_settings
     from morning_brief.pipeline import run_pipeline
