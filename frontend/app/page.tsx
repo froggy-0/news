@@ -18,6 +18,7 @@ export const metadata: Metadata = {
 
 export default async function HomePage() {
   const [brief, index] = await Promise.all([fetchLatest(), fetchIndex()]);
+  const heroSeed = brief.meta.date;
 
   return (
     <main className="pb-6">
@@ -26,7 +27,7 @@ export default async function HomePage() {
         statusCards={buildMetaStatusCards(brief.meta)}
         currentDate={brief.meta.date}
       />
-      <HomeHero brief={brief} />
+      <HomeHero brief={brief} heroSeed={heroSeed} />
       <JudgmentBlock
         headline={brief.meta.displayHeadline || brief.aiJudgment.headline}
         summaryLead={brief.aiJudgment.summaryLead}

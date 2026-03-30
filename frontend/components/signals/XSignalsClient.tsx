@@ -26,12 +26,8 @@ export function XSignalsClient({
               <XIcon />
             </div>
             <div className="flex max-w-xl flex-col gap-1">
-              <h2 className="text-[11px] font-mono uppercase tracking-[0.4em] text-white/60">
-                실시간 X 시그널
-              </h2>
-              <span className="text-[9px] font-mono uppercase tracking-[0.26em] text-white/28">
-                Fast-moving Commentary
-              </span>
+              <h2 className="section-title">실시간 X 시그널</h2>
+              <span className="eyebrow">Fast-moving Commentary</span>
               <p className="pt-2 text-[15px] leading-7 text-white/66">
                 기사보다 빠른 감도 변화와 시장 반응을 짧은 레이더 메모처럼 압축합니다.
               </p>

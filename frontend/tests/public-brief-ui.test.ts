@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { JudgmentBlock } from "../components/brief/JudgmentBlock";
 import { TopicGrid } from "../components/brief/TopicGrid";
+import { HomeHero } from "../components/hero/HomeHero";
 import { NewsFeed } from "../components/news/NewsFeed";
 import { XSignals } from "../components/signals/XSignals";
 import { buildHistoryEntries, buildMetaStatusCards } from "../lib/history";
@@ -51,9 +52,24 @@ test("judgment block renders degraded quality notes in static markup", async () 
   assert.doesNotMatch(markup, /신뢰 상태|발행 기준일|생성 시각/);
 });
 
-test("topic grid returns null when topic summaries are absent", () => {
+test("topic grid renders empty state when topic summaries are absent", () => {
   const markup = renderToStaticMarkup(createElement(TopicGrid, { items: [], variant: "home" }));
-  assert.equal(markup, "");
+  assert.match(markup, /테마 상태/);
+  assert.match(markup, /유효한 주요 테마 요약을 확인하지 못했어요/);
+});
+
+test("home hero renders brief entry CTA and deterministic seed marker", async () => {
+  const brief = await loadBrief("2026-03-21.json");
+  const markup = renderToStaticMarkup(
+    createElement(HomeHero, {
+      brief,
+      heroSeed: brief.meta.date,
+    }),
+  );
+
+  assert.match(markup, /data-hero-seed="2026-03-21"/);
+  assert.match(markup, /오늘 브리프 먼저 읽기/);
+  assert.match(markup, /href="#brief"/);
 });
 
 test("news feed detail renders all news cards from fixture", async () => {
@@ -71,22 +87,28 @@ test("news feed detail renders all news cards from fixture", async () => {
   assert.match(markup, /Full Source Flow/);
 });
 
-test("news feed returns null when both featured and all news are absent", () => {
-  const element = NewsFeed({
-    featuredItems: [],
-    allItems: [],
-    variant: "home",
-  });
+test("news feed renders empty state when both featured and all news are absent", () => {
+  const markup = renderToStaticMarkup(
+    createElement(NewsFeed, {
+      featuredItems: [],
+      allItems: [],
+      variant: "home",
+    }),
+  );
 
-  assert.equal(element, null);
+  assert.match(markup, /뉴스 상태/);
+  assert.match(markup, /주요 뉴스를 확인하지 못했어요/);
 });
 
-test("x signals component returns null when both featured and all signals are absent", () => {
-  const element = XSignals({
-    featuredItems: null,
-    allItems: null,
-    variant: "detail",
-  });
+test("x signals component renders empty state when both featured and all signals are absent", () => {
+  const markup = renderToStaticMarkup(
+    createElement(XSignals, {
+      featuredItems: null,
+      allItems: null,
+      variant: "detail",
+    }),
+  );
 
-  assert.equal(element, null);
+  assert.match(markup, /X 시그널 상태/);
+  assert.match(markup, /전체 X 시그널을 확인하지 못했어요/);
 });

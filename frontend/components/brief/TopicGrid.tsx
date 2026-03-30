@@ -2,6 +2,7 @@ import React from "react";
 import { Activity, Coins, Cpu, Globe, TrendingUp } from "lucide-react";
 
 import type { TopicSummary } from "@schema/brief.types";
+import { DataState } from "@/components/ui/DataState";
 import { RevealSection } from "@/components/ui/RevealSection";
 
 const HANGUL_RE = /[가-힣]/;
@@ -103,7 +104,18 @@ export function TopicGrid({
     .filter((entry) => entry.summary);
 
   if (visibleItems.length === 0) {
-    return null;
+    return (
+      <RevealSection id="map" className="border-b border-white/10 px-6 py-16" threshold={0.34} delayMs={180}>
+        <div className="mx-auto w-full max-w-6xl">
+          <DataState
+            title="테마 상태"
+            message="이번 발행본에서는 유효한 주요 테마 요약을 확인하지 못했어요."
+            family="reading"
+            minHeight={220}
+          />
+        </div>
+      </RevealSection>
+    );
   }
 
   return (
@@ -124,7 +136,7 @@ export function TopicGrid({
           {visibleItems.map(({ item, summary, keyMetric, relatedStocks }, index) => (
             <article
               key={item.topic}
-              className={`card-reading theme-card group relative overflow-hidden rounded-[26px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.015))] transition-colors duration-300 hover:border-white/22 ${
+              className={`card-reading card-family-reading theme-card group relative overflow-hidden rounded-[var(--card-radius-reading)] transition-colors duration-300 ${
                 variant === "home" && index === 0 ? "md:col-span-2 xl:col-span-2" : ""
               }`}
               style={{ animationDelay: animationDelayFor(index) }}
@@ -138,17 +150,17 @@ export function TopicGrid({
                     {themeIcon(item.topic)}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[10px] font-mono uppercase tracking-[0.26em] text-white/28">
+                    <p className="label-meta text-white/28">
                       {String(index + 1).padStart(2, "0")}
                     </p>
-                    <h3 className="card-reading-meta mt-1 text-[12px] font-mono uppercase tracking-[0.24em] text-white/70">
+                    <h3 className="card-reading-meta mt-1 text-[12px] font-mono uppercase tracking-[0.18em] text-white/70">
                       {item.label}
                     </h3>
                   </div>
                 </div>
 
                 <div className={`space-y-3 ${variant === "home" && index === 0 ? "max-w-2xl" : ""}`}>
-                  <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-white/30">전략적 맥락</span>
+                  <span className="label-meta text-white/30">전략적 맥락</span>
                   <p
                     className={`card-reading-copy theme-card-copy text-white/90 transition-colors group-hover:text-white ${
                       variant === "home" && index === 0
@@ -164,18 +176,14 @@ export function TopicGrid({
                   <div className="flex flex-col gap-3 border-t border-white/8 pt-4">
                     {keyMetric ? (
                       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                        <span className="text-[9px] font-mono uppercase tracking-[0.26em] text-white/30">
-                          핵심 수치
-                        </span>
+                        <span className="label-meta text-white/30">핵심 수치</span>
                         <p className="card-reading-meta text-[12px] font-mono leading-6 text-white/76">{keyMetric}</p>
                       </div>
                     ) : null}
 
                     {relatedStocks.length > 0 ? (
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                        <span className="text-[9px] font-mono uppercase tracking-[0.26em] text-white/24">
-                          Related
-                        </span>
+                        <span className="label-meta text-white/24">Related</span>
                         {relatedStocks.map((stock) => (
                           <span
                             key={stock}

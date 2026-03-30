@@ -46,7 +46,6 @@ export default function RootLayout({
       <body>
         <ScrollProgressBar />
         <div className="site-noise" />
-        <div className="scanline" />
         <div className="page-shell">
           <div className="page-inner">
             {children}

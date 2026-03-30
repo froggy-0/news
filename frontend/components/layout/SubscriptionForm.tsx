@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { ArrowRight, Loader2, Mail } from "lucide-react";
 
 import { SubscriptionState } from "@/components/ui/SubscriptionState";
@@ -56,15 +56,15 @@ export function SubscriptionForm() {
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           placeholder="이메일 주소"
-          className="h-14 w-full border border-white/20 bg-black px-4 pr-11 text-sm tracking-tight text-white outline-none transition placeholder:text-white/28 focus:border-[#00ffff] focus:ring-1 focus:ring-[#00ffff]"
+          className="h-14 w-full rounded-[20px] border border-white/14 bg-black/60 px-4 pr-11 text-[15px] tracking-tight text-white outline-none transition placeholder:text-white/28 focus:border-[var(--accent-primary)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--accent-primary)_28%,transparent)]"
           required
         />
-        <Mail className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/20 transition group-focus-within:text-[#00ffff]" />
+        <Mail className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/20 transition group-focus-within:text-[var(--accent-primary)]" />
       </div>
       <button
         type="submit"
         disabled={submitting}
-        className="group flex h-14 w-full items-center justify-center gap-2 bg-white px-4 text-sm font-bold tracking-tight text-black transition hover:bg-[#00ffff] disabled:cursor-not-allowed disabled:opacity-60"
+        className="group flex h-14 w-full items-center justify-center gap-2 rounded-[20px] bg-white px-4 text-[15px] font-bold tracking-tight text-black transition hover:bg-[var(--accent-primary)] disabled:cursor-not-allowed disabled:opacity-60"
       >
         {submitting ? (
           <>
@@ -78,7 +78,7 @@ export function SubscriptionForm() {
           </>
         )}
       </button>
-      <p className="text-[11px] leading-5 text-white/45">
+      <p className="text-[13px] leading-6 text-white/48">
         확인 메일의 링크를 눌러야 다음 발송부터 브리프를 받을 수 있습니다.
       </p>
       {message ? <SubscriptionState tone="success">{message}</SubscriptionState> : null}

@@ -24,7 +24,7 @@ export function NewsFeedList({
   emptyMessage: string;
 }) {
   if (items.length === 0) {
-    return <DataState message={emptyMessage} />;
+    return <DataState title="뉴스 상태" message={emptyMessage} family="reading" minHeight={220} />;
   }
 
   return (
@@ -46,7 +46,7 @@ export function NewsFeedList({
             href={item.url}
             target="_blank"
             rel="noreferrer"
-            className={`card-reading group relative flex flex-col overflow-hidden rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.015))] p-6 transition-all duration-500 ${
+            className={`card-reading card-family-reading group relative flex flex-col overflow-hidden rounded-[var(--card-radius-reading)] p-[var(--card-padding-reading)] ${
               index === 0 ? "md:col-span-2 xl:col-span-2 xl:min-h-[23rem]" : ""
             }`}
           >
@@ -54,13 +54,13 @@ export function NewsFeedList({
             <div className="absolute left-0 top-0 h-full w-px bg-gradient-to-b from-[#00ffff]/80 via-[#00ffff]/14 to-transparent" />
 
             <div className="mb-4 flex items-center gap-3">
-              <span className="text-[10px] font-mono uppercase tracking-[0.22em] text-white/26">
+              <span className="label-meta text-white/26">
                 {String(index + 1).padStart(2, "0")}
               </span>
-              <span className="card-reading-meta text-[10px] font-mono uppercase tracking-[0.2em] text-white/46 transition-colors group-hover:text-white/78">
+              <span className="card-reading-meta label-meta text-white/46 transition-colors group-hover:text-white/78">
                 {item.source}
               </span>
-              <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-[#00ffff]/72">
+              <span className="label-meta text-[var(--accent-primary)]/72">
                 {categoryLabel(item.category)}
               </span>
             </div>
@@ -75,14 +75,14 @@ export function NewsFeedList({
               </h3>
 
               {showRawTitle && rawTitle && rawTitle !== displayTitle ? (
-                <p className="text-[10px] font-mono tracking-[0.16em] text-white/30">
+                <p className="label-meta normal-case tracking-[0.08em] text-white/30">
                   원문 제목 · {rawTitle}
                 </p>
               ) : null}
 
               {leadSentences.length > 0 ? (
                 <div className={`space-y-3 ${index === 0 ? "max-w-2xl" : ""}`}>
-                  <span className="text-[9px] font-mono uppercase tracking-[0.28em] text-white/28">
+                  <span className="label-meta text-white/28">
                     뉴스 해설
                   </span>
                   <div className="space-y-2.5">
@@ -102,7 +102,7 @@ export function NewsFeedList({
 
               {interpretation ? (
                 <div className="border-t border-white/8 pt-4">
-                  <span className="text-[9px] font-mono uppercase tracking-[0.22em] text-white/30">
+                  <span className="label-meta text-white/30">
                     시장 함의
                   </span>
                   <p className="mt-2 text-[12px] leading-6 text-white/68">{interpretation}</p>
@@ -111,7 +111,7 @@ export function NewsFeedList({
             </div>
 
             <div className="mt-6 flex items-end justify-between border-t border-white/6 pt-5">
-              <div className="card-reading-meta flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] font-mono uppercase tracking-[0.18em] text-white/38">
+              <div className="card-reading-meta label-meta flex flex-wrap items-center gap-x-4 gap-y-2 text-white/38">
                 <span>{formatRelativeTime(item.publishedAt)}</span>
                 <span>{item.sourceTier === "tier1" ? "Tier 1" : "Verified"}</span>
                 {item.tags.slice(0, 2).map((tag) => (

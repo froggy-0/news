@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 export function RevealSection({
@@ -54,6 +54,7 @@ export function RevealSection({
       ref={sectionRef}
       className={className ? `reveal-on-view ${className}` : "reveal-on-view"}
       data-revealed={revealed ? "true" : "false"}
+      data-delay-ms={delayMs}
     >
       {children}
     </section>

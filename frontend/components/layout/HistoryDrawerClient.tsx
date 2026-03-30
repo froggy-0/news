@@ -92,7 +92,7 @@ export function HistoryDrawerClient({
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-white/70 transition hover:border-white/25 hover:text-white"
+        className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 text-white/70 transition hover:border-white/25 hover:text-white"
         aria-haspopup="dialog"
         aria-expanded={isOpen}
         aria-controls="history-drawer"
@@ -134,7 +134,7 @@ export function HistoryDrawerClient({
                   ref={closeButtonRef}
                   type="button"
                   onClick={() => setIsOpen(false)}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-white/55 transition hover:border-white/25 hover:text-white"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 text-white/55 transition hover:border-white/25 hover:text-white"
                   aria-label="히스토리 메뉴 닫기"
                 >
                   <X className="h-5 w-5" />
@@ -144,17 +144,17 @@ export function HistoryDrawerClient({
               <div className="flex-1 overflow-y-auto pr-1">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-[#00ffff]">Daily Intelligence Briefs</p>
+                    <p className="label-meta text-[var(--accent-primary)]">Daily Intelligence Briefs</p>
                     <div className="grid gap-2">
                       {entries.slice(0, visibleCount).map((entry) => (
                         <Link
                           key={entry.date}
                           href={entry.href}
                           className={clsx(
-                            "group flex items-center justify-between rounded-2xl border px-4 py-4 transition-all duration-300",
+                            "card-family-utility group flex items-center justify-between rounded-[var(--card-radius-utility)] px-4 py-4 transition-all duration-300",
                             entry.isCurrent
-                              ? "border-[#00ffff]/40 bg-[#00ffff]/10 text-[#00ffff]"
-                              : "border-white/8 bg-white/[0.02] text-white/65 hover:border-white/18 hover:bg-white/[0.05] hover:text-white",
+                              ? "border-cyan-300/40 bg-cyan-300/10 text-[var(--accent-primary)]"
+                              : "text-white/65 hover:border-white/18 hover:bg-white/[0.05] hover:text-white",
                           )}
                           onClick={() => setIsOpen(false)}
                         >
@@ -162,14 +162,14 @@ export function HistoryDrawerClient({
                             <div
                               className={clsx(
                                 "flex h-9 w-9 items-center justify-center rounded-full border",
-                                entry.isCurrent ? "border-[#00ffff]/35 bg-[#00ffff]/10" : "border-white/10 bg-white/[0.03]",
+                                entry.isCurrent ? "border-cyan-300/35 bg-cyan-300/10" : "border-white/10 bg-white/[0.03]",
                               )}
                             >
                               <Calendar className="h-4 w-4" />
                             </div>
                             <div className="space-y-1">
                               <p className="font-mono text-sm tracking-tight">{entry.date}</p>
-                              <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">
+                              <p className="label-meta text-white/35">
                                 {entry.isCurrent ? "현재 발행본" : "정적 아카이브"}
                               </p>
                             </div>
@@ -187,7 +187,7 @@ export function HistoryDrawerClient({
                       <button
                         type="button"
                         onClick={() => setVisibleCount((count) => count + 6)}
-                        className="mt-2 w-full rounded-2xl border border-dashed border-white/12 px-4 py-4 text-[10px] font-mono uppercase tracking-[0.24em] text-white/35 transition hover:border-white/22 hover:bg-white/[0.03] hover:text-white/70"
+                        className="label-meta mt-2 w-full rounded-[var(--card-radius-utility)] border border-dashed border-white/12 px-4 py-4 text-white/35 transition hover:border-white/22 hover:bg-white/[0.03] hover:text-white/70"
                       >
                         Load More Archive
                       </button>
@@ -196,22 +196,25 @@ export function HistoryDrawerClient({
 
                   <div className="border-t border-white/6 pt-7">
                     <div className="mb-4 flex items-center justify-between gap-4">
-                      <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-white/30">System Status</p>
+                      <p className="label-meta text-white/30">System Status</p>
                       {currentDate ? (
-                        <span className="rounded-full border border-white/10 px-3 py-1 text-[9px] font-mono uppercase tracking-[0.2em] text-white/45">
+                        <span className="label-meta rounded-full border border-white/10 px-3 py-1 text-white/45">
                           {currentDate}
                         </span>
                       ) : null}
                     </div>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       {statusCards.map((card) => (
-                        <div key={card.label} className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
-                          <p className="text-[9px] font-mono uppercase tracking-[0.24em] text-white/28">{card.label}</p>
+                        <div
+                          key={card.label}
+                          className="card-family-utility min-h-[96px] rounded-[var(--card-radius-utility)] p-4"
+                        >
+                          <p className="label-meta text-white/28">{card.label}</p>
                           <p
                             className={clsx(
                               "mt-2 text-xs font-mono leading-5",
-                              card.tone === "positive" && "text-[#00ffff]",
-                              card.tone === "warning" && "text-[#ffd166]",
+                              card.tone === "positive" && "text-[var(--status-positive)]",
+                              card.tone === "warning" && "text-[var(--status-warning)]",
                               (!card.tone || card.tone === "muted") && "text-white/72",
                             )}
                           >
