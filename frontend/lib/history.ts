@@ -25,12 +25,12 @@ export function buildHistoryEntries(dates: string[], currentDate?: string): Hist
 export function buildMetaStatusCards(meta: BriefMeta): DrawerStatusCard[] {
   return [
     {
-      label: "Data Quality",
+      label: "데이터 상태",
       value: qualityLabel(meta.dataQuality),
       tone: meta.dataQuality === "ok" ? "positive" : "warning",
     },
     {
-      label: "Translation",
+      label: "언어 상태",
       value: translationLabel(meta.translationStatus),
       tone:
         meta.translationStatus === "ok"
@@ -40,8 +40,8 @@ export function buildMetaStatusCards(meta: BriefMeta): DrawerStatusCard[] {
             : "muted",
     },
     {
-      label: "Coverage",
-      value: `뉴스 ${meta.sourceCounts.newsCandidates}→${meta.sourceCounts.newsAll} · X ${meta.sourceCounts.xSignalCandidates}→${meta.sourceCounts.xSignalAll}`,
+      label: "수집 범위",
+      value: `뉴스 ${meta.sourceCounts.newsAll}건 · X ${meta.sourceCounts.xSignalAll}건`,
       tone: "muted",
     },
   ];
