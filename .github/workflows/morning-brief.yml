@@ -1,4 +1,4 @@
-name: Generate Morning Brief
+name: Generate Sovereign Briefing
 
 on:
   schedule:
@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   run-brief:
-    name: Generate and Publish Brief
+    name: Generate and Publish Sovereign Briefing
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -229,7 +229,7 @@ jobs:
           if-no-files-found: warn
 
   deploy-frontend:
-    name: Deploy Frontend After Successful Brief Run
+    name: Deploy Frontend After Successful Sovereign Briefing Run
     needs: run-brief
     if: ${{ needs.run-brief.result == 'success' }}
     runs-on: ubuntu-latest
