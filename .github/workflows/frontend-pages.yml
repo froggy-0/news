@@ -1,4 +1,4 @@
-name: Frontend Production Deploy
+name: Deploy Frontend to Production
 
 on:
   workflow_dispatch:
@@ -9,12 +9,13 @@ concurrency:
 
 jobs:
   deploy:
+    name: Production Frontend Deploy
     runs-on: ubuntu-latest
     permissions:
       contents: read
 
     steps:
-      - name: Validate deployment settings
+      - name: Validate production deploy settings
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -34,20 +35,20 @@ jobs:
             exit 1
           fi
 
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
           ref: main
 
-      - name: Setup Node
+      - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Wait for public brief availability
+      - name: Wait for latest public brief
         id: public-brief
         shell: bash
         env:
@@ -94,13 +95,13 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Build static frontend
+      - name: Build static frontend bundle
         working-directory: frontend
         run: npm run build
         env:
           NEXT_PUBLIC_R2_BASE_URL: ${{ vars.NEXT_PUBLIC_R2_BASE_URL }}
 
-      - name: Deploy production to Cloudflare Pages
+      - name: Deploy production build to Cloudflare Pages
         working-directory: frontend
         run: npx wrangler@4 pages deploy out --project-name="$CLOUDFLARE_PAGES_PROJECT_NAME" --commit-dirty=true --commit-message="Deploy $GITHUB_SHA"
         env:
@@ -108,7 +109,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_PAGES_PROJECT_NAME: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
 
-      - name: Summarize frontend deploy
+      - name: Publish deploy summary
         shell: bash
         env:
           CLOUDFLARE_PAGES_PROJECT_NAME: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}

@@ -1,4 +1,4 @@
-name: Morning Market Brief
+name: Generate Morning Brief
 
 on:
   schedule:
@@ -12,6 +12,7 @@ concurrency:
 
 jobs:
   run-brief:
+    name: Generate and Publish Brief
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -19,12 +20,12 @@ jobs:
       id-token: write
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
         with:
           python-version: "3.11"
@@ -50,7 +51,7 @@ jobs:
           restore-keys: |
             pip-
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: pip install --disable-pip-version-check -r requirements-dev.txt
 
       - name: Restore BTC ETF snapshot cache
@@ -99,7 +100,7 @@ jobs:
             echo "pip_status=miss" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Run pipeline
+      - name: Run brief generation pipeline
         shell: bash
         run: |
           set -euo pipefail
@@ -167,7 +168,7 @@ jobs:
           CACHE_PIP_HIT: ${{ steps.cache-pip.outputs.cache-hit || 'false' }}
           CACHE_PIP_STATUS: ${{ steps.cache-status.outputs.pip_status }}
 
-      - name: Summarize public brief publish
+      - name: Publish brief summary
         if: always()
         shell: bash
         env:
@@ -193,14 +194,14 @@ jobs:
             echo "- Pages deploy target: \`${deploy_target}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Save BTC ETF snapshot cache
+      - name: Save BTC ETF cache
         if: always()
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
         with:
           path: .cache/btc_etf
           key: btc-etf-snapshots-${{ steps.cache-meta.outputs.day }}
 
-      - name: Save market snapshot cache
+      - name: Save market cache
         if: always()
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
         with:
@@ -214,7 +215,7 @@ jobs:
           path: ~/.cache/pip
           key: pip-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
 
-      - name: Upload run artifacts
+      - name: Upload brief run artifacts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -228,6 +229,7 @@ jobs:
           if-no-files-found: warn
 
   deploy-frontend:
+    name: Deploy Frontend After Successful Brief Run
     needs: run-brief
     if: ${{ needs.run-brief.result == 'success' }}
     runs-on: ubuntu-latest
@@ -236,7 +238,7 @@ jobs:
       contents: read
 
     steps:
-      - name: Validate deployment settings
+      - name: Validate frontend deploy settings
         id: validate
         shell: bash
         env:
@@ -260,7 +262,7 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Summarize skipped frontend deploy
+      - name: Publish skipped deploy summary
         if: steps.validate.outputs.skip == 'true'
         shell: bash
         run: |
@@ -269,13 +271,13 @@ jobs:
             echo "- Skipped because required settings are missing: \`${{ steps.validate.outputs.missing }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Checkout
+      - name: Checkout repository
         if: steps.validate.outputs.skip != 'true'
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
 
-      - name: Setup Node
+      - name: Set up Node.js
         if: steps.validate.outputs.skip != 'true'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -297,7 +299,7 @@ jobs:
             echo "branch_slug=${branch_slug}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Wait for public brief availability
+      - name: Wait for latest public brief
         if: steps.validate.outputs.skip != 'true'
         id: public-brief
         shell: bash
@@ -346,14 +348,14 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Build static frontend
+      - name: Build static frontend bundle
         if: steps.validate.outputs.skip != 'true'
         working-directory: frontend
         run: npm run build
         env:
           NEXT_PUBLIC_R2_BASE_URL: ${{ vars.NEXT_PUBLIC_R2_BASE_URL }}
 
-      - name: Deploy preview to Cloudflare Pages
+      - name: Deploy preview build to Cloudflare Pages
         if: steps.validate.outputs.skip != 'true' && steps.deploy-target.outputs.target == 'preview'
         working-directory: frontend
         run: npx wrangler@4 pages deploy out --project-name="$CLOUDFLARE_PAGES_PROJECT_NAME" --branch="$DEPLOY_BRANCH" --commit-dirty=true --commit-message="Deploy $GITHUB_SHA"
@@ -363,7 +365,7 @@ jobs:
           CLOUDFLARE_PAGES_PROJECT_NAME: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
           DEPLOY_BRANCH: ${{ steps.deploy-target.outputs.branch_slug }}
 
-      - name: Deploy production to Cloudflare Pages
+      - name: Deploy production build to Cloudflare Pages
         if: steps.validate.outputs.skip != 'true' && steps.deploy-target.outputs.target == 'production'
         working-directory: frontend
         run: npx wrangler@4 pages deploy out --project-name="$CLOUDFLARE_PAGES_PROJECT_NAME" --commit-dirty=true --commit-message="Deploy $GITHUB_SHA"
@@ -372,7 +374,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_PAGES_PROJECT_NAME: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
 
-      - name: Summarize frontend deploy
+      - name: Publish frontend deploy summary
         if: steps.validate.outputs.skip != 'true'
         shell: bash
         env:

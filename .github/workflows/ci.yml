@@ -1,4 +1,4 @@
-name: CI
+name: Repository Checks
 
 on:
   push:
@@ -12,16 +12,17 @@ concurrency:
 
 jobs:
   check:
+    name: Python Quality Checks
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
         with:
           python-version: "3.11"
@@ -34,17 +35,17 @@ jobs:
           restore-keys: |
             pip-
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: pip install --disable-pip-version-check -r requirements-dev.txt
 
-      - name: Check formatting
+      - name: Check Python formatting
         run: python -m ruff format --check .
 
-      - name: Run lint
+      - name: Run Python lint
         run: python -m ruff check .
 
-      - name: Run tests
+      - name: Run Python tests
         run: python -m pytest -q
 
-      - name: Run typecheck
+      - name: Run Python type checks
         run: python -m mypy
