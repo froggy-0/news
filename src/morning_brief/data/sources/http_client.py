@@ -177,9 +177,9 @@ def _request_with_retry(
         on_retry=log_retry,
         max_attempts=retries,
         base_backoff_seconds=backoff_seconds,
-        retry_after_seconds_for_error=lambda exc: exc.retry_after_seconds
-        if isinstance(exc, HttpFetchError)
-        else None,
+        retry_after_seconds_for_error=lambda exc: (
+            exc.retry_after_seconds if isinstance(exc, HttpFetchError) else None
+        ),
     )
 
 

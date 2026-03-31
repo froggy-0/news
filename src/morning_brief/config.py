@@ -167,7 +167,7 @@ def load_settings() -> Settings:
         grok_x_keyword_search_enabled=_env_bool("GROK_X_KEYWORD_SEARCH_ENABLED", True),
         grok_web_search_enabled=_env_bool("GROK_WEB_SEARCH_ENABLED", False),
         grok_x_search_max_items=_env_bounded_int(
-            "GROK_X_SEARCH_MAX_ITEMS", default=6, minimum=1, maximum=10
+            "GROK_X_SEARCH_MAX_ITEMS", default=4, minimum=1, maximum=8
         ),
         grok_web_search_max_items=_env_bounded_int(
             "GROK_WEB_SEARCH_MAX_ITEMS", default=8, minimum=1, maximum=12
@@ -187,9 +187,9 @@ def load_settings() -> Settings:
         ),
         official_x_max_items=_env_bounded_int(
             "OFFICIAL_X_MAX_ITEMS",
-            default=4,
+            default=3,
             minimum=1,
-            maximum=6,
+            maximum=5,
         ),
         ses_sender=os.getenv("SES_SENDER", DEFAULT_SES_SENDER).strip() or DEFAULT_SES_SENDER,
         ses_region=os.getenv("AWS_REGION", DEFAULT_SES_REGION).strip() or DEFAULT_SES_REGION,

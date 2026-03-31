@@ -153,6 +153,103 @@ def test_enrich_public_news_packet_skips_when_disabled(monkeypatch):
     assert audit.skipped_count == 1
 
 
+def test_enrich_public_news_packet_thin_input_produces_nonempty_result(monkeypatch):
+    """Property 1: 얇은 입력(summary/why_it_matters 없음)에서도 비어 있지 않은 해설 생성."""
+
+    class FakeOpenAI:
+        def __init__(self, *, api_key: str):
+            self.responses = self
+
+        def create(self, **kwargs):
+            payload = json.loads(kwargs["input"])
+            assert len(payload["items"]) == 1
+            return SimpleNamespace(
+                output_text=json.dumps(
+                    {
+                        "items": [
+                            {
+                                "id": "news-1",
+                                "summary_ko": "AI 빅테크 기업의 신규 모델 발표로 반도체 공급망 기대가 높아졌습니다.",
+                                "interpretation_ko": "AI 인프라 투자 확대 신호로 읽힐 수 있습니다.",
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                usage=_usage(),
+            )
+
+    monkeypatch.setattr("morning_brief.public_news_analysis.OpenAI", FakeOpenAI)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    settings = load_settings()
+
+    enriched, audit = enrich_public_news_packet(
+        items=[
+            {
+                "title": "Major AI Lab Announces Next-Gen Model",
+                "url": "https://example.com/ai-lab-model",
+                "source": "TechCrunch",
+                "topic": "ai_bigtech",
+            }
+        ],
+        settings=settings,
+    )
+
+    assert enriched[0].get("summary_ko"), "얇은 입력에서 summary_ko가 비어서는 안 됩니다"
+    assert enriched[0].get("interpretation_ko"), (
+        "얇은 입력에서 interpretation_ko가 비어서는 안 됩니다"
+    )
+    assert audit.success_count == 1
+
+
+def test_enrich_public_news_packet_reasoning_effort_low(monkeypatch):
+    """Property 2: reasoning effort가 'low'로 설정됨."""
+
+    class FakeOpenAI:
+        def __init__(self, *, api_key: str):
+            self.responses = self
+
+        def create(self, **kwargs):
+            assert kwargs.get("reasoning") == {"effort": "low"}, (
+                f"reasoning effort가 'low'여야 하지만 {kwargs.get('reasoning')!r}로 전달됨"
+            )
+            return SimpleNamespace(
+                output_text=json.dumps(
+                    {
+                        "items": [
+                            {
+                                "id": "news-1",
+                                "summary_ko": "테스트 해설입니다.",
+                                "interpretation_ko": "테스트 함의입니다.",
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                usage=_usage(),
+            )
+
+    monkeypatch.setattr("morning_brief.public_news_analysis.OpenAI", FakeOpenAI)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    settings = load_settings()
+
+    _, audit = enrich_public_news_packet(
+        items=[
+            {
+                "title": "Fed holds rates steady",
+                "url": "https://www.reuters.com/world/us/fed-holds",
+                "source": "Reuters",
+                "topic": "macro",
+                "summary": "The Fed kept rates unchanged.",
+                "why_it_matters": "Markets expected a hold.",
+            }
+        ],
+        settings=settings,
+    )
+
+    assert audit.success_count == 1
+
+
 def test_enrich_public_news_packet_handles_invalid_json_response(monkeypatch):
     class FakeOpenAI:
         def __init__(self, *, api_key: str):

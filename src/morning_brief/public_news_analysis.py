@@ -98,8 +98,6 @@ def _analysis_input_from_item(item: dict[str, Any], index: int) -> PublicNewsAna
     why_it_matters = _normalize_text(str(item.get("why_it_matters", "")).strip())
     if not title or not url:
         return None
-    if not summary and not why_it_matters:
-        return None
     return PublicNewsAnalysisInput(
         id=f"news-{index}",
         title=title,
@@ -295,7 +293,7 @@ def enrich_public_news_packet(
                         "strict": True,
                     }
                 },
-                reasoning={"effort": "minimal"},
+                reasoning={"effort": "low"},
                 max_output_tokens=min(3200, max(900, 320 * len(batch))),
                 prompt_cache_key=prompt_cache_key,
             )

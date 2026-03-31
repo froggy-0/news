@@ -32,9 +32,8 @@ logger = logging.getLogger(__name__)
 GROK_KEYWORD_PROVIDER = "grok_keyword"
 
 MACRO_EQUITY_GROUP = "macro_and_equity"
-CRYPTO_ETF_GROUP = "crypto_and_etf"
 AI_BIGTECH_GROUP = "ai_bigtech_primary"
-BTC_ETF_GROUP = "btc_etf_primary"
+BITCOIN_CRYPTO_GROUP = "bitcoin_crypto"
 
 MACRO_EQUITY_PROMPT = """Search X for the most significant market-moving posts from the last {lookback_hours} hours.
 Focus on:
@@ -54,12 +53,23 @@ For each post, extract as JSON array "signals":
 Return the top {max_items} most impactful posts. Skip routine marketing and non-market posts.
 Output format: {{"signals": [...]}}"""
 
-CRYPTO_ETF_PROMPT = """Search X for the most significant Bitcoin and crypto market posts from the last {lookback_hours} hours.
+AI_BIGTECH_PROMPT = """Search X for the most significant AI and Big Tech posts from the last {lookback_hours} hours.
 Focus on:
-1. Bitcoin ETF flow data (IBIT, BITB, GBTC inflows/outflows)
-2. Crypto regulatory news (SEC, CFTC decisions)
-3. BTC price action and market sentiment
-4. Institutional Bitcoin adoption signals
+1. NVIDIA, AMD, TSMC, ASML semiconductor news and analyst commentary
+2. Microsoft, Apple, Amazon, Google, Meta strategic moves
+3. AI infrastructure, data center capex, model announcements
+4. Earnings guidance, revenue signals, product launches
+
+Return the top {max_items} most market-moving posts.
+Output format: {{"signals": [{{"headline": "...", "summary": "...", "why_it_matters": "...", "sentiment": "bullish|bearish|neutral", "source_handle": "...", "posted_at": "ISO8601"}}]}}
+Skip marketing, promotional, and non-market posts."""
+
+BITCOIN_CRYPTO_PROMPT = """Search X for the most significant Bitcoin and crypto market posts from the last {lookback_hours} hours.
+Focus on:
+1. Bitcoin ETF flow data and AUM — IBIT, BITB, GBTC, FBTC, ARKB inflows/outflows
+2. BTC price action and market sentiment
+3. Crypto regulatory news (SEC, CFTC decisions and enforcement)
+4. Institutional demand, new ETF filings, fee changes, and fund manager commentary
 
 Return the top {max_items} most impactful posts as JSON array "signals":
 - headline: one-line summary
@@ -72,41 +82,19 @@ Return the top {max_items} most impactful posts as JSON array "signals":
 Prioritize posts with specific data points. Skip promotional content.
 Output format: {{"signals": [...]}}"""
 
-AI_BIGTECH_PROMPT = """Search X for the most significant AI and Big Tech posts from the last {lookback_hours} hours.
-Focus on:
-1. NVIDIA, AMD, TSMC, ASML semiconductor news and analyst commentary
-2. Microsoft, Apple, Amazon, Google, Meta strategic moves
-3. AI infrastructure, data center capex, model announcements
-4. Earnings guidance, revenue signals, product launches
-
-Return the top {max_items} most market-moving posts.
-Output format: {{"signals": [{{"headline": "...", "summary": "...", "why_it_matters": "...", "sentiment": "bullish|bearish|neutral", "source_handle": "...", "posted_at": "ISO8601"}}]}}
-Skip marketing, promotional, and non-market posts."""
-
-BTC_ETF_PRIMARY_PROMPT = """Search X for the most significant Bitcoin ETF and institutional crypto posts from the last {lookback_hours} hours.
-Focus on:
-1. IBIT, BITB, GBTC daily flow data and AUM changes
-2. New ETF filings or SEC decisions
-3. Institutional Bitcoin adoption announcements
-4. Major exchange or custodian updates
-
-Return the top {max_items} most impactful posts.
-Output format: {{"signals": [{{"headline": "...", "summary": "...", "why_it_matters": "...", "sentiment": "bullish|bearish|neutral", "source_handle": "...", "posted_at": "ISO8601"}}]}}
-Prioritize posts with specific data points. Skip promotional content."""
-
 GROUP_PROMPTS = {
     MACRO_EQUITY_GROUP: MACRO_EQUITY_PROMPT,
-    CRYPTO_ETF_GROUP: CRYPTO_ETF_PROMPT,
     AI_BIGTECH_GROUP: AI_BIGTECH_PROMPT,
-    BTC_ETF_GROUP: BTC_ETF_PRIMARY_PROMPT,
+    BITCOIN_CRYPTO_GROUP: BITCOIN_CRYPTO_PROMPT,
 }
 
 GROUP_TOPIC_MAP = {
     MACRO_EQUITY_GROUP: "macro",
-    CRYPTO_ETF_GROUP: "crypto",
     AI_BIGTECH_GROUP: "ai_bigtech",
-    BTC_ETF_GROUP: "bitcoin",
+    BITCOIN_CRYPTO_GROUP: "bitcoin",
 }
+
+search_groups = [MACRO_EQUITY_GROUP, AI_BIGTECH_GROUP, BITCOIN_CRYPTO_GROUP]
 
 WEEKEND_CONTEXT = (
     "\nNote: It is currently the weekend or Monday morning. "
@@ -331,6 +319,17 @@ def _record_usage(
     )
 
 
+def _bitcoin_crypto_handles(all_handles: dict[str, list[str]]) -> list[str]:
+    """crypto_and_etf와 btc_etf_primary 두 그룹의 핸들을 중복 없이 병합한다."""
+    seen: set[str] = set()
+    result: list[str] = []
+    for handle in all_handles.get("crypto_and_etf", []) + all_handles.get("btc_etf_primary", []):
+        if handle not in seen:
+            seen.add(handle)
+            result.append(handle)
+    return result
+
+
 def fetch_x_keyword_signals(
     *,
     api_key: str,
@@ -356,7 +355,6 @@ def fetch_x_keyword_signals(
         return [], [], {}
 
     all_handles = grouped_verified_x_handles()
-    search_groups = [MACRO_EQUITY_GROUP, CRYPTO_ETF_GROUP, AI_BIGTECH_GROUP, BTC_ETF_GROUP]
 
     all_signals: list[XSignal] = []
     all_news_items: list[NewsItem] = []
@@ -376,7 +374,10 @@ def fetch_x_keyword_signals(
             )
             break
 
-        handles = all_handles.get(group, [])
+        if group == BITCOIN_CRYPTO_GROUP:
+            handles = _bitcoin_crypto_handles(all_handles)
+        else:
+            handles = all_handles.get(group, [])
         topic = GROUP_TOPIC_MAP.get(group, "us_equity")
 
         try:
@@ -404,9 +405,9 @@ def fetch_x_keyword_signals(
                     retryable=True,
                     delay_seconds=delay,
                 ),
-                retry_after_seconds_for_error=lambda exc: exc.retry_after_seconds
-                if isinstance(exc, HttpFetchError)
-                else None,
+                retry_after_seconds_for_error=lambda exc: (
+                    exc.retry_after_seconds if isinstance(exc, HttpFetchError) else None
+                ),
             )
             _record_usage(observer, group, usage)
 

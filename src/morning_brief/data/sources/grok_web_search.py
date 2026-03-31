@@ -245,9 +245,9 @@ def fetch_grok_web_news(
                 retryable=True,
                 delay_seconds=delay,
             ),
-            retry_after_seconds_for_error=lambda exc: exc.retry_after_seconds
-            if isinstance(exc, HttpFetchError)
-            else None,
+            retry_after_seconds_for_error=lambda exc: (
+                exc.retry_after_seconds if isinstance(exc, HttpFetchError) else None
+            ),
         )
         _record_usage(observer, usage)
     except HttpFetchError as exc:

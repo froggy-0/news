@@ -773,9 +773,9 @@ def _request_reference_snapshots(
             retryable=True,
             delay_seconds=delay,
         ),
-        retry_after_seconds_for_error=lambda exc: exc.retry_after_seconds
-        if isinstance(exc, HttpFetchError)
-        else None,
+        retry_after_seconds_for_error=lambda exc: (
+            exc.retry_after_seconds if isinstance(exc, HttpFetchError) else None
+        ),
     )
     if observer is not None:
         observer.record_provider_usage(

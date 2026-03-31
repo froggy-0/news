@@ -321,15 +321,17 @@ def test_run_pipeline_uses_openai_backfill_only_when_quality_is_degraded(monkeyp
     )
     monkeypatch.setattr(
         "morning_brief.pipeline.backfill_news_with_web_search",
-        lambda **_: backfill_called.__setitem__("called", True)
-        or (
-            merged_news,
-            [
-                {
-                    "title": "Reuters",
-                    "url": "https://www.reuters.com/world/us/fed-keeps-options-open",
-                }
-            ],
+        lambda **_: (
+            backfill_called.__setitem__("called", True)
+            or (
+                merged_news,
+                [
+                    {
+                        "title": "Reuters",
+                        "url": "https://www.reuters.com/world/us/fed-keeps-options-open",
+                    }
+                ],
+            )
         ),
     )
     monkeypatch.setattr(

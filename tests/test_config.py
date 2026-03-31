@@ -160,3 +160,24 @@ def test_ses_settings_default_to_operating_values(monkeypatch):
 
     assert settings.ses_sender == DEFAULT_SES_SENDER
     assert settings.ses_region == DEFAULT_SES_REGION
+
+
+def test_grok_x_search_max_items_default(monkeypatch):
+    """Property 7: grok_x_search_max_items 기본값이 4."""
+    monkeypatch.delenv("GROK_X_SEARCH_MAX_ITEMS", raising=False)
+    settings = load_settings()
+    assert settings.grok_x_search_max_items == 4
+
+
+def test_official_x_max_items_default(monkeypatch):
+    """Property 8: official_x_max_items 기본값이 3."""
+    monkeypatch.delenv("OFFICIAL_X_MAX_ITEMS", raising=False)
+    settings = load_settings()
+    assert settings.official_x_max_items == 3
+
+
+def test_grok_x_search_max_items_upper_clamp(monkeypatch):
+    """Property 9: grok_x_search_max_items 상한이 8로 클램프됨."""
+    monkeypatch.setenv("GROK_X_SEARCH_MAX_ITEMS", "20")
+    settings = load_settings()
+    assert settings.grok_x_search_max_items == 8
