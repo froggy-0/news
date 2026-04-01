@@ -87,7 +87,8 @@ test("news feed detail renders all news cards from fixture", async () => {
   assert.match(markup, /Full Source Flow/);
 });
 
-test("news feed renders empty state when both featured and all news are absent", () => {
+test("news feed renders nothing when both featured and all news are absent", () => {
+  // Req 4.3: featuredNews 0개 시 섹션 숨김 (return null)
   const markup = renderToStaticMarkup(
     createElement(NewsFeed, {
       featuredItems: [],
@@ -96,8 +97,7 @@ test("news feed renders empty state when both featured and all news are absent",
     }),
   );
 
-  assert.match(markup, /뉴스 상태/);
-  assert.match(markup, /주요 뉴스를 확인하지 못했어요/);
+  assert.strictEqual(markup, "");
 });
 
 test("x signals component renders empty state when both featured and all signals are absent", () => {

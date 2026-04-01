@@ -7,6 +7,7 @@ import type {
   FearGreedIndex,
   MarketSnapshot,
   NewsItem,
+  PublicNewsAnalysisAudit,
   SourceCounts,
   TechStock,
   TickerItem,
@@ -108,6 +109,18 @@ function parseMeta(value: unknown): BriefMeta {
         : "",
     sourceCounts: parseSourceCounts(value.sourceCounts),
     translationStatus: asTranslationStatus(value.translationStatus),
+    publicNewsAnalysis: isRecord(value.publicNewsAnalysis)
+      ? {
+          candidateCount: typeof value.publicNewsAnalysis.candidateCount === "number" ? value.publicNewsAnalysis.candidateCount : 0,
+          requestedCount: typeof value.publicNewsAnalysis.requestedCount === "number" ? value.publicNewsAnalysis.requestedCount : 0,
+          successCount: typeof value.publicNewsAnalysis.successCount === "number" ? value.publicNewsAnalysis.successCount : 0,
+          failedCount: typeof value.publicNewsAnalysis.failedCount === "number" ? value.publicNewsAnalysis.failedCount : 0,
+          skippedCount: typeof value.publicNewsAnalysis.skippedCount === "number" ? value.publicNewsAnalysis.skippedCount : 0,
+          status: (["ok", "partial", "failed", "skipped"].includes(value.publicNewsAnalysis.status as string)
+            ? value.publicNewsAnalysis.status
+            : "skipped") as PublicNewsAnalysisAudit["status"],
+        }
+      : null,
   };
 }
 

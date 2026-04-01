@@ -7,9 +7,11 @@ import { NewsFeedList } from "./NewsFeedList";
 export function NewsFeedClient({
   featuredItems,
   allItems,
+  showInsufficientWarning = false,
 }: {
   featuredItems: NewsItem[];
   allItems: NewsItem[];
+  showInsufficientWarning?: boolean;
 }) {
   const items = featuredItems.length > 0 ? featuredItems : allItems;
 
@@ -31,6 +33,9 @@ export function NewsFeedClient({
           </div>
         </div>
 
+        {showInsufficientWarning && (
+          <p className="text-sm font-mono text-white/40">분析 기사가 충분하지 않습니다</p>
+        )}
         <NewsFeedList
           items={items}
           emptyMessage="이번 집계에서는 주요 뉴스를 확인하지 못했어요."

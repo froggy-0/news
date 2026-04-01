@@ -291,7 +291,12 @@ def _apply_domain_diversity_limit(items: list[NewsItem], max_items: int) -> list
     return selected[:max_items]
 
 
-def _dedup_and_rank(items: list[NewsItem], max_items: int) -> list[NewsItem]:
+def _dedup_and_rank(
+    items: list[NewsItem],
+    max_items: int,
+    *,
+    min_output: int = 0,
+) -> list[NewsItem]:
     by_key: dict[str, NewsItem] = {}
 
     for item in items:
@@ -322,7 +327,13 @@ def _dedup_and_rank(items: list[NewsItem], max_items: int) -> list[NewsItem]:
             by_key[key] = normalized_item
 
     ranked = _sort_by_score(list(by_key.values()))
-    return _apply_domain_diversity_limit(ranked, max_items=max_items)
+    result = _apply_domain_diversity_limit(ranked, max_items=max_items)
+
+    # 최소 출력 보장: 도메인 다양성 제한이 min_output을 만족하지 못하면 완화
+    if min_output > 0 and len(result) < min_output and len(ranked) >= min_output:
+        return ranked[:min_output]
+
+    return result
 
 
 def _merge_rank(items: list[NewsItem], other: list[NewsItem], max_items: int) -> list[NewsItem]:

@@ -143,6 +143,56 @@ def test_dedup_and_rank_keeps_multiple_official_x_sources():
     assert {item.source for item in ranked} == {"@Source0", "@Source1", "@Source2"}
 
 
+def test_dedup_and_rank_min_output_relaxes_domain_diversity():
+    """min_output이 지정되면 도메인 다양성 제한이 결과를 min_output 미만으로 줄이지 않는다."""
+    now = datetime.now(timezone.utc)
+    # reuters.com 아이템 5개: MAX_ITEMS_PER_DOMAIN=2이므로 일반적으로 2개만 선택됨
+    items = [
+        NewsItem(
+            title=f"Reuters article {i}",
+            url=f"https://www.reuters.com/article-{i}/",
+            source="Reuters",
+            published_at=now - timedelta(minutes=i),
+        )
+        for i in range(5)
+    ]
+    result = news._dedup_and_rank(items, max_items=12, min_output=3)
+    assert len(result) >= 3
+
+
+def test_dedup_and_rank_min_output_not_applied_when_ranked_too_few():
+    """ranked 자체가 min_output 미만이면 완화 미발동, ranked 전체를 반환한다."""
+    now = datetime.now(timezone.utc)
+    items = [
+        NewsItem(
+            title=f"Article {i}",
+            url=f"https://www.reuters.com/article-few-{i}/",
+            source="Reuters",
+            published_at=now - timedelta(minutes=i),
+        )
+        for i in range(2)
+    ]
+    result = news._dedup_and_rank(items, max_items=12, min_output=3)
+    assert len(result) == 2
+
+
+def test_dedup_and_rank_min_output_default_preserves_existing_behavior():
+    """min_output 기본값(0)이면 기존 동작과 동일하다."""
+    now = datetime.now(timezone.utc)
+    items = [
+        NewsItem(
+            title=f"Reuters article {i}",
+            url=f"https://www.reuters.com/article-default-{i}/",
+            source="Reuters",
+            published_at=now - timedelta(minutes=i),
+        )
+        for i in range(5)
+    ]
+    result_default = news._dedup_and_rank(items, max_items=12)
+    result_explicit_zero = news._dedup_and_rank(items, max_items=12, min_output=0)
+    assert len(result_default) == len(result_explicit_zero)
+
+
 def test_collect_from_rss_uses_passed_candidate_limit(monkeypatch):
     captured: dict[str, object] = {}
     monkeypatch.setattr(
@@ -613,6 +663,96 @@ def test_build_news_packet_enriches_public_article_news(monkeypatch):
         public_context["all_news"][0]["interpretation_ko"]
         == "고금리 부담이 성장주 선호를 약하게 만들 수 있습니다."
     )
+
+
+def test_build_news_packet_public_context_includes_public_news_analysis_audit(monkeypatch):
+    """public_context에 public_news_analysis 필드가 포함되어야 한다 (Req 1)."""
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")
+    monkeypatch.setenv("ENABLE_LEGACY_NEWS_FALLBACK", "false")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news_from_perplexity",
+        lambda **_: [
+            NewsItem(
+                title="Treasury yields rise as growth stocks wobble",
+                url="https://www.reuters.com/world/us/treasury-yields-rise-growth-stocks-wobble",
+                source="Reuters",
+                published_at=now,
+                topic="macro",
+                provider="perplexity_search",
+                summary="Yields moved higher.",
+                why_it_matters="Growth stocks face pressure.",
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news._collect_sonar_summaries", lambda *_, **__: ({}, [])
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news.enrich_public_news_packet",
+        lambda *, items, settings, observer=None: (
+            items,
+            SimpleNamespace(
+                candidate_count=1,
+                requested_count=1,
+                success_count=1,
+                skipped_count=0,
+                failed_count=0,
+                status="ok",
+            ),
+        ),
+    )
+
+    _, _, _, public_context = news.build_news_packet(settings=load_settings())
+
+    audit = public_context.get("public_news_analysis")
+    assert audit is not None, "public_news_analysis가 public_context에 없음"
+    assert audit["candidateCount"] == 1
+    assert audit["requestedCount"] == 1
+    assert audit["successCount"] == 1
+    assert audit["failedCount"] == 0
+    assert audit["skippedCount"] == 0
+    assert audit["status"] == "ok"
+    # 불변식 A: requestedCount == successCount + failedCount
+    assert audit["requestedCount"] == audit["successCount"] + audit["failedCount"]
+    # 불변식 B: candidateCount == requestedCount + skippedCount
+    assert audit["candidateCount"] == audit["requestedCount"] + audit["skippedCount"]
+
+
+def test_build_news_packet_public_news_analysis_audit_when_disabled(monkeypatch):
+    """enrichment 비활성화 시 status=skipped, requestedCount=0, skippedCount=candidateCount."""
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")
+    monkeypatch.setenv("ENABLE_LEGACY_NEWS_FALLBACK", "false")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
+    monkeypatch.setenv("OPENAI_PUBLIC_NEWS_ANALYSIS_ENABLED", "false")
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news_from_perplexity",
+        lambda **_: [
+            NewsItem(
+                title="Treasury yields rise",
+                url="https://www.reuters.com/world/us/treasury-yields-rise",
+                source="Reuters",
+                published_at=now,
+                topic="macro",
+                provider="perplexity_search",
+                summary="Yields moved higher.",
+                why_it_matters="Growth stocks face pressure.",
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news._collect_sonar_summaries", lambda *_, **__: ({}, [])
+    )
+
+    _, _, _, public_context = news.build_news_packet(settings=load_settings())
+
+    audit = public_context.get("public_news_analysis")
+    assert audit is not None
+    assert audit["status"] == "skipped"
+    assert audit["requestedCount"] == 0
+    assert audit["skippedCount"] == audit["candidateCount"]
 
 
 def test_build_news_packet_uses_sonar_news_only_when_search_is_empty(monkeypatch):
@@ -1129,3 +1269,73 @@ def test_summarize_news_packet_quality_counts_reliability_fields():
         "perplexity_explained_count": 1,
         "official_signal_count": 0,
     }
+
+
+# --- _cap_signals_by_topic 테스트 ---
+
+
+def _make_signal(topic: str, sentiment: str = "neutral") -> object:
+    from datetime import datetime, timezone
+
+    from morning_brief.data.sources.grok_x_keyword import XSignal
+
+    return XSignal(
+        headline=f"{topic} headline",
+        summary=f"{topic} summary",
+        why_it_matters=f"{topic} impact",
+        sentiment=sentiment,
+        source_handle="handle",
+        posted_at=datetime.now(timezone.utc),
+        topic=topic,
+    )
+
+
+def test_cap_signals_by_topic_limits_per_topic():
+    """macro 3개 입력 시 per_topic_max=2이면 2개만 반환한다."""
+    signals = [_make_signal("macro") for _ in range(3)]
+    result = news._cap_signals_by_topic(signals, total_max=6, per_topic_max=2)
+    assert len(result) == 2
+    assert all(s.topic == "macro" for s in result)
+
+
+def test_cap_signals_by_topic_total_max():
+    """3 topics × 3개 = 9개지만 total_max=6이면 6개만 반환한다."""
+    signals = (
+        [_make_signal("macro") for _ in range(3)]
+        + [_make_signal("ai_bigtech") for _ in range(3)]
+        + [_make_signal("bitcoin") for _ in range(3)]
+    )
+    result = news._cap_signals_by_topic(signals, total_max=6, per_topic_max=4)
+    assert len(result) == 6
+
+
+def test_cap_signals_by_topic_sentiment_diversity_prefers_different_sentiment():
+    """sentiment_diversity=True: bullish 이후 bullish 입력 시 bearish를 우선 선택한다."""
+    signals = [
+        _make_signal("macro", "bullish"),
+        _make_signal("macro", "bullish"),  # 같은 sentiment → deferred
+        _make_signal("macro", "bearish"),  # 다른 sentiment → 우선 선택
+    ]
+    result = news._cap_signals_by_topic(
+        signals, total_max=6, per_topic_max=2, sentiment_diversity=True
+    )
+    assert len(result) == 2
+    sentiments = {s.sentiment for s in result}
+    assert "bullish" in sentiments
+    assert "bearish" in sentiments
+
+
+def test_cap_signals_by_topic_sentiment_diversity_fallback_same_sentiment():
+    """sentiment_diversity=True: 같은 sentiment만 있으면 2개 모두 선택한다."""
+    signals = [_make_signal("macro", "bullish") for _ in range(3)]
+    result = news._cap_signals_by_topic(
+        signals, total_max=6, per_topic_max=2, sentiment_diversity=True
+    )
+    assert len(result) == 2
+
+
+def test_cap_signals_by_topic_empty_topic_treated_as_unknown():
+    """topic 필드가 빈 문자열인 경우 'unknown'으로 처리해 crash 없이 동작한다."""
+    signals = [_make_signal("") for _ in range(3)]
+    result = news._cap_signals_by_topic(signals, total_max=6, per_topic_max=2)
+    assert len(result) == 2  # unknown으로 묶여 2개 제한

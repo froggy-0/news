@@ -16,6 +16,15 @@ export interface BriefData {
   allNews: NewsItem[];
 }
 
+export interface PublicNewsAnalysisAudit {
+  candidateCount: number;
+  requestedCount: number;
+  successCount: number;
+  failedCount: number;
+  skippedCount: number;
+  status: "ok" | "partial" | "failed" | "skipped";
+}
+
 export interface BriefMeta {
   date: string;
   generatedAt: string;
@@ -24,6 +33,7 @@ export interface BriefMeta {
   displayHeadline: string;
   sourceCounts: SourceCounts;
   translationStatus: "ok" | "partial" | "failed";
+  publicNewsAnalysis: PublicNewsAnalysisAudit | null;
 }
 
 export interface SourceCounts {

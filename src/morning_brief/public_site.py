@@ -59,7 +59,7 @@ _DICT_LITERAL_RE = re.compile(r"^\s*[\[{].*[:].*[\]}]\s*$")
 _EXCLUDED_BODY_SECTIONS = {"4-2", "4-3", "5-2", "5-3", "6"}
 _PUBLIC_FEATURED_NEWS_LIMIT = 5
 _PUBLIC_ALL_NEWS_LIMIT = 12
-_PUBLIC_FEATURED_X_LIMIT = 5
+_PUBLIC_FEATURED_X_LIMIT = 6
 _PUBLIC_ALL_X_LIMIT = 12
 _PUBLIC_TRANSLATION_BATCH_ITEMS = 6
 _PUBLIC_TRANSLATION_BATCH_CHARS = 1800
@@ -227,6 +227,10 @@ def build_public_brief(
             "displayHeadline": display_headline,
             "sourceCounts": source_counts,
             "translationStatus": translation_status,
+            "publicNewsAnalysis": (
+                packet.get("public_news_analysis")
+                or (public_context.get("public_news_analysis") if public_context else None)
+            ),
         },
         "marketSnapshot": {
             "items": _market_snapshot_items_v2(unified)

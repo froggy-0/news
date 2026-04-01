@@ -1,3 +1,7 @@
+"use client";
+
+import { useState } from "react";
+
 import type { XSignal } from "@schema/brief.types";
 
 import { XSignalsList } from "./XSignalsList";
@@ -15,7 +19,9 @@ export function XSignalsClient({
   featuredItems: XSignal[];
   allItems: XSignal[];
 }) {
-  const items = allItems.length > 0 ? allItems : featuredItems;
+  const [showAll, setShowAll] = useState(false);
+  const displayed = showAll ? allItems : featuredItems;
+  const hasMore = allItems.length > featuredItems.length;
 
   return (
     <section id="signals" className="border-b border-white/10 px-6 py-16">
@@ -36,9 +42,18 @@ export function XSignalsClient({
         </div>
 
         <XSignalsList
-          items={items}
+          items={displayed}
           emptyMessage="이번 집계에서는 공식 X 시그널을 확인하지 못했어요."
         />
+
+        {hasMore && (
+          <button
+            onClick={() => setShowAll((v) => !v)}
+            className="self-start text-xs font-mono uppercase tracking-widest text-white/40 transition-colors hover:text-white/70"
+          >
+            {showAll ? "접기" : `전체 보기 (${allItems.length}개)`}
+          </button>
+        )}
       </div>
     </section>
   );

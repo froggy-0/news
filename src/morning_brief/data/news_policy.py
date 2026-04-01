@@ -26,6 +26,15 @@ PREFERRED_DOMAINS = {
     "tsmc.com",
     "asml.com",
     "broadcom.com",
+    # 확장: 금융·기술·암호화폐
+    "apnews.com",
+    "barrons.com",
+    "marketwatch.com",
+    "fortune.com",
+    "axios.com",
+    "techcrunch.com",
+    "theblock.co",
+    "cointelegraph.com",
 }
 
 DOMAIN_SCORES = {
@@ -50,6 +59,15 @@ DOMAIN_SCORES = {
     "tsmc.com": 3.8,
     "asml.com": 3.8,
     "broadcom.com": 3.8,
+    # 확장 도메인
+    "apnews.com": 4.0,
+    "barrons.com": 3.8,
+    "marketwatch.com": 3.7,
+    "fortune.com": 3.5,
+    "axios.com": 3.5,
+    "techcrunch.com": 3.5,
+    "theblock.co": 3.7,
+    "cointelegraph.com": 3.5,
 }
 
 SOURCE_TIERS = {
@@ -77,6 +95,15 @@ SOURCE_TIERS = {
         "tsmc.com",
         "asml.com",
         "broadcom.com",
+        # 확장 도메인
+        "apnews.com",
+        "barrons.com",
+        "marketwatch.com",
+        "fortune.com",
+        "axios.com",
+        "techcrunch.com",
+        "theblock.co",
+        "cointelegraph.com",
     },
 }
 

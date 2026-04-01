@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 PUBLIC_FEATURED_NEWS_ITEMS = 5
 PUBLIC_ALL_NEWS_ITEMS = 12
-PUBLIC_FEATURED_X_SIGNALS = 5
+PUBLIC_FEATURED_X_SIGNALS = 6
 PUBLIC_ALL_X_SIGNALS = 12
 
 # Re-export ranking helpers for tests and adjacent modules while keeping
@@ -310,6 +310,52 @@ def fetch_news(
     return final_items
 
 
+def _cap_signals_by_topic(
+    signals: list[XSignal],
+    *,
+    total_max: int,
+    per_topic_max: int,
+    sentiment_diversity: bool = False,
+) -> list[XSignal]:
+    """topic별 per_topic_max개로 제한하면서 최대 total_max개를 반환.
+
+    sentiment_diversity=True이면 동일 topic 내 두 번째 선택 시
+    이미 선택된 sentiment와 다른 sentiment를 우선한다.
+    """
+    topic_counts: dict[str, int] = {}
+    topic_sentiments: dict[str, set[str]] = {}
+    result: list[XSignal] = []
+    deferred: list[XSignal] = []
+
+    for signal in signals:
+        topic = signal.topic or "unknown"
+        count = topic_counts.get(topic, 0)
+        if count >= per_topic_max:
+            continue
+        if sentiment_diversity and count >= 1:
+            chosen = topic_sentiments.get(topic, set())
+            if signal.sentiment in chosen:
+                deferred.append(signal)
+                continue
+        result.append(signal)
+        topic_counts[topic] = count + 1
+        topic_sentiments.setdefault(topic, set()).add(signal.sentiment)
+        if len(result) >= total_max:
+            return result
+
+    # 2차 패스: sentiment 제한 없이 deferred 항목으로 채움
+    for signal in deferred:
+        topic = signal.topic or "unknown"
+        if topic_counts.get(topic, 0) >= per_topic_max:
+            continue
+        result.append(signal)
+        topic_counts[topic] = topic_counts.get(topic, 0) + 1
+        if len(result) >= total_max:
+            break
+
+    return result
+
+
 def build_news_packet(
     *,
     settings: Settings,
@@ -492,15 +538,28 @@ def build_news_packet(
             items = _merge_rank(items, grok_web_news, max_items=public_merge_limit)
 
     public_candidate_items, publish_candidate_audit = filter_public_article_news_candidates(items)
-    public_ranked_items = _dedup_and_rank(public_candidate_items, max_items=PUBLIC_ALL_NEWS_ITEMS)
+    public_ranked_items = _dedup_and_rank(
+        public_candidate_items,
+        max_items=PUBLIC_ALL_NEWS_ITEMS,
+        min_output=3,
+    )
     publish_news_items, publish_news_audit = filter_public_article_news(public_ranked_items)
     email_ranked_items = _dedup_and_rank(items, max_items=settings.max_news_items)
-    public_ranked_signals = x_signals[:PUBLIC_ALL_X_SIGNALS]
+    public_ranked_signals = _cap_signals_by_topic(
+        x_signals,
+        total_max=PUBLIC_ALL_X_SIGNALS,
+        per_topic_max=4,
+    )
     public_candidate_signals, publish_signal_candidate_audit = filter_publish_x_signal_candidates(
         public_ranked_signals
     )
     publish_signals, publish_signal_audit = filter_publish_x_signals(public_candidate_signals)
-    featured_publish_signals = publish_signals[:PUBLIC_FEATURED_X_SIGNALS]
+    featured_publish_signals = _cap_signals_by_topic(
+        publish_signals,
+        total_max=PUBLIC_FEATURED_X_SIGNALS,
+        per_topic_max=2,
+        sentiment_diversity=True,
+    )
 
     if observer is not None:
         observer.log_event(
@@ -580,6 +639,14 @@ def build_news_packet(
             "xSignalRanked": len(public_candidate_signals),
             "xSignalFeatured": len(featured_publish_signals),
             "xSignalAll": len(publish_signals),
+        },
+        "public_news_analysis": {
+            "candidateCount": public_news_analysis_audit.candidate_count,
+            "requestedCount": public_news_analysis_audit.requested_count,
+            "successCount": public_news_analysis_audit.success_count,
+            "failedCount": public_news_analysis_audit.failed_count,
+            "skippedCount": public_news_analysis_audit.skipped_count,
+            "status": public_news_analysis_audit.status,
         },
     }
 
