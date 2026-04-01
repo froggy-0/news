@@ -267,23 +267,24 @@ export function ScatterText({
 
       let phase: "scatter" | "settled" = "scatter";
       let frame = 0;
-      // Capture container position at animation start (viewport coords)
-      const containerLeft = rect.left;
-      const containerTop = rect.top;
 
       const animate = () => {
         frame++;
 
         if (phase === "scatter") {
+          // Re-read rect every frame so scroll doesn't desync particle targets
+          const currentRect = containerEl.getBoundingClientRect();
+          const cLeft = currentRect.left;
+          const cTop = currentRect.top;
+
           vpCtx.clearRect(0, 0, vw, vh);
 
           let allSettled = true;
 
           for (const particle of particles) {
             if (particle.active) {
-              // Origin expressed in viewport space
-              const originVX = containerLeft + particle.originX;
-              const originVY = containerTop + particle.originY;
+              const originVX = cLeft + particle.originX;
+              const originVY = cTop + particle.originY;
 
               const dx = originVX - particle.x;
               const dy = originVY - particle.y;
@@ -306,8 +307,8 @@ export function ScatterText({
               }
             }
 
-            const originVX = containerLeft + particle.originX;
-            const originVY = containerTop + particle.originY;
+            const originVX = cLeft + particle.originX;
+            const originVY = cTop + particle.originY;
             const distFromOrigin = Math.sqrt(
               (originVX - particle.x) ** 2 + (originVY - particle.y) ** 2,
             );
@@ -321,10 +322,23 @@ export function ScatterText({
           }
 
           if (allSettled) {
+            // Pre-draw settled state on container canvas BEFORE removing viewport canvas.
+            // Both draws happen in the same rAF callback so the browser paints them
+            // atomically — no blank frame between the two canvases.
+            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+            for (const p of particles) {
+              ctx.globalAlpha = 0.78;
+              ctx.fillStyle = p.color;
+              ctx.beginPath();
+              ctx.arc(p.originX, p.originY, p.size, 0, Math.PI * 2);
+              ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+
             viewportCanvas?.remove();
             viewportCanvas = null;
             phase = "settled";
-            // Convert each particle to container-local coords
+
             for (const particle of particles) {
               particle.x = particle.originX;
               particle.y = particle.originY;
