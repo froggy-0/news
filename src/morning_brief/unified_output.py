@@ -523,9 +523,17 @@ def briefing_to_narrative(
         key_narrative = str(kn).strip() or None
 
     # news / x_signals — public_context 우선, 없으면 packet fallback
+    # 주의: public_context["all_news"] = [] (빈 리스트)는 "필터 후 0건"을 의미하므로
+    # falsy로 취급해 packet fallback으로 넘어가면 안 됨 — is not None으로 명시 비교
     if isinstance(public_context, dict):
-        raw_news = public_context.get("all_news") or packet.get("news") or []
-        raw_signals = public_context.get("all_x_signals") or packet.get("x_market_signals") or []
+        _public_news = public_context.get("all_news")
+        raw_news = _public_news if _public_news is not None else (packet.get("news") or [])
+        _public_signals = public_context.get("all_x_signals")
+        raw_signals = (
+            _public_signals
+            if _public_signals is not None
+            else (packet.get("x_market_signals") or [])
+        )
     else:
         raw_news = packet.get("news") or []
         raw_signals = packet.get("x_market_signals") or []
