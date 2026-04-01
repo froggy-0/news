@@ -848,9 +848,10 @@ def test_build_news_packet_skips_legacy_when_perplexity_quality_is_good(monkeypa
     assert {item["topic"] for item in packet} == {"macro", "us_equity", "ai_bigtech", "bitcoin"}
 
 
-def test_build_news_packet_triggers_legacy_when_public_publish_candidates_are_filtered(
+def test_build_news_packet_includes_items_from_any_domain(
     monkeypatch,
 ):
+    """도메인 화이트리스트 제거 후 비선호 도메인 기사도 공개 뉴스에 포함되는지 확인."""
     now = datetime.now(timezone.utc)
     monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")
     monkeypatch.setenv("ENABLE_LEGACY_NEWS_FALLBACK", "true")
@@ -908,10 +909,13 @@ def test_build_news_packet_triggers_legacy_when_public_publish_candidates_are_fi
 
     packet, _, _, public_context = news.build_news_packet(settings=load_settings())
 
-    assert any(item["source"] == "Reuters" for item in packet)
-    assert public_context["source_counts"]["newsCandidates"] == 4
-    assert public_context["source_counts"]["newsAll"] == 1
-    assert [item["source"] for item in public_context["all_news"]] == ["Reuters"]
+    # 도메인 화이트리스트 제거 — 비선호 도메인 기사도 공개 뉴스에 포함되어야 함
+    assert public_context["source_counts"]["newsCandidates"] >= 3
+    assert public_context["source_counts"]["newsAll"] >= 3
+    public_sources = {item["source"] for item in public_context["all_news"]}
+    assert "Alpha Example" in public_sources
+    assert "Beta Example" in public_sources
+    assert "Gamma Example" in public_sources
 
 
 def test_build_news_packet_does_not_trigger_legacy_fallback_for_uncited_grok_items(monkeypatch):

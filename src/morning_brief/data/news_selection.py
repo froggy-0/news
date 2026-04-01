@@ -13,7 +13,6 @@ from morning_brief.data.news_policy import (
     TRACKING_QUERY_PREFIXES,
     domain_score,
     extract_domain,
-    is_preferred_domain,
     keyword_score,
     recency_score,
 )
@@ -100,7 +99,6 @@ def _filter_news_items(
         url = item.url.strip()
         domain = extract_domain(url)
         interpretation = item.why_it_matters.strip() or item.summary.strip()
-        is_official_signal = item.provider == OFFICIAL_SIGNAL_PROVIDER
         reason: str | None = None
 
         if public_article_only and _is_x_handle_source(item):
@@ -115,8 +113,6 @@ def _filter_news_items(
             reason = "missing_title_or_url"
         elif domain in _PUBLISH_BLOCKED_DOMAINS:
             reason = "blocked_domain"
-        elif not is_official_signal and not is_preferred_domain(url):
-            reason = "non_preferred_domain"
         elif _looks_like_publish_placeholder(title):
             reason = "placeholder_title"
         elif _looks_like_file_title(title):
