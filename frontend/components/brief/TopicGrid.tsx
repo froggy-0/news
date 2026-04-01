@@ -105,7 +105,7 @@ export function TopicGrid({
 
   if (visibleItems.length === 0) {
     return (
-      <RevealSection id="map" className="border-b border-white/10 px-6 py-16" threshold={0.34} delayMs={180}>
+      <RevealSection id="map" className="border-b border-white/10 px-6 py-16" threshold={0.25} delayMs={180}>
         <div className="mx-auto w-full max-w-6xl">
           <DataState
             title="테마 상태"
@@ -119,7 +119,7 @@ export function TopicGrid({
   }
 
   return (
-    <RevealSection id="map" className="border-b border-white/10 px-6 py-16" threshold={0.34} delayMs={180}>
+    <RevealSection id="map" className="border-b border-white/10 px-6 py-16" threshold={0.25} delayMs={180}>
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-10">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="flex flex-col gap-1">

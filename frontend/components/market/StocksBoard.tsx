@@ -120,7 +120,7 @@ export function StocksBoard({
   const compactMetrics = variant === "home" ? snapshot.items.slice(0, 2) : snapshot.items;
   const compactStocks = variant === "home" ? stocks.slice(0, 4) : stocks;
   return (
-    <RevealSection className="border-b border-white/10 px-6 py-16" threshold={0.38} delayMs={220}>
+    <RevealSection className="border-b border-white/10 px-6 py-16" threshold={0.25} delayMs={220}>
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="space-y-1">

@@ -7,7 +7,7 @@ export function RevealSection({
   id,
   className,
   children,
-  threshold = 0.34,
+  threshold = 0.25,
   delayMs = 180,
 }: {
   id?: string;
