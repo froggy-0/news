@@ -18,11 +18,9 @@ export function HomeHero({ brief, heroSeed }: { brief: BriefData; heroSeed: stri
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1.08fr)_minmax(20rem,0.92fr)] lg:items-end">
           <div className="space-y-5">
             <div className="space-y-3">
-              <p className="eyebrow">Daily Intelligence Brief</p>
+              <p className="eyebrow">노이즈는 우리가, 판단은 당신이</p>
               <h1 className="max-w-[12ch] text-[2rem] font-black leading-[1.04] tracking-[-0.07em] text-[var(--text-primary)] md:text-[3.4rem]">
-                <span>주권 있는</span>
-                <br />
-                <span>투자자를 위한</span>
+                <span>주도권 있는 투자자를 위한</span>
                 <br />
                 <ScatterText
                   text="데이터 인텔리전스"
