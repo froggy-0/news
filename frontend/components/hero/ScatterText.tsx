@@ -276,6 +276,10 @@ export function ScatterText({
           const currentRect = containerEl.getBoundingClientRect();
           const cLeft = currentRect.left;
           const cTop = currentRect.top;
+          // Canvas is vertically centered in the shell via CSS (top:50% translateY(-50%)),
+          // so its actual top = shellTop + shellH/2 - canvasH/2. Use this offset so
+          // viewport-canvas coords match container-canvas coords after transition.
+          const cActualTop = cTop + currentRect.height / 2 - canvasHeight / 2;
 
           vpCtx.clearRect(0, 0, vw, vh);
 
@@ -284,7 +288,7 @@ export function ScatterText({
           for (const particle of particles) {
             if (particle.active) {
               const originVX = cLeft + particle.originX;
-              const originVY = cTop + particle.originY;
+              const originVY = cActualTop + particle.originY;
 
               const dx = originVX - particle.x;
               const dy = originVY - particle.y;
@@ -308,7 +312,7 @@ export function ScatterText({
             }
 
             const originVX = cLeft + particle.originX;
-            const originVY = cTop + particle.originY;
+            const originVY = cActualTop + particle.originY;
             const distFromOrigin = Math.sqrt(
               (originVX - particle.x) ** 2 + (originVY - particle.y) ** 2,
             );
