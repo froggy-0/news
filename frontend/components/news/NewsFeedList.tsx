@@ -4,7 +4,7 @@ import { ExternalLink } from "lucide-react";
 import type { NewsItem } from "@schema/brief.types";
 
 import { DataState } from "@/components/ui/DataState";
-import { formatRelativeTime } from "@/lib/format";
+import { RelativeTime } from "@/components/ui/RelativeTime";
 import { containsKorean, filterMeaningless } from "@/lib/text";
 
 function categoryLabel(value: NewsItem["category"]): string {
@@ -112,7 +112,7 @@ export function NewsFeedList({
 
             <div className="mt-6 flex items-end justify-between border-t border-white/6 pt-5">
               <div className="card-reading-meta label-meta flex flex-wrap items-center gap-x-4 gap-y-2 text-white/38">
-                <span>{formatRelativeTime(item.publishedAt)}</span>
+                <RelativeTime value={item.publishedAt} />
                 <span>{item.sourceTier === "tier1" ? "Tier 1" : "Verified"}</span>
                 {item.tags.slice(0, 2).map((tag) => (
                   <span key={tag}>#{tag}</span>

@@ -6,12 +6,17 @@ import { useInView } from "motion/react";
 type Particle = {
   x: number;
   y: number;
+  vx: number;
+  vy: number;
   originX: number;
   originY: number;
   color: string;
   size: number;
-  ease: number;
   active: boolean;
+  jitterPhase: number;
+  jitterFreq: number;
+  sparklePhase: number;
+  isSparkle: boolean;
 };
 
 type ScatterSeedPoint = {
@@ -65,12 +70,17 @@ export function buildSeededParticles({
     particles.push({
       x: point.x + (random() * spreadX - spreadX / 2),
       y: point.y + (random() * spreadY - spreadY / 2),
+      vx: 0,
+      vy: 0,
       originX: point.x,
       originY: point.y,
       color,
-      size: 0.45 + random() * 0.7,
-      ease: 0.024 + random() * 0.028,
+      size: 0.18 + random() * 0.37,
       active: true,
+      jitterPhase: random() * Math.PI * 2,
+      jitterFreq: 0.5 + random() * 1.5,
+      sparklePhase: random() * Math.PI * 2,
+      isSparkle: random() < 0.035,
     });
   }
 
@@ -98,7 +108,7 @@ export function ScatterText({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const isInView = useInView(containerRef, { once: true, margin: "-80px" });
+  const isInView = useInView(containerRef, { once: true, margin: "0px" });
   const [reducedMotion, setReducedMotion] = useState(false);
   const [animationReady, setAnimationReady] = useState(false);
   const [fallbackVisible, setFallbackVisible] = useState(false);
@@ -116,20 +126,14 @@ export function ScatterText({
       setAnimationReady(false);
       return;
     }
-
     if (!isInView) {
       return;
     }
-
-    const timer = window.setTimeout(() => {
-      setAnimationReady(true);
-    }, Math.max(120, Math.round(durationMs * 0.4)));
-
-    return () => window.clearTimeout(timer);
+    setAnimationReady(true);
   }, [durationMs, isInView, reducedMotion]);
 
   useEffect(() => {
-    if (reducedMotion || !canvasRef.current || !containerRef.current) {
+    if (reducedMotion || !animationReady || !canvasRef.current || !containerRef.current) {
       return;
     }
 
@@ -142,16 +146,20 @@ export function ScatterText({
 
     let animationFrameId = 0;
     let resizeObserver: ResizeObserver | null = null;
+    let viewportCanvas: HTMLCanvasElement | null = null;
 
     const render = async () => {
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect) {
+      const containerEl = containerRef.current;
+      if (!containerEl) {
         return;
       }
 
       await document.fonts.ready;
 
       const dpr = window.devicePixelRatio || 1;
+      const rect = containerEl.getBoundingClientRect();
+
+      // Measure and resolve font size
       const tempCanvas = document.createElement("canvas");
       const tempCtx = tempCanvas.getContext("2d", { willReadFrequently: true });
       if (!tempCtx) {
@@ -175,12 +183,7 @@ export function ScatterText({
       const textX = 4;
       const textY = canvasHeight / 2;
 
-      canvas.width = canvasWidth * dpr;
-      canvas.height = canvasHeight * dpr;
-      canvas.style.width = `${canvasWidth}px`;
-      canvas.style.height = `${canvasHeight}px`;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
+      // Sample text pixels at higher density (gap 0.85 vs 1.25)
       const offscreenCanvas = document.createElement("canvas");
       const offscreenCtx = offscreenCanvas.getContext("2d", { willReadFrequently: true });
       if (!offscreenCtx) {
@@ -199,7 +202,7 @@ export function ScatterText({
 
       const pixels = offscreenCtx.getImageData(0, 0, canvasWidth, canvasHeight).data;
       const points: ScatterSeedPoint[] = [];
-      const gap = 1.25;
+      const gap = 0.85;
 
       for (let y = 0; y < canvasHeight; y += gap) {
         for (let x = 0; x < canvasWidth; x += gap) {
@@ -210,49 +213,154 @@ export function ScatterText({
         }
       }
 
-      const particles = buildSeededParticles({
-        points,
-        seed,
-        color,
-        spreadX: canvasWidth * spread,
-        spreadY: canvasHeight * (spread * 0.82),
-        density,
-      });
+      // Build particles — initial positions scattered across full viewport
+      const random = createSeededRandom(`${seed}:${points.length}:${density}:grav`);
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const particles: Particle[] = [];
+
+      for (const point of points) {
+        if (random() > density) continue;
+        particles.push({
+          x: random() * vw,
+          y: random() * vh,
+          vx: 0,
+          vy: 0,
+          originX: point.x,
+          originY: point.y,
+          color,
+          size: 0.18 + random() * 0.37,
+          active: true,
+          jitterPhase: random() * Math.PI * 2,
+          jitterFreq: 0.5 + random() * 1.5,
+          sparklePhase: random() * Math.PI * 2,
+          isSparkle: random() < 0.035,
+        });
+      }
+
+      // Viewport canvas for scatter phase
+      viewportCanvas?.remove();
+      viewportCanvas = document.createElement("canvas");
+      viewportCanvas.style.cssText =
+        "position:fixed;inset:0;pointer-events:none;z-index:9999";
+      viewportCanvas.width = vw * dpr;
+      viewportCanvas.height = vh * dpr;
+      viewportCanvas.style.width = `${vw}px`;
+      viewportCanvas.style.height = `${vh}px`;
+      document.body.appendChild(viewportCanvas);
+      const vpCtx = viewportCanvas.getContext("2d");
+      if (!vpCtx) {
+        setFallbackVisible(true);
+        return;
+      }
+      vpCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      // Container canvas (used during settled micro-life)
+      canvas.width = canvasWidth * dpr;
+      canvas.height = canvasHeight * dpr;
+      canvas.style.width = `${canvasWidth}px`;
+      canvas.style.height = `${canvasHeight}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       setFallbackVisible(false);
       cancelAnimationFrame(animationFrameId);
 
+      let phase: "scatter" | "settled" = "scatter";
+      let frame = 0;
+      // Capture container position at animation start (viewport coords)
+      const containerLeft = rect.left;
+      const containerTop = rect.top;
+
       const animate = () => {
-        ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+        frame++;
 
-        for (const particle of particles) {
-          if (animationReady && particle.active) {
-            const dx = particle.originX - particle.x;
-            const dy = particle.originY - particle.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
+        if (phase === "scatter") {
+          vpCtx.clearRect(0, 0, vw, vh);
 
-            particle.x += dx * particle.ease;
-            particle.y += dy * particle.ease;
+          let allSettled = true;
 
-            if (distance < 0.18) {
-              particle.x = particle.originX;
-              particle.y = particle.originY;
-              particle.active = false;
+          for (const particle of particles) {
+            if (particle.active) {
+              // Origin expressed in viewport space
+              const originVX = containerLeft + particle.originX;
+              const originVY = containerTop + particle.originY;
+
+              const dx = originVX - particle.x;
+              const dy = originVY - particle.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+
+              // Gravitational physics: velocity + damping
+              particle.vx += dx * 0.002;
+              particle.vy += dy * 0.002;
+              particle.vx *= 0.87;
+              particle.vy *= 0.87;
+              particle.x += particle.vx;
+              particle.y += particle.vy;
+
+              if (dist < 1.5 && Math.abs(particle.vx) < 0.2 && Math.abs(particle.vy) < 0.2) {
+                particle.x = originVX;
+                particle.y = originVY;
+                particle.active = false;
+              } else {
+                allSettled = false;
+              }
             }
+
+            const originVX = containerLeft + particle.originX;
+            const originVY = containerTop + particle.originY;
+            const distFromOrigin = Math.sqrt(
+              (originVX - particle.x) ** 2 + (originVY - particle.y) ** 2,
+            );
+            const opacity = Math.max(0.14, Math.min(1, 1.5 - distFromOrigin / 160));
+
+            vpCtx.globalAlpha = opacity;
+            vpCtx.fillStyle = particle.color;
+            vpCtx.beginPath();
+            vpCtx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+            vpCtx.fill();
           }
 
-          const distanceFromOrigin = Math.sqrt(
-            (particle.originX - particle.x) ** 2 + (particle.originY - particle.y) ** 2,
-          );
-          const opacity = animationReady
-            ? Math.max(0.22, Math.min(1, 1.4 - distanceFromOrigin / 90))
-            : 0;
+          if (allSettled) {
+            viewportCanvas?.remove();
+            viewportCanvas = null;
+            phase = "settled";
+            // Convert each particle to container-local coords
+            for (const particle of particles) {
+              particle.x = particle.originX;
+              particle.y = particle.originY;
+              particle.vx = 0;
+              particle.vy = 0;
+            }
+          }
+        } else {
+          // Settled micro-life on container canvas
+          ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+          const t = frame * 0.016; // ~seconds at 60fps
 
-          ctx.globalAlpha = opacity;
-          ctx.fillStyle = particle.color;
-          ctx.beginPath();
-          ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
-          ctx.fill();
+          for (const particle of particles) {
+            const jx =
+              Math.sin(t * particle.jitterFreq * Math.PI * 2 + particle.jitterPhase) * 0.3;
+            const jy =
+              Math.cos(t * particle.jitterFreq * 0.72 * Math.PI * 2 + particle.jitterPhase) * 0.3;
+
+            const px = particle.originX + jx;
+            const py = particle.originY + jy;
+
+            let opacity = 0.78 + Math.sin(t * 0.9 + particle.jitterPhase) * 0.08;
+
+            if (particle.isSparkle) {
+              const pulse = Math.sin(t * 0.35 + particle.sparklePhase);
+              if (pulse > 0.88) {
+                opacity = Math.min(1, opacity + (pulse - 0.88) * 8);
+              }
+            }
+
+            ctx.globalAlpha = Math.max(0, Math.min(1, opacity));
+            ctx.fillStyle = particle.color;
+            ctx.beginPath();
+            ctx.arc(px, py, particle.size, 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
 
         animationFrameId = requestAnimationFrame(animate);
@@ -270,6 +378,7 @@ export function ScatterText({
     return () => {
       cancelAnimationFrame(animationFrameId);
       resizeObserver?.disconnect();
+      viewportCanvas?.remove();
     };
   }, [animationReady, color, density, fontSize, reducedMotion, seed, spread, text]);
 
@@ -282,7 +391,9 @@ export function ScatterText({
       >
         {text}
       </span>
-      {reducedMotion ? null : <canvas ref={canvasRef} className="scatter-text-canvas" aria-hidden="true" />}
+      {reducedMotion ? null : (
+        <canvas ref={canvasRef} className="scatter-text-canvas" aria-hidden="true" />
+      )}
     </div>
   );
 }
