@@ -265,6 +265,16 @@ export function ScatterText({
       setFallbackVisible(false);
       cancelAnimationFrame(animationFrameId);
 
+      // Snapshot the container's viewport position once before the scatter phase begins.
+      // Re-reading getBoundingClientRect() every frame caused particles to chase the element
+      // as it moved during scroll, making the animation visually follow the scroll direction.
+      const initialRect = containerEl.getBoundingClientRect();
+      const cLeft = initialRect.left;
+      // Canvas is vertically centered in the shell via CSS (top:50% translateY(-50%)),
+      // so its actual top = shellTop + shellH/2 - canvasH/2. Use this offset so
+      // viewport-canvas coords match container-canvas coords after transition.
+      const cActualTop = initialRect.top + initialRect.height / 2 - canvasHeight / 2;
+
       let phase: "scatter" | "settled" = "scatter";
       let frame = 0;
 
@@ -272,14 +282,6 @@ export function ScatterText({
         frame++;
 
         if (phase === "scatter") {
-          // Re-read rect every frame so scroll doesn't desync particle targets
-          const currentRect = containerEl.getBoundingClientRect();
-          const cLeft = currentRect.left;
-          const cTop = currentRect.top;
-          // Canvas is vertically centered in the shell via CSS (top:50% translateY(-50%)),
-          // so its actual top = shellTop + shellH/2 - canvasH/2. Use this offset so
-          // viewport-canvas coords match container-canvas coords after transition.
-          const cActualTop = cTop + currentRect.height / 2 - canvasHeight / 2;
 
           vpCtx.clearRect(0, 0, vw, vh);
 
