@@ -126,21 +126,32 @@ export function SubscriptionConfirmResult() {
           </div>
         </SubscriptionState>
 
-        <div className="mt-6 grid gap-3 md:grid-cols-2">
-          <Link
-            href="/"
-            className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 px-5 py-3 text-sm tracking-tight text-white/72 transition hover:border-white/24 hover:text-white"
-          >
-            홈으로 돌아가기
-          </Link>
-          <Link
-            href="/archive"
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold tracking-tight text-black transition hover:bg-[#00ffff]"
-          >
-            브리핑 아카이브 보기
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
+        {isSuccess ? (
+          <div className="mt-6 grid gap-3 md:grid-cols-2">
+            <Link
+              href="/"
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 px-5 py-3 text-sm tracking-tight text-white/72 transition hover:border-white/24 hover:text-white"
+            >
+              홈으로 돌아가기
+            </Link>
+            <Link
+              href="/archive"
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold tracking-tight text-black transition hover:bg-[#00ffff]"
+            >
+              브리핑 아카이브 보기
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        ) : !loading ? (
+          <div className="mt-6">
+            <Link
+              href="/"
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 px-5 py-3 text-sm tracking-tight text-white/72 transition hover:border-white/24 hover:text-white"
+            >
+              홈으로 돌아가기
+            </Link>
+          </div>
+        ) : null}
       </div>
     </section>
   );

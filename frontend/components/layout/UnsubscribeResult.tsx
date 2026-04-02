@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { CheckCircle2, Loader2, MailX, ShieldAlert } from "lucide-react";
 
 import { SubscriptionState } from "@/components/ui/SubscriptionState";
 import type { UnsubscribePayload, UnsubscribePreviewResponse, UnsubscribeResponse } from "@/lib/subscriptions/contracts";
@@ -78,36 +80,140 @@ export function UnsubscribeResult() {
     }
   }
 
-  const visibleState = result ?? preview;
+  const loading = preview === null;
+  const activeState = result ?? preview;
+  const isError = activeState?.status === "invalid-token";
+  const isSuccess =
+    activeState?.status === "unsubscribed" || activeState?.status === "already-unsubscribed";
+  const isReady = !loading && !isError && !isSuccess;
+
+  const headline = loading
+    ? "구독 해지 링크를 확인하고 있습니다."
+    : isSuccess
+      ? "구독 해지가 완료되었습니다."
+      : isReady
+        ? "구독 해지를 진행하시겠습니까?"
+        : "구독 해지 링크를 다시 확인해 주세요.";
+
+  const subCopy = loading
+    ? "링크 유효성과 구독 상태를 점검하고 있습니다."
+    : isSuccess
+      ? "다음 발송부터 SOVEREIGN BRIEF를 받지 않으시게 됩니다."
+      : isReady
+        ? "아래 버튼을 누르면 수신이 즉시 중단됩니다."
+        : "링크가 만료되었거나 이미 사용된 경우 이메일로 직접 문의해 주세요.";
+
+  const badge = submitting
+    ? "processing"
+    : loading
+      ? "checking"
+      : isSuccess
+        ? "unsubscribed"
+        : isReady
+          ? "ready"
+          : "action needed";
+
+  const iconClass = loading || submitting
+    ? "border-white/12 bg-white/[0.03] text-white/68"
+    : isSuccess
+      ? "border-[#00ff66]/25 bg-[#00ff66]/10 text-[#00ff66]"
+      : isReady
+        ? "border-white/12 bg-white/[0.03] text-white/68"
+        : "border-[#ff6b6b]/25 bg-[#ff6b6b]/10 text-[#ff6b6b]";
+
+  const badgeClass = loading || submitting
+    ? "border-white/12 text-white/52"
+    : isSuccess
+      ? "border-[#00ff66]/25 text-[#00ff66]"
+      : isReady
+        ? "border-white/12 text-white/52"
+        : "border-[#ff6b6b]/25 text-[#ff6b6b]";
 
   return (
-    <section className="panel panel-soft space-y-4">
-      <p className="section-title">unsubscribe</p>
-      <h1 className="section-headline max-w-3xl">구독 해지</h1>
-      <SubscriptionState
-        tone={
-          visibleState?.status === "invalid-token"
-            ? "danger"
-            : visibleState?.status === "unsubscribed" || visibleState?.status === "already-unsubscribed"
-              ? "success"
-              : "neutral"
-        }
-      >
-        <div className="copy-block">
-          <p>{visibleState?.message ?? "구독 상태를 확인하는 중입니다."}</p>
-          {visibleState?.email ? <p className="numeric">{visibleState.email}</p> : null}
+    <section className="mx-auto flex w-full max-w-5xl flex-col gap-8">
+      <div className="space-y-3">
+        <p className="section-title">unsubscribe</p>
+        <h1 className="section-headline max-w-3xl">{headline}</h1>
+        <p className="copy-block max-w-2xl">{subCopy}</p>
+      </div>
+
+      <div className="section-shell rounded-[32px] p-6 md:p-8">
+        <div className="mb-6 flex items-start justify-between gap-4 border-b border-white/8 pb-6">
+          <div className="flex items-start gap-4">
+            <div
+              className={`mt-0.5 flex h-12 w-12 items-center justify-center rounded-full border ${iconClass}`}
+            >
+              {loading || submitting ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : isSuccess ? (
+                <CheckCircle2 className="h-5 w-5" />
+              ) : isReady ? (
+                <MailX className="h-5 w-5" />
+              ) : (
+                <ShieldAlert className="h-5 w-5" />
+              )}
+            </div>
+            <div className="space-y-2">
+              <p className="text-[10px] font-mono uppercase tracking-[0.24em] text-white/34">
+                Subscription Status
+              </p>
+              <h2 className="text-xl tracking-tight text-white">
+                {submitting
+                  ? "해지 요청 처리 중"
+                  : loading
+                    ? "상태 확인 중"
+                    : isSuccess
+                      ? "구독 해지 완료"
+                      : isReady
+                        ? "해지 대기"
+                        : "확인 실패 또는 만료"}
+              </h2>
+            </div>
+          </div>
+          <span
+            className={`rounded-full border px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em] ${badgeClass}`}
+          >
+            {badge}
+          </span>
         </div>
-      </SubscriptionState>
-      {!result && preview?.status === "ready" ? (
-        <button
-          type="button"
-          onClick={handleUnsubscribe}
-          disabled={submitting}
-          className="min-h-[48px] rounded-full border border-white/12 bg-white/5 px-5 py-3 font-mono text-[11px] tracking-[0.18em] text-[var(--text-primary)] transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+
+        <SubscriptionState
+          tone={isError ? "danger" : isSuccess ? "success" : "neutral"}
         >
-          {submitting ? "처리 중" : "이 이메일 구독 해지"}
-        </button>
-      ) : null}
+          <div className="copy-block">
+            <p>{activeState?.message ?? "구독 상태를 확인하는 중입니다."}</p>
+            {activeState?.email ? <p className="numeric">{activeState.email}</p> : null}
+          </div>
+        </SubscriptionState>
+
+        {isReady && !result ? (
+          <div className="mt-6 grid gap-3 md:grid-cols-2">
+            <Link
+              href="/"
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 px-5 py-3 text-sm tracking-tight text-white/72 transition hover:border-white/24 hover:text-white"
+            >
+              취소하고 돌아가기
+            </Link>
+            <button
+              type="button"
+              onClick={handleUnsubscribe}
+              disabled={submitting}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-[#ff6b6b]/30 bg-[#ff6b6b]/10 px-5 py-3 text-sm font-semibold tracking-tight text-[#ff6b6b] transition hover:bg-[#ff6b6b]/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {submitting ? "처리 중…" : "이 이메일 구독 해지"}
+            </button>
+          </div>
+        ) : (isSuccess || isError) ? (
+          <div className="mt-6">
+            <Link
+              href="/"
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 px-5 py-3 text-sm tracking-tight text-white/72 transition hover:border-white/24 hover:text-white"
+            >
+              홈으로 돌아가기
+            </Link>
+          </div>
+        ) : null}
+      </div>
     </section>
   );
 }
