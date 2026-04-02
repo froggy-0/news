@@ -213,17 +213,19 @@ export function ScatterText({
         }
       }
 
-      // Build particles — initial positions scattered across full viewport
+      // Build particles — initial positions scattered across full viewport (document coords)
       const random = createSeededRandom(`${seed}:${points.length}:${density}:grav`);
       const vw = window.innerWidth;
       const vh = window.innerHeight;
+      const initScrollX = window.scrollX;
+      const initScrollY = window.scrollY;
       const particles: Particle[] = [];
 
       for (const point of points) {
         if (random() > density) continue;
         particles.push({
-          x: random() * vw,
-          y: random() * vh,
+          x: initScrollX + random() * vw,
+          y: initScrollY + random() * vh,
           vx: 0,
           vy: 0,
           originX: point.x,
@@ -265,15 +267,19 @@ export function ScatterText({
       setFallbackVisible(false);
       cancelAnimationFrame(animationFrameId);
 
-      // Snapshot the container's viewport position once before the scatter phase begins.
-      // Re-reading getBoundingClientRect() every frame caused particles to chase the element
-      // as it moved during scroll, making the animation visually follow the scroll direction.
+      // Convert container position to document coordinates so targets are scroll-invariant.
+      // Particles are tracked in document space; at draw time we subtract window.scrollY
+      // to get viewport coords for the fixed canvas. This way scrolling never moves the
+      // particles relative to the page — they behave exactly like the text element itself.
       const initialRect = containerEl.getBoundingClientRect();
-      const cLeft = initialRect.left;
-      // Canvas is vertically centered in the shell via CSS (top:50% translateY(-50%)),
-      // so its actual top = shellTop + shellH/2 - canvasH/2. Use this offset so
-      // viewport-canvas coords match container-canvas coords after transition.
-      const cActualTop = initialRect.top + initialRect.height / 2 - canvasHeight / 2;
+      const docLeft = initialRect.left + initScrollX;
+      // Canvas is vertically centered in the shell via CSS (top:50% translateY(-50%))
+      const docActualTop =
+        initialRect.top + initScrollY + initialRect.height / 2 - canvasHeight / 2;
+
+      // Pre-compute per-particle document-space targets (constant for the whole animation)
+      const targetDocX = particles.map((p) => docLeft + p.originX);
+      const targetDocY = particles.map((p) => docActualTop + p.originY);
 
       let phase: "scatter" | "settled" = "scatter";
       let frame = 0;
@@ -282,48 +288,52 @@ export function ScatterText({
         frame++;
 
         if (phase === "scatter") {
+          const scrollX = window.scrollX;
+          const scrollY = window.scrollY;
 
           vpCtx.clearRect(0, 0, vw, vh);
 
           let allSettled = true;
 
-          for (const particle of particles) {
-            if (particle.active) {
-              const originVX = cLeft + particle.originX;
-              const originVY = cActualTop + particle.originY;
+          for (let i = 0; i < particles.length; i++) {
+            const particle = particles[i]!;
+            const tdx = targetDocX[i]!;
+            const tdy = targetDocY[i]!;
 
-              const dx = originVX - particle.x;
-              const dy = originVY - particle.y;
+            if (particle.active) {
+              const dx = tdx - particle.x;
+              const dy = tdy - particle.y;
               const dist = Math.sqrt(dx * dx + dy * dy);
 
-              // Gravitational physics: velocity + damping
-              particle.vx += dx * 0.002;
-              particle.vy += dy * 0.002;
-              particle.vx *= 0.87;
-              particle.vy *= 0.87;
+              // Gravitational physics: velocity + damping (gravity +30% vs original for ~20% faster)
+              particle.vx += dx * 0.0026;
+              particle.vy += dy * 0.0026;
+              particle.vx *= 0.875;
+              particle.vy *= 0.875;
               particle.x += particle.vx;
               particle.y += particle.vy;
 
-              if (dist < 1.5 && Math.abs(particle.vx) < 0.2 && Math.abs(particle.vy) < 0.2) {
-                particle.x = originVX;
-                particle.y = originVY;
+              if (dist < 2.0 && Math.abs(particle.vx) < 0.25 && Math.abs(particle.vy) < 0.25) {
+                particle.x = tdx;
+                particle.y = tdy;
                 particle.active = false;
               } else {
                 allSettled = false;
               }
             }
 
-            const originVX = cLeft + particle.originX;
-            const originVY = cActualTop + particle.originY;
+            // Draw at viewport coords (document coords minus current scroll)
+            const drawX = particle.x - scrollX;
+            const drawY = particle.y - scrollY;
             const distFromOrigin = Math.sqrt(
-              (originVX - particle.x) ** 2 + (originVY - particle.y) ** 2,
+              (tdx - particle.x) ** 2 + (tdy - particle.y) ** 2,
             );
             const opacity = Math.max(0.14, Math.min(1, 1.5 - distFromOrigin / 160));
 
             vpCtx.globalAlpha = opacity;
             vpCtx.fillStyle = particle.color;
             vpCtx.beginPath();
-            vpCtx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+            vpCtx.arc(drawX, drawY, particle.size, 0, Math.PI * 2);
             vpCtx.fill();
           }
 
