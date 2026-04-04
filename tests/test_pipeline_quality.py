@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from morning_brief.data.data_quality import assess_perplexity_fallback_need
+from morning_brief.data.data_quality import (
+    _zero_ratio_by_category,
+    assess_data_quality,
+    assess_perplexity_fallback_need,
+)
 from morning_brief.data.news_rollout import (
     record_news_rollout_run,
     should_reduce_legacy_broad_fallback,
@@ -55,16 +59,24 @@ def test_assess_data_quality_ok():
 
 
 def test_assess_data_quality_degraded_when_zero_ratio_high():
+    """카테고리 중 하나가 부분적으로 누락 (0.6 <= max < 0.8) 이면 degraded 판정."""
     packet = _base_packet(price=10.0)
-    for point in packet["macro"]:
-        point["price"] = 0.0
-    for point in packet["us_indices"]:
-        point["price"] = 0.0
-    for i in range(8):
+    # tech_stocks 10개 중 6개 zero → tech zero_ratio = 0.6, 다른 카테고리는 정상
+    for i in range(6):
         packet["tech_stocks"][i]["price"] = 0.0
     quality = _assess_data_quality(packet=packet, news_packet=[{}, {}, {}, {}])
     assert quality["status"] == "degraded"
     assert quality["zero_price_ratio"] >= 0.6
+
+
+def test_assess_data_quality_critical_when_single_category_all_zero():
+    """카테고리 하나가 전부 zero이면 max >= 1.0 → critical 판정."""
+    packet = _base_packet(price=10.0)
+    for point in packet["macro"]:
+        point["price"] = 0.0  # macro 전체 zero → max = 1.0 → critical
+    quality = _assess_data_quality(packet=packet, news_packet=[{}, {}, {}, {}])
+    assert quality["status"] == "critical"
+    assert quality["zero_price_ratio"] == 1.0
 
 
 def test_assess_data_quality_critical_when_zero_ratio_high():
@@ -283,3 +295,72 @@ def test_rollout_state_requires_three_stable_runs(tmp_path):
     )
 
     assert should_reduce_legacy_broad_fallback(tmp_path) is True
+
+
+# ─── 카테고리별 zero_ratio 테스트 ───────────────────────────────────────────
+
+
+def _make_point(price: float) -> dict:
+    return {"price": price, "change_pct": 0.0}
+
+
+def _good_news_packet() -> list:
+    return [
+        {
+            "preferred_source": True,
+            "source_tier": "tier_1",
+            "domain": "reuters.com",
+            "age_hours": 2.0,
+            "topic": "macro",
+            "provider": "perplexity_search",
+            "why_it_matters": "금리 흐름 해석에 참고됩니다.",
+            "citations": ["https://reuters.com/fed"],
+            "official_source": False,
+        }
+        for _ in range(3)
+    ]
+
+
+def test_zero_ratio_by_category_macro_all_zero() -> None:
+    packet = {
+        "macro": [_make_point(0.0) for _ in range(4)],
+        "us_indices": [_make_point(100.0) for _ in range(3)],
+        "tech_stocks": [_make_point(100.0) for _ in range(5)],
+        "bitcoin": {"spot": _make_point(50000.0), "etf_points": []},
+    }
+    by_cat = _zero_ratio_by_category(packet)
+    assert by_cat["macro"] == 1.0
+    assert by_cat["indices"] == 0.0
+
+
+def test_zero_ratio_by_category_max_equals_zero_price_ratio() -> None:
+    packet = {
+        "macro": [_make_point(0.0) for _ in range(4)],
+        "us_indices": [_make_point(100.0) for _ in range(3)],
+        "tech_stocks": [_make_point(100.0) for _ in range(5)],
+        "bitcoin": {"spot": _make_point(50000.0), "etf_points": []},
+    }
+    quality = assess_data_quality(packet, _good_news_packet())  # type: ignore[arg-type]
+    by_cat = quality["zero_ratio_by_category"]
+    assert quality["zero_price_ratio"] == max(by_cat.values())
+
+
+def test_assess_data_quality_has_zero_ratio_by_category_key() -> None:
+    packet = _base_packet(price=10.0)
+    quality = assess_data_quality(packet, _good_news_packet())  # type: ignore[arg-type]
+    assert "zero_ratio_by_category" in quality
+    assert set(quality["zero_ratio_by_category"].keys()) == {"macro", "indices", "tech", "bitcoin"}
+
+
+def test_critical_judgment_unchanged_after_category_refactor() -> None:
+    """카테고리 분리 전후 critical 판정이 동일해야 한다."""
+    # 전체 macro 실패 → critical
+    bad_packet = {
+        "macro": [_make_point(0.0) for _ in range(5)],
+        "us_indices": [_make_point(100.0) for _ in range(3)],
+        "tech_stocks": [_make_point(100.0) for _ in range(5)],
+        "bitcoin": {"spot": _make_point(50000.0), "etf_points": []},
+    }
+    quality = assess_data_quality(bad_packet, _good_news_packet())  # type: ignore[arg-type]
+    assert quality["status"] == "critical"
+    assert quality["zero_price_ratio"] >= 0.8

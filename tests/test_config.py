@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import logging
+import os
+from pathlib import Path
+
+import pytest
+
 from morning_brief.config import (
     DEFAULT_OPENAI_MODEL,
     DEFAULT_PROMPT_TEMPLATE_VERSION,
@@ -8,6 +14,12 @@ from morning_brief.config import (
     DEFAULT_SUBSCRIPTION_NEWSLETTER_KEY,
     DEFAULT_SUBSCRIPTION_UNSUBSCRIBE_PATH,
     load_settings,
+)
+from morning_brief.data.news_policy import (
+    _load_domain_policy,
+    _parse_domain_policy,
+    _resolve_domain_policy_path,
+    domain_score,
 )
 
 
@@ -181,3 +193,82 @@ def test_grok_x_search_max_items_upper_clamp(monkeypatch):
     monkeypatch.setenv("GROK_X_SEARCH_MAX_ITEMS", "20")
     settings = load_settings()
     assert settings.grok_x_search_max_items == 8
+
+
+# ─── 도메인 정책 YAML 로더 테스트 ─────────────────────────────────────────
+
+
+def _minimal_yaml_dict(domains: list[dict]) -> dict:
+    return {"version": "1", "domains": domains}
+
+
+def test_domain_score_reuters_equals_5() -> None:
+    """YAML 로드 후 reuters.com 점수가 5.0이어야 한다."""
+    assert domain_score("https://reuters.com/article/1") == 5.0
+
+
+def test_resolve_domain_policy_path_is_absolute() -> None:
+    path = _resolve_domain_policy_path()
+    assert path.is_absolute()
+
+
+def test_resolve_domain_policy_path_stable_across_cwd_change(tmp_path: Path) -> None:
+    original_cwd = Path.cwd()
+    path_before = _resolve_domain_policy_path()
+    os.chdir(tmp_path)
+    try:
+        path_after = _resolve_domain_policy_path()
+        assert path_before == path_after
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_load_domain_policy_missing_file_returns_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """YAML 미존재 시 WARNING 로그 + fallback 동작 검증."""
+    monkeypatch.setattr(
+        "morning_brief.data.news_policy._resolve_domain_policy_path",
+        lambda: tmp_path / "nonexistent.yaml",
+    )
+    with caplog.at_level(logging.WARNING):
+        scores, tiers, preferred = _load_domain_policy()
+
+    assert "reuters.com" in scores
+    assert scores["reuters.com"] == 5.0
+    assert any(
+        "fallback" in r.message.lower() or "domain_policy" in r.message or "기본값" in r.message
+        for r in caplog.records
+    )
+
+
+def test_load_domain_policy_bad_schema_returns_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """스키마 오류 YAML 시 WARNING 로그 + fallback (예외 없음) 검증."""
+    bad_yaml = tmp_path / "bad.yaml"
+    bad_yaml.write_text("domains:\n  - domain: reuters.com\n    score: -1.0\n    tier: tier_1\n")
+    monkeypatch.setattr(
+        "morning_brief.data.news_policy._resolve_domain_policy_path",
+        lambda: bad_yaml,
+    )
+    with caplog.at_level(logging.WARNING):
+        scores, tiers, preferred = _load_domain_policy()
+
+    assert "reuters.com" in scores
+    assert any(
+        "fallback" in r.message.lower() or "domain_policy" in r.message or "기본값" in r.message
+        for r in caplog.records
+    )
+
+
+def test_parse_domain_policy_negative_score_raises() -> None:
+    raw = _minimal_yaml_dict([{"domain": "bad.com", "score": -1.0, "tier": "tier_2"}])
+    with pytest.raises(ValueError, match="score"):
+        _parse_domain_policy(raw)
+
+
+def test_parse_domain_policy_missing_domain_raises() -> None:
+    raw = _minimal_yaml_dict([{"score": 3.0, "tier": "tier_2"}])
+    with pytest.raises(ValueError):
+        _parse_domain_policy(raw)

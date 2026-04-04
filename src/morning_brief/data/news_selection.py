@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-from morning_brief.data.news_packet import OFFICIAL_SIGNAL_PROVIDER, news_items_to_packet
+from morning_brief.data import providers
+from morning_brief.data.news_packet import news_items_to_packet
 from morning_brief.data.news_policy import (
     MAX_ITEMS_PER_DOMAIN,
     MIN_NEWS_ITEMS,
@@ -18,12 +19,8 @@ from morning_brief.data.news_policy import (
 )
 from morning_brief.models import NewsItem
 
-PERPLEXITY_PROVIDER = "perplexity_search"
-PERPLEXITY_SONAR_PROVIDER = "perplexity_sonar"
-GROK_KEYWORD_PROVIDER = "grok_x_keyword"
-GROK_WEB_PROVIDER = "grok_web_search"
-_PERPLEXITY_PROVIDERS = {PERPLEXITY_PROVIDER, PERPLEXITY_SONAR_PROVIDER}
-_GROK_PROVIDERS = {OFFICIAL_SIGNAL_PROVIDER, GROK_KEYWORD_PROVIDER, GROK_WEB_PROVIDER}
+_PERPLEXITY_PROVIDERS = providers.PERPLEXITY_PROVIDERS
+_GROK_PROVIDERS = providers.GROK_PROVIDERS
 _PUBLISH_PLACEHOLDER_TITLE_RE = re.compile(
     r"^(weak source item|example|sample|test item|placeholder)\b",
     re.IGNORECASE,
@@ -33,6 +30,7 @@ _PUBLISH_BLOCKED_DOMAINS = {"example.com", "example.net", "example.org", "localh
 _PUBLIC_NEWS_BLOCKED_DOMAINS = {"x.com", "twitter.com"}
 _PUBLIC_NEWS_MEANINGLESS_INTERPRETATIONS = frozenset(
     {
+        # 한국어 패턴
         "",
         "없음",
         "없음.",
@@ -43,8 +41,21 @@ _PUBLIC_NEWS_MEANINGLESS_INTERPRETATIONS = frozenset(
         "해당 없음.",
         "해당없음,",
         "해당 없음,",
+        # 영어 패턴
         "n/a",
+        "na",
+        "none",
         "null",
+        "unknown",
+        "no information",
+        "no comment",
+        "not available",
+        "no information available",
+        "no details available",
+        # 기호
+        "–",
+        "-",
+        "...",
     }
 )
 
@@ -82,7 +93,14 @@ def _is_x_domain_url(url: str) -> bool:
 def _has_meaningful_public_interpretation(item: NewsItem) -> bool:
     interpretation = item.why_it_matters.strip() or item.summary.strip()
     normalized = _normalized_publish_text(interpretation)
-    return bool(normalized) and normalized not in _PUBLIC_NEWS_MEANINGLESS_INTERPRETATIONS
+    if not normalized or normalized in _PUBLIC_NEWS_MEANINGLESS_INTERPRETATIONS:
+        return False
+    # 30자 미만이면 구두점 제거 후 재체크 (예: "N/A." → "n/a")
+    if len(normalized) < 30:
+        stripped = normalized.rstrip(".,;:")
+        if stripped in _PUBLIC_NEWS_MEANINGLESS_INTERPRETATIONS:
+            return False
+    return True
 
 
 def _filter_news_items(
@@ -239,7 +257,7 @@ def _normalize_url(url: str) -> str:
 
 
 def _item_score(item: NewsItem) -> float:
-    provider_bonus = 4.2 if item.provider == OFFICIAL_SIGNAL_PROVIDER else 0.0
+    provider_bonus = 4.2 if item.provider == providers.GROK_OFFICIAL_X else 0.0
     return (
         domain_score(item.url)
         + recency_score(item.published_at)
@@ -265,8 +283,8 @@ def _apply_domain_diversity_limit(items: list[NewsItem], max_items: int) -> list
 
     for item in items:
         domain = (
-            f"{OFFICIAL_SIGNAL_PROVIDER}:{item.source.lower()}"
-            if item.provider == OFFICIAL_SIGNAL_PROVIDER
+            f"{providers.GROK_OFFICIAL_X}:{item.source.lower()}"
+            if item.provider == providers.GROK_OFFICIAL_X
             else extract_domain(item.url)
         )
         count = per_domain.get(domain, 0)
@@ -287,13 +305,26 @@ def _apply_domain_diversity_limit(items: list[NewsItem], max_items: int) -> list
     return selected[:max_items]
 
 
+def _title_dedup_key(title: str) -> str:
+    """보조 title dedup 키를 반환한다.
+
+    소문자·공백 정규화 후 앞 40자를 반환한다.
+    10자 미만이면 빈 문자열을 반환하여 보조 dedup을 비활성화한다.
+    """
+    normalized = " ".join(title.strip().lower().split())
+    if len(normalized) < 10:
+        return ""
+    return normalized[:40]
+
+
 def _dedup_and_rank(
     items: list[NewsItem],
     max_items: int,
     *,
     min_output: int = 0,
 ) -> list[NewsItem]:
-    by_key: dict[str, NewsItem] = {}
+    by_url: dict[str, NewsItem] = {}
+    by_title: dict[str, str] = {}  # title_key → url_key
 
     for item in items:
         title = item.title.strip()
@@ -317,12 +348,34 @@ def _dedup_and_rank(
             citations=list(item.citations),
         )
 
-        key = normalized_url or title.lower()
-        existing = by_key.get(key)
-        if existing is None or _item_score(normalized_item) > _item_score(existing):
-            by_key[key] = normalized_item
+        url_key = normalized_url
+        title_key = _title_dedup_key(title)
 
-    ranked = _sort_by_score(list(by_key.values()))
+        # Step 1: URL dedup (우선 적용)
+        existing_url = by_url.get(url_key)
+        if existing_url is not None:
+            if _item_score(normalized_item) > _item_score(existing_url):
+                by_url[url_key] = normalized_item
+                if title_key:
+                    by_title[title_key] = url_key
+            continue
+
+        # Step 2: Title dedup (새 URL에 대해서만 적용)
+        if title_key:
+            existing_url_key = by_title.get(title_key)
+            if existing_url_key is not None:
+                # 같은 title이 이미 다른 URL로 등록됨 — 점수 높은 것 유지
+                if _item_score(normalized_item) > _item_score(by_url[existing_url_key]):
+                    del by_url[existing_url_key]
+                    by_url[url_key] = normalized_item
+                    by_title[title_key] = url_key
+                continue
+
+        by_url[url_key] = normalized_item
+        if title_key:
+            by_title[title_key] = url_key
+
+    ranked = _sort_by_score(list(by_url.values()))
     result = _apply_domain_diversity_limit(ranked, max_items=max_items)
 
     # 최소 출력 보장: 도메인 다양성 제한이 min_output을 만족하지 못하면 완화

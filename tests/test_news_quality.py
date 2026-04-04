@@ -9,6 +9,11 @@ from morning_brief.data.news_rollout import (
     record_news_rollout_run,
     should_reduce_legacy_broad_fallback,
 )
+from morning_brief.data.news_selection import (
+    _dedup_and_rank,
+    _has_meaningful_public_interpretation,
+    _title_dedup_key,
+)
 from morning_brief.data.sources.http_client import HttpFetchError
 from morning_brief.models import NewsItem
 
@@ -1343,3 +1348,111 @@ def test_cap_signals_by_topic_empty_topic_treated_as_unknown():
     signals = [_make_signal("") for _ in range(3)]
     result = news._cap_signals_by_topic(signals, total_max=6, per_topic_max=2)
     assert len(result) == 2  # unknown으로 묶여 2개 제한
+
+
+# ─── Title dedup 테스트 ────────────────────────────────────────────────────
+
+
+def _item(
+    title: str,
+    url: str,
+) -> NewsItem:
+    return NewsItem(
+        title=title,
+        url=url,
+        source="test",
+        published_at=datetime.now(timezone.utc),
+        topic="macro",
+        provider="perplexity_search",
+        summary="summary",
+        why_it_matters="impact",
+        citations=[],
+    )
+
+
+def test_title_dedup_key_returns_first_40_chars() -> None:
+    title = "A" * 50
+    assert _title_dedup_key(title) == "a" * 40
+
+
+def test_title_dedup_key_short_title_disabled() -> None:
+    assert _title_dedup_key("short") == ""
+    assert _title_dedup_key("123456789") == ""  # 9자
+
+
+def test_title_dedup_key_normalizes_whitespace() -> None:
+    key = _title_dedup_key("Fed  Raises  Rates")
+    assert "  " not in key
+
+
+def test_dedup_and_rank_same_title_different_url_returns_one() -> None:
+    title = "Fed raises interest rates by 25 basis points"
+    item_a = _item(title, "https://reuters.com/fed-raises")
+    item_b = _item(title, "https://bloomberg.com/fed-raises")
+    result = _dedup_and_rank([item_a, item_b], max_items=10)
+    assert len(result) == 1
+
+
+def test_dedup_and_rank_different_title_same_url_dedup_by_url() -> None:
+    url = "https://reuters.com/article/1"
+    item_a = _item("Fed raises rates in surprise move", url)
+    item_b = _item("Central bank hikes by a quarter point", url)
+    result = _dedup_and_rank([item_a, item_b], max_items=10)
+    assert len(result) == 1
+
+
+def test_dedup_and_rank_short_title_no_title_dedup() -> None:
+    """9자 이하 제목은 보조 title dedup 미적용 — URL이 다르면 둘 다 통과한다."""
+    item_a = _item("Fed news", "https://reuters.com/fed")
+    item_b = _item("Fed news", "https://bloomberg.com/fed")
+    result = _dedup_and_rank([item_a, item_b], max_items=10)
+    assert len(result) == 2
+
+
+# ─── Meaningless interpretation 탐지 테스트 ──────────────────────────────
+
+
+def _news_item_with_why(why: str, summary: str = "") -> NewsItem:
+    return NewsItem(
+        title="Test",
+        url="https://reuters.com/test",
+        source="Reuters",
+        published_at=None,
+        topic="macro",
+        provider="perplexity_search",
+        summary=summary,
+        why_it_matters=why,
+        citations=[],
+    )
+
+
+def test_interpretation_na_uppercase_is_meaningless() -> None:
+    assert _has_meaningful_public_interpretation(_news_item_with_why("N/A")) is False
+
+
+def test_interpretation_none_is_meaningless() -> None:
+    assert _has_meaningful_public_interpretation(_news_item_with_why("none")) is False
+
+
+def test_interpretation_no_information_is_meaningless() -> None:
+    assert _has_meaningful_public_interpretation(_news_item_with_why("no information")) is False
+
+
+def test_interpretation_na_with_period_is_meaningless() -> None:
+    """'N/A.' → rstrip 후 'n/a' 매칭."""
+    assert _has_meaningful_public_interpretation(_news_item_with_why("N/A.")) is False
+
+
+def test_interpretation_meaningful_text_is_meaningful() -> None:
+    assert (
+        _has_meaningful_public_interpretation(_news_item_with_why("The Fed raised rates by 25bps"))
+        is True
+    )
+
+
+def test_interpretation_korean_없음_is_meaningless() -> None:
+    assert _has_meaningful_public_interpretation(_news_item_with_why("없음")) is False
+
+
+def test_interpretation_korean_해당없음_is_meaningless() -> None:
+    assert _has_meaningful_public_interpretation(_news_item_with_why("해당없음")) is False

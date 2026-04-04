@@ -20,6 +20,7 @@ from morning_brief.data.market import (
 )
 from morning_brief.data.market_keywords import build_search_keywords, extract_market_keywords
 from morning_brief.data.news import PUBLIC_FEATURED_NEWS_ITEMS, build_news_packet
+from morning_brief.data.news_packet import NewsPacketItem
 from morning_brief.data.sources.provider_runtime import (
     provider_stats_snapshot,
     reset_provider_runtime_state,
@@ -85,7 +86,7 @@ def run_pipeline(settings: Settings) -> str:
     )
     pipeline_started_at = time.perf_counter()
     market_packet: dict = {}
-    news_packet: list[dict] = []
+    news_packet: list[NewsPacketItem] = []
     public_context: dict = {}
     packet: dict = {}
     briefing = ""
@@ -102,6 +103,7 @@ def run_pipeline(settings: Settings) -> str:
                 perplexity_api_key=settings.perplexity_api_key,
                 cache_dir=settings.cache_dir,
                 observer=observer,
+                cache_max_age_hours=settings.market_point_cache_max_age_hours,
             )
         with observer.phase("news"):
             market_keywords = extract_market_keywords(market_packet)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from morning_brief.data import providers
+from morning_brief.data.news_packet import NewsPacketItem
 from morning_brief.data.news_policy import FRESH_NEWS_HOURS
 from morning_brief.data.news_policy import MIN_NEWS_ITEMS as MIN_NEWS_ITEMS
 
@@ -8,11 +10,6 @@ MIN_TIER_1_NEWS_ITEMS = 1
 MIN_UNIQUE_NEWS_DOMAINS = 3
 MIN_FRESH_NEWS_ITEMS = 2
 MIN_TOPIC_COVERAGE = 2
-PERPLEXITY_PROVIDER = "perplexity_search"
-PERPLEXITY_SONAR_PROVIDER = "perplexity_sonar"
-GROK_X_KEYWORD_PROVIDER = "grok_x_keyword"
-GROK_WEB_SEARCH_PROVIDER = "grok_web_search"
-OFFICIAL_SIGNAL_PROVIDER = "grok_official_x"
 
 
 def _safe_price(value: object) -> float:
@@ -41,12 +38,12 @@ def _blank_news_quality_summary() -> dict[str, int | set[str]]:
     }
 
 
-def _has_citations(item: dict) -> bool:
+def _has_citations(item: NewsPacketItem) -> bool:
     citations = item.get("citations", [])
     return isinstance(citations, list) and any(str(value).strip() for value in citations)
 
 
-def _is_fresh_item(item: dict) -> bool:
+def _is_fresh_item(item: NewsPacketItem) -> bool:
     age_hours = item.get("age_hours")
     try:
         return age_hours is not None and float(age_hours) <= FRESH_NEWS_HOURS
@@ -54,24 +51,24 @@ def _is_fresh_item(item: dict) -> bool:
         return False
 
 
-def _record_news_domain(item: dict, summary: dict[str, int | set[str]]) -> None:
-    if bool(item.get("official_source")):
-        source = str(item.get("source", "")).strip().lower()
+def _record_news_domain(item: NewsPacketItem, summary: dict[str, int | set[str]]) -> None:
+    if item.get("official_source", False):
+        source = str(item.get("source") or "").strip().lower()
         if source:
             cast_set = summary["unique_domains"]
             assert isinstance(cast_set, set)
             cast_set.add(f"official:{source}")
         return
 
-    domain = str(item.get("domain", "")).strip().lower()
+    domain = str(item.get("domain") or "").strip().lower()
     if domain:
         cast_set = summary["unique_domains"]
         assert isinstance(cast_set, set)
         cast_set.add(domain)
 
 
-def _record_news_topic(item: dict, summary: dict[str, int | set[str]]) -> None:
-    topic = str(item.get("topic", "")).strip().lower()
+def _record_news_topic(item: NewsPacketItem, summary: dict[str, int | set[str]]) -> None:
+    topic = str(item.get("topic") or "").strip().lower()
     if topic:
         cast_set = summary["unique_topics"]
         assert isinstance(cast_set, set)
@@ -84,17 +81,17 @@ def _increment(summary: dict[str, int | set[str]], key: str) -> None:
     summary[key] = value + 1
 
 
-def _record_provider_counts(item: dict, summary: dict[str, int | set[str]]) -> str:
-    provider = str(item.get("provider", "")).strip().lower()
-    if provider in {PERPLEXITY_PROVIDER, PERPLEXITY_SONAR_PROVIDER}:
+def _record_provider_counts(item: NewsPacketItem, summary: dict[str, int | set[str]]) -> str:
+    provider = str(item.get("provider") or "").strip().lower()
+    if provider in providers.PERPLEXITY_PROVIDERS:
         _increment(summary, "perplexity_item_count")
-    if provider == OFFICIAL_SIGNAL_PROVIDER or bool(item.get("official_source")):
+    if provider == providers.GROK_OFFICIAL_X or item.get("official_source", False):
         _increment(summary, "official_signal_count")
     return provider
 
 
 def _record_citation_and_explanation_counts(
-    item: dict,
+    item: NewsPacketItem,
     summary: dict[str, int | set[str]],
     *,
     provider: str,
@@ -103,11 +100,11 @@ def _record_citation_and_explanation_counts(
     if has_citations:
         _increment(summary, "citation_backed_count")
 
-    has_explanation = bool(str(item.get("why_it_matters", "")).strip())
+    has_explanation = bool(str(item.get("why_it_matters") or "").strip())
     if has_explanation:
         _increment(summary, "explained_count")
 
-    if provider not in {PERPLEXITY_PROVIDER, PERPLEXITY_SONAR_PROVIDER}:
+    if provider not in providers.PERPLEXITY_PROVIDERS:
         return
     if has_citations:
         _increment(summary, "perplexity_citation_backed_count")
@@ -115,11 +112,11 @@ def _record_citation_and_explanation_counts(
         _increment(summary, "perplexity_explained_count")
 
 
-def _update_news_quality_summary(summary: dict[str, int | set[str]], item: dict) -> None:
+def _update_news_quality_summary(summary: dict[str, int | set[str]], item: NewsPacketItem) -> None:
     _increment(summary, "count")
-    if bool(item.get("preferred_source")):
+    if item.get("preferred_source", False):
         _increment(summary, "preferred_count")
-    if str(item.get("source_tier", "")).strip().lower() == "tier_1":
+    if str(item.get("source_tier") or "").strip().lower() == "tier_1":
         _increment(summary, "tier_1_count")
 
     _record_news_domain(item, summary)
@@ -130,7 +127,7 @@ def _update_news_quality_summary(summary: dict[str, int | set[str]], item: dict)
         _increment(summary, "fresh_count")
 
 
-def summarize_news_packet_quality(packet: list[dict]) -> dict:
+def summarize_news_packet_quality(packet: list[NewsPacketItem]) -> dict:
     summary = _blank_news_quality_summary()
 
     for item in packet:
@@ -176,18 +173,45 @@ def _append_perplexity_quality_warnings(warnings: list[str], news_quality: dict)
         warnings.append("Perplexity 결과 일부에 시장 해석 메모가 빠져 있습니다")
 
 
-def _zero_ratio(packet: dict) -> float:
-    macro = packet.get("macro", [])
-    us_indices = packet.get("us_indices", [])
-    tech_stocks = packet.get("tech_stocks", [])
-    btc = packet.get("bitcoin", {})
-    numeric_points = (
-        macro + us_indices + tech_stocks + btc.get("etf_points", []) + [btc.get("spot", {})]
+def _category_zero_ratio(points: list) -> float:
+    """주어진 포인트 목록에서 price <= 0 비율을 반환한다. 빈 목록은 0.0."""
+    if not points:
+        return 0.0
+    zero_count = sum(
+        1 for p in points if isinstance(p, dict) and _safe_price(p.get("price", 0.0)) <= 0.0
     )
-    zero_points = [
-        p for p in numeric_points if isinstance(p, dict) and _safe_price(p.get("price", 0.0)) <= 0.0
-    ]
-    return (len(zero_points) / len(numeric_points)) if numeric_points else 1.0
+    return zero_count / len(points)
+
+
+def _zero_ratio_by_category(packet: dict) -> dict[str, float]:
+    """카테고리별 price-zero 비율을 반환한다.
+
+    카테고리:
+    - macro: packet["macro"]
+    - indices: packet["us_indices"]
+    - tech: packet["tech_stocks"]
+    - bitcoin: [spot] + etf_points
+      (build_market_packet 경로에서 etf_points는 항상 []이므로 bitcoin 카테고리는 spot만 포함됨)
+    """
+    btc = packet.get("bitcoin", {})
+    spot = btc.get("spot", {})
+    btc_points: list = ([spot] if isinstance(spot, dict) else []) + list(btc.get("etf_points", []))
+    return {
+        "macro": _category_zero_ratio(list(packet.get("macro", []))),
+        "indices": _category_zero_ratio(list(packet.get("us_indices", []))),
+        "tech": _category_zero_ratio(list(packet.get("tech_stocks", []))),
+        "bitcoin": _category_zero_ratio(btc_points),
+    }
+
+
+def _zero_ratio(packet: dict) -> float:
+    """카테고리별 zero_ratio 중 최댓값을 반환한다.
+
+    단일 카테고리가 완전히 실패했을 때 전체 평균으로 희석되는 버그를 수정한다.
+    빈 packet은 1.0 반환 (critical 처리).
+    """
+    by_category = _zero_ratio_by_category(packet)
+    return max(by_category.values(), default=1.0)
 
 
 def _build_data_quality_warnings(news_quality: dict, zero_ratio: float) -> list[str]:
@@ -223,7 +247,7 @@ def _build_data_quality_warnings(news_quality: dict, zero_ratio: float) -> list[
     return warnings
 
 
-def assess_perplexity_fallback_need(news_packet: list[dict]) -> dict:
+def assess_perplexity_fallback_need(news_packet: list[NewsPacketItem]) -> dict:
     summary = summarize_news_packet_quality(news_packet)
     reasons = _build_perplexity_fallback_reasons(summary)
 
@@ -234,8 +258,9 @@ def assess_perplexity_fallback_need(news_packet: list[dict]) -> dict:
     }
 
 
-def assess_data_quality(packet: dict, news_packet: list[dict]) -> dict:
-    zero_ratio = _zero_ratio(packet)
+def assess_data_quality(packet: dict, news_packet: list[NewsPacketItem]) -> dict:
+    zero_by_category = _zero_ratio_by_category(packet)
+    zero_ratio = max(zero_by_category.values(), default=1.0)
     news_quality = summarize_news_packet_quality(news_packet)
     warnings = _build_data_quality_warnings(news_quality, zero_ratio)
 
@@ -249,6 +274,7 @@ def assess_data_quality(packet: dict, news_packet: list[dict]) -> dict:
     return {
         "status": status,
         "zero_price_ratio": round(zero_ratio, 4),
+        "zero_ratio_by_category": {k: round(v, 4) for k, v in zero_by_category.items()},
         "warnings": warnings,
         "news_count": news_quality["count"],
         "preferred_news_count": news_quality["preferred_count"],
