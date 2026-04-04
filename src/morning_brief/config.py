@@ -63,6 +63,7 @@ class Settings:
     supabase_service_role_key: str
     newsapi_key: str
     max_news_items: int
+    market_point_cache_max_age_hours: int
     output_dir: Path
     r2_public_bucket: str
     r2_s3_endpoint: str
@@ -202,6 +203,9 @@ def load_settings() -> Settings:
         supabase_service_role_key=os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip(),
         newsapi_key=os.getenv("NEWSAPI_KEY", "").strip(),
         max_news_items=_env_bounded_int("MAX_NEWS_ITEMS", default=5, minimum=3, maximum=5),
+        market_point_cache_max_age_hours=_env_bounded_int(
+            "MARKET_POINT_CACHE_MAX_AGE_HOURS", default=26, minimum=4, maximum=72
+        ),
         output_dir=output_dir,
         r2_public_bucket=os.getenv("R2_PUBLIC_BUCKET", "").strip(),
         r2_s3_endpoint=os.getenv("R2_S3_ENDPOINT", "").strip(),

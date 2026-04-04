@@ -41,6 +41,7 @@ BTC_ETF_OFFICIAL_CACHE_RELATIVE_PATH = Path("btc_etf/official_snapshots.json")
 MARKET_POINT_CACHE_RELATIVE_PATH = Path("market/last_success_points.json")
 # 운영용 cache state는 유지하지만, stale snapshot을 사용자-facing 값에는 재사용하지 않는다.
 BTC_ETF_CACHE_MAX_AGE_HOURS = 48
+MARKET_POINT_CACHE_MAX_AGE_HOURS = 26
 MACRO_FALLBACK_TARGETS = [
     ("us10y", "^TNX", 0.1),
     # DEPRECATED: dxy yfinance DX=F — ICE Dollar Futures, 비공식 스크래퍼, 현물 DXY 괴리
@@ -646,7 +647,11 @@ def _normalize_point_state(point: MarketPoint) -> MarketPoint:
     )
 
 
-def _load_market_point_cache(cache_file: Path) -> dict[str, MarketPoint]:
+def _load_market_point_cache(
+    cache_file: Path,
+    *,
+    max_age_hours: int = MARKET_POINT_CACHE_MAX_AGE_HOURS,
+) -> dict[str, MarketPoint]:
     if not cache_file.exists():
         return {}
 
@@ -657,6 +662,23 @@ def _load_market_point_cache(cache_file: Path) -> dict[str, MarketPoint]:
 
     if not isinstance(payload, dict):
         return {}
+
+    meta = payload.pop("_meta", None)
+    if isinstance(meta, dict) and isinstance(meta.get("cached_at"), str):
+        try:
+            cached_at = datetime.fromisoformat(meta["cached_at"])
+            age_hours = (datetime.now(timezone.utc) - cached_at).total_seconds() / 3600
+            if age_hours > max_age_hours:
+                log_structured(
+                    logger,
+                    event="cache.stale",
+                    message=f"시장 포인트 캐시가 {age_hours:.1f}시간 경과하여 오래됐습니다 (임계값 {max_age_hours}h). 이전 값을 사용합니다.",
+                    level=logging.WARNING,
+                    age_hours=round(age_hours, 1),
+                    max_age_hours=max_age_hours,
+                )
+        except (ValueError, TypeError):
+            pass
 
     cached: dict[str, MarketPoint] = {}
     for canonical_key, item in payload.items():
@@ -671,7 +693,7 @@ def _load_market_point_cache(cache_file: Path) -> dict[str, MarketPoint]:
 
 def _save_market_point_cache(cache_file: Path, points: list[MarketPoint]) -> None:
     cache_file.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
+    data = {
         point.canonical_key: asdict(
             replace(
                 _normalize_point_state(point),
@@ -688,6 +710,7 @@ def _save_market_point_cache(cache_file: Path, points: list[MarketPoint]) -> Non
             and _point_is_within_expected_range(point)
         )
     }
+    payload: dict = {"_meta": {"cached_at": datetime.now(timezone.utc).isoformat()}, **data}
     cache_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -939,6 +962,7 @@ def build_market_packet(
     perplexity_api_key: str = "",
     cache_dir: Path | None = None,
     observer: PipelineObserver | None = None,
+    cache_max_age_hours: int = MARKET_POINT_CACHE_MAX_AGE_HOURS,
 ) -> dict:
     """감성 분석 파이프라인용 시장 패킷.
 
@@ -948,7 +972,7 @@ def build_market_packet(
     """
     effective_cache_dir = cache_dir or Path(".cache").resolve()
     cache_file = _market_point_cache_file(effective_cache_dir)
-    previous_by_key = _load_market_point_cache(cache_file)
+    previous_by_key = _load_market_point_cache(cache_file, max_age_hours=cache_max_age_hours)
     macro_points = fetch_macro_points(fred_api_key=fred_api_key)
     us_index_points = fetch_us_index_points()
     btc_snapshot = fetch_bitcoin_snapshot(

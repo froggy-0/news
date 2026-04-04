@@ -3,11 +3,28 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Callable
 
+from typing_extensions import TypedDict
+
+from morning_brief.data import providers
 from morning_brief.data.news_policy import extract_domain, is_preferred_domain, source_tier
 from morning_brief.models import NewsItem
 
-OFFICIAL_SIGNAL_PROVIDER = "grok_official_x"
-GROK_PROVIDERS = {"grok_official_x", "grok_x_keyword", "grok_web_search"}
+
+class NewsPacketItem(TypedDict):
+    title: str
+    url: str
+    source: str
+    published_at: str | None
+    domain: str
+    source_tier: str
+    preferred_source: bool
+    age_hours: float | None
+    topic: str | None
+    provider: str | None
+    summary: str | None
+    why_it_matters: str | None
+    citations: list[str]
+    official_source: bool
 
 
 def packet_item_to_news_item(item: dict) -> NewsItem | None:
@@ -45,8 +62,8 @@ def packet_item_to_news_item(item: dict) -> NewsItem | None:
     )
 
 
-def news_items_to_packet(items: list[NewsItem]) -> list[dict]:
-    result: list[dict] = []
+def news_items_to_packet(items: list[NewsItem]) -> list[NewsPacketItem]:
+    result: list[NewsPacketItem] = []
     now_utc = datetime.now(timezone.utc)
 
     for item in items:
@@ -71,7 +88,7 @@ def news_items_to_packet(items: list[NewsItem]) -> list[dict]:
                 "summary": item.summary or None,
                 "why_it_matters": item.why_it_matters or None,
                 "citations": list(item.citations),
-                "official_source": item.provider == OFFICIAL_SIGNAL_PROVIDER,
+                "official_source": item.provider == providers.GROK_OFFICIAL_X,
             }
         )
 
@@ -84,7 +101,7 @@ def merge_news_packets(
     extra_items: list[NewsItem],
     max_items: int,
     merge_rank_fn: Callable[[list[NewsItem], list[NewsItem], int], list[NewsItem]],
-) -> list[dict]:
+) -> list[NewsPacketItem]:
     existing_items = [
         item
         for item in (packet_item_to_news_item(entry) for entry in existing_packet)

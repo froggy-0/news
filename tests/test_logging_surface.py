@@ -11,6 +11,7 @@ EXPECTED_GET_LOGGER_FILES = {
     "src/morning_brief/briefing.py",
     "src/morning_brief/data/market.py",
     "src/morning_brief/data/news.py",
+    "src/morning_brief/data/news_policy.py",
     "src/morning_brief/data/sources/btc_etf_official.py",
     "src/morning_brief/data/sources/dynamic_registry_updater.py",
     "src/morning_brief/data/sources/fred.py",

@@ -38,6 +38,8 @@ files = [
     "src/morning_brief/data/sources/btc_etf_official.py",
     "src/morning_brief/data/sources/fred.py",
     "src/morning_brief/data/sources/provider_runtime.py",
+    "src/morning_brief/data/providers.py",
+    "src/morning_brief/data/news_packet.py",
 ]
 ignore_missing_imports = true
 follow_imports = "skip"

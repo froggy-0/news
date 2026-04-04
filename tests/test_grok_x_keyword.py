@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import morning_brief.data.sources.grok_x_keyword as grok_mod
+from morning_brief.data.news import _dedup_x_signals
 from morning_brief.data.sources.grok_x_keyword import (
     BITCOIN_CRYPTO_GROUP,
     BITCOIN_CRYPTO_PROMPT,
     GROUP_TOPIC_MAP,
+    XSignal,
     _bitcoin_crypto_handles,
     fetch_x_keyword_signals,
     search_groups,
@@ -77,3 +81,59 @@ def test_fetch_x_keyword_signals_return_type(monkeypatch):
     assert isinstance(signals, list)
     assert isinstance(news_items, list)
     assert isinstance(keywords, dict)
+
+
+# ─── XSignal dedup 테스트 ──────────────────────────────────────────────────
+
+
+def _signal(headline: str, handle: str = "@test", posted_at: datetime | None = None) -> XSignal:
+    return XSignal(
+        headline=headline,
+        summary="summary",
+        why_it_matters="impact",
+        sentiment="neutral",
+        source_handle=handle,
+        posted_at=posted_at,
+        topic="macro",
+    )
+
+
+def test_dedup_x_signals_removes_duplicate_handle_headline() -> None:
+    s1 = _signal("Fed raises rates by 25bps in surprise move")
+    s2 = _signal("Fed raises rates by 25bps in surprise move")
+    result = _dedup_x_signals([s1, s2])
+    assert len(result) == 1
+
+
+def test_dedup_x_signals_keeps_newer_posted_at() -> None:
+    t1 = datetime(2024, 1, 1, 10, 0, tzinfo=timezone.utc)
+    t2 = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
+    s_old = _signal("Fed raises rates by 25bps in surprise move", posted_at=t1)
+    s_new = _signal("Fed raises rates by 25bps in surprise move", posted_at=t2)
+    result = _dedup_x_signals([s_old, s_new])
+    assert len(result) == 1
+    assert result[0].posted_at == t2
+
+
+def test_dedup_x_signals_empty_input() -> None:
+    assert _dedup_x_signals([]) == []
+
+
+def test_dedup_x_signals_removed_count_accurate() -> None:
+    """removed = len(입력) - len(출력) 정확도 검증."""
+    signals = [
+        _signal("Fed raises rates by 25bps in move today"),
+        _signal("Fed raises rates by 25bps in move today"),
+        _signal("Bitcoin ETF inflows surge to record high"),
+        _signal("Bitcoin ETF inflows surge to record high"),
+        _signal("Nvidia beats earnings expectations clearly"),
+    ]
+    result = _dedup_x_signals(signals)
+    assert len(result) == 3  # 5 - 2 duplicates = 3
+
+
+def test_dedup_x_signals_different_handles_not_deduped() -> None:
+    s1 = _signal("Fed raises rates by 25bps in surprise move", handle="@jpmorgan")
+    s2 = _signal("Fed raises rates by 25bps in surprise move", handle="@goldman")
+    result = _dedup_x_signals([s1, s2])
+    assert len(result) == 2

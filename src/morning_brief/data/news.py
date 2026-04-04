@@ -310,6 +310,35 @@ def fetch_news(
     return final_items
 
 
+def _dedup_x_signals(signals: list[XSignal]) -> list[XSignal]:
+    """source_handle + headline[:30] 복합 키로 중복 XSignal을 제거한다.
+
+    충돌 시 posted_at 최신 것을 유지한다. 동일하거나 None이면 기존 항목 유지.
+    """
+    seen: dict[str, XSignal] = {}
+    for signal in signals:
+        key = f"{signal.source_handle.lower()}:{signal.headline[:30].lower().strip()}"
+        existing = seen.get(key)
+        if existing is None:
+            seen[key] = signal
+        elif signal.posted_at is not None and (
+            existing.posted_at is None or signal.posted_at > existing.posted_at
+        ):
+            seen[key] = signal
+
+    removed = len(signals) - len(seen)
+    if removed > 0:
+        log_structured(
+            logger,
+            event="dedup.applied",
+            message=f"XSignal 중복 {removed}건 제거됨",
+            level=logging.DEBUG,
+            provider="x_signal",
+            removed_count=removed,
+        )
+    return list(seen.values())
+
+
 def _cap_signals_by_topic(
     signals: list[XSignal],
     *,
@@ -546,7 +575,7 @@ def build_news_packet(
     publish_news_items, publish_news_audit = filter_public_article_news(public_ranked_items)
     email_ranked_items = _dedup_and_rank(items, max_items=settings.max_news_items)
     public_ranked_signals = _cap_signals_by_topic(
-        x_signals,
+        _dedup_x_signals(x_signals),
         total_max=PUBLIC_ALL_X_SIGNALS,
         per_topic_max=4,
     )

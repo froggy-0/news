@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import json
+import logging
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+import pytest
 
 from morning_brief.data.market import (
     _fear_greed_level_label,
+    _load_market_point_cache,
+    _save_market_point_cache,
     build_market_packet,
     fetch_korea_investor_points,
     fetch_macro_points,
@@ -350,3 +356,82 @@ def test_fear_greed_level_label_uses_korean_bands():
     assert _fear_greed_level_label(50) == "중립"
     assert _fear_greed_level_label(60) == "탐욕"
     assert _fear_greed_level_label(90) == "극단적 탐욕"
+
+
+def _make_point(canonical_key: str = "us10y", price: float = 4.5) -> MarketPoint:
+    return MarketPoint(
+        label="US10Y",
+        ticker="^TNX",
+        canonical_key=canonical_key,
+        price=price,
+        change_pct=0.1,
+        is_previous_value=False,
+        validation_status="ok",
+    )
+
+
+def test_save_and_load_cache_includes_cached_at(tmp_path: Path) -> None:
+    cache_file = tmp_path / "cache.json"
+    point = _make_point()
+    _save_market_point_cache(cache_file, [point])
+
+    raw = json.loads(cache_file.read_text())
+    assert "_meta" in raw
+    assert "cached_at" in raw["_meta"]
+    datetime.fromisoformat(raw["_meta"]["cached_at"])  # 파싱 가능해야 한다
+
+
+def test_load_stale_cache_emits_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    cache_file = tmp_path / "cache.json"
+    point = _make_point()
+    _save_market_point_cache(cache_file, [point])
+
+    # cached_at을 30시간 전으로 조작
+    raw = json.loads(cache_file.read_text())
+    raw["_meta"]["cached_at"] = (datetime.now(timezone.utc) - timedelta(hours=30)).isoformat()
+    cache_file.write_text(json.dumps(raw))
+
+    with caplog.at_level(logging.WARNING):
+        result = _load_market_point_cache(cache_file, max_age_hours=26)
+
+    assert "us10y" in result
+    assert any("오래됐습니다" in r.message or "stale" in r.message.lower() for r in caplog.records)
+
+
+def test_load_fresh_cache_no_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    cache_file = tmp_path / "cache.json"
+    _save_market_point_cache(cache_file, [_make_point()])
+
+    with caplog.at_level(logging.WARNING):
+        result = _load_market_point_cache(cache_file, max_age_hours=26)
+
+    assert "us10y" in result
+    assert not any("cache.stale" in r.message for r in caplog.records)
+
+
+def test_load_legacy_cache_without_meta_no_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """_meta 없는 기존 캐시 파일도 WARNING 없이 정상 로드해야 한다."""
+    cache_file = tmp_path / "cache.json"
+    # 구형 포맷 직접 작성 (_meta 없음)
+    legacy = {
+        "us10y": {
+            "label": "US10Y",
+            "ticker": "^TNX",
+            "canonical_key": "us10y",
+            "price": 4.5,
+            "change_pct": 0.1,
+            "change_bps": None,
+            "is_previous_value": False,
+            "validation_status": "ok",
+            "resolution_reason": "",
+        }
+    }
+    cache_file.write_text(json.dumps(legacy))
+
+    with caplog.at_level(logging.WARNING):
+        result = _load_market_point_cache(cache_file, max_age_hours=26)
+
+    assert "us10y" in result
+    assert not any("cache.stale" in r.message for r in caplog.records)

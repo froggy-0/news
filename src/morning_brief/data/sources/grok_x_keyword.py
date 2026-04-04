@@ -16,6 +16,7 @@ from xai_sdk import Client
 from xai_sdk.chat import user
 from xai_sdk.tools import x_search
 
+from morning_brief.data import providers
 from morning_brief.data.official_signal_registry import grouped_verified_x_handles
 from morning_brief.data.sources.http_client import HttpFetchError
 from morning_brief.data.sources.provider_runtime import (
@@ -29,7 +30,7 @@ from morning_brief.models import NewsItem
 from morning_brief.observability import PipelineObserver
 
 logger = logging.getLogger(__name__)
-GROK_KEYWORD_PROVIDER = "grok_keyword"
+GROK_KEYWORD_PROVIDER = providers.RUNTIME_GROK_KEYWORD
 
 MACRO_EQUITY_GROUP = "macro_and_equity"
 AI_BIGTECH_GROUP = "ai_bigtech_primary"

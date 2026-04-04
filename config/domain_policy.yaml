@@ -1,0 +1,154 @@
+version: "1"
+
+# 도메인 점수 및 계층 정책
+# score_rationale: 도메인별 신뢰도 근거 (문서화 용도)
+# score: float — _item_score() domain_score() 계산에 사용
+# tier: "tier_1" | "tier_2" — 없으면 tier_3으로 처리
+
+domains:
+  # ── Tier 1: 글로벌 금융·규제 기관 ──────────────────────────────────────
+  - domain: reuters.com
+    score: 5.0
+    tier: tier_1
+    score_rationale: "글로벌 1위 금융 뉴스 에이전시, 속보 신뢰도 최상"
+
+  - domain: bloomberg.com
+    score: 5.0
+    tier: tier_1
+    score_rationale: "금융 데이터·뉴스 최고 권위"
+
+  - domain: wsj.com
+    score: 4.5
+    tier: tier_1
+    score_rationale: "월스트리트저널, 미국 경제·금융 1위 언론"
+
+  - domain: ft.com
+    score: 4.5
+    tier: tier_1
+    score_rationale: "파이낸셜타임스, 유럽 경제·금융 1위 언론"
+
+  - domain: federalreserve.gov
+    score: 5.0
+    tier: tier_1
+    score_rationale: "미 연방준비제도 공식 웹사이트"
+
+  - domain: home.treasury.gov
+    score: 5.0
+    tier: tier_1
+    score_rationale: "미 재무부 공식 웹사이트"
+
+  - domain: sec.gov
+    score: 5.0
+    tier: tier_1
+    score_rationale: "미 증권거래위원회 공식 웹사이트"
+
+  # ── Tier 2: 주요 금융·기술·암호화폐 미디어 ────────────────────────────
+  - domain: cnbc.com
+    score: 4.0
+    tier: tier_2
+    score_rationale: "미국 주요 경제 방송"
+
+  - domain: coindesk.com
+    score: 3.8
+    tier: tier_2
+    score_rationale: "암호화폐·블록체인 전문 미디어"
+
+  - domain: ishares.com
+    score: 4.0
+    tier: tier_2
+    score_rationale: "BlackRock iShares ETF 공식 사이트"
+
+  - domain: bitbetf.com
+    score: 4.0
+    tier: tier_2
+    score_rationale: "Bitwise 비트코인 ETF 공식 사이트"
+
+  - domain: etfs.grayscale.com
+    score: 4.0
+    tier: tier_2
+    score_rationale: "Grayscale ETF 공식 사이트"
+
+  - domain: investor.nvidia.com
+    score: 3.9
+    tier: tier_2
+    score_rationale: "NVIDIA IR 공식 사이트"
+
+  - domain: news.microsoft.com
+    score: 3.9
+    tier: tier_2
+    score_rationale: "Microsoft 공식 뉴스룸"
+
+  - domain: aboutamazon.com
+    score: 3.9
+    tier: tier_2
+    score_rationale: "Amazon 공식 뉴스룸"
+
+  - domain: blog.google
+    score: 3.9
+    tier: tier_2
+    score_rationale: "Google 공식 블로그"
+
+  - domain: about.fb.com
+    score: 3.9
+    tier: tier_2
+    score_rationale: "Meta 공식 뉴스룸"
+
+  - domain: ir.amd.com
+    score: 3.9
+    tier: tier_2
+    score_rationale: "AMD IR 공식 사이트"
+
+  - domain: tsmc.com
+    score: 3.8
+    tier: tier_2
+    score_rationale: "TSMC 공식 웹사이트"
+
+  - domain: asml.com
+    score: 3.8
+    tier: tier_2
+    score_rationale: "ASML 공식 웹사이트"
+
+  - domain: broadcom.com
+    score: 3.8
+    tier: tier_2
+    score_rationale: "Broadcom 공식 웹사이트"
+
+  - domain: apnews.com
+    score: 4.0
+    tier: tier_2
+    score_rationale: "AP 통신 — 속보 신뢰도 높음"
+
+  - domain: barrons.com
+    score: 3.8
+    tier: tier_2
+    score_rationale: "Barron's — 주식·투자 전문지"
+
+  - domain: marketwatch.com
+    score: 3.7
+    tier: tier_2
+    score_rationale: "MarketWatch — Dow Jones 산하 시장 뉴스"
+
+  - domain: fortune.com
+    score: 3.5
+    tier: tier_2
+    score_rationale: "Fortune — 비즈니스 전문지"
+
+  - domain: axios.com
+    score: 3.5
+    tier: tier_2
+    score_rationale: "Axios — 속보·정책 전문 미디어"
+
+  - domain: techcrunch.com
+    score: 3.5
+    tier: tier_2
+    score_rationale: "TechCrunch — 기술 스타트업 전문"
+
+  - domain: theblock.co
+    score: 3.7
+    tier: tier_2
+    score_rationale: "The Block — 암호화폐 전문 미디어"
+
+  - domain: cointelegraph.com
+    score: 3.5
+    tier: tier_2
+    score_rationale: "CoinTelegraph — 암호화폐 미디어"

@@ -9,6 +9,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
 
 from morning_brief.config import Settings
+from morning_brief.data import providers
 
 INSTRUCTIONS_TEMPLATE = "brief_instructions.j2"
 INPUT_TEMPLATE = "brief_input.j2"
@@ -89,7 +90,7 @@ def _build_news_focus(packet: dict) -> dict:
         if not item["title"]:
             continue
         top_items.append(item)
-        if item["official_source"] or item["provider"] == "grok_official_x":
+        if item["official_source"] or item["provider"] == providers.GROK_OFFICIAL_X:
             official_signals.append(item)
 
     return {
