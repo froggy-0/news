@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import pytest
 import requests
 
@@ -42,6 +44,25 @@ def test_fetch_close_change_and_volume_success(monkeypatch: pytest.MonkeyPatch) 
     assert close == 612.34
     assert change_pct == 2.06
     assert volume == 123456
+
+
+def test_fetch_close_change_and_volume_success_logs_quote(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(kis, "_ensure_token", lambda: "token")
+    monkeypatch.setattr(
+        kis,
+        "_kis_get",
+        lambda path, params, headers: {
+            "rt_cd": "0",
+            "output": {"last": "612.34", "base": "600.00", "tvol": "123456"},
+        },
+    )
+
+    with caplog.at_level(logging.INFO, logger="morning_brief.data.sources.kis"):
+        kis.fetch_close_change_and_volume("NVDA")
+
+    assert any("KIS 시세: NVDA=612.34 (+2.06%)" in record.message for record in caplog.records)
 
 
 def test_fetch_close_change_and_volume_rt_cd_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -125,6 +146,29 @@ def test_fetch_usdkrw_point_uses_output1_when_available(monkeypatch: pytest.Monk
 
     assert price == 1478.2
     assert change_pct == 0.08
+
+
+def test_fetch_usdkrw_point_logs_quote(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(kis, "_ensure_token", lambda: "token")
+    monkeypatch.setattr(
+        kis,
+        "_kis_get",
+        lambda path, params, headers: {
+            "rt_cd": "0",
+            "output1": {
+                "ovrs_nmix_prpr": "1478.20",
+                "ovrs_nmix_prdy_clpr": "1477.00",
+            },
+            "output2": [],
+        },
+    )
+
+    with caplog.at_level(logging.INFO, logger="morning_brief.data.sources.kis"):
+        kis.fetch_usdkrw_point()
+
+    assert any("KIS 시세: USDKRW=1,478.2 (+0.08%)" in record.message for record in caplog.records)
 
 
 def test_fetch_usdkrw_point_falls_back_to_output2(monkeypatch: pytest.MonkeyPatch) -> None:
