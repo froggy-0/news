@@ -23,10 +23,18 @@ from morning_brief.data.sources.btc_etf_official import (
 from morning_brief.data.sources.coingecko import fetch_btc_usd_price_change
 from morning_brief.data.sources.fred import fetch_macro_points_from_fred
 from morning_brief.data.sources.http_client import get_json_with_retry, is_host_resolvable
+from morning_brief.data.sources.kis import (
+    fetch_close_change_and_volume as kis_fetch_close_change_and_volume,
+)
+from morning_brief.data.sources.kis import (
+    fetch_usdkrw_point as kis_fetch_usdkrw_point,
+)
+from morning_brief.data.sources.kis import (
+    is_available as kis_is_available,
+)
 from morning_brief.data.sources.provider_runtime import (
     execute_with_provider_retry,
 )
-from morning_brief.data.sources.stooq import fetch_close_change_and_volume, to_stooq_symbol
 from morning_brief.logging_utils import log_structured
 from morning_brief.models import BitcoinEtfIssuerSnapshot, BitcoinSnapshot, MarketPoint
 from morning_brief.observability import PipelineObserver
@@ -51,13 +59,12 @@ MACRO_FALLBACK_TARGETS = [
     ("vix", "^VIX", 1.0),
 ]
 KOREA_INVESTOR_TARGETS = [
-    ("usdkrw", "KRW=X", 1.0),
     ("nq_futures", "NQ=F", 1.0),
 ]
 US_INDEX_TARGETS = [
-    ("spy", "SPY", "spy.us"),
-    ("qqq", "QQQ", "qqq.us"),
-    ("soxx", "SOXX", "soxx.us"),
+    ("spy", "SPY"),
+    ("qqq", "QQQ"),
+    ("soxx", "SOXX"),
 ]
 TECH_STOCK_TICKERS = [
     "NVDA",
@@ -117,6 +124,21 @@ def _warn_once(key: str, message: str, *args) -> None:
         message=rendered_message,
         level=logging.WARNING,
         reason=key,
+    )
+
+
+def _info_once(key: str, message: str, *args, provider: str | None = None) -> None:
+    if key in _provider_warned:
+        return
+    _provider_warned.add(key)
+    rendered_message = message % args if args else message
+    log_structured(
+        logger,
+        event="selection.complete",
+        message=rendered_message,
+        level=logging.INFO,
+        reason=key,
+        provider=provider,
     )
 
 
@@ -271,15 +293,13 @@ def _safe_yfinance_point(
         )
 
 
-def _point_from_stooq(
+def _point_from_kis(
     label: str,
     ticker: str,
     canonical_key: str | None = None,
-    stooq_symbol: str | None = None,
 ) -> MarketPoint:
-    canonical_key = canonical_key or canonical_key_for(ticker, stooq_symbol or label)
-    symbol = stooq_symbol or to_stooq_symbol(ticker)
-    close, change_pct, _ = fetch_close_change_and_volume(symbol)
+    canonical_key = canonical_key or canonical_key_for(ticker, label)
+    close, change_pct, _ = kis_fetch_close_change_and_volume(ticker)
     return _market_point(
         label=label,
         ticker=ticker,
@@ -289,15 +309,13 @@ def _point_from_stooq(
     )
 
 
-def _point_and_volume_from_stooq(
+def _point_and_volume_from_kis(
     label: str,
     ticker: str,
     canonical_key: str | None = None,
-    stooq_symbol: str | None = None,
 ) -> tuple[MarketPoint, int]:
-    canonical_key = canonical_key or canonical_key_for(ticker, stooq_symbol or label)
-    symbol = stooq_symbol or to_stooq_symbol(ticker)
-    close, change_pct, volume = fetch_close_change_and_volume(symbol)
+    canonical_key = canonical_key or canonical_key_for(ticker, label)
+    close, change_pct, volume = kis_fetch_close_change_and_volume(ticker)
     return (
         _market_point(
             label=label,
@@ -310,23 +328,34 @@ def _point_and_volume_from_stooq(
     )
 
 
-def _safe_stooq_point(
+def _safe_kis_point(
     label: str,
     ticker: str,
     canonical_key: str | None = None,
-    stooq_symbol: str | None = None,
 ) -> MarketPoint:
-    canonical_key = canonical_key or canonical_key_for(ticker, stooq_symbol or label)
-    symbol = stooq_symbol or to_stooq_symbol(ticker)
-    return _safe_with_fallback(
-        warning_key=f"stooq_fallback_{symbol}",
-        warning_message="Stooq에서 %s (%s) 데이터를 바로 가져오지 못해 yfinance로 이어서 볼게요: %s",
-        warning_args=(label, symbol),
-        primary_fetch=lambda: _point_from_stooq(
+    canonical_key = canonical_key or canonical_key_for(ticker, label)
+    if not kis_is_available():
+        _info_once(
+            f"kis_unavailable_{ticker}",
+            "KIS 인증 정보가 없어 %s (%s)은 yfinance로 바로 가져올게요.",
+            label,
+            ticker,
+            provider="kis",
+        )
+        return _safe_yfinance_point(
             label=label,
             ticker=ticker,
             canonical_key=canonical_key,
-            stooq_symbol=symbol,
+        )
+
+    return _safe_with_fallback(
+        warning_key=f"kis_fallback_{ticker}",
+        warning_message="KIS에서 %s (%s) 데이터를 바로 가져오지 못해 yfinance로 이어서 볼게요: %s",
+        warning_args=(label, ticker),
+        primary_fetch=lambda: _point_from_kis(
+            label=label,
+            ticker=ticker,
+            canonical_key=canonical_key,
         ),
         fallback_fetch=lambda: _safe_yfinance_point(
             label=label,
@@ -353,24 +382,34 @@ def _volume_from_yfinance(ticker: str) -> int | None:
     return None
 
 
-def _safe_stooq_point_and_volume(
+def _safe_kis_point_and_volume(
     *,
     label: str,
     ticker: str,
     canonical_key: str | None = None,
-    stooq_symbol: str | None = None,
 ) -> tuple[MarketPoint, int | None]:
-    canonical_key = canonical_key or canonical_key_for(ticker, stooq_symbol or label)
-    symbol = stooq_symbol or to_stooq_symbol(ticker)
+    canonical_key = canonical_key or canonical_key_for(ticker, label)
+    if not kis_is_available():
+        _info_once(
+            f"kis_unavailable_point_volume_{ticker}",
+            "KIS 인증 정보가 없어 %s (%s)은 yfinance로 바로 가져올게요.",
+            label,
+            ticker,
+            provider="kis",
+        )
+        return (
+            _safe_yfinance_point(label=label, ticker=ticker, canonical_key=canonical_key),
+            _volume_from_yfinance(ticker=ticker),
+        )
+
     return _safe_with_fallback(
-        warning_key=f"stooq_point_volume_fallback_{symbol}",
-        warning_message="Stooq에서 %s (%s) 가격과 거래량을 바로 가져오지 못해 yfinance로 이어서 볼게요: %s",
-        warning_args=(label, symbol),
-        primary_fetch=lambda: _point_and_volume_from_stooq(
+        warning_key=f"kis_point_volume_fallback_{ticker}",
+        warning_message="KIS에서 %s (%s) 가격과 거래량을 바로 가져오지 못해 yfinance로 이어서 볼게요: %s",
+        warning_args=(label, ticker),
+        primary_fetch=lambda: _point_and_volume_from_kis(
             label=label,
             ticker=ticker,
             canonical_key=canonical_key,
-            stooq_symbol=symbol,
         ),
         fallback_fetch=lambda: (
             _safe_yfinance_point(label=label, ticker=ticker, canonical_key=canonical_key),
@@ -386,7 +425,7 @@ def fetch_macro_points(fred_api_key: str = "") -> list[MarketPoint]:
         existing = existing_canonical_keys or set()
         # ICE DXY is sourced from Yahoo Finance's DX=F (ICE Dollar Index Futures) path.
         # The previous DX-Y.NYB ticker was delisted; DX=F tracks the same ICE DXY
-        # and is actively maintained. Stooq does not expose a compatible symbol,
+        # and is actively maintained. Other public CSV sources do not expose a compatible symbol,
         # and FRED broad dollar indices are intentionally excluded because they
         # do not match the ICE DXY definition.
         return [
@@ -441,22 +480,21 @@ def fetch_macro_points(fred_api_key: str = "") -> list[MarketPoint]:
 
 
 def fetch_us_index_points() -> list[MarketPoint]:
-    # Stooq index symbols are inconsistent; use liquid ETF proxies for stability.
+    # Direct index quotes stay unstable across providers; use liquid ETF proxies for stability.
     points = [
-        _safe_stooq_point(
+        _safe_kis_point(
             label=canonical_label_for(canonical_key),
             ticker=ticker,
-            canonical_key=canonical_key_for(ticker, stooq_symbol, canonical_key),
-            stooq_symbol=stooq_symbol,
+            canonical_key=canonical_key_for(ticker, canonical_key),
         )
-        for canonical_key, ticker, stooq_symbol in US_INDEX_TARGETS
+        for canonical_key, ticker in US_INDEX_TARGETS
     ]
     log_structured(
         logger,
         event="selection.complete",
-        message="미국 지수 흐름은 Stooq 기준으로 보고 필요하면 yfinance로 보강했어요.",
+        message="미국 지수 흐름은 KIS 기준으로 보고 필요하면 yfinance로 보강했어요.",
         level=logging.DEBUG,
-        provider="stooq",
+        provider="kis",
         kept_count=len(points),
     )
     return points
@@ -464,7 +502,7 @@ def fetch_us_index_points() -> list[MarketPoint]:
 
 def fetch_tech_stock_points() -> list[MarketPoint]:
     points = [
-        _safe_stooq_point(
+        _safe_kis_point(
             label=ticker,
             ticker=ticker,
             canonical_key=canonical_key_for(ticker),
@@ -478,9 +516,9 @@ def fetch_tech_stock_points() -> list[MarketPoint]:
     log_structured(
         logger,
         event="selection.complete",
-        message="기술주는 Stooq 기준으로 보고 필요하면 yfinance로 보강했어요.",
+        message="기술주는 KIS 기준으로 보고 필요하면 yfinance로 보강했어요.",
         level=logging.DEBUG,
-        provider="stooq",
+        provider="kis",
         kept_count=len(points),
     )
     return points
@@ -500,7 +538,7 @@ def fetch_newsletter_display_data(
     tech_stocks = fetch_tech_stock_points()
     btc_etf_points: list[MarketPoint] = []
     for ticker in BTC_ETF_TICKERS:
-        point, _ = _safe_stooq_point_and_volume(
+        point, _ = _safe_kis_point_and_volume(
             label=ticker,
             ticker=ticker,
         )
@@ -524,8 +562,48 @@ def fetch_newsletter_display_data(
     }
 
 
+def _point_from_kis_usdkrw() -> MarketPoint:
+    price, change_pct = kis_fetch_usdkrw_point()
+    return _market_point(
+        label=canonical_label_for("usdkrw"),
+        ticker="USDKRW",
+        close=price,
+        change_pct=change_pct,
+        canonical_key="usdkrw",
+    )
+
+
+def _safe_kis_usdkrw_point() -> MarketPoint:
+    def fallback_fetch() -> MarketPoint:
+        return _safe_yfinance_point(
+            label=canonical_label_for("usdkrw"),
+            ticker="KRW=X",
+            canonical_key=canonical_key_for("KRW=X", "usdkrw"),
+            price_scale=1.0,
+        )
+
+    if not kis_is_available():
+        _info_once(
+            "kis_unavailable_usdkrw",
+            "KIS 인증 정보가 없어 %s (%s)은 yfinance로 바로 가져올게요.",
+            canonical_label_for("usdkrw"),
+            "KRW=X",
+            provider="kis",
+        )
+        return fallback_fetch()
+
+    return _safe_with_fallback(
+        warning_key="kis_fallback_usdkrw",
+        warning_message="KIS에서 %s (%s) 데이터를 가져오지 못해 yfinance로 이어서 볼게요: %s",
+        warning_args=(canonical_label_for("usdkrw"), "KRW=X"),
+        primary_fetch=_point_from_kis_usdkrw,
+        fallback_fetch=fallback_fetch,
+    )
+
+
 def fetch_korea_investor_points() -> list[MarketPoint]:
-    points = [
+    points = [_safe_kis_usdkrw_point()]
+    points.extend(
         _safe_yfinance_point(
             label=canonical_label_for(canonical_key),
             ticker=ticker,
@@ -533,13 +611,13 @@ def fetch_korea_investor_points() -> list[MarketPoint]:
             price_scale=scale,
         )
         for canonical_key, ticker, scale in KOREA_INVESTOR_TARGETS
-    ]
+    )
     log_structured(
         logger,
         event="selection.complete",
-        message="한국 투자자 참고 지표는 yfinance 기준으로 가져왔어요.",
+        message="한국 투자자 참고 지표는 원/달러는 KIS, 나스닥 선물은 yfinance 기준으로 가져왔어요.",
         level=logging.DEBUG,
-        provider="yfinance",
+        provider="kis",
         kept_count=len(points),
     )
     return points
@@ -929,7 +1007,7 @@ def fetch_bitcoin_snapshot(
     etf_points: list[MarketPoint] = []
     if fetch_etf_prices:
         for ticker in BTC_ETF_TICKERS:
-            point, _ = _safe_stooq_point_and_volume(
+            point, _ = _safe_kis_point_and_volume(
                 label=ticker,
                 ticker=ticker,
             )

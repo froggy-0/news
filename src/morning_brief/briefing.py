@@ -393,15 +393,18 @@ def _bullet_lines(items: list[str]) -> str:
 
 def _market_source_label(point: dict) -> str:
     ticker = str(point.get("ticker", "")).strip()
+    canonical_key = str(point.get("canonical_key", "")).strip()
     if ticker in {"DGS10", "DGS2", "VIXCLS"}:
         return "FRED"
     if ticker in {"DTWEXAFEGS", "BAMLH0A0HYM2"}:
         return "FRED"
+    if canonical_key == "usdkrw" and ticker == "USDKRW":
+        return "KIS"
     if ticker in {"DX-Y.NYB", "^TNX", "^VIX", "KRW=X", "NQ=F"}:
         return "yfinance"
     if ticker == "BTC-USD":
         return "CoinGecko"
-    return "Stooq"
+    return "KIS"
 
 
 def _news_reference(item: dict) -> str:
@@ -681,7 +684,7 @@ def _korea_watch_lines(korea_watch: list[dict], btc: dict) -> list[str]:
     usdkrw_change = _point_change_pct(usdkrw)
     if usdkrw_price is not None and usdkrw_change is not None:
         lines.append(
-            f"원/달러 환율은 {usdkrw_price:,.2f}원으로 전일 대비 {usdkrw_change:+.2f}%였습니다{_point_suffix(usdkrw)}. [출처: yfinance]"
+            f"원/달러 환율은 {usdkrw_price:,.2f}원으로 전일 대비 {usdkrw_change:+.2f}%였습니다{_point_suffix(usdkrw)}. [출처: {_market_source_label(usdkrw)}]"
         )
 
     nq_futures = _point_by_key(korea_watch, "nq_futures")
@@ -829,7 +832,7 @@ def _fallback_stock_lines(
             continue
         cause = _fallback_stock_cause(point["label"], change_pct, news)
         stock_lines.append(
-            f"{point['label']}는 {cause} {_abs_change_text(change_pct)} {_change_direction(change_pct)}했습니다{_point_suffix(point)}. [출처: Stooq]"
+            f"{point['label']}는 {cause} {_abs_change_text(change_pct)} {_change_direction(change_pct)}했습니다{_point_suffix(point)}. [출처: {_market_source_label(point)}]"
         )
         if len(stock_lines) >= 4:
             break
@@ -925,7 +928,7 @@ def _fallback_brief_raw(packet: dict, timezone: str) -> str:
             investor_lines
             or [
                 f"{macro_text} [출처: FRED/yfinance]",
-                f"{index_text} [출처: Stooq]",
+                f"{index_text} [출처: KIS]",
                 f"{btc_spot_line} [출처: CoinGecko]",
             ]
         )

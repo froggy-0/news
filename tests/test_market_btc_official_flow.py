@@ -40,8 +40,8 @@ def test_fetch_bitcoin_snapshot_summarizes_official_holdings(monkeypatch, tmp_pa
         lambda: (60, "Greed"),
     )
     monkeypatch.setattr(
-        "morning_brief.data.market._safe_stooq_point_and_volume",
-        lambda label, ticker, stooq_symbol=None: (
+        "morning_brief.data.market._safe_kis_point_and_volume",
+        lambda label, ticker: (
             MarketPoint(
                 label=label,
                 ticker=ticker,
@@ -87,8 +87,8 @@ def test_fetch_bitcoin_snapshot_keeps_official_totals_without_prior_cache(
     )
     monkeypatch.setattr("morning_brief.data.market._fetch_fear_greed", lambda: (60, "Greed"))
     monkeypatch.setattr(
-        "morning_brief.data.market._safe_stooq_point_and_volume",
-        lambda label, ticker, stooq_symbol=None: (
+        "morning_brief.data.market._safe_kis_point_and_volume",
+        lambda label, ticker: (
             MarketPoint(label=label, ticker=ticker, price=50.0, change_pct=1.0),
             10,
         ),
@@ -114,7 +114,7 @@ def test_fetch_bitcoin_snapshot_keeps_official_totals_without_prior_cache(
     assert snapshot.official_etf_total_aum_usd == 4_300_000_000.0
 
 
-def test_fetch_bitcoin_snapshot_calls_stooq_once_per_etf(monkeypatch, tmp_path: Path):
+def test_fetch_bitcoin_snapshot_calls_kis_once_per_etf(monkeypatch, tmp_path: Path):
     calls: list[str] = []
     monkeypatch.setattr(
         "morning_brief.data.market._fetch_btc_spot_point",
@@ -122,8 +122,8 @@ def test_fetch_bitcoin_snapshot_calls_stooq_once_per_etf(monkeypatch, tmp_path: 
     )
     monkeypatch.setattr("morning_brief.data.market._fetch_fear_greed", lambda: (60, "Greed"))
     monkeypatch.setattr(
-        "morning_brief.data.market._safe_stooq_point_and_volume",
-        lambda label, ticker, stooq_symbol=None: (
+        "morning_brief.data.market._safe_kis_point_and_volume",
+        lambda label, ticker: (
             calls.append(ticker)
             or MarketPoint(label=label, ticker=ticker, price=50.0, change_pct=1.0),
             10,
@@ -155,8 +155,8 @@ def test_fetch_bitcoin_snapshot_keeps_pipeline_alive_when_perplexity_etf_parsing
     )
     monkeypatch.setattr("morning_brief.data.market._fetch_fear_greed", lambda: (60, "Greed"))
     monkeypatch.setattr(
-        "morning_brief.data.market._safe_stooq_point_and_volume",
-        lambda label, ticker, stooq_symbol=None: (
+        "morning_brief.data.market._safe_kis_point_and_volume",
+        lambda label, ticker: (
             MarketPoint(label=label, ticker=ticker, price=50.0, change_pct=1.0),
             10,
         ),
@@ -180,8 +180,8 @@ def test_fetch_bitcoin_snapshot_records_empty_official_etf_state(monkeypatch, tm
     )
     monkeypatch.setattr("morning_brief.data.market._fetch_fear_greed", lambda: (60, "Greed"))
     monkeypatch.setattr(
-        "morning_brief.data.market._safe_stooq_point_and_volume",
-        lambda label, ticker, stooq_symbol=None: (
+        "morning_brief.data.market._safe_kis_point_and_volume",
+        lambda label, ticker: (
             MarketPoint(label=label, ticker=ticker, price=50.0, change_pct=1.0),
             10,
         ),
@@ -211,8 +211,8 @@ def test_fetch_bitcoin_snapshot_does_not_use_stale_official_etf_cache_when_refer
     )
     monkeypatch.setattr("morning_brief.data.market._fetch_fear_greed", lambda: (60, "Greed"))
     monkeypatch.setattr(
-        "morning_brief.data.market._safe_stooq_point_and_volume",
-        lambda label, ticker, stooq_symbol=None: (
+        "morning_brief.data.market._safe_kis_point_and_volume",
+        lambda label, ticker: (
             MarketPoint(label=label, ticker=ticker, price=50.0, change_pct=1.0),
             10,
         ),

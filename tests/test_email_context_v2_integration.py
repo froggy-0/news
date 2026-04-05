@@ -242,7 +242,7 @@ def test_build_email_context_v2_builds_hero_metadata_and_sources() -> None:
     assert news_sources[0].source_kind == "원문 기사"
     assert ctx["market_source_lines"] == [
         "거시 지표: FRED, yfinance",
-        "미국 지수/기술주: Stooq",
+        "미국 지수/기술주: KIS",
         "비트코인: CoinGecko",
         "X 시그널: Grok",
     ]

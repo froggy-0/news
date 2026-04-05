@@ -39,14 +39,14 @@ _NON_DXY_MACRO_KEYS = [key for key, _, _ in MACRO_FALLBACK_TARGETS if key != "dx
 st_non_dxy_macro_key = st.sampled_from(_NON_DXY_MACRO_KEYS) if _NON_DXY_MACRO_KEYS else st.nothing()
 
 # US_INDEX_TARGETS의 canonical key 집합
-_US_INDEX_KEYS = [key for key, _, _ in US_INDEX_TARGETS]
+_US_INDEX_KEYS = [key for key, _ in US_INDEX_TARGETS]
 st_us_index_key = st.sampled_from(_US_INDEX_KEYS)
 
-# Stooq 패턴을 사용하는 모든 티커 (US indices + tech stocks + BTC ETF)
-_STOOQ_PATTERN_TICKERS = (
-    [ticker for _, ticker, _ in US_INDEX_TARGETS] + list(TECH_STOCK_TICKERS) + list(BTC_ETF_TICKERS)
+# KIS 패턴을 사용하는 모든 티커 (US indices + tech stocks + BTC ETF)
+_KIS_PATTERN_TICKERS = (
+    [ticker for _, ticker in US_INDEX_TARGETS] + list(TECH_STOCK_TICKERS) + list(BTC_ETF_TICKERS)
 )
-st_stooq_ticker = st.sampled_from(_STOOQ_PATTERN_TICKERS)
+st_kis_ticker = st.sampled_from(_KIS_PATTERN_TICKERS)
 
 
 # ===========================================================================
@@ -113,54 +113,46 @@ class TestMacroFallbackPreservation:
 
 
 # ===========================================================================
-# Property 2b: 미국 지수·빅테크·BTC ETF 가격이 Stooq → yfinance fallback 유지
+# Property 2b: 미국 지수·빅테크·BTC ETF 가격이 KIS → yfinance fallback 유지
 # **Validates: Requirements 3.2, 3.3**
 # ===========================================================================
-class TestStooqFallbackPreservation:
-    """미국 지수·빅테크·BTC ETF 가격이 동일한 Stooq → yfinance fallback 패턴을 유지하는지 검증.
+class TestKisFallbackPreservation:
+    """미국 지수·빅테크·BTC ETF 가격이 동일한 KIS → yfinance fallback 패턴을 유지하는지 검증.
 
     관찰:
-    - US_INDEX_TARGETS에 SPY, QQQ, SOXX가 Stooq 우선 패턴으로 수집됨
-    - BTC_ETF_TICKERS가 _safe_stooq_point_and_volume() 경로를 사용함
+    - US_INDEX_TARGETS에 SPY, QQQ, SOXX가 KIS 우선 패턴으로 수집됨
+    - BTC_ETF_TICKERS가 _safe_kis_point_and_volume() 경로를 사용함
 
     **Validates: Requirements 3.2, 3.3**
     """
 
     def test_us_index_targets_contain_spy_qqq_soxx(self):
         """US_INDEX_TARGETS에 SPY, QQQ, SOXX가 포함되어야 한다."""
-        tickers = {ticker for _, ticker, _ in US_INDEX_TARGETS}
+        tickers = {ticker for _, ticker in US_INDEX_TARGETS}
         assert "SPY" in tickers
         assert "QQQ" in tickers
         assert "SOXX" in tickers
 
-    def test_us_index_targets_have_stooq_symbols(self):
-        """US_INDEX_TARGETS의 각 항목이 Stooq 심볼을 포함해야 한다."""
-        for canonical_key, ticker, stooq_symbol in US_INDEX_TARGETS:
-            assert stooq_symbol.endswith(".us"), (
-                f"{ticker}의 Stooq 심볼 '{stooq_symbol}'이 .us로 끝나지 않음"
-            )
-
     @given(key=st_us_index_key)
     @settings(max_examples=10)
     def test_us_index_targets_have_valid_structure(self, key: str):
-        """미국 지수 타겟이 (canonical_key, ticker, stooq_symbol) 3-tuple 구조를 유지한다.
+        """미국 지수 타겟이 (canonical_key, ticker) 2-tuple 구조를 유지한다.
 
         **Validates: Requirements 3.2**
         """
         entries = [entry for entry in US_INDEX_TARGETS if entry[0] == key]
         assert len(entries) == 1
-        canonical_key, ticker, stooq_symbol = entries[0]
+        canonical_key, ticker = entries[0]
         assert isinstance(canonical_key, str) and canonical_key
         assert isinstance(ticker, str) and ticker
-        assert isinstance(stooq_symbol, str) and stooq_symbol
 
-    def test_fetch_us_index_points_uses_safe_stooq_point(self):
-        """fetch_us_index_points()가 _safe_stooq_point()를 사용하는 구조를 유지한다.
+    def test_fetch_us_index_points_uses_safe_kis_point(self):
+        """fetch_us_index_points()가 _safe_kis_point()를 사용하는 구조를 유지한다.
 
         **Validates: Requirements 3.2**
         """
         source = textwrap.dedent(inspect.getsource(fetch_us_index_points))
-        assert "_safe_stooq_point" in source
+        assert "_safe_kis_point" in source
         assert "US_INDEX_TARGETS" in source
 
     def test_btc_etf_tickers_present(self):
@@ -174,9 +166,9 @@ class TestStooqFallbackPreservation:
         assert "BITB" in BTC_ETF_TICKERS
         assert "GBTC" in BTC_ETF_TICKERS
 
-    def test_btc_etf_uses_safe_stooq_point_and_volume(self):
+    def test_btc_etf_uses_safe_kis_point_and_volume(self):
         """fetch_newsletter_display_data()에서 BTC ETF 가격·거래량이
-        _safe_stooq_point_and_volume() 경로를 사용하는 구조를 유지한다.
+        _safe_kis_point_and_volume() 경로를 사용하는 구조를 유지한다.
         (ETF 가격은 감성 파이프라인에서 제외 → 뉴스레터 렌더링 전용)
 
         **Validates: Requirements 3.3**
@@ -184,7 +176,7 @@ class TestStooqFallbackPreservation:
         from morning_brief.data.market import fetch_newsletter_display_data
 
         source = textwrap.dedent(inspect.getsource(fetch_newsletter_display_data))
-        assert "_safe_stooq_point_and_volume" in source
+        assert "_safe_kis_point_and_volume" in source
         assert "BTC_ETF_TICKERS" in source
 
 

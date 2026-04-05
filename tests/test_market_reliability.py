@@ -276,17 +276,32 @@ def test_market_policy_dxy_mapping():
     assert "DTWE" + "XBGS" not in CANONICAL_KEY_BY_SOURCE
 
 
-def test_fetch_korea_investor_points_uses_yfinance_targets(monkeypatch):
-    calls: list[tuple[str, str, str, float]] = []
+def test_fetch_korea_investor_points_uses_kis_for_usdkrw_and_yfinance_for_nq(monkeypatch):
+    kis_calls: list[str] = []
+    yfinance_calls: list[tuple[str, str, str, float]] = []
+
+    monkeypatch.setattr(
+        "morning_brief.data.market._safe_kis_usdkrw_point",
+        lambda: (
+            kis_calls.append("usdkrw")
+            or _point(
+                label="원/달러 환율",
+                ticker="USDKRW",
+                canonical_key="usdkrw",
+                price=1_330.0,
+                change_pct=0.2,
+            )
+        ),
+    )
 
     def fake_yfinance_point(*, label: str, ticker: str, canonical_key: str, price_scale: float):
-        calls.append((label, ticker, canonical_key, price_scale))
+        yfinance_calls.append((label, ticker, canonical_key, price_scale))
         return _point(
             label=label,
             ticker=ticker,
             canonical_key=canonical_key,
-            price=1_330.0 if canonical_key == "usdkrw" else 20_150.0,
-            change_pct=0.2 if canonical_key == "usdkrw" else -0.4,
+            price=20_150.0,
+            change_pct=-0.4,
         )
 
     monkeypatch.setattr("morning_brief.data.market._safe_yfinance_point", fake_yfinance_point)
@@ -294,10 +309,8 @@ def test_fetch_korea_investor_points_uses_yfinance_targets(monkeypatch):
     points = fetch_korea_investor_points()
 
     assert [point.canonical_key for point in points] == ["usdkrw", "nq_futures"]
-    assert calls == [
-        ("원/달러 환율", "KRW=X", "usdkrw", 1.0),
-        ("나스닥 선물", "NQ=F", "nq_futures", 1.0),
-    ]
+    assert kis_calls == ["usdkrw"]
+    assert yfinance_calls == [("나스닥 선물", "NQ=F", "nq_futures", 1.0)]
 
 
 def test_build_market_packet_korea_watch_is_empty(monkeypatch, tmp_path: Path):
@@ -325,29 +338,54 @@ def test_build_market_packet_korea_watch_is_empty(monkeypatch, tmp_path: Path):
     assert packet["bitcoin"]["etf_points"] == [], "btc etf_points는 감성 파이프라인에서 제외됨"
 
 
-def test_fetch_korea_investor_points_available_for_newsletter(monkeypatch):
-    """fetch_korea_investor_points()는 여전히 동작하며 뉴스레터 렌더링에서 사용 가능해야 한다."""
-    calls: list[tuple[str, str, str, float]] = []
+def test_safe_kis_usdkrw_point_falls_back_to_yfinance_on_kis_error(monkeypatch):
+    import morning_brief.data.market as market_module
 
     def fake_yfinance_point(*, label: str, ticker: str, canonical_key: str, price_scale: float):
-        calls.append((label, ticker, canonical_key, price_scale))
         return _point(
             label=label,
             ticker=ticker,
             canonical_key=canonical_key,
-            price=1_330.0 if canonical_key == "usdkrw" else 20_150.0,
-            change_pct=0.2 if canonical_key == "usdkrw" else -0.4,
+            price=1_330.0,
+            change_pct=0.2,
         )
 
+    monkeypatch.setattr("morning_brief.data.market.kis_is_available", lambda: True)
+    monkeypatch.setattr(
+        "morning_brief.data.market._point_from_kis_usdkrw",
+        lambda: (_ for _ in ()).throw(RuntimeError("kis failed")),
+    )
     monkeypatch.setattr("morning_brief.data.market._safe_yfinance_point", fake_yfinance_point)
 
-    points = fetch_korea_investor_points()
+    point = market_module._safe_kis_usdkrw_point()
 
-    assert [point.canonical_key for point in points] == ["usdkrw", "nq_futures"]
-    assert calls == [
-        ("원/달러 환율", "KRW=X", "usdkrw", 1.0),
-        ("나스닥 선물", "NQ=F", "nq_futures", 1.0),
-    ]
+    assert point.ticker == "KRW=X"
+    assert point.canonical_key == "usdkrw"
+
+
+def test_safe_kis_usdkrw_point_skips_to_yfinance_when_kis_unavailable(monkeypatch):
+    import morning_brief.data.market as market_module
+
+    monkeypatch.setattr("morning_brief.data.market.kis_is_available", lambda: False)
+    monkeypatch.setattr(
+        "morning_brief.data.market._point_from_kis_usdkrw",
+        lambda: (_ for _ in ()).throw(AssertionError("KIS should be skipped")),
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.market._safe_yfinance_point",
+        lambda *, label, ticker, canonical_key, price_scale: _point(
+            label=label,
+            ticker=ticker,
+            canonical_key=canonical_key,
+            price=1_331.5,
+            change_pct=-0.1,
+        ),
+    )
+
+    point = market_module._safe_kis_usdkrw_point()
+
+    assert point.ticker == "KRW=X"
+    assert point.price == 1_331.5
 
 
 def test_fear_greed_level_label_uses_korean_bands():
