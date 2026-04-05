@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from email import message_from_bytes
 
+import morning_brief.emailer as emailer_module
 from morning_brief.config import load_settings
 from morning_brief.emailer import SesSender, _unsubscribe_url, build_briefing_message
 from morning_brief.subscriptions.models import ActiveRecipient
@@ -55,6 +56,44 @@ def test_build_briefing_message_renders_recipient_specific_unsubscribe_url(monke
     assert "bcc" not in {key.lower() for key in msg.keys()}
     assert unsubscribe_url in text_part
     assert unsubscribe_url in html_part
+
+
+def test_build_briefing_message_builds_email_context_once(monkeypatch):
+    shared_context = {"subject": "공유 컨텍스트"}
+    seen_contexts: list[dict[str, object]] = []
+    build_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def _fake_build(*args, **kwargs):
+        build_calls.append((args, kwargs))
+        return shared_context
+
+    def _fake_render_html(*, context=None, **_kwargs):
+        assert context is not None
+        seen_contexts.append(context)
+        return "<p>html</p>"
+
+    def _fake_render_text(*, context=None, **_kwargs):
+        assert context is not None
+        seen_contexts.append(context)
+        return "text"
+
+    monkeypatch.setattr(emailer_module, "_build_email_context_v2", _fake_build)
+    monkeypatch.setattr(emailer_module, "render_briefing_email_html", _fake_render_html)
+    monkeypatch.setattr(emailer_module, "render_briefing_email_text", _fake_render_text)
+
+    msg = build_briefing_message(
+        subject="테스트 브리핑",
+        body="0. 오늘의 핵심\n시장 점검\n",
+        sender="no-reply@example.com",
+        recipient="reader@example.com",
+        unsubscribe_url="https://brief.example.com/unsubscribe?token=test",
+        packet={"date": "2026-03-28"},
+    )
+
+    assert len(build_calls) == 1
+    assert seen_contexts == [shared_context, shared_context]
+    assert msg.get_payload()[0].get_payload(decode=True).decode("utf-8") == "text"
+    assert msg.get_payload()[1].get_payload(decode=True).decode("utf-8") == "<p>html</p>"
 
 
 def test_ses_sender_sends_each_active_recipient_individually(monkeypatch):

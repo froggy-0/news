@@ -5,6 +5,8 @@ Validates: Requirements 6.2, 9.1, 9.2, 9.3, 9.4
 
 from __future__ import annotations
 
+import logging
+
 from morning_brief.emailer import _build_email_context_v2
 
 # ---------------------------------------------------------------------------
@@ -226,6 +228,28 @@ def test_build_email_context_v2_core_status_messages_are_empty_when_data_exists(
     ctx = _build_email_context_v2("제목", SAMPLE_BODY, _make_packet())
     assert ctx["news_status_text"] == ""
     assert ctx["market_status_text"] == ""
+
+
+def test_build_email_context_v2_uses_packet_market_data_without_parse_fallback(caplog) -> None:
+    minimal_body = """\
+SOVEREIGN BRIEF (2026-03-18)
+0. 오늘의 핵심
+오늘 시장은 혼조세를 보였어요.
+"""
+    packet = _make_packet()
+    packet["tech_stocks"] = [{"ticker": "NVDA", "label": "엔비디아", "change_pct": 2.1}]
+
+    with caplog.at_level(logging.WARNING, logger="morning_brief.emailer"):
+        ctx = _build_email_context_v2("제목", minimal_body, packet)
+
+    assert [item["ticker"] for item in ctx["stock_indices"]] == ["SPY", "QQQ"]
+    assert [item["ticker"] for item in ctx["stock_tech"]] == ["NVDA"]
+    assert [item["label"] for item in ctx["macro_indicators"]] == [
+        "미국 10년물",
+        "달러 인덱스",
+        "VIX",
+    ]
+    assert not any("packet 값으로" in record.message for record in caplog.records)
 
 
 def test_build_email_context_v2_builds_hero_metadata_and_sources() -> None:

@@ -4,6 +4,7 @@ import json
 from types import SimpleNamespace
 
 from morning_brief.brief_review import (
+    _normalize_review_payload,
     _parse_review_payload_text,
     _review_briefing,
     validate_and_rewrite_briefing,
@@ -52,6 +53,24 @@ def test_parse_review_payload_text_accepts_json_with_prefix_suffix() -> None:
     assert payload is not None
     assert payload["pass"] is True
     assert payload["rewrite_guidance"] == []
+
+
+def test_normalize_review_payload_coerces_failed_review_into_rewrite() -> None:
+    payload = _normalize_review_payload(
+        {
+            "pass": False,
+            "rewrite_needed": False,
+            "plain_language_pass": True,
+            "numeric_consistency_pass": False,
+            "structure_pass": True,
+            "issues": ["숫자 해석을 바로잡아 주세요."],
+            "rewrite_guidance": [],
+        }
+    )
+
+    assert payload["pass"] is False
+    assert payload["rewrite_needed"] is True
+    assert payload["rewrite_guidance"] == ["숫자 해석을 바로잡아 주세요."]
 
 
 def test_review_briefing_retries_when_validator_hits_max_output_tokens(
@@ -261,3 +280,72 @@ def test_validate_and_rewrite_briefing_rewrites_only_when_section_is_structurall
 
     assert "Section 4-2. 핵심 뉴스" in result
     assert "재작성 후 섹션 구조를 복구했습니다." in result
+
+
+def test_validate_and_rewrite_briefing_rewrites_when_failed_review_omits_rewrite_flag(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BRIEF_MAX_REWRITES", "1")
+    settings = load_settings()
+    observer = PipelineObserver(output_dir=tmp_path)
+    packet = {
+        "news": [],
+        "macro": [],
+        "bitcoin": {},
+        "data_quality": {"status": "ok", "warnings": []},
+    }
+    draft_text = _section_brief(body="수치와 해석이 어긋난 초안입니다.")
+    rewritten_text = _section_brief(body="수치와 해석을 다시 맞춘 초안입니다.")
+    review_fail = {
+        "pass": False,
+        "rewrite_needed": False,
+        "plain_language_pass": True,
+        "numeric_consistency_pass": False,
+        "structure_pass": True,
+        "issues": ["수치와 해석이 어긋난 문장을 바로잡아 주세요."],
+        "rewrite_guidance": [],
+    }
+    review_pass = {
+        "pass": True,
+        "rewrite_needed": False,
+        "plain_language_pass": True,
+        "numeric_consistency_pass": True,
+        "structure_pass": True,
+        "issues": [],
+        "rewrite_guidance": [],
+    }
+    responses = [
+        SimpleNamespace(
+            output_text=json.dumps(review_fail, ensure_ascii=False),
+            usage=None,
+            status="completed",
+            incomplete_details=None,
+        ),
+        SimpleNamespace(
+            output_text=rewritten_text,
+            usage=None,
+            status="completed",
+            incomplete_details=None,
+        ),
+        SimpleNamespace(
+            output_text=json.dumps(review_pass, ensure_ascii=False),
+            usage=None,
+            status="completed",
+            incomplete_details=None,
+        ),
+    ]
+
+    def _create(**_kwargs):
+        return responses.pop(0)
+
+    client = SimpleNamespace(responses=SimpleNamespace(create=_create))
+    result = validate_and_rewrite_briefing(
+        draft_text=draft_text,
+        packet=packet,
+        settings=settings,
+        client=client,
+        observer=observer,
+    )
+
+    assert result.strip() == rewritten_text.strip()
