@@ -215,6 +215,35 @@ def _parse_int(raw: object) -> int:
     return int(value)
 
 
+def _format_quote_value(value: float) -> str:
+    return f"{value:,.4f}".rstrip("0").rstrip(".")
+
+
+def _log_quote_success(
+    *,
+    ticker: str,
+    price: float,
+    change_pct: float,
+    volume: int | None = None,
+) -> None:
+    message = f"KIS 시세: {ticker}={_format_quote_value(price)} ({change_pct:+.2f}%)"
+    attributes: dict[str, Any] = {
+        "provider": "kis",
+        "ticker": ticker,
+        "price": round(price, 4),
+        "change_pct": round(change_pct, 2),
+    }
+    if volume is not None:
+        attributes["volume"] = volume
+    log_structured(
+        logger,
+        event="provider.response",
+        message=message,
+        level=logging.INFO,
+        **attributes,
+    )
+
+
 def fetch_close_change_and_volume(ticker: str) -> tuple[float, float, int]:
     normalized_ticker = ticker.strip().upper()
     excd = _EXCD_MAP.get(normalized_ticker)
@@ -257,7 +286,15 @@ def fetch_close_change_and_volume(ticker: str) -> tuple[float, float, int]:
 
     change_pct = 0.0 if not base else ((close - base) / base) * 100
     volume = _parse_int(output.get("tvol"))
-    return round(close, 4), round(change_pct, 2), volume
+    rounded_close = round(close, 4)
+    rounded_change_pct = round(change_pct, 2)
+    _log_quote_success(
+        ticker=normalized_ticker,
+        price=rounded_close,
+        change_pct=rounded_change_pct,
+        volume=volume,
+    )
+    return rounded_close, rounded_change_pct, volume
 
 
 def _rate_from_output1(output1: dict[str, Any]) -> tuple[float, float] | None:
@@ -333,12 +370,22 @@ def fetch_usdkrw_point() -> tuple[float, float]:
     if isinstance(output1, dict):
         rate = _rate_from_output1(output1)
         if rate is not None:
+            _log_quote_success(
+                ticker="USDKRW",
+                price=rate[0],
+                change_pct=rate[1],
+            )
             return rate
 
     output2 = data.get("output2")
     if isinstance(output2, list):
         rate = _rate_from_output2(output2)
         if rate is not None:
+            _log_quote_success(
+                ticker="USDKRW",
+                price=rate[0],
+                change_pct=rate[1],
+            )
             return rate
 
     raise HttpFetchError("KIS USD/KRW 응답에서 유효 값을 찾지 못했어요.", provider="kis")
