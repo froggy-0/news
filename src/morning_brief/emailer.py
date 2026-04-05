@@ -1350,89 +1350,14 @@ def _format_display_date_v2(packet: dict) -> str:
     return ""
 
 
-def _parse_macro_indicators(section_1: str) -> list[MacroIndicator]:
-    # DEPRECATED: unified-pipeline — LLM 텍스트 regex 파싱 제거 대상
-    # 기존 로직은 _macro_indicators_from_packet(packet) 폴백으로 대체됨
-    # (호출자 _build_email_context_v2 의 폴백 분기가 처리)
-    return []
-    # --- 이하 기존 로직 (주석 처리) ---
-    # indicators: list[MacroIndicator] = []
-    # if not section_1.strip():
-    #     return indicators
-    #
-    # indicator_re = re.compile(r"(.+?):\s*(.+?)\s*\((.+?)\)")
-    # for line in section_1.splitlines():
-    #     stripped = line.strip().lstrip("- ")
-    #     if not stripped:
-    #         continue
-    #     match = indicator_re.match(stripped)
-    #     if match:
-    #         label = match.group(1).strip()
-    #         value = match.group(2).strip()
-    #         change = match.group(3).strip()
-    #         is_prev = "(전일" in stripped or "전일 값" in stripped
-    #         is_anom = "anomaly" in stripped.lower() or value == "—"
-    #         direction = "flat"
-    #         if change.startswith("+"):
-    #             direction = "up"
-    #         elif change.startswith("-"):
-    #             direction = "down"
-    #         indicators.append(
-    #             MacroIndicator(
-    #                 label=label,
-    #                 value=value,
-    #                 change=change,
-    #                 direction=direction,
-    #                 is_previous=is_prev,
-    #                 is_anomaly=is_anom,
-    #                 status_text=None,
-    #             )
-    #         )
-    # return indicators
-
-
-def _parse_stocks(section_2: str) -> tuple[list[StockItem], list[StockItem]]:
-    # DEPRECATED: unified-pipeline — LLM 텍스트 regex 파싱 제거 대상
-    # 기존 로직은 _stock_indices_from_packet / _stock_tech_from_packet 폴백으로 대체됨
-    return [], []
-    # --- 이하 기존 로직 (주석 처리) ---
-    # indices: list[StockItem] = []
-    # tech: list[StockItem] = []
-    # if not section_2.strip():
-    #     return indices, tech
-    #
-    # in_tech = False
-    # stock_re = re.compile(r"(\w+)\s+\$?([\d,.]+)\s*([+-][\d.]+%)")
-    # for line in section_2.splitlines():
-    #     stripped = line.strip()
-    #     if "빅테크" in stripped or "Big Tech" in stripped.lower():
-    #         in_tech = True
-    #         continue
-    #     match = stock_re.search(stripped)
-    #     if match:
-    #         ticker = match.group(1)
-    #         price = match.group(2)
-    #         change_pct = match.group(3)
-    #         direction = (
-    #             "up"
-    #             if change_pct.startswith("+")
-    #             else "down"
-    #             if change_pct.startswith("-")
-    #             else "flat"
-    #         )
-    #         item = StockItem(
-    #             ticker=ticker,
-    #             name=ticker,
-    #             price=price,
-    #             change_pct=change_pct,
-    #             direction=direction,
-    #             volume=None,
-    #         )
-    #         if in_tech:
-    #             tech.append(item)
-    #         else:
-    #             indices.append(item)
-    # return indices, tech
+def _market_sections_from_packet(
+    packet: dict,
+) -> tuple[list[MacroIndicator], list[StockItem], list[StockItem]]:
+    return (
+        _macro_indicators_from_packet(packet),
+        _stock_indices_from_packet(packet),
+        _stock_tech_from_packet(packet),
+    )
 
 
 def _parse_issue_briefings(section_4_1: str) -> list[dict]:
@@ -1644,40 +1569,7 @@ def _build_email_context_v2(
     )
     events = parse_event_calendar(section_map.get("section_6", ""))
     event_calendar = events if events else None
-    macro_indicators = _parse_macro_indicators(section_map.get("section_1", ""))
-    stock_indices, stock_tech = _parse_stocks(section_map.get("section_2", ""))
-
-    # 시장 지표 폴백: LLM 섹션 파싱이 비어있으면 packet 데이터에서 직접 구성
-    if not stock_indices:
-        log_structured(
-            logger,
-            event="fallback.used",
-            message="briefing 파싱 결과가 비어 packet 값으로 stock_indices를 보강했어요.",
-            level=logging.WARNING,
-            field="stock_indices",
-            source="packet_fallback",
-        )
-        stock_indices = _stock_indices_from_packet(packet)
-    if not stock_tech:
-        log_structured(
-            logger,
-            event="fallback.used",
-            message="briefing 파싱 결과가 비어 packet 값으로 stock_tech를 보강했어요.",
-            level=logging.WARNING,
-            field="stock_tech",
-            source="packet_fallback",
-        )
-        stock_tech = _stock_tech_from_packet(packet)
-    if not macro_indicators:
-        log_structured(
-            logger,
-            event="fallback.used",
-            message="briefing 파싱 결과가 비어 packet 값으로 macro_indicators를 보강했어요.",
-            level=logging.WARNING,
-            field="macro_indicators",
-            source="packet_fallback",
-        )
-        macro_indicators = _macro_indicators_from_packet(packet)
+    macro_indicators, stock_indices, stock_tech = _market_sections_from_packet(packet)
 
     dq = packet.get("data_quality", {})
     data_quality_status = dq.get("status", "ok")
@@ -1837,17 +1729,22 @@ def render_briefing_email_html(
     unsubscribe_url: str | None = None,
     packet: dict | None = None,
     unified: "UnifiedOutput | None" = None,
+    context: dict[str, object] | None = None,
 ) -> str:
     environment = _load_email_environment()
     template = environment.get_template("email_base.html.j2")
-    context = _build_email_context_v2(
-        subject=subject,
-        body=body,
-        packet=packet or {},
-        unsubscribe_url=unsubscribe_url,
-        unified=unified,
+    render_context = (
+        context
+        if context is not None
+        else _build_email_context_v2(
+            subject=subject,
+            body=body,
+            packet=packet or {},
+            unsubscribe_url=unsubscribe_url,
+            unified=unified,
+        )
     )
-    return template.render(**context).strip()
+    return template.render(**render_context).strip()
 
 
 def render_briefing_email_text(
@@ -1857,17 +1754,22 @@ def render_briefing_email_text(
     unsubscribe_url: str | None = None,
     packet: dict | None = None,
     unified: "UnifiedOutput | None" = None,
+    context: dict[str, object] | None = None,
 ) -> str:
     environment = _load_email_environment()
     template = environment.get_template("email_v2.txt.j2")
-    context = _build_email_context_v2(
-        subject=subject,
-        body=body,
-        packet=packet or {},
-        unsubscribe_url=unsubscribe_url,
-        unified=unified,
+    render_context = (
+        context
+        if context is not None
+        else _build_email_context_v2(
+            subject=subject,
+            body=body,
+            packet=packet or {},
+            unsubscribe_url=unsubscribe_url,
+            unified=unified,
+        )
     )
-    return template.render(**context).strip()
+    return template.render(**render_context).strip()
 
 
 def build_briefing_message(
@@ -1880,12 +1782,20 @@ def build_briefing_message(
     packet: dict | None = None,
     unified: "UnifiedOutput | None" = None,
 ) -> MIMEMultipart:
+    context = _build_email_context_v2(
+        subject=subject,
+        body=body,
+        packet=packet or {},
+        unsubscribe_url=unsubscribe_url,
+        unified=unified,
+    )
     html_body = render_briefing_email_html(
         subject=subject,
         body=body,
         unsubscribe_url=unsubscribe_url,
         packet=packet,
         unified=unified,
+        context=context,
     )
     text_body = render_briefing_email_text(
         subject=subject,
@@ -1893,6 +1803,7 @@ def build_briefing_message(
         unsubscribe_url=unsubscribe_url,
         packet=packet,
         unified=unified,
+        context=context,
     )
     msg = MIMEMultipart("alternative")
     msg["to"] = recipient

@@ -31,6 +31,7 @@ VALIDATOR_MAX_OUTPUT_TOKENS = 4000
 VALIDATOR_RETRY_MAX_OUTPUT_TOKENS = 8000
 RETRYABLE_INCOMPLETE_REASON = "max_output_tokens"
 REVIEW_PARSE_PREVIEW_LEN = 240
+REWRITE_FALLBACK_GUIDANCE = "검수에서 지적한 문제를 반영해 브리핑을 다시 정리하세요."
 JSON_CODE_BLOCK_RE = re.compile(
     r"```(?:json)?\s*(?P<payload>\{.*?\})\s*```",
     flags=re.DOTALL | re.IGNORECASE,
@@ -82,7 +83,7 @@ def _coerce_bool(value: object) -> bool:
 
 def _normalize_review_payload(payload: object) -> dict:
     data = payload if isinstance(payload, dict) else {}
-    return {
+    normalized: dict[str, Any] = {
         "pass": _coerce_bool(data.get("pass", False)),
         "rewrite_needed": _coerce_bool(data.get("rewrite_needed", False)),
         "plain_language_pass": _coerce_bool(data.get("plain_language_pass", False)),
@@ -93,6 +94,24 @@ def _normalize_review_payload(payload: object) -> dict:
             str(item).strip() for item in data.get("rewrite_guidance", []) if str(item).strip()
         ],
     }
+    if normalized["pass"]:
+        normalized["rewrite_needed"] = False
+        normalized["rewrite_guidance"] = []
+        return normalized
+
+    if not normalized["rewrite_guidance"]:
+        normalized["rewrite_guidance"] = normalized["issues"][:5] or [REWRITE_FALLBACK_GUIDANCE]
+
+    if not normalized["rewrite_needed"]:
+        normalized["rewrite_needed"] = True
+        log_structured(
+            logger,
+            event="review.normalize",
+            message="검수 결과가 자동화 계약과 맞지 않아 재작성 필요로 보정했어요.",
+            phase="brief_review",
+            reason="failed_review_requires_rewrite",
+        )
+    return normalized
 
 
 def _review_parse_preview(text: str) -> str:
@@ -404,15 +423,22 @@ def _rewrite_briefing(
 
 def _should_skip_rewrite(review: dict, settings: Settings) -> bool:
     if settings.openai_brief_max_rewrites <= 0:
+        log_structured(
+            logger,
+            event="review.skip",
+            message="자동 재작성 횟수가 0이라 현재 초안을 유지할게요.",
+            phase="brief_review",
+            reason="rewrites_disabled",
+        )
         return True
     if review["rewrite_needed"]:
         return False
     log_structured(
         logger,
         event="review.skip",
-        message="자동 재작성보다 사람 확인이 더 적절해 보여서 초안을 유지할게요.",
+        message="검수 결과상 자동 재작성이 필요하지 않아 현재 초안을 유지할게요.",
         phase="brief_review",
-        reason="manual_review_preferred",
+        reason="rewrite_not_required",
     )
     return True
 
@@ -477,15 +503,6 @@ def _run_rewrite_loop(
             phase="brief_review",
             reason=followup_issues,
         )
-        if not current_review["rewrite_needed"]:
-            log_structured(
-                logger,
-                event="review.skip",
-                message="추가 자동 재작성보다는 현재 버전을 유지하는 편이 안전해 보여요.",
-                phase="brief_review",
-                reason="rewrite_no_longer_needed",
-            )
-            return rewritten
     return rewritten
 
 

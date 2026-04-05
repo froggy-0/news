@@ -197,6 +197,7 @@ def test_render_brief_validator_prompts_contains_draft_and_packet(monkeypatch):
     assert "수혜" in instructions
     assert "rewrite_needed" in instructions
     assert "자동 재작성이 실제로 필요한 경우에만 true" in instructions
+    assert "pass`가 false면 `rewrite_needed`도 반드시 true" in instructions
     assert "Prompt Version: market_brief_test" in instructions
     assert "<brief_text>" in user_prompt
     assert '"macro":[{"label":"US10Y"}]' in user_prompt

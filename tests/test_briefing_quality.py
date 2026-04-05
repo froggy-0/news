@@ -692,7 +692,9 @@ def test_generate_briefing_records_cached_input_tokens_in_observer(monkeypatch, 
     assert usage.reasoning_tokens == 10
 
 
-def test_generate_briefing_respects_validator_no_rewrite_guidance(monkeypatch):
+def test_generate_briefing_rewrites_when_validator_returns_failed_review_without_guidance(
+    monkeypatch,
+):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     settings = load_settings()
     packet = {
@@ -703,21 +705,33 @@ def test_generate_briefing_respects_validator_no_rewrite_guidance(monkeypatch):
         "news": [],
         "data_quality": {"status": "ok", "warnings": []},
     }
-    draft_text = _complete_layered_brief(layer_one_body="사람 확인이 필요해요.")
-    review_payload = {
+    draft_text = _complete_layered_brief(layer_one_body="수치 해석이 어긋난 초안입니다.")
+    rewritten_text = _complete_layered_brief(layer_one_body="수치 해석을 다시 맞춘 최종안입니다.")
+    review_fail = {
         "pass": False,
         "rewrite_needed": False,
         "plain_language_pass": True,
         "numeric_consistency_pass": False,
         "structure_pass": True,
-        "issues": ["숫자 해석은 사람 확인이 필요해요."],
+        "issues": ["수치와 해석이 어긋난 문장을 바로잡아 주세요."],
+        "rewrite_guidance": [],
+    }
+    review_pass = {
+        "pass": True,
+        "rewrite_needed": False,
+        "plain_language_pass": True,
+        "numeric_consistency_pass": True,
+        "structure_pass": True,
+        "issues": [],
         "rewrite_guidance": [],
     }
 
     calls: list[dict] = []
     responses = [
         SimpleNamespace(output_text=draft_text, usage=None),
-        SimpleNamespace(output_text=json.dumps(review_payload, ensure_ascii=False), usage=None),
+        SimpleNamespace(output_text=json.dumps(review_fail, ensure_ascii=False), usage=None),
+        SimpleNamespace(output_text=rewritten_text, usage=None),
+        SimpleNamespace(output_text=json.dumps(review_pass, ensure_ascii=False), usage=None),
     ]
 
     def _create(**kwargs):
@@ -729,8 +743,8 @@ def test_generate_briefing_respects_validator_no_rewrite_guidance(monkeypatch):
 
     briefing = generate_briefing(packet=packet, settings=settings)
 
-    assert briefing.strip() == draft_text.strip()
-    assert len(calls) == 2
+    assert briefing.strip() == rewritten_text.strip()
+    assert len(calls) == 4
 
 
 def test_generate_briefing_keeps_draft_when_validator_json_is_invalid(monkeypatch):
