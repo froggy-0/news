@@ -13,11 +13,11 @@
 | `vix` VIX | FRED `VIXCLS` → 동일 | yfinance `^VIX` | ✅ |
 | `dxy` 달러 인덱스 | FRED `DTWEXAFEGS` (연준 AFE 무역가중 달러 지수) | yfinance `DX=F` | ✅ |
 | `hy_spread` 하이일드 스프레드 | FRED `BAMLH0A0HYM2` (ICE BofA 미국 HY 스프레드) | — | ✅ |
-| `usdkrw` 원달러 | yfinance `KRW=X` | — | ✅ |
+| `usdkrw` 원달러 | KIS `/uapi/overseas-price/v1/quotations/inquire-daily-chartprice` (`FID_COND_MRKT_DIV_CODE="X"`, `FID_INPUT_ISCD="FX@KRW"`) | yfinance `KRW=X` | ✅ |
 | `nq_futures` 나스닥선물 | yfinance `NQ=F` | — | ✅ |
-| `spy/qqq/soxx` 미국지수 | Stooq `stooq.com/q/d/l/?s={심볼}&i=d` | yfinance | ✅ |
-| 빅테크 10종 | Stooq (nvda.us, msft.us … avgo.us) | yfinance | ✅ |
-| BTC ETF 가격 5종 | Stooq (ibit.us, fbtc.us, arkb.us, bitb.us, gbtc.us) | yfinance | ✅ |
+| `spy/qqq/soxx` 미국지수 | KIS `/uapi/overseas-price/v1/quotations/price` | yfinance | ✅ |
+| 빅테크 10종 | KIS `/uapi/overseas-price/v1/quotations/price` | yfinance | ✅ |
+| BTC ETF 가격 5종 | KIS `/uapi/overseas-price/v1/quotations/price` | yfinance | ✅ |
 | `btc` 현물 가격 | CoinGecko `api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true` | yfinance `BTC-USD` | ✅ |
 | BTC ETF 보유량 (IBIT) | `ishares.com/us/products/333011/…` HTML 파싱 | — | ✅ |
 | BTC ETF 보유량 (BITB) | `bitbetf.com` `__NEXT_DATA__` JSON 파싱 | — | ✅ |
@@ -25,7 +25,7 @@
 
 **FRED 호출**: 최근 15개 관측값 중 유효한 최신 2개로 변화량(bp) 계산
 **yfinance 호출**: `period="7d", interval="1d"` 일봉 마지막 2행
-**Stooq 호출**: 일봉 CSV → 최신·전일 Close로 변동률 계산
+**KIS 호출**: 해외주식 현재체결가(`price`)와 환율 일자별 시세(`inquire-daily-chartprice`)를 사용하며, 실패 시 yfinance로 폴백
 
 **데이터 검증 범위** (`market_policy.py`):
 

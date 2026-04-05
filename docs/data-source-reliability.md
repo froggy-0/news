@@ -1,6 +1,7 @@
 # 데이터 소스 신뢰도 분석 및 캐시 전략 트레이드오프
 
 최근 10회 실행 로그(2026-03-16~17) 기반 실측 분석 및 수정 결과입니다.
+이 문서는 일부 구간이 KIS 전환 전 관측치를 담은 히스토리 문서이며, 현재 운영 기준의 실제 수집 경로는 `docs/data-sources.md`, `docs/data-flow.md`를 우선합니다.
 
 ---
 
@@ -10,7 +11,7 @@
 
 | 소스 | 대상 | 10회 성공률 | 비고 |
 |---|---|---|---|
-| **Stooq** | 미국 지수 3종 + 빅테크 10종 + BTC ETF 5종 | **18/18 = 100%** (전 실행) | 무료, rate limit 여유, 재시도 0회 |
+| **레거시 미국주식 공급자** | 미국 지수 3종 + 빅테크 10종 + BTC ETF 5종 | **18/18 = 100%** (전 실행) | 무료, rate limit 여유, 재시도 0회 |
 | **FRED** | us10y, us2y, vix | **3/3 = 100%** (전 실행) | API 키 필요하지만 안정적 |
 | **CoinGecko** | BTC 현물 | **1/1 = 100%** (전 실행) | 무료 tier, 재시도 0회 |
 | **alternative.me** | Fear & Greed | **1/1 = 100%** (전 실행) | 무료, 단순 JSON |
@@ -40,7 +41,7 @@
 ### market snapshot 캐시
 - **의도**: 수집 실패 시 전일 값으로 대체
 - **수정 후**: DXY가 yfinance `DX=F`로 안정 수집되므로 캐시에 실제 값이 쌓이게 됨
-- **나머지 지표**: Stooq/FRED/CoinGecko가 100% 성공하므로 캐시 대체가 발동한 적 없음
+- **나머지 지표**: 레거시 미국주식 공급자/FRED/CoinGecko가 100% 성공하므로 캐시 대체가 발동한 적 없음
 - **결론**: DXY 소스 수정으로 캐시가 방어적 안전망으로 정상 작동
 
 ### BTC ETF snapshot 캐시
@@ -62,11 +63,11 @@
 | 선택지 | 장점 | 단점 | 상태 |
 |---|---|---|---|
 | ~~현재 (yfinance `DX-Y.NYB` + 캐시)~~ | 코드 변경 없음 | 10/10 실패, 캐시에도 값 없음, DXY 영구 누락 | ❌ 폐기 |
-| ~~Stooq `dx.f` 추가~~ | Stooq 100% 신뢰도 | Stooq가 선물 심볼의 CSV 다운로드를 지원하지 않아 사용 불가 | ❌ 불가 |
+| ~~레거시 CSV 공급자 `dx.f` 추가~~ | 레거시 공급자 100% 신뢰도 | 해당 공급자가 선물 심볼의 CSV 다운로드를 지원하지 않아 사용 불가 | ❌ 불가 |
 | **yfinance `DX=F` (ICE Dollar Index Futures)** | ICE DXY와 거의 동일한 값 | yfinance 자체의 간헐적 불안정성 | ✅ **적용됨** |
 | ~~FRED `DTWEXBGS` (broad dollar)~~ | FRED 100% 신뢰도 | ICE DXY와 다른 지수 (broad weighted) | — 미채택 |
 
-**적용 결과**: `MACRO_FALLBACK_TARGETS`에서 DXY 티커를 `DX-Y.NYB` → `DX=F`로 교체. `CANONICAL_KEY_BY_SOURCE`에 `"DX=F": "dxy"` 매핑 추가. Stooq는 선물 심볼의 CSV 다운로드를 지원하지 않아 yfinance 전용 경로 유지.
+**적용 결과**: `MACRO_FALLBACK_TARGETS`에서 DXY 티커를 `DX-Y.NYB` → `DX=F`로 교체. `CANONICAL_KEY_BY_SOURCE`에 `"DX=F": "dxy"` 매핑 추가. 당시 비교한 레거시 CSV 공급자는 선물 심볼의 CSV 다운로드를 지원하지 않아 yfinance 전용 경로를 유지했다.
 
 ### BTC ETF 보유량: ~~Perplexity structured vs direct fetch~~ → direct fetch primary 적용 완료
 
@@ -83,7 +84,7 @@
 | 선택지 | 장점 | 단점 | 상태 |
 |---|---|---|---|
 | ~~캐시 유지 (현재)~~ | 이론적 안전망 | 실제로 발동한 적 없음, 코드 복잡도 증가 | — |
-| ~~캐시 제거~~ | 코드 단순화 | 만약 Stooq/FRED가 동시 장애 시 대체 없음 | — |
+| ~~캐시 제거~~ | 코드 단순화 | 만약 레거시 미국주식 공급자/FRED가 동시 장애 시 대체 없음 | — |
 | **캐시 유지 + 소스 수정** | DXY 소스 수정 후 캐시가 실제로 작동 | 약간의 코드 변경 | ✅ **적용됨** |
 
 **적용 결과**: 캐시 구조는 그대로 유지 (방어적 설계). DXY 소스가 `DX=F`로 수정되어 캐시에 실제 값이 쌓이게 됨.
@@ -112,10 +113,10 @@
 |---|---|---|
 | DXY (달러 인덱스) | yfinance `DX=F` (MACRO_FALLBACK_TARGETS) | 안정 (ICE Dollar Index Futures) |
 | us10y, us3m, vix | FRED 우선 → yfinance fallback | 99%+ |
-| 미국 지수 (SPY, QQQ, SOXX) | Stooq 우선 → yfinance fallback | 100% |
-| 빅테크 10종 | Stooq 우선 → yfinance fallback | 100% |
-| BTC ETF 가격·거래량 | Stooq 우선 → yfinance fallback | 100% |
+| 미국 지수 (SPY, QQQ, SOXX) | KIS 우선 → yfinance fallback | 운영 전환 완료 |
+| 빅테크 10종 | KIS 우선 → yfinance fallback | 운영 전환 완료 |
+| BTC ETF 가격·거래량 | KIS 우선 → yfinance fallback | 운영 전환 완료 |
 | BTC ETF 보유량 (IBIT+BITB) | direct fetch primary (Perplexity 미사용) | 100% |
 | BTC 현물 | CoinGecko | 100% |
 
-나머지 소스(Stooq, FRED, CoinGecko, Grok, Perplexity Sonar 토픽 요약)는 99%+ 신뢰도로 캐시 없이도 안정적입니다. 캐시는 방어적 안전망으로 유지하며, DXY 소스 수정으로 캐시에 실제 값이 쌓이게 되었습니다.
+현재 운영 소스는 KIS, FRED, CoinGecko, Grok, Perplexity Sonar 토픽 요약 기준으로 정리되어 있습니다. 캐시는 방어적 안전망으로 유지하며, DXY 소스 수정으로 캐시에 실제 값이 쌓이게 되었습니다.

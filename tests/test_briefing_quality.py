@@ -25,8 +25,8 @@ def _complete_layered_brief(
     layer_three_body: str | None = None,
 ) -> str:
     stock_block = layer_three_body or (
-        "- NVDA | +1.20% | 데이터센터 투자 기대가 이어졌습니다. | [출처: Stooq]\n"
-        "- AMD | -0.80% | 반도체 종목 안에서도 차이가 있었습니다. | [출처: Stooq]\n"
+        "- NVDA | +1.20% | 데이터센터 투자 기대가 이어졌습니다. | [출처: KIS]\n"
+        "- AMD | -0.80% | 반도체 종목 안에서도 차이가 있었습니다. | [출처: KIS]\n"
     )
     return f"""SOVEREIGN BRIEF ({title_date})
 
@@ -194,8 +194,8 @@ def test_brief_structure_issues_accepts_layer_two_bullets_outside_metrics_label(
 
 3. LAYER 3 | 종목 브리핑
 쉽게 보면
-- NVDA는 AI 수요 기대가 이어지며 1.20% 상승했습니다. [출처: Stooq]
-- AMD는 반도체 내 종목별 차이가 나타나며 0.80% 하락했습니다. [출처: Stooq]
+- NVDA는 AI 수요 기대가 이어지며 1.20% 상승했습니다. [출처: KIS]
+- AMD는 반도체 내 종목별 차이가 나타나며 0.80% 하락했습니다. [출처: KIS]
 """
 
     issues = _brief_structure_issues(brief)
@@ -217,8 +217,8 @@ def test_brief_structure_issues_does_not_fail_only_for_missing_macro_subheading(
 
 3. LAYER 3 | 종목 브리핑
 주요 지표
-- NVDA는 AI 투자 기대가 이어지며 1.20% 상승했습니다. [출처: Stooq]
-- AMD는 종목별 차이가 나타나며 0.80% 하락했습니다. [출처: Stooq]
+- NVDA는 AI 투자 기대가 이어지며 1.20% 상승했습니다. [출처: KIS]
+- AMD는 종목별 차이가 나타나며 0.80% 하락했습니다. [출처: KIS]
 """
 
     issues = _brief_structure_issues(brief)
@@ -354,11 +354,57 @@ def test_fallback_brief_includes_korean_investor_signals():
     assert "오늘은 매수 관심 국면입니다." in briefing
     assert "원/달러 환율은 1,330.50원으로 전일 대비 +0.12%였습니다." in briefing
     assert "나스닥 선물은 전일 대비 +0.48%로 상승 방향입니다." in briefing
+    assert "원/달러 환율은 1,330.50원으로 전일 대비 +0.12%였습니다. [출처: yfinance]" in briefing
+    assert "나스닥 선물은 전일 대비 +0.48%로 상승 방향입니다. [출처: yfinance]" in briefing
     assert "공포탐욕지수는 60로 탐욕 구간입니다." not in briefing
     assert "공포탐욕지수는 60으로 탐욕 구간입니다." in briefing
     assert "오늘 미국 증시 흐름이 코스피에 미치는 영향:" in briefing
     assert "AVGO은" not in briefing
     assert "AVGO는" in briefing
+
+
+def test_fallback_brief_marks_kis_source_for_usdkrw_primary():
+    packet = {
+        "macro": [],
+        "korea_watch": [
+            {
+                "label": "원/달러 환율",
+                "ticker": "USDKRW",
+                "price": 1330.5,
+                "resolved_value": 1330.5,
+                "change_pct": 0.12,
+                "canonical_key": "usdkrw",
+            },
+            {
+                "label": "나스닥 선물",
+                "ticker": "NQ=F",
+                "price": 20150.0,
+                "resolved_value": 20150.0,
+                "change_pct": 0.48,
+                "canonical_key": "nq_futures",
+            },
+        ],
+        "us_indices": [],
+        "tech_stocks": [],
+        "bitcoin": {
+            "spot": {},
+            "etf_points": [],
+            "fear_greed_value": 60,
+            "fear_greed_label": "탐욕",
+            "official_etf_supported_tickers": [],
+            "official_etf_compared_tickers": [],
+            "official_etf_total_btc": None,
+            "official_etf_daily_flow_btc": None,
+            "official_etf_daily_flow_usd": None,
+        },
+        "news": [],
+        "data_quality": {"status": "ok", "warnings": []},
+    }
+
+    briefing = _fallback_brief(packet=packet, timezone="Asia/Seoul")
+
+    assert "원/달러 환율은 1,330.50원으로 전일 대비 +0.12%였습니다. [출처: KIS]" in briefing
+    assert "나스닥 선물은 전일 대비 +0.48%로 상승 방향입니다. [출처: yfinance]" in briefing
 
 
 def test_append_reference_block_includes_news_item_urls():

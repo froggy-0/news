@@ -21,6 +21,7 @@ EXPECTED_GET_LOGGER_FILES = {
     "src/morning_brief/data/sources/grok_web_search.py",
     "src/morning_brief/data/sources/grok_x_keyword.py",
     "src/morning_brief/data/sources/http_client.py",
+    "src/morning_brief/data/sources/kis.py",
     "src/morning_brief/data/sources/perplexity_search.py",
     "src/morning_brief/data/sources/perplexity_sonar.py",
     "src/morning_brief/emailer.py",

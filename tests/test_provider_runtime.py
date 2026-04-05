@@ -54,3 +54,14 @@ def test_execute_with_provider_retry_tracks_retries_and_success(monkeypatch):
         "skips": 0,
         "circuit_opened": 0,
     }
+
+
+def test_kis_policy_matches_spec() -> None:
+    policy = provider_runtime.PROVIDER_POLICIES["kis"]
+
+    assert policy.name == "kis"
+    assert policy.min_interval_seconds == 0.4
+    assert policy.retryable_statuses == frozenset({408, 429, 500, 502, 503, 504})
+    assert policy.max_attempts == 5
+    assert policy.base_backoff_seconds == 1.0
+    assert policy.max_backoff_seconds == 8.0

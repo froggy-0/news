@@ -133,6 +133,8 @@ jobs:
           OPENAI_PROMPT_CACHE_KEY: ${{ vars.OPENAI_PROMPT_CACHE_KEY || 'morning-market-brief' }}
           PROMPT_TEMPLATE_VERSION: ${{ vars.PROMPT_TEMPLATE_VERSION || 'market_brief_v4' }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          KIS_APP_KEY: ${{ secrets.KIS_APP_KEY || '' }}
+          KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET || '' }}
           PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
           GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
           GROK_MODEL: ${{ vars.GROK_MODEL || 'grok-4.20-beta-latest-non-reasoning' }}

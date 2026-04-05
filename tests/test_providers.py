@@ -59,3 +59,9 @@ def test_runtime_keyword_not_in_data_provenance_sets() -> None:
     """RUNTIME_GROK_KEYWORD는 data provenance 집합에 포함되면 안 된다."""
     assert providers.RUNTIME_GROK_KEYWORD not in providers.PERPLEXITY_PROVIDERS
     assert providers.RUNTIME_GROK_KEYWORD not in providers.GROK_PROVIDERS
+
+
+def test_kis_runtime_policy_is_present_and_stooq_removed() -> None:
+    assert "kis" in PROVIDER_POLICIES
+    assert PROVIDER_POLICIES["kis"].name == "kis"
+    assert "stooq" not in PROVIDER_POLICIES

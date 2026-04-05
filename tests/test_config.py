@@ -41,6 +41,22 @@ def test_fred_api_key_loaded(monkeypatch):
     assert settings.fred_api_key == "fred-test-key"
 
 
+def test_kis_settings_loaded(monkeypatch):
+    monkeypatch.setenv("KIS_APP_KEY", "kis-app-key")
+    monkeypatch.setenv("KIS_APP_SECRET", "kis-app-secret")
+    settings = load_settings()
+    assert settings.kis_app_key == "kis-app-key"
+    assert settings.kis_app_secret == "kis-app-secret"
+
+
+def test_kis_settings_default_to_empty(monkeypatch):
+    monkeypatch.delenv("KIS_APP_KEY", raising=False)
+    monkeypatch.delenv("KIS_APP_SECRET", raising=False)
+    settings = load_settings()
+    assert settings.kis_app_key == ""
+    assert settings.kis_app_secret == ""
+
+
 def test_perplexity_settings_loaded(monkeypatch):
     monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
     monkeypatch.setenv("GROK_API_KEY", "grok-test-key")

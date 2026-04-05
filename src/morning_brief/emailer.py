@@ -865,7 +865,7 @@ def _build_news_source_items(
 def _market_source_lines() -> list[str]:
     return [
         "거시 지표: FRED, yfinance",
-        "미국 지수/기술주: Stooq",
+        "미국 지수/기술주: KIS",
         "비트코인: CoinGecko",
         "X 시그널: Grok",
     ]

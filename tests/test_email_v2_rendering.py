@@ -158,7 +158,7 @@ SAMPLE_CONTEXT = {
     ],
     "market_source_lines": [
         "거시 지표: FRED, yfinance",
-        "미국 지수/기술주: Stooq",
+        "미국 지수/기술주: KIS",
         "비트코인: CoinGecko",
         "X 시그널: Grok",
     ],

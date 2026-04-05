@@ -339,7 +339,7 @@ def test_footer_partial_renders_independently() -> None:
         ],
         market_source_lines=[
             "거시 지표: FRED, yfinance",
-            "미국 지수/기술주: Stooq",
+            "미국 지수/기술주: KIS",
         ],
         data_quality_status="ok",
         footer_notes=[],
@@ -389,7 +389,7 @@ def _build_full_context() -> dict:
         ],
         "market_source_lines": [
             "거시 지표: FRED, yfinance",
-            "미국 지수/기술주: Stooq",
+            "미국 지수/기술주: KIS",
             "비트코인: CoinGecko",
             "X 시그널: Grok",
         ],
@@ -502,7 +502,7 @@ _V2_PARTIALS = [
             ],
             "market_source_lines": [
                 "거시 지표: FRED, yfinance",
-                "미국 지수/기술주: Stooq",
+                "미국 지수/기술주: KIS",
             ],
             "data_quality_status": "ok",
             "footer_notes": [],

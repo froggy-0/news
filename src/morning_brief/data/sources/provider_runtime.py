@@ -62,7 +62,14 @@ PROVIDER_POLICIES = {
         base_backoff_seconds=1.5,
         max_backoff_seconds=10.0,
     ),
-    "stooq": ProviderPolicy(name="stooq", min_interval_seconds=0.35, base_backoff_seconds=1.0),
+    "kis": ProviderPolicy(
+        name="kis",
+        min_interval_seconds=0.4,
+        retryable_statuses=frozenset({408, 429, 500, 502, 503, 504}),
+        max_attempts=5,
+        base_backoff_seconds=1.0,
+        max_backoff_seconds=8.0,
+    ),
     "newsapi": ProviderPolicy(name="newsapi", min_interval_seconds=0.35, base_backoff_seconds=1.0),
     "yfinance": ProviderPolicy(
         name="yfinance", min_interval_seconds=0.35, base_backoff_seconds=1.0
