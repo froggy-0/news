@@ -9,7 +9,7 @@ import { SiteHeader } from "@/components/layout/SiteHeader";
 import { StocksBoard } from "@/components/market/StocksBoard";
 import { NewsFeed } from "@/components/news/NewsFeed";
 import { XSignals } from "@/components/signals/XSignals";
-import { buildHistoryEntries, buildMetaStatusCards } from "@/lib/history";
+import { buildHistoryEntries } from "@/lib/history";
 import { fetchBriefByDate, fetchIndex } from "@/lib/r2";
 
 export async function generateStaticParams() {
@@ -45,7 +45,6 @@ export default async function ArchiveDetailPage({
         <SiteHeader
           variant="archive-detail"
           historyEntries={buildHistoryEntries(index.dates, brief.meta.date)}
-          statusCards={buildMetaStatusCards(brief.meta)}
           currentDate={brief.meta.date}
         />
         <JudgmentBlock
@@ -54,20 +53,18 @@ export default async function ArchiveDetailPage({
           summarySupport={brief.aiJudgment.summarySupport}
           issueDate={brief.meta.date}
         />
-        <StocksBoard snapshot={brief.marketSnapshot} stocks={brief.techStocks} variant="detail" />
+        <StocksBoard snapshot={brief.marketSnapshot} stocks={brief.techStocks} />
         <BitcoinPanel bitcoin={brief.bitcoin} />
         <BriefBody body={brief.aiJudgment.body} date={brief.meta.date} />
         <TopicGrid items={brief.topicSummaries} />
         <NewsFeed
           featuredItems={brief.featuredNews}
           allItems={brief.allNews}
-          variant="detail"
           showRawTitle
         />
         <XSignals
           featuredItems={brief.featuredXSignals}
           allItems={brief.allXSignals}
-          variant="detail"
           showRawToggle
         />
       </main>

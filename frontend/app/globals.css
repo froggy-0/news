@@ -546,3 +546,9 @@ section[id] {
     min-height: 64px;
   }
 }
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .bottom-tab-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

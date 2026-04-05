@@ -1,18 +1,16 @@
 import Link from "next/link";
 
-import type { DrawerStatusCard, HistoryMenuEntry } from "@/lib/history";
+import type { HistoryMenuEntry } from "@/lib/history";
 
 import { HistoryDrawerClient } from "./HistoryDrawerClient";
 
 export function SiteHeader({
   variant = "home",
   historyEntries,
-  statusCards,
   currentDate,
 }: {
   variant?: "home" | "archive-list" | "archive-detail";
   historyEntries: HistoryMenuEntry[];
-  statusCards: DrawerStatusCard[];
   currentDate?: string;
 }) {
   const variantCopy =
@@ -43,7 +41,6 @@ export function SiteHeader({
         <div className="flex items-center">
           <HistoryDrawerClient
             entries={historyEntries}
-            statusCards={statusCards}
             currentDate={currentDate}
           />
         </div>

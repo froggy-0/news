@@ -1,14 +1,8 @@
 import type { Metadata } from "next";
 
-import { BitcoinPanel } from "@/components/bitcoin/BitcoinPanel";
-import { JudgmentBlock } from "@/components/brief/JudgmentBlock";
-import { TopicGrid } from "@/components/brief/TopicGrid";
 import { HomeHero } from "@/components/hero/HomeHero";
 import { SiteHeader } from "@/components/layout/SiteHeader";
-import { StocksBoard } from "@/components/market/StocksBoard";
-import { NewsFeed } from "@/components/news/NewsFeed";
-import { XSignals } from "@/components/signals/XSignals";
-import { buildHistoryEntries, buildMetaStatusCards } from "@/lib/history";
+import { buildHistoryEntries } from "@/lib/history";
 import { fetchIndex, fetchLatest } from "@/lib/r2";
 
 export const metadata: Metadata = {
@@ -24,22 +18,9 @@ export default async function HomePage() {
     <main className="pb-6">
       <SiteHeader
         historyEntries={buildHistoryEntries(index.dates, brief.meta.date)}
-        statusCards={buildMetaStatusCards(brief.meta)}
         currentDate={brief.meta.date}
       />
-      <HomeHero brief={brief} heroSeed={heroSeed} />
-      <JudgmentBlock
-        headline={brief.meta.displayHeadline || brief.aiJudgment.headline}
-        summaryLead={brief.aiJudgment.summaryLead}
-        summarySupport={brief.aiJudgment.summarySupport}
-        issueDate={brief.meta.date}
-        variant="home"
-      />
-      <StocksBoard snapshot={brief.marketSnapshot} stocks={brief.techStocks} variant="home" />
-      <BitcoinPanel bitcoin={brief.bitcoin} variant="home" />
-      <TopicGrid items={brief.topicSummaries} variant="home" />
-      <NewsFeed featuredItems={brief.featuredNews} allItems={brief.allNews} variant="home" />
-      <XSignals featuredItems={brief.featuredXSignals} allItems={brief.allXSignals} variant="home" />
+      <HomeHero brief={brief} heroSeed={heroSeed} latestDate={brief.meta.date} />
     </main>
   );
 }

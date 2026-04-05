@@ -1,32 +1,19 @@
 import React from "react";
 import type { NewsItem } from "@schema/brief.types";
 
-import { NewsFeedClient } from "./NewsFeedClient";
 import { NewsFeedList } from "./NewsFeedList";
 
 export function NewsFeed({
   featuredItems,
   allItems,
-  variant = "home",
   showRawTitle = false,
 }: {
   featuredItems: NewsItem[];
   allItems: NewsItem[];
-  variant?: "home" | "detail";
   showRawTitle?: boolean;
 }) {
   if (featuredItems.length === 0 && allItems.length === 0) {
     return null;
-  }
-
-  if (variant === "home") {
-    return (
-      <NewsFeedClient
-        featuredItems={featuredItems}
-        allItems={allItems}
-        showInsufficientWarning={featuredItems.length === 1}
-      />
-    );
   }
 
   return (

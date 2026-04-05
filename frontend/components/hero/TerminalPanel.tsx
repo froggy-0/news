@@ -3,7 +3,7 @@
 import React from "react";
 import type { BriefMeta } from "@schema/brief.types";
 
-import { formatIssueTime, qualityLabel, translationLabel } from "@/lib/format";
+import { formatIssueTime } from "@/lib/format";
 
 type TerminalLine = {
   text: string;
@@ -36,18 +36,6 @@ export function TerminalPanel({
       type: "INFO",
       status: "OK",
       tone: "primary",
-    },
-    {
-      text: `뉴스 ${meta.sourceCounts.newsCandidates}건 / X ${meta.sourceCounts.xSignalCandidates}건 정합성 점검`,
-      type: "INFO",
-      status: qualityLabel(meta.dataQuality),
-      tone: meta.dataQuality === "ok" ? "primary" : "warning",
-    },
-    {
-      text: `번역 상태 ${translationLabel(meta.translationStatus)} · 원본 무결성 기준 유지`,
-      type: "ANALYSIS",
-      status: "ACTIVE",
-      tone: meta.translationStatus === "failed" ? "warning" : "success",
     },
   ];
 

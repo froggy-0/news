@@ -7,13 +7,11 @@ export function JudgmentBlock({
   summaryLead,
   summarySupport,
   issueDate,
-  variant = "detail",
 }: {
   headline: string;
   summaryLead: string;
   summarySupport: string | null;
   issueDate: string;
-  variant?: "home" | "detail";
 }) {
   const cleanHeadline = hasUsableHeadline(headline)
     ? displayHeadline(headline)
@@ -31,10 +29,10 @@ export function JudgmentBlock({
       : null;
 
   return (
-    <section id="brief" className={`${variant === "home" ? "px-6 py-16" : "border-b border-white/10 px-6 py-16"}`}>
-      <div className={`mx-auto w-full ${variant === "home" ? "max-w-4xl" : "max-w-6xl"} space-y-12`}>
+    <section id="brief" className="border-b border-white/10 px-6 py-16">
+      <div className="mx-auto w-full max-w-6xl space-y-12">
         <div className="space-y-6">
-          <div className={`relative pl-6 md:pl-10 ${variant === "home" ? "max-w-3xl" : "max-w-4xl"}`}>
+          <div className="relative pl-6 md:pl-10 max-w-4xl">
             <div className="absolute left-0 top-0 h-full w-px bg-gradient-to-b from-[#00ff66] via-[#00ff66]/40 to-transparent" />
             <div className="absolute left-0 top-0 h-px w-4 bg-[#00ff66]" />
             <div className="space-y-4">
@@ -46,7 +44,7 @@ export function JudgmentBlock({
           </div>
         </div>
 
-        <div className={`space-y-8 ${variant === "detail" ? "max-w-4xl" : ""}`}>
+        <div className="space-y-8 max-w-4xl">
           {cleanLead ? (
             <div className="relative pl-6 md:pl-10">
               <div className="absolute left-0 top-0 h-full w-px bg-gradient-to-b from-[#00ff66] via-[#00ff66]/40 to-transparent" />

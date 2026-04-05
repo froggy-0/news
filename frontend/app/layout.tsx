@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Instrument_Serif, Inter, JetBrains_Mono } from "next/font/google";
 
+import { BottomTabBar } from "@/components/layout/BottomTabBar";
 import { ScrollProgressBar } from "@/components/layout/ScrollProgressBar";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 
@@ -47,10 +48,11 @@ export default function RootLayout({
         <ScrollProgressBar />
         <div className="site-noise" />
         <div className="page-shell">
-          <div className="page-inner">
+          <div className="page-inner pb-14 md:pb-0">
             {children}
             <SiteFooter />
           </div>
+          <BottomTabBar />
         </div>
       </body>
     </html>
