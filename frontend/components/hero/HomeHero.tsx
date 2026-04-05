@@ -7,7 +7,7 @@ import { displayHeadline, formatPublicationDate, hasUsableHeadline } from "@/lib
 import { ScatterText } from "./ScatterText";
 import { TerminalPanel } from "./TerminalPanel";
 
-export function HomeHero({ brief, heroSeed }: { brief: BriefData; heroSeed: string }) {
+export function HomeHero({ brief, heroSeed, latestDate }: { brief: BriefData; heroSeed: string; latestDate: string }) {
   const heroHeadline = hasUsableHeadline(brief.meta.displayHeadline || brief.aiJudgment.headline)
     ? displayHeadline(brief.meta.displayHeadline || brief.aiJudgment.headline)
     : `${formatPublicationDate(brief.meta.date)} 브리프`;
@@ -52,18 +52,15 @@ export function HomeHero({ brief, heroSeed }: { brief: BriefData; heroSeed: stri
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                <a href="#brief" className="hero-cta-primary">
+                <a href={`/archive/${latestDate}`} className="hero-cta-primary">
                   오늘 브리프 먼저 읽기
-                </a>
-                <a href="#news" className="hero-cta-secondary">
-                  뉴스 흐름 보기
                 </a>
               </div>
             </div>
           </div>
 
           <div className="space-y-4 lg:pb-1">
-            <div className="card-family-utility rounded-[var(--card-radius-utility)] p-[var(--card-padding-utility)]">
+            <div id="subscribe" className="card-family-utility rounded-[var(--card-radius-utility)] p-[var(--card-padding-utility)]">
               <div className="mb-4 space-y-2">
                 <p className="section-title">Brief Access</p>
                 <p className="text-[0.92rem] leading-6 text-[var(--text-secondary)]">

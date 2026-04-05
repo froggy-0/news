@@ -111,14 +111,10 @@ function stockDelayFor(index: number): string {
 export function StocksBoard({
   snapshot,
   stocks,
-  variant = "home",
 }: {
   snapshot: MarketSnapshot;
   stocks: TechStock[];
-  variant?: "home" | "detail";
 }) {
-  const compactMetrics = variant === "home" ? snapshot.items.slice(0, 2) : snapshot.items;
-  const compactStocks = variant === "home" ? stocks.slice(0, 4) : stocks;
   return (
     <RevealSection className="border-b border-white/10 px-6 py-16" threshold={0.25} delayMs={220}>
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
@@ -127,25 +123,19 @@ export function StocksBoard({
             <h2 className="section-title">시장 주요 지표</h2>
             <p className="eyebrow">Quantitative Pulse</p>
           </div>
-          {variant === "detail" ? (
-            <div className="flex items-center gap-4 text-[10px] font-mono uppercase tracking-[0.18em] text-white/42">
-              <span className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-[#00ffff]" />
-                상승
-              </span>
-              <span className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-[#ff6b6b]" />
-                하락
-              </span>
-            </div>
-          ) : (
-            <p className="max-w-md text-[0.95rem] leading-7 text-[var(--text-secondary)]">
-              홈에서는 핵심 두 개 지표만 먼저 보여주고, 해석은 아래 브리프와 뉴스 흐름에서 읽도록 압축했습니다.
-            </p>
-          )}
+          <div className="flex items-center gap-4 text-[10px] font-mono uppercase tracking-[0.18em] text-white/42">
+            <span className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-[#00ffff]" />
+              상승
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-[#ff6b6b]" />
+              하락
+            </span>
+          </div>
         </div>
 
-        {compactMetrics.length === 0 ? (
+        {snapshot.items.length === 0 ? (
           <DataState
             title="시장 지표 상태"
             message="이번 집계에서는 시장 지표를 확인하지 못했어요."
@@ -153,12 +143,8 @@ export function StocksBoard({
             minHeight={160}
           />
         ) : (
-          <div
-            className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${
-              variant === "home" ? "lg:grid-cols-2" : "lg:grid-cols-4 xl:grid-cols-7"
-            }`}
-          >
-            {compactMetrics.map((item, index) => (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+            {snapshot.items.map((item, index) => (
               <div
                 key={item.symbol}
                 className="card-data market-heat-card"
@@ -176,14 +162,12 @@ export function StocksBoard({
             <div>
               <p className="section-title">주요 기술주</p>
               <p className="mt-1 text-[13px] leading-6 text-[var(--text-secondary)]">
-                {variant === "home"
-                  ? "대표 종목 네 개만 먼저 보여주고, 상세한 해석은 홈 하단 섹션과 상세 화면에 남깁니다."
-                  : "홈에서는 고빈도 종목만 빠르게 스캔하고, 상세에서도 동일한 보드 체계를 유지합니다."}
+                주요 기술주의 시세와 등락을 확인합니다.
               </p>
             </div>
             <span className="label-meta text-white/26">Tech Board</span>
           </div>
-          {compactStocks.length === 0 ? (
+          {stocks.length === 0 ? (
             <DataState
               title="기술주 보드 상태"
               message="이번 집계에서는 주요 기술주를 확인하지 못했어요."
@@ -191,8 +175,8 @@ export function StocksBoard({
               minHeight={160}
             />
           ) : (
-            <div className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${variant === "home" ? "lg:grid-cols-2" : "xl:grid-cols-5"}`}>
-              {compactStocks.map((stock, index) => (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              {stocks.map((stock, index) => (
                 <div
                   key={stock.symbol}
                   className="card-data market-heat-card"

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, Menu, X } from "lucide-react";
 
-import type { DrawerStatusCard, HistoryMenuEntry } from "@/lib/history";
+import type { HistoryMenuEntry } from "@/lib/history";
 import { formatPublicationDate } from "@/lib/format";
 
 function parseArchiveDate(value: string): Date | null {
@@ -43,12 +43,10 @@ function archiveRelativeLabel(date: string, currentDate?: string): string {
 
 export function HistoryDrawerClient({
   entries,
-  statusCards: _statusCards,
   currentDate,
   initialVisibleCount = 6,
 }: {
   entries: HistoryMenuEntry[];
-  statusCards: DrawerStatusCard[];
   currentDate?: string;
   initialVisibleCount?: number;
 }) {

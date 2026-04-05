@@ -89,10 +89,8 @@ function animationDelayFor(index: number): string {
 
 export function TopicGrid({
   items,
-  variant = "detail",
 }: {
   items: TopicSummary[];
-  variant?: "home" | "detail";
 }) {
   const visibleItems = items
     .map((item) => ({
@@ -132,19 +130,17 @@ export function TopicGrid({
             오늘 장을 해석하는 네 개의 축을 먼저 제시하고, 그 뒤에 숫자와 기사로 내려갑니다.
           </p>
         </div>
-        <div className={`grid gap-6 ${variant === "home" ? "md:grid-cols-2 xl:grid-cols-3" : "md:grid-cols-2"}`}>
+        <div className="grid gap-6 md:grid-cols-2">
           {visibleItems.map(({ item, summary, keyMetric, relatedStocks }, index) => (
             <article
               key={item.topic}
-              className={`card-reading card-family-reading theme-card group relative overflow-hidden rounded-[var(--card-radius-reading)] transition-colors duration-300 ${
-                variant === "home" && index === 0 ? "md:col-span-2 xl:col-span-2" : ""
-              }`}
+              className="card-reading card-family-reading theme-card group relative overflow-hidden rounded-[var(--card-radius-reading)] transition-colors duration-300"
               style={{ animationDelay: animationDelayFor(index) }}
             >
               <div className={`theme-card-accent-x absolute left-0 top-0 h-px w-full bg-gradient-to-r ${themeAccent(item.topic)}`} />
               <div className={`theme-card-accent-y absolute left-0 top-0 h-full w-px bg-gradient-to-b ${themeAccent(item.topic)}`} />
 
-              <div className={`space-y-6 p-6 md:p-7 ${variant === "home" && index === 0 ? "xl:p-8" : ""}`}>
+              <div className="space-y-6 p-6 md:p-7">
                 <div className="flex items-center gap-3">
                   <div className="rounded-full border border-white/10 bg-white/[0.03] p-2 text-white/38 transition-colors group-hover:text-white/70">
                     {themeIcon(item.topic)}
@@ -159,15 +155,9 @@ export function TopicGrid({
                   </div>
                 </div>
 
-                <div className={`space-y-3 ${variant === "home" && index === 0 ? "max-w-2xl" : ""}`}>
+                <div className="space-y-3">
                   <span className="label-meta text-white/30">전략적 맥락</span>
-                  <p
-                    className={`card-reading-copy theme-card-copy text-white/90 transition-colors group-hover:text-white ${
-                      variant === "home" && index === 0
-                        ? "text-[16px] leading-8 md:text-[18px] md:leading-9"
-                        : "text-[15px] leading-8"
-                    }`}
-                  >
+                  <p className="card-reading-copy theme-card-copy text-white/90 transition-colors group-hover:text-white text-[15px] leading-8">
                     {summary}
                   </p>
                 </div>

@@ -3,18 +3,15 @@ import type { XSignal } from "@schema/brief.types";
 
 import { DataState } from "@/components/ui/DataState";
 
-import { XSignalsClient } from "./XSignalsClient";
 import { XSignalsList } from "./XSignalsList";
 
 export function XSignals({
   featuredItems,
   allItems,
-  variant = "home",
   showRawToggle = false,
 }: {
   featuredItems: XSignal[] | null;
   allItems: XSignal[] | null;
-  variant?: "home" | "detail";
   showRawToggle?: boolean;
 }) {
   const featured = featuredItems ?? [];
@@ -26,29 +23,19 @@ export function XSignals({
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-10">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div className="space-y-1">
-              <h2 className="section-title">{variant === "home" ? "실시간 X 시그널" : "전체 X 시그널"}</h2>
-              <span className="eyebrow">
-                {variant === "home" ? "Fast-moving Commentary" : "Full Signal Flow"}
-              </span>
+              <h2 className="section-title">전체 X 시그널</h2>
+              <span className="eyebrow">Full Signal Flow</span>
             </div>
           </div>
           <DataState
             title="X 시그널 상태"
-            message={
-              variant === "home"
-                ? "이번 집계에서는 공식 X 시그널을 확인하지 못했어요."
-                : "이번 집계에서는 전체 X 시그널을 확인하지 못했어요."
-            }
+            message="이번 집계에서는 전체 X 시그널을 확인하지 못했어요."
             family="reading"
             minHeight={220}
           />
         </div>
       </section>
     );
-  }
-
-  if (variant === "home") {
-    return <XSignalsClient featuredItems={featured} allItems={all} />;
   }
 
   return (

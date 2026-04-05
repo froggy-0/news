@@ -52,13 +52,10 @@ function bitcoinCardDelayFor(index: number): string {
 
 export function BitcoinPanel({
   bitcoin,
-  variant = "detail",
 }: {
   bitcoin: BitcoinSection;
-  variant?: "home" | "detail";
 }) {
   const etf = bitcoin.etf;
-  const compactHome = variant === "home";
 
   return (
     <RevealSection className="border-b border-white/10 px-6 py-16" threshold={0.25} delayMs={220}>
@@ -70,88 +67,12 @@ export function BitcoinPanel({
               현물 가격, 투자 심리, 공식 ETF 핵심 수치를 압축해서 함께 봅니다.
             </p>
           </div>
-          {variant === "detail" ? (
-            <p className="max-w-md text-sm leading-7 text-white/52">
-              시세와 심리만 따로 보지 않고, 실제 ETF 집행 강도와 함께 읽도록 구성합니다.
-            </p>
-          ) : null}
+          <p className="max-w-md text-sm leading-7 text-white/52">
+            시세와 심리만 따로 보지 않고, 실제 ETF 집행 강도와 함께 읽도록 구성합니다.
+          </p>
         </div>
 
-        {compactHome ? (
-          bitcoin.price || bitcoin.fearGreedIndex || etf ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {bitcoin.price ? (
-                <div
-                  className="card-data market-heat-card"
-                  data-trend={trendFromChange(bitcoin.change)}
-                  style={{ animationDelay: bitcoinCardDelayFor(0) }}
-                >
-                  <div className="card-family-data h-full" style={compactBitcoinTone("bitcoin")}>
-                    <p className="section-title">비트코인 현물</p>
-                    <div className="mt-2 flex items-center justify-between gap-3">
-                      <p className="numeric text-[1.08rem] font-semibold text-white">{bitcoin.price}</p>
-                      <p className="text-[12px] text-[var(--accent-primary)]">{bitcoin.change ?? "보합"}</p>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-
-              {bitcoin.fearGreedIndex ? (
-                <div
-                  className="card-data market-heat-card"
-                  data-trend="neutral"
-                  style={{ animationDelay: bitcoinCardDelayFor(1) }}
-                >
-                  <div className="card-family-data h-full" style={compactBitcoinTone("fear")}>
-                    <p className="section-title">공포탐욕</p>
-                    <div className="mt-2 flex items-center justify-between gap-3">
-                      <p className="numeric text-[1.08rem] font-semibold text-white">{bitcoin.fearGreedIndex.value}/100</p>
-                      <p className="text-[12px] text-[var(--accent-primary)]">{bitcoin.fearGreedIndex.label}</p>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-
-              {etf?.totalHolding ? (
-                <div
-                  className="card-data market-heat-card"
-                  data-trend="neutral"
-                  style={{ animationDelay: bitcoinCardDelayFor(2) }}
-                >
-                  <div className="card-family-data h-full" style={compactBitcoinTone("etf")}>
-                    <p className="section-title">ETF 총 보유량</p>
-                    <div className="mt-2">
-                      <p className="numeric text-[1.08rem] font-semibold text-white">{etf.totalHolding}</p>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-
-              {etf?.totalAum ? (
-                <div
-                  className="card-data market-heat-card"
-                  data-trend="neutral"
-                  style={{ animationDelay: bitcoinCardDelayFor(3) }}
-                >
-                  <div className="card-family-data h-full" style={compactBitcoinTone("etf")}>
-                    <p className="section-title">ETF 총 AUM</p>
-                    <div className="mt-2">
-                      <p className="numeric text-[1.08rem] font-semibold text-white">{etf.totalAum}</p>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <DataState
-              title="비트코인 보드 상태"
-              message="이번 집계에서는 비트코인 및 ETF 수치를 확인하지 못했어요."
-              family="data"
-              minHeight={160}
-            />
-          )
-        ) : (
-          <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+        <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
             <div className="grid gap-4 md:grid-cols-[1.1fr_0.9fr]">
               <div className="section-shell rounded-[28px] p-6">
                 <div className="flex items-center justify-between gap-4">
@@ -261,7 +182,6 @@ export function BitcoinPanel({
               )}
             </div>
           </div>
-        )}
       </div>
     </RevealSection>
   );

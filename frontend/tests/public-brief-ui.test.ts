@@ -10,7 +10,7 @@ import { TopicGrid } from "../components/brief/TopicGrid";
 import { HomeHero } from "../components/hero/HomeHero";
 import { NewsFeed } from "../components/news/NewsFeed";
 import { XSignals } from "../components/signals/XSignals";
-import { buildHistoryEntries, buildMetaStatusCards } from "../lib/history";
+import { buildHistoryEntries } from "../lib/history";
 import { parseBriefData } from "../lib/brief-schema";
 
 async function loadBrief(name: string) {
@@ -27,16 +27,7 @@ test("history entries preserve archive hrefs and current date", () => {
   ]);
 });
 
-test("meta status cards replace fake system metrics with operational labels", async () => {
-  const brief = await loadBrief("2026-03-21.json");
-  const cards = buildMetaStatusCards(brief.meta);
-
-  assert.equal(cards[0]?.label, "Data Quality");
-  assert.equal(cards[1]?.label, "Translation");
-  assert.match(cards[2]?.value ?? "", /뉴스 0→0 · X 0→0/);
-});
-
-test("judgment block renders degraded quality notes in static markup", async () => {
+test("judgment block renders headline in static markup", async () => {
   const brief = await loadBrief("degraded.json");
   const markup = renderToStaticMarkup(
     createElement(JudgmentBlock, {
@@ -44,7 +35,6 @@ test("judgment block renders degraded quality notes in static markup", async () 
       summaryLead: brief.aiJudgment.summaryLead,
       summarySupport: brief.aiJudgment.summarySupport,
       issueDate: brief.meta.date,
-      variant: "home",
     }),
   );
 
@@ -53,7 +43,7 @@ test("judgment block renders degraded quality notes in static markup", async () 
 });
 
 test("topic grid renders empty state when topic summaries are absent", () => {
-  const markup = renderToStaticMarkup(createElement(TopicGrid, { items: [], variant: "home" }));
+  const markup = renderToStaticMarkup(createElement(TopicGrid, { items: [] }));
   assert.match(markup, /테마 상태/);
   assert.match(markup, /유효한 주요 테마 요약을 확인하지 못했어요/);
 });
@@ -64,12 +54,12 @@ test("home hero renders brief entry CTA and deterministic seed marker", async ()
     createElement(HomeHero, {
       brief,
       heroSeed: brief.meta.date,
+      latestDate: brief.meta.date,
     }),
   );
 
   assert.match(markup, /data-hero-seed="2026-03-21"/);
   assert.match(markup, /오늘 브리프 먼저 읽기/);
-  assert.match(markup, /href="#brief"/);
 });
 
 test("news feed detail renders all news cards from fixture", async () => {
@@ -78,7 +68,6 @@ test("news feed detail renders all news cards from fixture", async () => {
     createElement(NewsFeed, {
       featuredItems: brief.featuredNews,
       allItems: brief.allNews,
-      variant: "detail",
       showRawTitle: true,
     }),
   );
@@ -88,12 +77,10 @@ test("news feed detail renders all news cards from fixture", async () => {
 });
 
 test("news feed renders nothing when both featured and all news are absent", () => {
-  // Req 4.3: featuredNews 0개 시 섹션 숨김 (return null)
   const markup = renderToStaticMarkup(
     createElement(NewsFeed, {
       featuredItems: [],
       allItems: [],
-      variant: "home",
     }),
   );
 
@@ -105,7 +92,6 @@ test("x signals component renders empty state when both featured and all signals
     createElement(XSignals, {
       featuredItems: null,
       allItems: null,
-      variant: "detail",
     }),
   );
 
