@@ -40,6 +40,7 @@
 | `news-source-quality` | `.agents/skills/news-source-quality/` | Perplexity/Sonar/Grok/RSS 뉴스 품질과 필터 drift 분석 |
 | `email-render-audit` | `.agents/skills/email-render-audit/` | markdown, email context, template, MIME 결과 비교 |
 | `brief-ops-app` | `.agents/skills/brief-ops-app/` | SOVEREIGN BRIEF 전용 Apps SDK 운영 UI 설계 |
+| `financial-services-research` | `.agents/skills/financial-services-research/` | Anthropic financial-services-plugins를 Codex용 on-demand 리서치 워크플로로 단순 포팅 |
 
 ## 4. Frontend / Apps SDK 원칙
 
@@ -57,6 +58,14 @@
 3. 브리핑/이메일 품질: `brief-quality-review`, `email-render-audit`
 4. 뉴스 품질: `news-source-quality`
 5. 운영 UI 설계: `brief-ops-app` + global `chatgpt-apps`
+6. 금융 업무형 리서치: `financial-services-research`
+
+## 5-1. Claude plugin 포팅 메모
+
+- Anthropic의 `financial-services-plugins`는 Claude 전용 plugin 포맷이므로 Codex에 직접 설치하지 않습니다.
+- 이 저장소에서는 repo skill + 필요 시 MCP 설정으로 대응합니다.
+- 기본 전략은 자동 상시 활성화가 아니라 on-demand 사용입니다.
+- 상세 기준은 [docs/codex-financial-services-plugins.md](codex-financial-services-plugins.md)를 따릅니다.
 
 ## 6. Frontend QA와 Playwright
 

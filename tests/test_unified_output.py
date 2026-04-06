@@ -65,6 +65,34 @@ MINIMAL_PACKET: dict = {
             "change_pct": -0.75,
         },
     ],
+    "korea_indices": [
+        {
+            "canonical_key": "kospi",
+            "label": "코스피",
+            "ticker": "0001",
+            "price": 5450.33,
+            "resolved_value": 5450.33,
+            "change_pct": 1.36,
+        },
+        {
+            "canonical_key": "kosdaq",
+            "label": "코스닥",
+            "ticker": "1001",
+            "price": 1047.37,
+            "resolved_value": 1047.37,
+            "change_pct": -1.54,
+        },
+    ],
+    "validated_indices": [
+        {
+            "canonical_key": "dow30",
+            "label": "다우30",
+            "ticker": ".DJI",
+            "price": 46504.67,
+            "resolved_value": 46504.67,
+            "change_pct": -0.13,
+        }
+    ],
     "us_indices": [
         {
             "canonical_key": "spy",
@@ -168,6 +196,14 @@ class TestPacketToQuantitative:
         assert self.q.dxy is not None
         assert self.q.dxy.change == "-0.35%"
 
+    def test_validated_index_slots_are_populated(self):
+        assert self.q.dow30 is not None
+        assert self.q.dow30.value_fmt == "46,504.67"
+        assert self.q.kospi is not None
+        assert self.q.kospi.change == "+1.36%"
+        assert self.q.kosdaq is not None
+        assert self.q.kosdaq.change == "-1.54%"
+
     def test_fc1_soxx_positive(self):
         """soxx change_pct=+1.23 → "+1.23%"."""
         assert self.q.soxx is not None
@@ -193,6 +229,8 @@ class TestPacketToQuantitative:
         """sparkline_data에 주요 키가 있어야 함."""
         assert "us10y" in self.q.sparkline_data
         assert "btc" in self.q.sparkline_data
+        assert "dow30" in self.q.sparkline_data
+        assert "kospi" in self.q.sparkline_data
         assert len(self.q.sparkline_data["btc"]) == 2
 
     def test_sparkline_two_points(self):
@@ -206,6 +244,8 @@ class TestPacketToQuantitative:
         """packet에 없는 섹션은 None."""
         q = packet_to_quantitative({})
         assert q.us10y is None
+        assert q.dow30 is None
+        assert q.kospi is None
         assert q.btc_spot is None
         assert q.btc_total_holding is None
 

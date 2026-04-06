@@ -27,6 +27,15 @@ from morning_brief.data.sources.kis import (
     fetch_close_change_and_volume as kis_fetch_close_change_and_volume,
 )
 from morning_brief.data.sources.kis import (
+    fetch_dow30_point as kis_fetch_dow30_point,
+)
+from morning_brief.data.sources.kis import (
+    fetch_kosdaq_point as kis_fetch_kosdaq_point,
+)
+from morning_brief.data.sources.kis import (
+    fetch_kospi_point as kis_fetch_kospi_point,
+)
+from morning_brief.data.sources.kis import (
     fetch_usdkrw_point as kis_fetch_usdkrw_point,
 )
 from morning_brief.data.sources.kis import (
@@ -60,6 +69,13 @@ MACRO_FALLBACK_TARGETS = [
 ]
 KOREA_INVESTOR_TARGETS = [
     ("nq_futures", "NQ=F", 1.0),
+]
+VALIDATED_GLOBAL_INDEX_TARGETS = [
+    ("dow30", ".DJI", "^DJI"),
+]
+KOREA_INDEX_TARGETS = [
+    ("kospi", "0001", "^KS11"),
+    ("kosdaq", "1001", "^KQ11"),
 ]
 US_INDEX_TARGETS = [
     ("spy", "SPY"),
@@ -106,6 +122,17 @@ def _point_changes(
         return 0.0, None
 
     return round(((latest_value - previous_value) / previous_value) * 100, 2), None
+
+
+def _record_provider_usage(
+    observer: PipelineObserver | None,
+    provider: str | None,
+    *,
+    phase: str | None = None,
+) -> None:
+    if observer is None or not provider:
+        return
+    observer.record_provider_usage(provider, phase=phase, requests=1)
 
 
 def reset_market_warned_state() -> None:
@@ -251,12 +278,21 @@ def _safe_with_fallback(
     warning_args: tuple[object, ...],
     primary_fetch,
     fallback_fetch,
+    observer: PipelineObserver | None = None,
+    primary_provider: str | None = None,
+    fallback_provider: str | None = None,
+    phase: str | None = None,
 ):
     try:
-        return primary_fetch()
+        result = primary_fetch()
+        _record_provider_usage(observer, primary_provider, phase=phase)
+        return result
     except Exception as exc:
         _warn_once(warning_key, warning_message, *warning_args, exc)
-        return fallback_fetch()
+        _record_provider_usage(observer, primary_provider, phase=phase)
+        result = fallback_fetch()
+        _record_provider_usage(observer, fallback_provider, phase=phase)
+        return result
 
 
 def _safe_yfinance_point(
@@ -309,6 +345,23 @@ def _point_from_kis(
     )
 
 
+def _point_from_kis_fetcher(
+    *,
+    label: str,
+    ticker: str,
+    canonical_key: str,
+    fetch_point,
+) -> MarketPoint:
+    close, change_pct = fetch_point()
+    return _market_point(
+        label=label,
+        ticker=ticker,
+        close=close,
+        change_pct=change_pct,
+        canonical_key=canonical_key,
+    )
+
+
 def _point_and_volume_from_kis(
     label: str,
     ticker: str,
@@ -332,6 +385,8 @@ def _safe_kis_point(
     label: str,
     ticker: str,
     canonical_key: str | None = None,
+    observer: PipelineObserver | None = None,
+    phase: str | None = None,
 ) -> MarketPoint:
     canonical_key = canonical_key or canonical_key_for(ticker, label)
     if not kis_is_available():
@@ -342,11 +397,13 @@ def _safe_kis_point(
             ticker,
             provider="kis",
         )
-        return _safe_yfinance_point(
+        point = _safe_yfinance_point(
             label=label,
             ticker=ticker,
             canonical_key=canonical_key,
         )
+        _record_provider_usage(observer, "yfinance", phase=phase)
+        return point
 
     return _safe_with_fallback(
         warning_key=f"kis_fallback_{ticker}",
@@ -362,6 +419,10 @@ def _safe_kis_point(
             ticker=ticker,
             canonical_key=canonical_key,
         ),
+        observer=observer,
+        primary_provider="kis",
+        fallback_provider="yfinance",
+        phase=phase,
     )
 
 
@@ -387,6 +448,8 @@ def _safe_kis_point_and_volume(
     label: str,
     ticker: str,
     canonical_key: str | None = None,
+    observer: PipelineObserver | None = None,
+    phase: str | None = None,
 ) -> tuple[MarketPoint, int | None]:
     canonical_key = canonical_key or canonical_key_for(ticker, label)
     if not kis_is_available():
@@ -397,10 +460,12 @@ def _safe_kis_point_and_volume(
             ticker,
             provider="kis",
         )
-        return (
+        result = (
             _safe_yfinance_point(label=label, ticker=ticker, canonical_key=canonical_key),
             _volume_from_yfinance(ticker=ticker),
         )
+        _record_provider_usage(observer, "yfinance", phase=phase)
+        return result
 
     return _safe_with_fallback(
         warning_key=f"kis_point_volume_fallback_{ticker}",
@@ -415,6 +480,10 @@ def _safe_kis_point_and_volume(
             _safe_yfinance_point(label=label, ticker=ticker, canonical_key=canonical_key),
             _volume_from_yfinance(ticker=ticker),
         ),
+        observer=observer,
+        primary_provider="kis",
+        fallback_provider="yfinance",
+        phase=phase,
     )
 
 
@@ -479,13 +548,19 @@ def fetch_macro_points(fred_api_key: str = "") -> list[MarketPoint]:
     return _fallback_macro_points()
 
 
-def fetch_us_index_points() -> list[MarketPoint]:
+def fetch_us_index_points(
+    observer: PipelineObserver | None = None,
+    *,
+    phase: str | None = None,
+) -> list[MarketPoint]:
     # Direct index quotes stay unstable across providers; use liquid ETF proxies for stability.
     points = [
         _safe_kis_point(
             label=canonical_label_for(canonical_key),
             ticker=ticker,
             canonical_key=canonical_key_for(ticker, canonical_key),
+            observer=observer,
+            phase=phase,
         )
         for canonical_key, ticker in US_INDEX_TARGETS
     ]
@@ -500,12 +575,18 @@ def fetch_us_index_points() -> list[MarketPoint]:
     return points
 
 
-def fetch_tech_stock_points() -> list[MarketPoint]:
+def fetch_tech_stock_points(
+    observer: PipelineObserver | None = None,
+    *,
+    phase: str | None = None,
+) -> list[MarketPoint]:
     points = [
         _safe_kis_point(
             label=ticker,
             ticker=ticker,
             canonical_key=canonical_key_for(ticker),
+            observer=observer,
+            phase=phase,
         )
         for ticker in TECH_STOCK_TICKERS
     ]
@@ -524,8 +605,87 @@ def fetch_tech_stock_points() -> list[MarketPoint]:
     return points
 
 
+def _safe_kis_custom_point(
+    *,
+    label: str,
+    ticker: str,
+    fallback_ticker: str,
+    canonical_key: str,
+    fetch_point,
+    observer: PipelineObserver | None = None,
+    phase: str | None = None,
+) -> MarketPoint:
+    def fallback_fetch() -> MarketPoint:
+        return _safe_yfinance_point(
+            label=label,
+            ticker=fallback_ticker,
+            canonical_key=canonical_key,
+        )
+
+    if not kis_is_available():
+        _info_once(
+            f"kis_unavailable_{ticker}",
+            "KIS 인증 정보가 없어 %s (%s)은 yfinance로 바로 가져올게요.",
+            label,
+            ticker,
+            provider="kis",
+        )
+        point = fallback_fetch()
+        _record_provider_usage(observer, "yfinance", phase=phase)
+        return point
+
+    return _safe_with_fallback(
+        warning_key=f"kis_fallback_{ticker}",
+        warning_message="KIS에서 %s (%s) 데이터를 바로 가져오지 못해 yfinance로 이어서 볼게요: %s",
+        warning_args=(label, ticker),
+        primary_fetch=lambda: _point_from_kis_fetcher(
+            label=label,
+            ticker=ticker,
+            canonical_key=canonical_key,
+            fetch_point=fetch_point,
+        ),
+        fallback_fetch=fallback_fetch,
+        observer=observer,
+        primary_provider="kis",
+        fallback_provider="yfinance",
+        phase=phase,
+    )
+
+
+def fetch_validated_global_index_points(
+    observer: PipelineObserver | None = None,
+    *,
+    phase: str | None = None,
+) -> list[MarketPoint]:
+    fetcher_by_key = {
+        "dow30": kis_fetch_dow30_point,
+    }
+    points = [
+        _safe_kis_custom_point(
+            label=canonical_label_for(canonical_key),
+            ticker=ticker,
+            fallback_ticker=fallback_ticker,
+            canonical_key=canonical_key_for(ticker, canonical_key),
+            fetch_point=fetcher_by_key[canonical_key],
+            observer=observer,
+            phase=phase,
+        )
+        for canonical_key, ticker, fallback_ticker in VALIDATED_GLOBAL_INDEX_TARGETS
+    ]
+    log_structured(
+        logger,
+        event="selection.complete",
+        message="검증된 글로벌 지수는 KIS 기준으로 보고 필요하면 yfinance로 보강했어요.",
+        level=logging.DEBUG,
+        provider="kis",
+        kept_count=len(points),
+    )
+    return points
+
+
 def fetch_newsletter_display_data(
     cache_dir: Path | None = None,
+    observer: PipelineObserver | None = None,
 ) -> dict:
     """뉴스레터 렌더링 직전에만 호출하는 표시 전용 데이터 수집 함수.
 
@@ -534,13 +694,15 @@ def fetch_newsletter_display_data(
     - BTC ETF 가격 5종 (btc_etf_points)
     - nq_futures / usdkrw (korea_watch)
     """
-    korea_watch = fetch_korea_investor_points()
-    tech_stocks = fetch_tech_stock_points()
+    korea_watch = fetch_korea_investor_points(observer=observer)
+    korea_indices = fetch_korea_index_points(observer=observer)
+    tech_stocks = fetch_tech_stock_points(observer=observer)
     btc_etf_points: list[MarketPoint] = []
     for ticker in BTC_ETF_TICKERS:
         point, _ = _safe_kis_point_and_volume(
             label=ticker,
             ticker=ticker,
+            observer=observer,
         )
         btc_etf_points.append(point)
 
@@ -549,14 +711,17 @@ def fetch_newsletter_display_data(
     previous_by_key = _load_market_point_cache(cache_file)
 
     korea_watch = _resolve_points_from_cache(korea_watch, previous_by_key)
+    korea_indices = _resolve_points_from_cache(korea_indices, previous_by_key)
     tech_stocks = _resolve_points_from_cache(tech_stocks, previous_by_key)
     btc_etf_points = _resolve_points_from_cache(btc_etf_points, previous_by_key)
     korea_watch, _ = _validate_market_points(korea_watch)
+    korea_indices, _ = _validate_market_points(korea_indices)
     tech_stocks, _ = _validate_market_points(tech_stocks)
     btc_etf_points, _ = _validate_market_points(btc_etf_points)
 
     return {
         "korea_watch": [point.__dict__ for point in korea_watch],
+        "korea_indices": [point.__dict__ for point in korea_indices],
         "tech_stocks": [point.__dict__ for point in tech_stocks],
         "btc_etf_points": [point.__dict__ for point in btc_etf_points],
     }
@@ -573,7 +738,11 @@ def _point_from_kis_usdkrw() -> MarketPoint:
     )
 
 
-def _safe_kis_usdkrw_point() -> MarketPoint:
+def _safe_kis_usdkrw_point(
+    observer: PipelineObserver | None = None,
+    *,
+    phase: str | None = None,
+) -> MarketPoint:
     def fallback_fetch() -> MarketPoint:
         return _safe_yfinance_point(
             label=canonical_label_for("usdkrw"),
@@ -590,7 +759,9 @@ def _safe_kis_usdkrw_point() -> MarketPoint:
             "KRW=X",
             provider="kis",
         )
-        return fallback_fetch()
+        point = fallback_fetch()
+        _record_provider_usage(observer, "yfinance", phase=phase)
+        return point
 
     return _safe_with_fallback(
         warning_key="kis_fallback_usdkrw",
@@ -598,24 +769,65 @@ def _safe_kis_usdkrw_point() -> MarketPoint:
         warning_args=(canonical_label_for("usdkrw"), "KRW=X"),
         primary_fetch=_point_from_kis_usdkrw,
         fallback_fetch=fallback_fetch,
+        observer=observer,
+        primary_provider="kis",
+        fallback_provider="yfinance",
+        phase=phase,
     )
 
 
-def fetch_korea_investor_points() -> list[MarketPoint]:
-    points = [_safe_kis_usdkrw_point()]
-    points.extend(
-        _safe_yfinance_point(
-            label=canonical_label_for(canonical_key),
-            ticker=ticker,
-            canonical_key=canonical_key_for(ticker, canonical_key),
-            price_scale=scale,
+def fetch_korea_investor_points(
+    observer: PipelineObserver | None = None,
+    *,
+    phase: str | None = None,
+) -> list[MarketPoint]:
+    points = [_safe_kis_usdkrw_point(observer=observer, phase=phase)]
+    for canonical_key, ticker, scale in KOREA_INVESTOR_TARGETS:
+        points.append(
+            _safe_yfinance_point(
+                label=canonical_label_for(canonical_key),
+                ticker=ticker,
+                canonical_key=canonical_key_for(ticker, canonical_key),
+                price_scale=scale,
+            )
         )
-        for canonical_key, ticker, scale in KOREA_INVESTOR_TARGETS
-    )
+        _record_provider_usage(observer, "yfinance", phase=phase)
     log_structured(
         logger,
         event="selection.complete",
         message="한국 투자자 참고 지표는 원/달러는 KIS, 나스닥 선물은 yfinance 기준으로 가져왔어요.",
+        level=logging.DEBUG,
+        provider="kis",
+        kept_count=len(points),
+    )
+    return points
+
+
+def fetch_korea_index_points(
+    observer: PipelineObserver | None = None,
+    *,
+    phase: str | None = None,
+) -> list[MarketPoint]:
+    fetcher_by_key = {
+        "kospi": kis_fetch_kospi_point,
+        "kosdaq": kis_fetch_kosdaq_point,
+    }
+    points = [
+        _safe_kis_custom_point(
+            label=canonical_label_for(canonical_key),
+            ticker=ticker,
+            fallback_ticker=fallback_ticker,
+            canonical_key=canonical_key_for(ticker, canonical_key),
+            fetch_point=fetcher_by_key[canonical_key],
+            observer=observer,
+            phase=phase,
+        )
+        for canonical_key, ticker, fallback_ticker in KOREA_INDEX_TARGETS
+    ]
+    log_structured(
+        logger,
+        event="selection.complete",
+        message="국내 대표지수는 KIS 기준으로 보고 필요하면 yfinance로 보강했어요.",
         level=logging.DEBUG,
         provider="kis",
         kept_count=len(points),
@@ -1052,7 +1264,8 @@ def build_market_packet(
     cache_file = _market_point_cache_file(effective_cache_dir)
     previous_by_key = _load_market_point_cache(cache_file, max_age_hours=cache_max_age_hours)
     macro_points = fetch_macro_points(fred_api_key=fred_api_key)
-    us_index_points = fetch_us_index_points()
+    validated_index_points = fetch_validated_global_index_points(observer=observer, phase="market")
+    us_index_points = fetch_us_index_points(observer=observer, phase="market")
     btc_snapshot = fetch_bitcoin_snapshot(
         cache_dir=effective_cache_dir,
         perplexity_api_key=perplexity_api_key,
@@ -1061,14 +1274,17 @@ def build_market_packet(
     )
     all_current_points = [
         *macro_points,
+        *validated_index_points,
         *us_index_points,
         btc_snapshot.spot,
     ]
     macro_points = _resolve_points_from_cache(macro_points, previous_by_key)
+    validated_index_points = _resolve_points_from_cache(validated_index_points, previous_by_key)
     us_index_points = _resolve_points_from_cache(us_index_points, previous_by_key)
     btc_snapshot.spot = _resolve_point_from_cache(btc_snapshot.spot, previous_by_key)
     _save_market_point_cache(cache_file, all_current_points)
     macro_points, macro_notes = _validate_market_points(macro_points)
+    validated_index_points, validated_index_notes = _validate_market_points(validated_index_points)
     us_index_points, index_notes = _validate_market_points(us_index_points)
     validated_spot, spot_note = _validate_market_point(btc_snapshot.spot)
     btc_snapshot.spot = validated_spot
@@ -1089,6 +1305,7 @@ def build_market_packet(
 
     data_footer_notes = [
         *macro_notes,
+        *validated_index_notes,
         *index_notes,
         *([spot_note] if spot_note else []),
     ]
@@ -1099,6 +1316,7 @@ def build_market_packet(
         "macro": [point.__dict__ for point in macro_points],
         "yield_spread": yield_spread,  # 장단기 금리차 (10Y-2Y). 음수 = 역전 = 경기침체 우려
         "korea_watch": [],
+        "validated_indices": [point.__dict__ for point in validated_index_points],
         "us_indices": [point.__dict__ for point in us_index_points],
         "tech_stocks": [],
         "data_footer_notes": data_footer_notes,

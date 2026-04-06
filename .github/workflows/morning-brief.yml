@@ -1,9 +1,6 @@
 name: Generate Sovereign Briefing
 
 on:
-  schedule:
-    # 07:54 KST daily == 22:54 UTC (previous day)
-    - cron: "54 22 * * *"
   workflow_dispatch:
 
 concurrency:

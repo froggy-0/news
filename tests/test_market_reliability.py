@@ -12,8 +12,11 @@ from morning_brief.data.market import (
     _load_market_point_cache,
     _save_market_point_cache,
     build_market_packet,
+    fetch_korea_index_points,
     fetch_korea_investor_points,
     fetch_macro_points,
+    fetch_newsletter_display_data,
+    fetch_validated_global_index_points,
 )
 from morning_brief.data.market_policy import CANONICAL_KEY_BY_SOURCE
 from morning_brief.data.sources.fred import fetch_macro_points_from_fred
@@ -84,6 +87,9 @@ def test_build_market_packet_uses_previous_value_cache_for_missing_points(
         ],
     )
     monkeypatch.setattr("morning_brief.data.market.fetch_us_index_points", lambda **_: [])
+    monkeypatch.setattr(
+        "morning_brief.data.market.fetch_validated_global_index_points", lambda **_: []
+    )
     monkeypatch.setattr("morning_brief.data.market.fetch_tech_stock_points", lambda **_: [])
     monkeypatch.setattr("morning_brief.data.market.fetch_korea_investor_points", lambda: [])
     monkeypatch.setattr(
@@ -121,6 +127,9 @@ def test_build_market_packet_keeps_missing_points_empty_without_cache(monkeypatc
         ],
     )
     monkeypatch.setattr("morning_brief.data.market.fetch_us_index_points", lambda **_: [])
+    monkeypatch.setattr(
+        "morning_brief.data.market.fetch_validated_global_index_points", lambda **_: []
+    )
     monkeypatch.setattr("morning_brief.data.market.fetch_tech_stock_points", lambda **_: [])
     monkeypatch.setattr("morning_brief.data.market.fetch_korea_investor_points", lambda: [])
     monkeypatch.setattr(
@@ -163,6 +172,9 @@ def test_build_market_packet_omits_anomalous_values_and_records_footer_note(
         ],
     )
     monkeypatch.setattr("morning_brief.data.market.fetch_us_index_points", lambda **_: [])
+    monkeypatch.setattr(
+        "morning_brief.data.market.fetch_validated_global_index_points", lambda **_: []
+    )
     monkeypatch.setattr("morning_brief.data.market.fetch_tech_stock_points", lambda **_: [])
     monkeypatch.setattr("morning_brief.data.market.fetch_korea_investor_points", lambda: [])
     monkeypatch.setattr(
@@ -282,7 +294,7 @@ def test_fetch_korea_investor_points_uses_kis_for_usdkrw_and_yfinance_for_nq(mon
 
     monkeypatch.setattr(
         "morning_brief.data.market._safe_kis_usdkrw_point",
-        lambda: (
+        lambda *args, **kwargs: (
             kis_calls.append("usdkrw")
             or _point(
                 label="원/달러 환율",
@@ -313,11 +325,121 @@ def test_fetch_korea_investor_points_uses_kis_for_usdkrw_and_yfinance_for_nq(mon
     assert yfinance_calls == [("나스닥 선물", "NQ=F", "nq_futures", 1.0)]
 
 
+def test_fetch_validated_global_index_points_uses_dow30_contract(monkeypatch):
+    calls: list[tuple[str, str, str]] = []
+
+    def fake_safe_kis_custom_point(
+        *,
+        label: str,
+        ticker: str,
+        fallback_ticker: str,
+        canonical_key: str,
+        fetch_point,
+        observer=None,
+        phase=None,
+    ):
+        calls.append((ticker, fallback_ticker, canonical_key))
+        return _point(
+            label=label,
+            ticker=ticker,
+            canonical_key=canonical_key,
+            price=46_504.67,
+            change_pct=-0.13,
+        )
+
+    monkeypatch.setattr(
+        "morning_brief.data.market._safe_kis_custom_point", fake_safe_kis_custom_point
+    )
+
+    points = fetch_validated_global_index_points()
+
+    assert [point.canonical_key for point in points] == ["dow30"]
+    assert calls == [(".DJI", "^DJI", "dow30")]
+
+
+def test_fetch_korea_index_points_uses_verified_contracts(monkeypatch):
+    calls: list[tuple[str, str, str]] = []
+
+    def fake_safe_kis_custom_point(
+        *,
+        label: str,
+        ticker: str,
+        fallback_ticker: str,
+        canonical_key: str,
+        fetch_point,
+        observer=None,
+        phase=None,
+    ):
+        calls.append((ticker, fallback_ticker, canonical_key))
+        price = 5450.33 if canonical_key == "kospi" else 1047.37
+        change_pct = 1.36 if canonical_key == "kospi" else -1.54
+        return _point(
+            label=label,
+            ticker=ticker,
+            canonical_key=canonical_key,
+            price=price,
+            change_pct=change_pct,
+        )
+
+    monkeypatch.setattr(
+        "morning_brief.data.market._safe_kis_custom_point", fake_safe_kis_custom_point
+    )
+
+    points = fetch_korea_index_points()
+
+    assert [point.canonical_key for point in points] == ["kospi", "kosdaq"]
+    assert calls == [("0001", "^KS11", "kospi"), ("1001", "^KQ11", "kosdaq")]
+
+
+def test_fetch_newsletter_display_data_adds_korea_indices(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(
+        "morning_brief.data.market.fetch_korea_investor_points",
+        lambda **_: [
+            _point(
+                label="원/달러 환율",
+                ticker="USDKRW",
+                canonical_key="usdkrw",
+                price=1506.4,
+                change_pct=0.1,
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.market.fetch_korea_index_points",
+        lambda **_: [
+            _point(
+                label="코스피",
+                ticker="0001",
+                canonical_key="kospi",
+                price=5450.33,
+                change_pct=1.36,
+            ),
+            _point(
+                label="코스닥",
+                ticker="1001",
+                canonical_key="kosdaq",
+                price=1047.37,
+                change_pct=-1.54,
+            ),
+        ],
+    )
+    monkeypatch.setattr("morning_brief.data.market.fetch_tech_stock_points", lambda **_: [])
+    monkeypatch.setattr("morning_brief.data.market.BTC_ETF_TICKERS", [])
+
+    display = fetch_newsletter_display_data(cache_dir=tmp_path)
+
+    assert [point["canonical_key"] for point in display["korea_indices"]] == ["kospi", "kosdaq"]
+    assert [point["canonical_key"] for point in display["korea_watch"]] == ["usdkrw"]
+
+
 def test_build_market_packet_korea_watch_is_empty(monkeypatch, tmp_path: Path):
     """build_market_packet()의 korea_watch는 빈 리스트여야 한다.
     usdkrw/nq_futures는 fetch_newsletter_display_data()에서 렌더링 직전에 수집됨."""
     monkeypatch.setattr("morning_brief.data.market.fetch_macro_points", lambda **_: [])
     monkeypatch.setattr("morning_brief.data.market.fetch_us_index_points", lambda **_: [])
+    monkeypatch.setattr(
+        "morning_brief.data.market.fetch_validated_global_index_points", lambda **_: []
+    )
     monkeypatch.setattr(
         "morning_brief.data.market.fetch_bitcoin_snapshot",
         lambda **_: _btc_snapshot(
@@ -334,6 +456,7 @@ def test_build_market_packet_korea_watch_is_empty(monkeypatch, tmp_path: Path):
     packet = build_market_packet(cache_dir=tmp_path)
 
     assert packet["korea_watch"] == [], "korea_watch는 감성 파이프라인에서 제외됨"
+    assert packet["validated_indices"] == [], "validated_indices는 phase 1 direct index 섹션"
     assert packet["tech_stocks"] == [], "tech_stocks는 감성 파이프라인에서 제외됨"
     assert packet["bitcoin"]["etf_points"] == [], "btc etf_points는 감성 파이프라인에서 제외됨"
 
