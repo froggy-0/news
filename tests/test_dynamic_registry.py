@@ -444,11 +444,13 @@ class TestFallbackBehavior:
         saved_data = []
 
         # crypto_and_etf 그룹만 포함된 응답 (나머지 그룹 키 없음)
-        content = _json.dumps({
-            "groups": {
-                "crypto": [{"handle": "CryptoHandle", "trust_score": 4}],
+        content = _json.dumps(
+            {
+                "groups": {
+                    "crypto": [{"handle": "CryptoHandle", "trust_score": 4}],
+                }
             }
-        })
+        )
 
         def mock_call_once(**kwargs):
             return content, {}
