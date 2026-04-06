@@ -79,8 +79,8 @@ Output format (strict JSON):
 {
   "groups": {
     "crypto_and_etf": [
-      {"handle": "SECGov", "trust_score": 5, "rationale": "U.S. SEC official account. Crypto regulatory decisions directly impact ETF approvals."},
-      {"handle": "CoinDesk", "trust_score": 4, "rationale": "Leading crypto news outlet. Real-time regulatory and market updates."}
+      {"handle": "SECGov", "trust_score": 5},
+      {"handle": "CoinDesk", "trust_score": 4}
     ],
     "ai_bigtech_primary": [...],
     "macro_and_equity": [...],
@@ -91,7 +91,6 @@ Output format (strict JSON):
 Rules:
 - handle: X handle WITHOUT @ symbol
 - trust_score: integer 1-5
-- rationale: concise English string explaining why this account matters for professional investors
 - Return up to 10 handles per group
 - Only include accounts you are highly confident are x_verified: true
 - Do not include duplicate handles across groups
@@ -282,26 +281,12 @@ def _validate_entity(item: dict[str, Any], group: str) -> DynamicSignalEntity | 
         )
         return None
 
-    # rationale 검증
-    rationale = str(item.get("rationale", "")).strip()
-    if not rationale:
-        log_structured(
-            logger,
-            event="selection.complete",
-            message="rationale이 없어 핸들을 제외했어요.",
-            level=logging.DEBUG,
-            handle=handle,
-            kept_count=0,
-            reason="missing_rationale",
-        )
-        return None
-
     return DynamicSignalEntity(
         handle=handle,
         x_search_group=group,
         x_search_priority=0,  # Dynamic 엔티티는 항상 0으로 고정
         trust_score=trust_score,
-        rationale=rationale,
+        rationale="",
         x_verified=True,  # x_verified 필터 통과한 것만 저장
     )
 

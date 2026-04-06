@@ -61,9 +61,16 @@ Focus on:
 3. AI infrastructure, data center capex, model announcements
 4. Earnings guidance, revenue signals, product launches
 
-Return the top {max_items} most market-moving posts.
-Output format: {{"signals": [{{"headline": "...", "summary": "...", "why_it_matters": "...", "sentiment": "bullish|bearish|neutral", "source_handle": "...", "posted_at": "ISO8601"}}]}}
-Skip marketing, promotional, and non-market posts."""
+For each post, extract as JSON array "signals":
+- headline: one-line summary
+- summary: core market insight in 1-2 sentences
+- why_it_matters: market implication for investors
+- sentiment: bullish / bearish / neutral
+- source_handle: @handle of the poster
+- posted_at: ISO8601 timestamp
+
+Return the top {max_items} most market-moving posts. Skip marketing, promotional, and non-market posts.
+Output format: {{"signals": [...]}}"""
 
 BITCOIN_CRYPTO_PROMPT = """Search X for the most significant Bitcoin and crypto market posts from the last {lookback_hours} hours.
 Focus on:
