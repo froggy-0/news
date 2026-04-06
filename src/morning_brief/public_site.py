@@ -31,6 +31,9 @@ _PUBLIC_SNAPSHOT_SPECS = (
     ("macro", "vix", "VIX", "VIX"),
     ("korea_watch", "usdkrw", "KRW", "원/달러 환율"),
     ("korea_watch", "nq_futures", "NQ1!", "나스닥 선물"),
+    ("validated_indices", "dow30", "DJI", "다우30"),
+    ("korea_indices", "kospi", "KOSPI", "코스피"),
+    ("korea_indices", "kosdaq", "KOSDAQ", "코스닥"),
     ("us_indices", "spy", "SPX", "S&P 500"),
     ("us_indices", "qqq", "QQQ", "나스닥 100"),
     ("us_indices", "soxx", "SOXX", "반도체 ETF"),
@@ -632,6 +635,8 @@ def _market_snapshot_items(packet: dict[str, Any]) -> list[dict[str, Any]]:
     packet_sections = {
         "macro": packet.get("macro", []),
         "korea_watch": packet.get("korea_watch", []),
+        "korea_indices": packet.get("korea_indices", []),
+        "validated_indices": packet.get("validated_indices", []),
         "us_indices": packet.get("us_indices", []),
     }
     items: list[dict[str, Any]] = []
@@ -688,6 +693,9 @@ def _market_snapshot_items_v2(unified: UnifiedOutput) -> list[dict[str, Any]]:
         quant.vix,
         quant.usdkrw,
         quant.nq_futures,
+        quant.dow30,
+        quant.kospi,
+        quant.kosdaq,
         quant.spy,
         quant.qqq,
         quant.soxx,

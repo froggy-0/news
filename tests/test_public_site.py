@@ -68,6 +68,40 @@ def _packet() -> dict:
                 "validation_status": "ok",
             },
         ],
+        "korea_indices": [
+            {
+                "canonical_key": "kospi",
+                "ticker": "0001",
+                "label": "코스피",
+                "price": 5450.33,
+                "resolved_value": 5450.33,
+                "change_pct": 1.36,
+                "is_previous_value": False,
+                "validation_status": "ok",
+            },
+            {
+                "canonical_key": "kosdaq",
+                "ticker": "1001",
+                "label": "코스닥",
+                "price": 1047.37,
+                "resolved_value": 1047.37,
+                "change_pct": -1.54,
+                "is_previous_value": False,
+                "validation_status": "ok",
+            },
+        ],
+        "validated_indices": [
+            {
+                "canonical_key": "dow30",
+                "ticker": ".DJI",
+                "label": "다우30",
+                "price": 46504.67,
+                "resolved_value": 46504.67,
+                "change_pct": -0.13,
+                "is_previous_value": False,
+                "validation_status": "ok",
+            }
+        ],
         "us_indices": [
             {
                 "canonical_key": "spy",
@@ -218,7 +252,20 @@ def test_build_public_brief_matches_frontend_contract_shape() -> None:
     assert "오늘의 핵심" in payload["aiJudgment"]["body"]
     assert "4-2. 핵심 뉴스 5선" not in payload["aiJudgment"]["body"]
     symbols = {item["symbol"] for item in payload["marketSnapshot"]["items"]}
-    assert {"US10Y", "DXY", "VIX", "KRW", "NQ1!", "SPX", "QQQ", "SOXX", "BTC"} <= symbols
+    assert {
+        "US10Y",
+        "DXY",
+        "VIX",
+        "KRW",
+        "NQ1!",
+        "DJI",
+        "KOSPI",
+        "KOSDAQ",
+        "SPX",
+        "QQQ",
+        "SOXX",
+        "BTC",
+    } <= symbols
     assert payload["bitcoin"]["fearGreedIndex"]["label"] == "탐욕"
     assert payload["bitcoin"]["etf"]["totalHolding"] == "983,240.13 BTC"
     assert payload["featuredXSignals"][0]["sentiment"] == "bullish"
@@ -438,7 +485,10 @@ def test_build_public_brief_hides_sparse_market_snapshot() -> None:
     packet = _packet()
     packet["macro"] = []
     packet["korea_watch"] = []
+    packet["korea_indices"] = []
+    packet["validated_indices"] = []
     packet["us_indices"] = []
+    packet["bitcoin"]["spot"] = {}
 
     payload = build_public_brief(
         packet=packet,

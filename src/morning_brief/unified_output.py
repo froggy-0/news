@@ -40,6 +40,9 @@ _SNAPSHOT_SPECS = (
     ("macro", "vix", "VIX", "VIX"),
     ("korea_watch", "usdkrw", "KRW", "원/달러 환율"),
     ("korea_watch", "nq_futures", "NQ1!", "나스닥 선물"),
+    ("validated_indices", "dow30", "DJI", "다우30"),
+    ("korea_indices", "kospi", "KOSPI", "코스피"),
+    ("korea_indices", "kosdaq", "KOSDAQ", "코스닥"),
     ("us_indices", "spy", "SPX", "S&P 500"),
     ("us_indices", "qqq", "QQQ", "나스닥 100"),
     ("us_indices", "soxx", "SOXX", "반도체 ETF"),
@@ -94,7 +97,16 @@ def _format_value(canonical_key: str, price: float | None) -> str | None:
         return None
     if canonical_key == "btc":
         return f"${price:,.0f}"  # FC-3
-    if canonical_key in {"usdkrw", "nq_futures", "spy", "qqq", "soxx"}:
+    if canonical_key in {
+        "usdkrw",
+        "nq_futures",
+        "dow30",
+        "kospi",
+        "kosdaq",
+        "spy",
+        "qqq",
+        "soxx",
+    }:
         return f"{price:,.2f}"
     if is_rate_canonical_key(canonical_key):
         return f"{price:.2f}%"
@@ -205,6 +217,10 @@ class QuantitativeLayer:
     # 원/달러 + 나스닥 선물 (korea_watch)
     usdkrw: TickerPoint | None
     nq_futures: TickerPoint | None
+    # 검증된 실제 지수
+    dow30: TickerPoint | None
+    kospi: TickerPoint | None
+    kosdaq: TickerPoint | None
     # 미국 지수
     spy: TickerPoint | None
     qqq: TickerPoint | None
@@ -316,6 +332,8 @@ def packet_to_quantitative(packet: dict) -> QuantitativeLayer:
     packet_sections: dict[str, list] = {
         "macro": packet.get("macro") or [],
         "korea_watch": packet.get("korea_watch") or [],
+        "korea_indices": packet.get("korea_indices") or [],
+        "validated_indices": packet.get("validated_indices") or [],
         "us_indices": packet.get("us_indices") or [],
     }
 
@@ -348,6 +366,9 @@ def packet_to_quantitative(packet: dict) -> QuantitativeLayer:
     vix = _build_ticker("macro", "vix", "VIX", "VIX")
     usdkrw = _build_ticker("korea_watch", "usdkrw", "KRW", "원/달러 환율")
     nq_futures = _build_ticker("korea_watch", "nq_futures", "NQ1!", "나스닥 선물")
+    dow30 = _build_ticker("validated_indices", "dow30", "DJI", "다우30")
+    kospi = _build_ticker("korea_indices", "kospi", "KOSPI", "코스피")
+    kosdaq = _build_ticker("korea_indices", "kosdaq", "KOSDAQ", "코스닥")
     spy = _build_ticker("us_indices", "spy", "SPX", "S&P 500")
     qqq = _build_ticker("us_indices", "qqq", "QQQ", "나스닥 100")
     soxx = _build_ticker("us_indices", "soxx", "SOXX", "반도체 ETF")
@@ -415,6 +436,9 @@ def packet_to_quantitative(packet: dict) -> QuantitativeLayer:
         vix=vix,
         usdkrw=usdkrw,
         nq_futures=nq_futures,
+        dow30=dow30,
+        kospi=kospi,
+        kosdaq=kosdaq,
         spy=spy,
         qqq=qqq,
         soxx=soxx,

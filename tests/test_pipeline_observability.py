@@ -183,6 +183,7 @@ def test_run_pipeline_continues_when_email_delivery_fails(monkeypatch, tmp_path)
         "morning_brief.pipeline.fetch_newsletter_display_data",
         lambda **_: {
             "korea_watch": [],
+            "korea_indices": [],
             "tech_stocks": _market_packet()["tech_stocks"],
             "btc_etf_points": _market_packet()["bitcoin"]["etf_points"],
         },

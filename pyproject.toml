@@ -1,7 +1,10 @@
 [tool.pytest.ini_options]
-addopts = "-q"
+addopts = "-q -m 'not live_kis'"
 testpaths = ["tests"]
 norecursedirs = [".git", ".venv", ".cache", "outputs"]
+markers = [
+    "live_kis: exercises real Korea Investment Open API contracts",
+]
 
 [tool.ruff]
 target-version = "py311"

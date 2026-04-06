@@ -295,10 +295,14 @@ def run_pipeline(settings: Settings) -> str:
         )
 
         # 뉴스레터 렌더링 직전 — 표시 전용 데이터 주입 (감성 파이프라인 제외 항목)
-        display_data = fetch_newsletter_display_data(cache_dir=settings.cache_dir)
+        display_data = fetch_newsletter_display_data(
+            cache_dir=settings.cache_dir,
+            observer=observer,
+        )
         render_packet = {
             **packet,
             "korea_watch": display_data["korea_watch"],
+            "korea_indices": display_data["korea_indices"],
             "tech_stocks": display_data["tech_stocks"],
         }
         render_packet["bitcoin"] = {

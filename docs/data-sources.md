@@ -15,6 +15,9 @@
 | `hy_spread` 하이일드 스프레드 | FRED `BAMLH0A0HYM2` (ICE BofA 미국 HY 스프레드) | — | ✅ |
 | `usdkrw` 원달러 | KIS `/uapi/overseas-price/v1/quotations/inquire-daily-chartprice` (`FID_COND_MRKT_DIV_CODE="X"`, `FID_INPUT_ISCD="FX@KRW"`) | yfinance `KRW=X` | ✅ |
 | `nq_futures` 나스닥선물 | yfinance `NQ=F` | — | ✅ |
+| `dow30` 다우30 | KIS `/uapi/overseas-price/v1/quotations/inquire-daily-chartprice` (`FID_COND_MRKT_DIV_CODE="N"`, `FID_INPUT_ISCD=".DJI"`) | yfinance `^DJI` | ✅ |
+| `kospi` 코스피 | KIS `/uapi/domestic-stock/v1/quotations/inquire-index-price` (`FID_COND_MRKT_DIV_CODE="U"`, `FID_INPUT_ISCD="0001"`) | yfinance `^KS11` | ✅ |
+| `kosdaq` 코스닥 | KIS `/uapi/domestic-stock/v1/quotations/inquire-index-price` (`FID_COND_MRKT_DIV_CODE="U"`, `FID_INPUT_ISCD="1001"`) | yfinance `^KQ11` | ✅ |
 | `spy/qqq/soxx` 미국지수 | KIS `/uapi/overseas-price/v1/quotations/price` | yfinance | ✅ |
 | 빅테크 10종 | KIS `/uapi/overseas-price/v1/quotations/price` | yfinance | ✅ |
 | BTC ETF 가격 5종 | KIS `/uapi/overseas-price/v1/quotations/price` | yfinance | ✅ |
@@ -35,10 +38,20 @@
 | `vix` | 10 ~ 80 | 동일 |
 | `us10y` | 0.5 ~ 8.0% | 동일 |
 | `btc` | $10,000 ~ $200,000 | 동일 |
+| `dow30` | 10,000 ~ 80,000 | 동일 |
+| `kospi` | 1,000 ~ 6,500 | 동일 |
+| `kosdaq` | 300 ~ 2,000 | 동일 |
 | `spy` | $300 ~ $700 | 동일 |
 | `hy_spread` | 1.5 ~ 20.0% | 동일 |
 
 수집 실패 시 전일 캐시 복원 (`is_previous_value=True`). 캐시도 없으면 `missing`.
+
+### KIS phase 1 contract 검증
+
+- standalone probe: `python scripts/kis_parameter_probe.py`
+- live contract test: `python -m pytest -q -m live_kis tests/test_kis_live_contract.py`
+- production 편입 범위: `usdkrw`, `dow30`, `kospi`, `kosdaq`
+- future phase로 남긴 후보: `sp500`, `nasdaq100`, `nasdaq_composite`, `jpykrw`, `eurkrw`, `cnykrw`, 한국 국채, 원자재
 
 **폐기된 경로**:
 - `us3m / ^IRX` — 단기금리 항목 제거됨 (CANONICAL_LABELS에서 삭제)

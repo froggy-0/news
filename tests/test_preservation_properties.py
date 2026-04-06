@@ -188,8 +188,8 @@ class TestCacheAndPacketStructurePreservation:
     """캐시 구조 및 packet 구조가 변경되지 않았는지 검증.
 
     관찰:
-    - build_market_packet() 반환 packet 구조가 macro, korea_watch, us_indices,
-      tech_stocks, bitcoin 키를 포함함
+    - build_market_packet() 반환 packet 구조가 macro, korea_watch, validated_indices,
+      us_indices, tech_stocks, bitcoin 키를 포함함
     - DXY validation bounds가 (95.0, 115.0)임
 
     **Validates: Requirements 3.4, 3.6, 3.8**
@@ -197,7 +197,7 @@ class TestCacheAndPacketStructurePreservation:
 
     def test_build_market_packet_returns_expected_keys(self):
         """build_market_packet()의 소스 코드에서 packet dict에
-        macro, korea_watch, us_indices, tech_stocks, bitcoin 키가 포함되어야 한다.
+        macro, korea_watch, validated_indices, us_indices, tech_stocks, bitcoin 키가 포함되어야 한다.
 
         **Validates: Requirements 3.6**
         """
@@ -205,7 +205,14 @@ class TestCacheAndPacketStructurePreservation:
         tree = ast.parse(source)
 
         # packet dict에 할당되는 키를 추출
-        expected_keys = {"macro", "korea_watch", "us_indices", "tech_stocks", "bitcoin"}
+        expected_keys = {
+            "macro",
+            "korea_watch",
+            "validated_indices",
+            "us_indices",
+            "tech_stocks",
+            "bitcoin",
+        }
         found_keys: set[str] = set()
 
         for node in ast.walk(tree):
@@ -231,7 +238,7 @@ class TestCacheAndPacketStructurePreservation:
 
         **Validates: Requirements 3.7, 3.8**
         """
-        expected_keys = {"dxy", "vix", "us10y", "btc", "spy"}
+        expected_keys = {"dxy", "vix", "us10y", "btc", "spy", "dow30", "kospi", "kosdaq"}
         assert expected_keys <= set(MARKET_VALIDATION_BOUNDS.keys()), (
             f"MARKET_VALIDATION_BOUNDS에서 {expected_keys - set(MARKET_VALIDATION_BOUNDS.keys())} 누락"
         )
@@ -358,6 +365,12 @@ class TestCanonicalKeyMappingPreservation:
         "^VIX": "vix",
         "KRW=X": "usdkrw",
         "NQ=F": "nq_futures",
+        ".DJI": "dow30",
+        "^DJI": "dow30",
+        "0001": "kospi",
+        "^KS11": "kospi",
+        "1001": "kosdaq",
+        "^KQ11": "kosdaq",
         "SPY": "spy",
         "spy.us": "spy",
         "QQQ": "qqq",
