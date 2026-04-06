@@ -186,8 +186,8 @@ def load_settings() -> Settings:
         enable_official_x_signals=_env_bool("ENABLE_OFFICIAL_X_SIGNALS", True),
         official_x_lookback_hours=_env_bounded_int(
             "OFFICIAL_X_LOOKBACK_HOURS",
-            default=48,
-            minimum=24,
+            default=24,
+            minimum=12,
             maximum=72,
         ),
         official_x_max_items=_env_bounded_int(
