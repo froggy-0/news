@@ -1,12 +1,11 @@
 """Dynamic Signal Registry 자동 갱신 모듈.
 
-Grok API의 x_search 도구를 활용하여 그룹별 Top 10개 influential 핸들을 추천받고
+Grok API chat completion으로 그룹별 Top 10개 influential 핸들을 추천받고
 dynamic_signal_registry.json을 자동 갱신한다.
 
 설계 원칙:
 - Base Layer (official_signal_registry.json) 불변 — Grok 실패 시 Base만 사용
-- 그룹당 순차 API 호출 — xai_sdk x_search의 allowed_x_handles는 tool 등록 시 고정이므로 그룹별 별도 요청
-- Prompt Caching 극대화 — FIXED_SYSTEM_PROMPT 고정 + x-grok-conv-id gRPC metadata
+- 4개 그룹을 단일 API 호출로 처리 — x_search 툴 없이 chat completion 사용
 - x_search_priority = 0 고정 — 기존 sorted(key=x_search_priority ASC)[:N] 로직 변경 없이 Dynamic 자동 상위 배치
 """
 
@@ -20,17 +19,16 @@ from typing import Any
 
 from xai_sdk import Client
 from xai_sdk.chat import system, user
-from xai_sdk.tools import x_search
 
 from morning_brief.data.official_signal_registry import (
     _GROK_MAX_HANDLES,
     DYNAMIC_REGISTRY_PATH,
     DynamicSignalEntity,
-    list_verified_x_entities,
     load_dynamic_signal_registry,
     load_official_signal_registry,
 )
 from morning_brief.logging_utils import log_structured
+from morning_brief.observability import PipelineObserver
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +37,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 DYNAMIC_REGISTRY_MODEL = "grok-4-1-fast-non-reasoning"
-_CONV_ID = "registry-update-daily-2026"
 
 # Grok JSON 응답 키 → 코드 그룹 상수값 매핑
 _RESPONSE_KEY_TO_GROUP: dict[str, str] = {
@@ -106,11 +103,7 @@ Rules:
 
 
 def _build_registry_client(api_key: str) -> Client:
-    """xai_sdk Client with x-grok-conv-id gRPC metadata for Prompt Caching."""
-    return Client(
-        api_key=api_key,
-        metadata=(("x-grok-conv-id", _CONV_ID),),
-    )
+    return Client(api_key=api_key)
 
 
 # ---------------------------------------------------------------------------
@@ -121,14 +114,6 @@ def _build_registry_client(api_key: str) -> Client:
 def _build_user_prompt(today: date) -> str:
     """날짜만 포함한 최소 동적 User Prompt."""
     return f"Today's date: {today.isoformat()}. Please generate recommendations now."
-
-
-def _build_messages(today: date) -> list[dict[str, str]]:
-    """messages 배열 구성. System Prompt → User Prompt 순서 고정 (캐시 miss 방지)."""
-    return [
-        {"role": "system", "content": FIXED_SYSTEM_PROMPT},
-        {"role": "user", "content": _build_user_prompt(today)},
-    ]
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +127,7 @@ def _normalize_handle(raw: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Grok API 호출 — 그룹당 순차 실행
+# Grok API 호출 — 단일 호출로 4개 그룹 전체 처리
 # ---------------------------------------------------------------------------
 
 
@@ -161,36 +146,28 @@ def _get_base_handles() -> set[str]:
     return handles
 
 
-def _call_grok_for_group(
+def _call_grok_once(
     *,
     api_key: str,
-    group: str,
-    base_handles: list[str],
     today: date,
-) -> list[dict[str, Any]]:
-    """그룹별 Grok API 호출. allowed_x_handles를 Base 핸들로 지정하여 관련 계정 검색.
+) -> tuple[str, dict[str, Any]]:
+    """4개 그룹을 단일 Grok chat completion 호출로 처리한다.
 
-    xai_sdk의 x_search는 allowed_x_handles가 tool 등록 시 고정되므로,
-    그룹별 별도 API 요청으로 순차 실행 (grok_official_signals.py 패턴 동일).
+    x_search 툴 없이 모델의 지식 기반으로 핸들을 추천받는다.
+    Returns:
+        (content, usage) 튜플.
     """
     client = _build_registry_client(api_key)
-
-    # allowed_x_handles: 해당 그룹의 Base 핸들 (최대 10개) — 관련 계정 컨텍스트 제공
-    handles_for_tool = base_handles[:_GROK_MAX_HANDLES] if base_handles else None
-
     try:
-        tools = [x_search(allowed_x_handles=handles_for_tool)] if handles_for_tool else [x_search()]
         chat = client.chat.create(
             model=DYNAMIC_REGISTRY_MODEL,
-            tools=tools,
-            tool_choice="required",
             response_format="json_object",
         )
         chat.append(system(FIXED_SYSTEM_PROMPT))
         chat.append(user(_build_user_prompt(today)))
         response = chat.sample()
     except Exception as exc:
-        raise RuntimeError(f"Grok API 호출 실패 (group={group}): {exc}") from exc
+        raise RuntimeError(f"Grok API 호출 실패: {exc}") from exc
 
     content = getattr(response, "content", "") or ""
     usage = _extract_usage(response)
@@ -199,21 +176,19 @@ def _call_grok_for_group(
         event="provider.response",
         message="Dynamic registry Grok API 호출을 완료했어요.",
         provider="grok_keyword",
-        group=group,
         cached_input_tokens=usage.get("cached_input_tokens"),
     )
-    return _parse_group_handles(content, group)
+    return content, usage
 
 
 def _extract_usage(response: object) -> dict[str, Any]:
     usage = getattr(response, "usage", None)
     if usage is None:
         return {}
-    result: dict[str, Any] = {}
-    for attr in ("prompt_tokens", "completion_tokens"):
-        val = getattr(usage, attr, None)
-        if val is not None:
-            result[attr] = val
+    result: dict[str, Any] = {
+        "input_tokens": getattr(usage, "prompt_tokens", None),
+        "output_tokens": getattr(usage, "completion_tokens", None),
+    }
     # cached tokens
     cached = None
     for path in [
@@ -391,10 +366,15 @@ def _save_dynamic_registry(entities: list[DynamicSignalEntity]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def update_dynamic_registry(*, api_key: str, today: date | None = None) -> bool:
+def update_dynamic_registry(
+    *,
+    api_key: str,
+    today: date | None = None,
+    observer: PipelineObserver | None = None,
+) -> bool:
     """Dynamic Signal Registry를 Grok API로 갱신한다.
 
-    그룹당 1회씩 순차 API 호출 (N그룹 = N회 요청).
+    4개 그룹을 단일 API 호출로 처리 (x_search 툴 없이 chat completion 사용).
     Grok API 실패 시 False 반환 (Base Layer fallback 트리거용).
 
     Returns:
@@ -415,38 +395,36 @@ def update_dynamic_registry(*, api_key: str, today: date | None = None) -> bool:
         today = date.today()
 
     base_handle_set = _get_base_handles()
+
+    try:
+        content, usage = _call_grok_once(api_key=api_key, today=today)
+    except RuntimeError as exc:
+        log_structured(
+            logger,
+            event="error.raised",
+            message="Grok API 호출이 실패해 Dynamic Registry 갱신을 중단할게요.",
+            level=logging.ERROR,
+            provider="grok_keyword",
+            reason=str(exc),
+            error_type=type(exc).__name__,
+        )
+        return False
+
+    if observer is not None:
+        usage_parse_failures = 1 if all(v is None for v in usage.values()) else 0
+        observer.record_provider_usage(
+            "grok_keyword",
+            requests=1,
+            input_tokens=usage.get("input_tokens"),
+            output_tokens=usage.get("output_tokens"),
+            cached_input_tokens=usage.get("cached_input_tokens"),
+            usage_parse_failures=usage_parse_failures,
+        )
+
     all_dynamic: list[DynamicSignalEntity] = []
-    any_success = False
 
     for group in _SEARCH_GROUPS:
-        # 해당 그룹의 Base 핸들 목록 (x_search tool context용)
-        base_handles_for_group = [
-            entity.get("x_handle", "")
-            for entity in list_verified_x_entities()
-            if entity.get("x_search_group") == group and entity.get("x_handle")
-        ]
-
-        try:
-            raw_items = _call_grok_for_group(
-                api_key=api_key,
-                group=group,
-                base_handles=base_handles_for_group,
-                today=today,
-            )
-        except RuntimeError as exc:
-            log_structured(
-                logger,
-                event="error.raised",
-                message="Grok API 호출이 실패해 Base Layer fallback으로 이어갈게요.",
-                level=logging.WARNING,
-                provider="grok_keyword",
-                group=group,
-                reason=str(exc),
-                error_type=type(exc).__name__,
-            )
-            continue
-
-        any_success = True
+        raw_items = _parse_group_handles(content, group)
 
         # 스키마 검증 + trust_score 필터
         validated: list[DynamicSignalEntity] = []
@@ -472,17 +450,6 @@ def update_dynamic_registry(*, api_key: str, today: date | None = None) -> bool:
             kept_count=len(new_handles),
         )
         all_dynamic.extend(new_handles)
-
-    if not any_success:
-        log_structured(
-            logger,
-            event="error.raised",
-            message="모든 Grok API 호출이 실패해 Dynamic Registry 갱신을 중단할게요.",
-            level=logging.ERROR,
-            provider="grok_keyword",
-            reason="all_groups_failed",
-        )
-        return False
 
     _save_dynamic_registry(all_dynamic)
     return True
