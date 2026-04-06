@@ -40,6 +40,7 @@ EXPECTED_OBSERVER_CALL_FILES = {
     "src/morning_brief/data/market.py",
     "src/morning_brief/data/news.py",
     "src/morning_brief/data/sources/btc_etf_official.py",
+    "src/morning_brief/data/sources/dynamic_registry_updater.py",
     "src/morning_brief/data/sources/gemini_grounding.py",
     "src/morning_brief/data/sources/grok_official_signals.py",
     "src/morning_brief/data/sources/grok_web_search.py",
