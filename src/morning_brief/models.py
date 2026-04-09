@@ -30,6 +30,9 @@ class NewsItem:
     summary: str = ""
     why_it_matters: str = ""
     citations: list[str] = field(default_factory=list)
+    sentiment_score: float | None = None
+    sentiment_label: str = ""
+    sentiment_confidence: float | None = None
 
 
 @dataclass

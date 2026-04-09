@@ -72,6 +72,14 @@ class Settings:
     r2_access_key_id: str
     r2_secret_access_key: str
     send_email: bool
+    # FinBERT sentiment
+    finbert_enabled: bool
+    finbert_model: str
+    finbert_model_revision: str
+    finbert_model_path: str
+    finbert_batch_size: int
+    finbert_bullish_threshold: float
+    finbert_bearish_threshold: float
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -216,4 +224,14 @@ def load_settings() -> Settings:
         r2_access_key_id=os.getenv("R2_ACCESS_KEY_ID", "").strip(),
         r2_secret_access_key=os.getenv("R2_SECRET_ACCESS_KEY", "").strip(),
         send_email=_env_bool("SEND_EMAIL", True),
+        # FinBERT sentiment
+        finbert_enabled=_env_bool("FINBERT_ENABLED", True),
+        finbert_model=os.getenv("FINBERT_MODEL", "ProsusAI/finbert").strip(),
+        finbert_model_revision=os.getenv("FINBERT_MODEL_REVISION", "").strip(),
+        finbert_model_path=os.getenv("FINBERT_MODEL_PATH", "").strip(),
+        finbert_batch_size=_env_bounded_int(
+            "FINBERT_BATCH_SIZE", default=16, minimum=1, maximum=64
+        ),
+        finbert_bullish_threshold=float(os.getenv("FINBERT_BULLISH_THRESHOLD", "0.3")),
+        finbert_bearish_threshold=float(os.getenv("FINBERT_BEARISH_THRESHOLD", "-0.3")),
     )

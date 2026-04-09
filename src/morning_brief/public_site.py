@@ -196,6 +196,23 @@ def build_public_brief(
         settings=settings,
         observer=observer,
     )
+    # ── FinBERT sentiment 필드 주입 ──
+    _resolved_settings = settings or _default_settings()
+    for item in all_news:
+        item.setdefault("sentimentScore", item.get("sentiment_score"))
+        item.setdefault("sentimentConfidence", item.get("sentiment_confidence"))
+        item.setdefault(
+            "sentimentLabel",
+            _score_to_label(item.get("sentiment_score"), _resolved_settings),
+        )
+    for sig in all_x_signals:
+        sig.setdefault("sentimentScore", sig.get("sentiment_score"))
+        sig.setdefault("sentimentConfidence", sig.get("sentiment_confidence"))
+        sig.setdefault(
+            "sentimentLabel",
+            _score_to_label(sig.get("sentiment_score"), _resolved_settings),
+        )
+
     display_news = _filter_public_news_for_display(all_news)
     featured_news = display_news[:_PUBLIC_FEATURED_NEWS_LIMIT]
     featured_x_signals = _filter_public_signals_for_display(
@@ -234,6 +251,12 @@ def build_public_brief(
                 packet.get("public_news_analysis")
                 or (public_context.get("public_news_analysis") if public_context else None)
             ),
+            "sentimentStatus": (
+                public_context.get("sentiment_status", "skipped") if public_context else "skipped"
+            ),
+            "newsSentiment": _compute_sentiment_aggregate(display_news),
+            "signalSentiment": _compute_sentiment_aggregate(all_x_signals),
+            "sentimentByCategory": _compute_sentiment_by_category(display_news),
         },
         "marketSnapshot": {
             "items": _market_snapshot_items_v2(unified)
@@ -464,6 +487,70 @@ def _normalize_public_text(text: str) -> str:
 
 def _contains_korean(text: str) -> bool:
     return bool(_HANGUL_RE.search(str(text or "")))
+
+
+def _score_to_label(score: float | None, settings: Any) -> str | None:
+    if score is None:
+        return None
+    bullish_th = getattr(settings, "finbert_bullish_threshold", 0.3)
+    bearish_th = getattr(settings, "finbert_bearish_threshold", -0.3)
+    if score >= bullish_th:
+        return "bullish"
+    if score <= bearish_th:
+        return "bearish"
+    return "neutral"
+
+
+def _default_settings() -> Settings:
+    from morning_brief.config import load_settings
+
+    return load_settings()
+
+
+def _compute_sentiment_aggregate(items: list[dict[str, Any]]) -> dict[str, Any]:
+    scores = [s for item in items if (s := item.get("sentimentScore")) is not None]
+    if not scores:
+        return {
+            "mean": None,
+            "median": None,
+            "std": None,
+            "bullishRatio": None,
+            "bearishRatio": None,
+            "count": 0,
+        }
+    labels = [
+        item.get("sentimentLabel") for item in items if item.get("sentimentScore") is not None
+    ]
+    n = len(scores)
+    mean = sum(scores) / n
+    sorted_scores = sorted(scores)
+    median = sorted_scores[n // 2]
+    std = (sum((s - mean) ** 2 for s in scores) / n) ** 0.5
+    return {
+        "mean": round(mean, 4),
+        "median": round(median, 4),
+        "std": round(std, 4),
+        "bullishRatio": round(labels.count("bullish") / n, 4),
+        "bearishRatio": round(labels.count("bearish") / n, 4),
+        "count": n,
+    }
+
+
+def _compute_sentiment_by_category(news_items: list[dict[str, Any]]) -> dict[str, Any] | None:
+    by_cat: dict[str, list[float]] = {}
+    for item in news_items:
+        cat = item.get("category")
+        score = item.get("sentimentScore")
+        if cat and score is not None:
+            by_cat.setdefault(cat, []).append(score)
+    result: dict[str, Any] = {}
+    for cat, cat_scores in by_cat.items():
+        if len(cat_scores) >= 2:
+            result[cat] = {
+                "mean": round(sum(cat_scores) / len(cat_scores), 4),
+                "count": len(cat_scores),
+            }
+    return result or None
 
 
 def _is_machine_payload(text: str) -> bool:
@@ -808,6 +895,7 @@ def _topic_summaries(packet: dict[str, Any]) -> list[dict[str, Any]]:
                 "topic": public_topic,
                 "label": label,
                 "summary": summary,
+                "rawSummary": summary if not _contains_korean(summary) else None,
                 "keyMetric": _parse_key_metric(str(key_points[0]).strip())
                 if isinstance(key_points, list) and key_points
                 else None,
@@ -1087,15 +1175,17 @@ def _news_items(
         if not url or not title:
             continue
         topic = _normalize_news_topic(item.get("topic"))
+        raw_summary = str(item.get("summary", "")).strip()
+        raw_why = str(item.get("why_it_matters", "")).strip()
         summary_ko = _best_korean_text(
             str(item.get("summary_ko", "")).strip(),
-            str(item.get("summary", "")).strip(),
-            str(item.get("why_it_matters", "")).strip(),
+            raw_summary,
+            raw_why,
         )
         interpretation_ko = _best_korean_text(
             str(item.get("interpretation_ko", "")).strip(),
-            str(item.get("why_it_matters", "")).strip(),
-            str(item.get("summary", "")).strip(),
+            raw_why,
+            raw_summary,
         )
         fallback_items.append(
             {
@@ -1106,6 +1196,10 @@ def _news_items(
                 "interpretation": interpretation_ko,
                 "summaryKo": summary_ko,
                 "rawTitle": title if not _contains_korean(title) else None,
+                "rawSummary": raw_summary
+                if raw_summary and not _contains_korean(raw_summary)
+                else None,
+                "rawInterpretation": raw_why if raw_why and not _contains_korean(raw_why) else None,
                 "source": str(item.get("source", "")).strip() or _source_from_url(url),
                 "sourceTier": "tier1" if _source_tier_value(item) == 1 else "standard",
                 "url": url,
@@ -1185,15 +1279,17 @@ def _news_items_v2(
         if not url or not title:
             continue
         topic = _normalize_news_topic(item.get("topic"))
+        raw_summary = str(item.get("summary", "")).strip()
+        raw_why = str(item.get("why_it_matters", "")).strip()
         summary_ko = _best_korean_text(
             str(item.get("summary_ko", "")).strip(),
-            str(item.get("summary", "")).strip(),
-            str(item.get("why_it_matters", "")).strip(),
+            raw_summary,
+            raw_why,
         )
         interpretation_ko = _best_korean_text(
             str(item.get("interpretation_ko", "")).strip(),
-            str(item.get("why_it_matters", "")).strip(),
-            str(item.get("summary", "")).strip(),
+            raw_why,
+            raw_summary,
         )
         results.append(
             {
@@ -1204,6 +1300,10 @@ def _news_items_v2(
                 "interpretation": interpretation_ko,
                 "summaryKo": summary_ko,
                 "rawTitle": title if not _contains_korean(title) else None,
+                "rawSummary": raw_summary
+                if raw_summary and not _contains_korean(raw_summary)
+                else None,
+                "rawInterpretation": raw_why if raw_why and not _contains_korean(raw_why) else None,
                 "source": str(item.get("source", "")).strip() or _source_from_url(url),
                 "sourceTier": "tier1" if _source_tier_value(item) == 1 else "standard",
                 "url": url,
@@ -1340,8 +1440,16 @@ def _apply_public_translation(
                 item["rawTitle"] = title
             item["title"] = translated_title
         if translated_summary:
+            if not item.get("rawSummary") and summary_ko and summary_ko != translated_summary:
+                item["rawSummary"] = summary_ko
             item["summaryKo"] = translated_summary
         if translated_interpretation:
+            if (
+                not item.get("rawInterpretation")
+                and interpretation
+                and interpretation != translated_interpretation
+            ):
+                item["rawInterpretation"] = interpretation
             item["interpretation"] = translated_interpretation
         elif translated_summary and not interpretation:
             item["interpretation"] = translated_summary

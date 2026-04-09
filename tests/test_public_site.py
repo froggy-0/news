@@ -864,3 +864,167 @@ def test_build_public_brief_skips_translation_when_only_single_low_value_topic_s
     assert FakeOpenAI.called is False
     assert payload["meta"]["translationStatus"] == "ok"
     assert payload["topicSummaries"][0]["summary"] == "Long-end yields stayed elevated overnight."
+
+
+# ── Phase A: 영문 원본 보존 테스트 ──────────────────────────────
+
+
+def test_build_public_brief_preserves_raw_summary_and_raw_interpretation_for_english() -> None:
+    """영문 summary/why_it_matters가 rawSummary/rawInterpretation으로 보존된다."""
+    packet = _packet()
+    packet["news"] = [
+        {
+            "title": "미국 국채 금리 재하락",
+            "url": "https://www.reuters.com/markets/rates",
+            "source": "Reuters",
+            "published_at": "2026-03-21T05:50:00+09:00",
+            "topic": "macro",
+            "source_tier": 1,
+            "summary": "Bond yields fell as investors sought safety.",
+            "summary_ko": "채권 금리가 안전자산 선호 속 하락했습니다.",
+            "why_it_matters": "Lower yields could ease pressure on growth stocks.",
+            "interpretation_ko": "금리 하락이 성장주 부담을 완화할 수 있습니다.",
+        }
+    ]
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+    payload = build_public_brief(packet=packet, briefing=_briefing(), run_at=run_at)
+
+    news = payload["allNews"][0]
+    assert news["rawTitle"] is None  # 한국어 제목이므로 rawTitle은 None
+    assert news["rawSummary"] == "Bond yields fell as investors sought safety."
+    assert news["rawInterpretation"] == "Lower yields could ease pressure on growth stocks."
+
+
+def test_build_public_brief_sets_raw_fields_null_for_korean() -> None:
+    """한국어 summary/why_it_matters면 rawSummary/rawInterpretation은 null."""
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+    payload = build_public_brief(packet=_packet(), briefing=_briefing(), run_at=run_at)
+
+    news = payload["allNews"][0]
+    assert news["rawTitle"] is None  # 기존 — 한국어 제목이므로 None
+    assert news["rawSummary"] is None
+    assert news["rawInterpretation"] is None
+
+
+def test_build_public_brief_topic_summary_raw_summary_english() -> None:
+    """영문 토픽 요약이 rawSummary로 보존된다."""
+    packet = _packet()
+    packet["topic_summaries"] = {
+        "macro": {
+            "summary_text": "Long-end yields stayed elevated.",
+            "market_implication": "Rising rates pressure tech multiples.",
+            "key_data_points": ["US10Y 4.25%"],
+            "notable_stocks": [],
+        },
+    }
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+    payload = build_public_brief(packet=packet, briefing=_briefing(), run_at=run_at)
+
+    topic = payload["topicSummaries"][0]
+    assert topic["rawSummary"] == "Rising rates pressure tech multiples."
+
+
+def test_build_public_brief_topic_summary_raw_summary_null_for_korean() -> None:
+    """한국어 토픽 요약이면 rawSummary는 null."""
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+    payload = build_public_brief(packet=_packet(), briefing=_briefing(), run_at=run_at)
+
+    topic = payload["topicSummaries"][0]
+    assert topic["rawSummary"] is None
+
+
+# ── Phase B: sentiment 출력 / 집계 테스트 ──────────────────────
+
+
+def test_build_public_brief_news_sentiment_fields_present() -> None:
+    """뉴스 출력에 sentimentScore/Confidence/Label이 존재한다."""
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+    payload = build_public_brief(packet=_packet(), briefing=_briefing(), run_at=run_at)
+    news = payload["allNews"][0]
+    assert "sentimentScore" in news
+    assert "sentimentConfidence" in news
+    assert "sentimentLabel" in news
+    # score가 None이면 label도 None
+    assert news["sentimentScore"] is None
+    assert news["sentimentLabel"] is None
+
+
+def test_build_public_brief_xsignal_sentiment_fields_present() -> None:
+    """X시그널 출력에 감성 필드 존재 + 기존 sentiment 필드 유지."""
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+    payload = build_public_brief(packet=_packet(), briefing=_briefing(), run_at=run_at)
+    sig = payload["featuredXSignals"][0]
+    assert sig["sentiment"] == "bullish"  # 기존 Grok 라벨 유지
+    assert "sentimentScore" in sig
+    assert "sentimentLabel" in sig
+
+
+def test_build_public_brief_meta_sentiment_status() -> None:
+    """meta.sentimentStatus 필드가 존재한다."""
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+    payload = build_public_brief(packet=_packet(), briefing=_briefing(), run_at=run_at)
+    assert payload["meta"]["sentimentStatus"] == "skipped"
+    assert "newsSentiment" in payload["meta"]
+    assert "signalSentiment" in payload["meta"]
+    assert "sentimentByCategory" in payload["meta"]
+
+
+def test_compute_sentiment_aggregate_normal() -> None:
+    """정상 케이스: 분리 집계 검증."""
+    from morning_brief.public_site import _compute_sentiment_aggregate
+
+    items = [
+        {"sentimentScore": 0.5, "sentimentLabel": "bullish"},
+        {"sentimentScore": -0.4, "sentimentLabel": "bearish"},
+        {"sentimentScore": 0.1, "sentimentLabel": "neutral"},
+        {"sentimentScore": 0.8, "sentimentLabel": "bullish"},
+        {"sentimentScore": -0.2, "sentimentLabel": "neutral"},
+    ]
+    agg = _compute_sentiment_aggregate(items)
+    assert agg["count"] == 5
+    assert agg["mean"] is not None
+    assert agg["median"] is not None
+    assert agg["std"] is not None
+    assert agg["bullishRatio"] == round(2 / 5, 4)
+    assert agg["bearishRatio"] == round(1 / 5, 4)
+
+
+def test_compute_sentiment_aggregate_with_nulls() -> None:
+    """null 포함: None 항목은 제외."""
+    from morning_brief.public_site import _compute_sentiment_aggregate
+
+    items = [
+        {"sentimentScore": 0.5, "sentimentLabel": "bullish"},
+        {"sentimentScore": None, "sentimentLabel": None},
+        {"sentimentScore": -0.3, "sentimentLabel": "bearish"},
+    ]
+    agg = _compute_sentiment_aggregate(items)
+    assert agg["count"] == 2
+
+
+def test_compute_sentiment_aggregate_all_null() -> None:
+    """전체 null: 모든 필드 null, count=0."""
+    from morning_brief.public_site import _compute_sentiment_aggregate
+
+    items = [{"sentimentScore": None}, {"sentimentScore": None}]
+    agg = _compute_sentiment_aggregate(items)
+    assert agg["count"] == 0
+    assert agg["mean"] is None
+    assert agg["median"] is None
+
+
+def test_compute_sentiment_by_category_filters_small() -> None:
+    """카테고리별 집계: 2건 미만은 제외."""
+    from morning_brief.public_site import _compute_sentiment_by_category
+
+    items = [
+        {"category": "macro", "sentimentScore": 0.5},
+        {"category": "macro", "sentimentScore": -0.1},
+        {"category": "macro", "sentimentScore": 0.3},
+        {"category": "bigtech", "sentimentScore": 0.2},  # 1건 → 제외
+    ]
+    result = _compute_sentiment_by_category(items)
+    assert result is not None
+    assert "macro" in result
+    assert result["macro"]["count"] == 3
+    assert "bigtech" not in result

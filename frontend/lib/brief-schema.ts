@@ -8,6 +8,7 @@ import type {
   MarketSnapshot,
   NewsItem,
   PublicNewsAnalysisAudit,
+  SentimentAggregate,
   SourceCounts,
   TechStock,
   TickerItem,
@@ -121,6 +122,23 @@ function parseMeta(value: unknown): BriefMeta {
             : "skipped") as PublicNewsAnalysisAudit["status"],
         }
       : null,
+    sentimentStatus: (["ok", "skipped", "failed"].includes(value.sentimentStatus as string)
+      ? value.sentimentStatus
+      : "skipped") as BriefMeta["sentimentStatus"],
+    newsSentiment: isRecord(value.newsSentiment) ? parseSentimentAggregate(value.newsSentiment) : null,
+    signalSentiment: isRecord(value.signalSentiment) ? parseSentimentAggregate(value.signalSentiment) : null,
+    sentimentByCategory: isRecord(value.sentimentByCategory) ? (value.sentimentByCategory as BriefMeta["sentimentByCategory"]) : null,
+  };
+}
+
+function parseSentimentAggregate(value: Record<string, unknown>): SentimentAggregate {
+  return {
+    mean: typeof value.mean === "number" ? value.mean : null,
+    median: typeof value.median === "number" ? value.median : null,
+    std: typeof value.std === "number" ? value.std : null,
+    bullishRatio: typeof value.bullishRatio === "number" ? value.bullishRatio : null,
+    bearishRatio: typeof value.bearishRatio === "number" ? value.bearishRatio : null,
+    count: typeof value.count === "number" ? value.count : 0,
   };
 }
 
@@ -185,6 +203,7 @@ function parseTopicSummary(value: unknown): TopicSummary {
     topic,
     label: asString(value.label, "topicSummary.label"),
     summary: asString(value.summary, "topicSummary.summary"),
+    rawSummary: value.rawSummary === undefined ? null : asOptionalString(value.rawSummary, "topicSummary.rawSummary"),
     keyMetric: asOptionalString(value.keyMetric, "topicSummary.keyMetric"),
     relatedStocks:
       value.relatedStocks === null
@@ -273,6 +292,11 @@ function parseSignal(value: unknown): XSignal {
     content: asString(value.content, "xSignal.content"),
     rawContent:
       value.rawContent === undefined ? null : asOptionalString(value.rawContent, "xSignal.rawContent"),
+    sentimentScore: typeof value.sentimentScore === "number" ? value.sentimentScore : null,
+    sentimentConfidence: typeof value.sentimentConfidence === "number" ? value.sentimentConfidence : null,
+    sentimentLabel: (["bullish", "bearish", "neutral"].includes(value.sentimentLabel as string)
+      ? value.sentimentLabel
+      : null) as XSignal["sentimentLabel"],
   };
 }
 
@@ -300,11 +324,18 @@ function parseNewsItem(value: unknown): NewsItem {
     interpretation: asOptionalString(value.interpretation, "news.interpretation"),
     summaryKo: value.summaryKo === undefined ? null : asOptionalString(value.summaryKo, "news.summaryKo"),
     rawTitle: value.rawTitle === undefined ? null : asOptionalString(value.rawTitle, "news.rawTitle"),
+    rawSummary: value.rawSummary === undefined ? null : asOptionalString(value.rawSummary, "news.rawSummary"),
+    rawInterpretation: value.rawInterpretation === undefined ? null : asOptionalString(value.rawInterpretation, "news.rawInterpretation"),
     source: asString(value.source, "news.source"),
     sourceTier,
     url: asString(value.url, "news.url"),
     urgency,
     tags: asStringArray(value.tags, "news.tags"),
+    sentimentScore: typeof value.sentimentScore === "number" ? value.sentimentScore : null,
+    sentimentConfidence: typeof value.sentimentConfidence === "number" ? value.sentimentConfidence : null,
+    sentimentLabel: (["bullish", "bearish", "neutral"].includes(value.sentimentLabel as string)
+      ? value.sentimentLabel
+      : null) as NewsItem["sentimentLabel"],
   };
 }
 
