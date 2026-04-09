@@ -57,6 +57,7 @@ npm run deploy:production   # Cloudflare production 배포
 | 1. Market Data | `data/market.py` | FRED(거시), Stooq(지수), yfinance(주식), CoinGecko(BTC), ETF 공식 사이트 |
 | 2. Keywords | `data/market.py` | VIX 스파이크·금리·지수·BTC 변동 감지 → 검색 토픽 생성 |
 | 3. News | `data/news.py` | Grok X 신호 → Perplexity Sonar → Grok 키워드 검색 → fallback(Gemini/RSS) |
+| 3.5. Sentiment | `data/finbert_sentiment.py` | ProsusAI/finbert로 뉴스·X시그널 영문 원본에 감성 점수(-1~1) 부여. `FINBERT_ENABLED=false`로 비활성화 가능. 선택적 의존성(`requirements-ml.txt`) |
 | 4. Context | `data/sources/` | 상위 12개 뉴스 Perplexity 교차 분석 |
 | 5. Quality | `data/data_quality.py` | ok / degraded / critical 품질 판정 |
 | 6. Backfill | `data/sources/` | 뉴스 부족 시 OpenAI web_search 보완 |
@@ -69,6 +70,7 @@ npm run deploy:production   # Cloudflare production 배포
 - `src/morning_brief/observability.py` — 구조화 로깅
 - `src/morning_brief/templates/` — Jinja2 이메일/마크다운 템플릿
 - `src/morning_brief/prompts/` — LLM 프롬프트
+- `src/morning_brief/data/finbert_sentiment.py` — FinBERT 감성 분석 (선택적)
 
 ### Frontend
 
@@ -85,6 +87,7 @@ Next.js 15 App Router + SSG(`output: 'export'`), Cloudflare Pages 배포.
 - **시장**: FRED, Stooq, yfinance, CoinGecko, BlackRock/Bitwise 공식 ETF 페이지
 - **뉴스**: Perplexity (Sonar/Search), Grok (X API + 웹 검색), Gemini Grounding, RSS/NewsAPI
 - **LLM**: OpenAI GPT-4 (브리핑 생성·검증)
+- **NLP**: ProsusAI/finbert (뉴스·시그널 감성 점수, 선택적 — `requirements-ml.txt`)
 - **DB**: Supabase PostgreSQL (구독자 관리)
 
 ## Development Rules
