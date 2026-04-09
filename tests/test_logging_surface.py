@@ -5,11 +5,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-EXPECTED_LOGGER_CALL_FILES: set[str] = set()
+EXPECTED_LOGGER_CALL_FILES: set[str] = {
+    "src/morning_brief/data/finbert_sentiment.py",
+}
 EXPECTED_GET_LOGGER_FILES = {
     "src/morning_brief/brief_review.py",
     "src/morning_brief/briefing.py",
     "src/morning_brief/data/market.py",
+    "src/morning_brief/data/finbert_sentiment.py",
     "src/morning_brief/data/news.py",
     "src/morning_brief/data/news_policy.py",
     "src/morning_brief/data/sources/btc_etf_official.py",
@@ -38,6 +41,7 @@ EXPECTED_OBSERVER_CALL_FILES = {
     "src/morning_brief/brief_review.py",
     "src/morning_brief/briefing.py",
     "src/morning_brief/data/market.py",
+    "src/morning_brief/data/finbert_sentiment.py",
     "src/morning_brief/data/news.py",
     "src/morning_brief/data/sources/btc_etf_official.py",
     "src/morning_brief/data/sources/dynamic_registry_updater.py",

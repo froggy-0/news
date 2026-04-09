@@ -126,6 +126,30 @@ def run_pipeline(settings: Settings) -> str:
             news_count=len(news_packet),
         )
 
+        # ── FinBERT sentiment enrichment ──
+        from morning_brief.data.finbert_sentiment import enrich_news_packet as _enrich_news
+        from morning_brief.data.finbert_sentiment import enrich_x_signals as _enrich_signals
+
+        sentiment_status = _enrich_news(news_packet, settings, observer)
+        _enrich_signals(x_signals, settings, observer)
+        public_context["sentiment_status"] = sentiment_status
+        # public_context["all_news"] 항목에도 sentiment 전파
+        for pn_item in public_context.get("all_news", []):
+            if isinstance(pn_item, dict):
+                pn_item.setdefault("sentiment_score", None)
+                pn_item.setdefault("sentiment_confidence", None)
+        # email packet의 sentiment를 public_context all_news에 매칭 전파
+        score_by_url: dict[str, tuple[float | None, float | None]] = {}
+        for item in news_packet:
+            url = item.get("url", "")
+            if url and item.get("sentiment_score") is not None:
+                score_by_url[url] = (item["sentiment_score"], item["sentiment_confidence"])
+        for pn_item in public_context.get("all_news", []):
+            if isinstance(pn_item, dict) and pn_item.get("url") in score_by_url:
+                s, c = score_by_url[pn_item["url"]]
+                pn_item["sentiment_score"] = s
+                pn_item["sentiment_confidence"] = c
+
         packet = {
             **market_packet,
             "news": news_packet,

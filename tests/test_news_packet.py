@@ -22,6 +22,8 @@ _NEWS_PACKET_ITEM_KEYS = {
     "why_it_matters",
     "citations",
     "official_source",
+    "sentiment_score",
+    "sentiment_confidence",
 }
 
 

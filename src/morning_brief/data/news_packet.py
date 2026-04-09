@@ -25,6 +25,8 @@ class NewsPacketItem(TypedDict):
     why_it_matters: str | None
     citations: list[str]
     official_source: bool
+    sentiment_score: float | None
+    sentiment_confidence: float | None
 
 
 def packet_item_to_news_item(item: dict) -> NewsItem | None:
@@ -89,6 +91,8 @@ def news_items_to_packet(items: list[NewsItem]) -> list[NewsPacketItem]:
                 "why_it_matters": item.why_it_matters or None,
                 "citations": list(item.citations),
                 "official_source": item.provider == providers.GROK_OFFICIAL_X,
+                "sentiment_score": item.sentiment_score,
+                "sentiment_confidence": item.sentiment_confidence,
             }
         )
 

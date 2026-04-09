@@ -130,6 +130,8 @@ class XSignal:
     posted_at: datetime | None = None
     topic: str = ""
     citations: list[str] = field(default_factory=list)
+    sentiment_score: float | None = None
+    sentiment_confidence: float | None = None
 
 
 def _build_client(api_key: str) -> Client:
@@ -474,6 +476,8 @@ def x_signals_to_dict(signals: list[XSignal]) -> list[dict[str, Any]]:
             "posted_at": s.posted_at.isoformat() if s.posted_at else None,
             "topic": s.topic,
             "citations": s.citations,
+            "sentiment_score": s.sentiment_score,
+            "sentiment_confidence": s.sentiment_confidence,
         }
         for s in signals
     ]

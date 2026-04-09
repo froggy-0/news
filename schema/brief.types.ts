@@ -25,6 +25,15 @@ export interface PublicNewsAnalysisAudit {
   status: "ok" | "partial" | "failed" | "skipped";
 }
 
+export interface SentimentAggregate {
+  mean: number | null;
+  median: number | null;
+  std: number | null;
+  bullishRatio: number | null;
+  bearishRatio: number | null;
+  count: number;
+}
+
 export interface BriefMeta {
   date: string;
   generatedAt: string;
@@ -34,6 +43,10 @@ export interface BriefMeta {
   sourceCounts: SourceCounts;
   translationStatus: "ok" | "partial" | "failed";
   publicNewsAnalysis: PublicNewsAnalysisAudit | null;
+  sentimentStatus: "ok" | "skipped" | "failed";
+  newsSentiment: SentimentAggregate | null;
+  signalSentiment: SentimentAggregate | null;
+  sentimentByCategory: Record<string, { mean: number; count: number }> | null;
 }
 
 export interface SourceCounts {
@@ -72,6 +85,7 @@ export interface TopicSummary {
   topic: "macro" | "bigtech" | "bitcoin" | "us-stocks";
   label: string;
   summary: string;
+  rawSummary: string | null;
   keyMetric: string | null;
   relatedStocks: string[] | null;
 }
@@ -119,6 +133,9 @@ export interface XSignal {
   sentiment: "bullish" | "bearish" | "neutral";
   content: string;
   rawContent: string | null;
+  sentimentScore: number | null;
+  sentimentConfidence: number | null;
+  sentimentLabel: "bullish" | "bearish" | "neutral" | null;
 }
 
 export interface NewsItem {
@@ -129,9 +146,14 @@ export interface NewsItem {
   interpretation: string | null;
   summaryKo: string | null;
   rawTitle: string | null;
+  rawSummary: string | null;
+  rawInterpretation: string | null;
   source: string;
   sourceTier: "tier1" | "standard";
   url: string;
   urgency: "high" | "medium" | "low";
   tags: string[];
+  sentimentScore: number | null;
+  sentimentConfidence: number | null;
+  sentimentLabel: "bullish" | "bearish" | "neutral" | null;
 }
