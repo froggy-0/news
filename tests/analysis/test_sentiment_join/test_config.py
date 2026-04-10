@@ -10,7 +10,7 @@ from morning_brief.analysis.sentiment_join.config import load_sentiment_join_set
 def test_load_sentiment_join_settings_rejects_below_minimum(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("SENTIMENT_JOIN_LOOKBACK_DAYS", "29")
+    monkeypatch.setenv("SENTIMENT_JOIN_LOOKBACK_DAYS", "0")
 
     with pytest.raises(ValueError):
         load_sentiment_join_settings()
@@ -25,7 +25,7 @@ def test_load_sentiment_join_settings_rejects_above_maximum(
         load_sentiment_join_settings()
 
 
-@pytest.mark.parametrize("value", ["30", "730"])
+@pytest.mark.parametrize("value", ["1", "30", "730"])
 def test_load_sentiment_join_settings_accepts_boundary_values(
     monkeypatch: pytest.MonkeyPatch,
     value: str,
