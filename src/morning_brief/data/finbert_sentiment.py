@@ -217,7 +217,7 @@ def _select_items_for_scoring(
     )
 
     indexed = list(enumerate(items))
-    indexed.sort(key=lambda x: (0 if x[1].get("source_tier", "standard") == "tier1" else 1))
+    indexed.sort(key=lambda x: 0 if x[1].get("source_tier", "standard") == "tier1" else 1)
 
     by_cat: dict[str, list[int]] = {}
     for idx, item in indexed:
