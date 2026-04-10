@@ -59,23 +59,23 @@
 
 - `provider_usage_by_phase.openai`에서 어떤 phase가 늘었는지 본다
 - `brief_review`와 `brief_rewrite`가 크면:
-  - `/Users/giwon/code/news/src/morning_brief/prompts/brief_validator_input.j2`
-  - `/Users/giwon/code/news/src/morning_brief/prompts/brief_validator_instructions.j2`
+  - `src/morning_brief/prompts/brief_validator_input.j2`
+  - `src/morning_brief/prompts/brief_validator_instructions.j2`
   를 확인한다
 - `public_translation`이 크면:
-  - `/Users/giwon/code/news/src/morning_brief/public_site.py`
+  - `src/morning_brief/public_site.py`
   의 featured-only translation 조건이 깨졌는지 본다
 - `web_backfill`이 크면:
-  - `/Users/giwon/code/news/src/morning_brief/pipeline.py`
-  - `/Users/giwon/code/news/src/morning_brief/research_backfill.py`
+  - `src/morning_brief/pipeline.py`
+  - `src/morning_brief/research_backfill.py`
   의 skip 조건이 유지되는지 본다
 
 ### 2. input tokens가 90,000을 넘는다
 
 - 생성 phase input이 큰지 먼저 본다
 - 아래 파일에서 중복 payload가 다시 들어갔는지 확인한다
-  - `/Users/giwon/code/news/src/morning_brief/prompting.py`
-  - `/Users/giwon/code/news/src/morning_brief/prompts/brief_input.j2`
+  - `src/morning_brief/prompting.py`
+  - `src/morning_brief/prompts/brief_input.j2`
 
 ### 3. public 뉴스가 0건인데 비용은 높다
 
@@ -107,21 +107,20 @@
 
 ## 관련 핵심 파일
 
-- `/Users/giwon/code/news/src/morning_brief/prompting.py`
-- `/Users/giwon/code/news/src/morning_brief/prompts/brief_input.j2`
-- `/Users/giwon/code/news/src/morning_brief/prompts/brief_validator_input.j2`
-- `/Users/giwon/code/news/src/morning_brief/prompts/brief_validator_instructions.j2`
-- `/Users/giwon/code/news/src/morning_brief/brief_review.py`
-- `/Users/giwon/code/news/src/morning_brief/data/news.py`
-- `/Users/giwon/code/news/src/morning_brief/data/news_selection.py`
-- `/Users/giwon/code/news/src/morning_brief/research_backfill.py`
-- `/Users/giwon/code/news/src/morning_brief/public_site.py`
-- `/Users/giwon/code/news/src/morning_brief/observability.py`
+- `src/morning_brief/prompting.py`
+- `src/morning_brief/prompts/brief_input.j2`
+- `src/morning_brief/prompts/brief_validator_input.j2`
+- `src/morning_brief/prompts/brief_validator_instructions.j2`
+- `src/morning_brief/brief_review.py`
+- `src/morning_brief/data/news.py`
+- `src/morning_brief/data/news_selection.py`
+- `src/morning_brief/research_backfill.py`
+- `src/morning_brief/public_site.py`
+- `src/morning_brief/observability.py`
 
 ## 회귀 검증 명령
 
 ```bash
-cd /Users/giwon/code/news
-.venv/bin/pytest -q tests/test_llm_cost_baselines.py tests/test_prompting.py tests/test_brief_review.py tests/test_news_quality.py tests/test_public_site.py tests/test_research_backfill.py tests/test_pipeline_observability.py
-.venv/bin/ruff check src/morning_brief/prompting.py src/morning_brief/brief_review.py src/morning_brief/data/news.py src/morning_brief/data/news_selection.py src/morning_brief/research_backfill.py src/morning_brief/public_site.py src/morning_brief/observability.py tests/test_llm_cost_baselines.py tests/test_prompting.py tests/test_brief_review.py tests/test_news_quality.py tests/test_public_site.py tests/test_research_backfill.py tests/test_pipeline_observability.py
+pytest -q tests/test_llm_cost_baselines.py tests/test_prompting.py tests/test_brief_review.py tests/test_news_quality.py tests/test_public_site.py tests/test_research_backfill.py tests/test_pipeline_observability.py
+ruff check src/morning_brief/prompting.py src/morning_brief/brief_review.py src/morning_brief/data/news.py src/morning_brief/data/news_selection.py src/morning_brief/research_backfill.py src/morning_brief/public_site.py src/morning_brief/observability.py tests/test_llm_cost_baselines.py tests/test_prompting.py tests/test_brief_review.py tests/test_news_quality.py tests/test_public_site.py tests/test_research_backfill.py tests/test_pipeline_observability.py
 ```
