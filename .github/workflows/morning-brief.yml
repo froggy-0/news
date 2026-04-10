@@ -272,7 +272,7 @@ jobs:
 
       - name: Run sentiment time join
         shell: bash
-        run: make sentiment-join
+        run: make sentiment-join PYTHON=python
         env:
           R2_PUBLIC_BUCKET: ${{ vars.R2_PUBLIC_BUCKET || '' }}
           R2_S3_ENDPOINT: ${{ vars.R2_S3_ENDPOINT || '' }}

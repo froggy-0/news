@@ -563,7 +563,7 @@ def test_pipeline_observability_writes_provider_usage_summary_event(tmp_path):
     assert summary_event["providers"]["openai"]["cost_usd"] == 0.000516
     assert summary["total_cost_usd"] == 0.000554
     assert final_summary["status"] == "ok"
-    assert final_summary["provider_usage_line"] == summary["provider_usage_line"]
+    assert final_summary["total_cost_usd"] == summary["total_cost_usd"]
     assert final_summary["pipeline_run_path"].endswith(".json")
     assert final_summary["app_events_path"].endswith(".jsonl")
 
