@@ -58,7 +58,7 @@ SUMMARY_ATTR_PRIORITY = (
     "dropped",
     "requests",
     "cost_usd",
-    "provider_usage_line",
+    "total_cost_usd",
     "app_events_path",
     "pipeline_run_path",
     "perplexity_audit_path",

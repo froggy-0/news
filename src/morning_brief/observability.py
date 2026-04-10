@@ -563,11 +563,10 @@ class PipelineObserver:
                 message=f"pipeline completed with status={status}",
                 status=status,
                 total_duration_ms=summary.get("total_duration_ms"),
-                provider_usage_line=usage_summary_line or None,
+                total_cost_usd=_total_cost_usd(usage_summary),
                 app_events_path=str(app_events_path),
                 pipeline_run_path=str(run_file),
                 perplexity_audit_path=str(audit_file),
-                summary=summary,
             )
             self._final_summary_emitted = True
         run_file.write_text(
