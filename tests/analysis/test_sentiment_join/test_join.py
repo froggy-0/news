@@ -23,6 +23,9 @@ def _sentiment_df(days: int) -> pd.DataFrame:
             "news_sentiment_mean": [0.1] * days,
             "news_sentiment_std": [0.05] * days,
             "n_articles": pd.array([3] * days, dtype="Int64"),
+            "signal_sentiment_mean": [0.05] * days,
+            "signal_sentiment_std": [0.02] * days,
+            "n_signals": pd.array([6] * days, dtype="Int64"),
         }
     )
 
@@ -74,6 +77,9 @@ def test_merge_sources_inner_join_and_drop_missing_sentiment(
         "news_sentiment_mean",
         "news_sentiment_std",
         "n_articles",
+        "signal_sentiment_mean",
+        "signal_sentiment_std",
+        "n_signals",
         "fng_value",
         "btc_log_return",
         "btc_return",

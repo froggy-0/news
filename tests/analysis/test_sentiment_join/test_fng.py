@@ -13,8 +13,8 @@ def test_fetch_fng_parses_value_and_date(monkeypatch: pytest.MonkeyPatch) -> Non
     today = datetime.now(timezone.utc).date()
     payload = {
         "data": [
-            {"timestamp": today.strftime("%m/%d/%Y"), "value": "75"},
-            {"timestamp": (today - timedelta(days=1)).strftime("%m/%d/%Y"), "value": "63"},
+            {"timestamp": today.strftime("%m-%d-%Y"), "value": "75"},
+            {"timestamp": (today - timedelta(days=1)).strftime("%m-%d-%Y"), "value": "63"},
         ]
     }
     monkeypatch.setattr(fng, "get_json_with_retry", lambda *args, **kwargs: payload)
@@ -31,7 +31,7 @@ def test_fetch_fng_parses_value_and_date(monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_fetch_fng_sets_nan_for_invalid_value(monkeypatch: pytest.MonkeyPatch) -> None:
     today = datetime.now(timezone.utc).date()
-    payload = {"data": [{"timestamp": today.strftime("%m/%d/%Y"), "value": "N/A"}]}
+    payload = {"data": [{"timestamp": today.strftime("%m-%d-%Y"), "value": "N/A"}]}
     monkeypatch.setattr(fng, "get_json_with_retry", lambda *args, **kwargs: payload)
 
     df = fng.fetch_fng(0)

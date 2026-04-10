@@ -36,7 +36,7 @@ def _parse_fng_date(value: object) -> str | None:
     if not raw:
         return None
     try:
-        return datetime.strptime(raw, "%m/%d/%Y").date().isoformat()
+        return datetime.strptime(raw, "%m-%d-%Y").date().isoformat()
     except ValueError:
         return None
 
