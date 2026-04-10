@@ -69,6 +69,33 @@ filter_publish_x_signal_candidates = news_selection.filter_publish_x_signal_cand
 summarize_news_packet_quality = data_quality.summarize_news_packet_quality
 
 
+def compute_topic_coverage(items: list[NewsItem]) -> dict[str, int]:
+    """Official_Signal 결과를 item.topic 기준으로 집계한다.
+
+    topic이 None이거나 빈 문자열인 항목은 제외한다.
+    빈 리스트 입력 시 빈 딕셔너리를 반환한다.
+    """
+    coverage: dict[str, int] = {}
+    for item in items:
+        topic = (item.topic or "").strip()
+        if topic:
+            coverage[topic] = coverage.get(topic, 0) + 1
+    return coverage
+
+
+def determine_skip_topics(
+    coverage: dict[str, int],
+    threshold: int,
+) -> frozenset[str]:
+    """threshold 이상 커버된 토픽을 Skip 대상으로 반환한다.
+
+    threshold=0이면 빈 frozenset 반환 (기능 비활성화).
+    """
+    if threshold <= 0:
+        return frozenset()
+    return frozenset(topic for topic, count in coverage.items() if count >= threshold)
+
+
 def _collect_from_rss(max_items: int, preferred_only: bool = True) -> list[NewsItem]:
     candidates = fetch_news_from_google_rss(
         queries=RSS_QUERIES,
@@ -193,6 +220,8 @@ def _collect_x_keyword_signals(
     settings: Settings,
     *,
     observer: PipelineObserver | None = None,
+    skip_topics: frozenset[str] | None = None,
+    topic_coverage: dict[str, int] | None = None,
 ) -> tuple[list[XSignal], list[NewsItem], dict[str, list[str]]]:
     """Grok X 키워드 기반 시장 반응을 수집한다."""
     if not settings.grok_x_keyword_search_enabled or not settings.grok_api_key:
@@ -204,6 +233,9 @@ def _collect_x_keyword_signals(
         lookback_hours=settings.official_x_lookback_hours,
         max_items=settings.grok_x_search_max_items,
         observer=observer,
+        skip_topics=skip_topics,
+        topic_coverage=topic_coverage,
+        coverage_threshold=settings.grok_keyword_min_official_to_skip,
     )
 
 
@@ -405,7 +437,21 @@ def build_news_packet(
 
     # --- 신규: Sonar 요약 + Grok X 키워드 + Grok Web Search ---
     topic_summaries, sonar_news = _collect_sonar_summaries(settings, observer=observer)
-    x_signals, x_news, grok_keywords = _collect_x_keyword_signals(settings, observer=observer)
+
+    # 티어드 수집: 커버리지 계산 → Skip 토픽 결정
+    topic_coverage = compute_topic_coverage(official_signal_items)
+    skip_topics = determine_skip_topics(
+        topic_coverage,
+        settings.grok_keyword_min_official_to_skip,
+    )
+
+    # Keyword 호출 (커버리지 계산 이후로 이동)
+    x_signals, x_news, grok_keywords = _collect_x_keyword_signals(
+        settings,
+        observer=observer,
+        skip_topics=skip_topics,
+        topic_coverage=topic_coverage,
+    )
     grok_web_news = _collect_grok_web_news(settings, observer=observer)
 
     # official signals와 keyword signals 간 source_handle 기반 dedup
@@ -466,7 +512,7 @@ def build_news_packet(
             gemini_items = fetch_gemini_grounding(
                 api_key=settings.gemini_api_key,
                 model=settings.gemini_model,
-                topics=["macro", "ai_bigtech", "bitcoin", "us_equity"],
+                topics=["macro", "bitcoin", "us_equity"],
                 keywords_by_topic=keywords_by_topic,
                 observer=observer,
             )

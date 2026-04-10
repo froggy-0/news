@@ -80,6 +80,8 @@ class Settings:
     finbert_batch_size: int
     finbert_bullish_threshold: float
     finbert_bearish_threshold: float
+    # Tiered collection
+    grok_keyword_min_official_to_skip: int
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -234,4 +236,11 @@ def load_settings() -> Settings:
         ),
         finbert_bullish_threshold=float(os.getenv("FINBERT_BULLISH_THRESHOLD", "0.3")),
         finbert_bearish_threshold=float(os.getenv("FINBERT_BEARISH_THRESHOLD", "-0.3")),
+        # Tiered collection
+        grok_keyword_min_official_to_skip=_env_bounded_int(
+            "GROK_KEYWORD_MIN_OFFICIAL_TO_SKIP",
+            default=2,
+            minimum=0,
+            maximum=5,
+        ),
     )

@@ -56,7 +56,6 @@ def build_search_keywords(
     """시장 데이터 키워드 + Grok 키워드 합산."""
     result: dict[str, list[str]] = {
         "macro": [],
-        "ai_bigtech": [],
         "bitcoin": [],
         "us_equity": [],
     }
@@ -67,10 +66,8 @@ def build_search_keywords(
             result["bitcoin"].append(kw)
         elif any(h in lower for h in _MACRO_HINTS):
             result["macro"].append(kw)
-        elif any(h in lower for h in _EQUITY_HINTS):
-            result["us_equity"].append(kw)
         else:
-            result["ai_bigtech"].append(kw)
+            result["us_equity"].append(kw)
 
     if grok_keywords:
         for sector, kws in grok_keywords.items():

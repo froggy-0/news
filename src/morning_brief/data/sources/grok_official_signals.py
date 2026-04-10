@@ -28,19 +28,16 @@ GROK_PROVIDER = "grok_official"
 
 GROUP_TOPIC_MAP = {
     "macro_regulator": "macro",
-    "ai_bigtech_primary": "ai_bigtech",
     "btc_etf_primary": "bitcoin",
 }
 
 GROUP_MATERIALITY_RULES = {
     "macro_regulator": "연준, 재무부, SEC의 정책, 규제, 공식 일정, 시장에 직접 영향을 줄 수 있는 공지",
-    "ai_bigtech_primary": "AI 투자, 제품 발표, 가이던스, 대형 계약, 설비 투자, 규제 대응, 공식 해명",
     "btc_etf_primary": "ETF 자금 흐름, 보유량, 수수료 변경, 규제 이슈, 공식 운용사 코멘트",
 }
 
 GROUP_IMPACT_LINES = {
     "macro": "공식 기관 시그널이라 거시 해석의 우선 근거로 볼 수 있어요.",
-    "ai_bigtech": "기업이 직접 낸 메시지라 빅테크 뉴스 해석의 우선 근거로 볼 수 있어요.",
     "bitcoin": "ETF 운용사나 관련 주체의 직접 발신이라 비트코인 수급 해석에 바로 연결할 수 있어요.",
 }
 

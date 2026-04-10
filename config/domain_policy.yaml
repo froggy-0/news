@@ -68,51 +68,6 @@ domains:
     tier: tier_2
     score_rationale: "Grayscale ETF 공식 사이트"
 
-  - domain: investor.nvidia.com
-    score: 3.9
-    tier: tier_2
-    score_rationale: "NVIDIA IR 공식 사이트"
-
-  - domain: news.microsoft.com
-    score: 3.9
-    tier: tier_2
-    score_rationale: "Microsoft 공식 뉴스룸"
-
-  - domain: aboutamazon.com
-    score: 3.9
-    tier: tier_2
-    score_rationale: "Amazon 공식 뉴스룸"
-
-  - domain: blog.google
-    score: 3.9
-    tier: tier_2
-    score_rationale: "Google 공식 블로그"
-
-  - domain: about.fb.com
-    score: 3.9
-    tier: tier_2
-    score_rationale: "Meta 공식 뉴스룸"
-
-  - domain: ir.amd.com
-    score: 3.9
-    tier: tier_2
-    score_rationale: "AMD IR 공식 사이트"
-
-  - domain: tsmc.com
-    score: 3.8
-    tier: tier_2
-    score_rationale: "TSMC 공식 웹사이트"
-
-  - domain: asml.com
-    score: 3.8
-    tier: tier_2
-    score_rationale: "ASML 공식 웹사이트"
-
-  - domain: broadcom.com
-    score: 3.8
-    tier: tier_2
-    score_rationale: "Broadcom 공식 웹사이트"
-
   - domain: apnews.com
     score: 4.0
     tier: tier_2

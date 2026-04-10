@@ -51,7 +51,6 @@ HANGUL_RE = re.compile(r"[가-힣]")
 TOPIC_KOREAN_LABELS = {
     "macro": "거시경제",
     "us_equity": "미국 증시",
-    "ai_bigtech": "AI·빅테크",
     "bitcoin": "비트코인",
 }
 
@@ -419,7 +418,6 @@ def _news_reference(item: dict) -> str:
 
 _TOPIC_LABEL = {
     "macro": "거시경제",
-    "ai_bigtech": "AI·빅테크",
     "us_equity": "미국 증시",
     "bitcoin": "비트코인",
 }
@@ -548,7 +546,7 @@ def _fallback_news_takeaway(item: dict) -> str:
     topic = str(item.get("topic", "")).strip().lower()
     if topic == "bitcoin":
         return "국내 투자자에게는 비트코인과 관련주 반응을 함께 보는 편이 적절합니다."
-    if topic in {"ai_bigtech", "us_equity"}:
+    if topic == "us_equity":
         return "국내 투자자에게는 반도체와 대형 기술주 흐름을 같이 보는 편이 적절합니다."
     if topic == "macro":
         return "국내 투자자에게는 환율과 외국인 수급 변화까지 같이 확인할 필요가 있습니다."
@@ -806,8 +804,6 @@ def _fallback_stock_cause(label: str, change_pct: float | None, news: list[dict]
         "ASML",
         "AVGO",
     }:
-        if "ai_bigtech" in topics:
-            return "AI 투자 관련 뉴스 흐름 속에"
         if "us_equity" in topics:
             return "기술주 전반 흐름 속에"
     if "macro" in topics:

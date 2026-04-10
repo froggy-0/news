@@ -33,11 +33,10 @@ WEB_SEARCH_PROMPT = """Search the web for the most important financial news arti
 from the last 24 hours covering:
 1. US macro economy (Fed, rates, inflation, employment)
 2. US equity markets (S&P 500, Nasdaq, sector moves)
-3. AI and Big Tech (NVDA, MSFT, AAPL, AMZN, GOOGL, META)
-4. Bitcoin and crypto (ETF flows, regulation, price)
+3. Bitcoin and crypto (ETF flows, regulation, price)
 
 Return the top {max_items} most market-moving articles as JSON.
-For each: title, url, source, published_at (ISO8601), topic (macro/us_equity/ai_bigtech/bitcoin), summary (one sentence).
+For each: title, url, source, published_at (ISO8601), topic (macro/us_equity/bitcoin), summary (one sentence).
 Prefer Reuters, Bloomberg, WSJ, FT, CNBC.
 Exclude data pages, stock quote pages, and non-English articles.
 Output format: {{"articles": [...]}}"""

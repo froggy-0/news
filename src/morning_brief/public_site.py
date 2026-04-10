@@ -42,7 +42,6 @@ _PUBLIC_SNAPSHOT_SPECS = (
 _PUBLIC_TOPIC_SPECS = (
     ("macro", "macro", "거시경제"),
     ("us_equity", "us-stocks", "미국 주식"),
-    ("ai_bigtech", "bigtech", "빅테크·AI"),
     ("bitcoin", "bitcoin", "비트코인"),
 )
 
@@ -50,8 +49,6 @@ _PUBLIC_NEWS_TOPIC_MAP = {
     "macro": "macro",
     "us_equity": "us-stocks",
     "us-stocks": "us-stocks",
-    "ai_bigtech": "bigtech",
-    "bigtech": "bigtech",
     "bitcoin": "bitcoin",
 }
 

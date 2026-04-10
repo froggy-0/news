@@ -70,7 +70,6 @@ SOURCE_LABELS = {
 TOPIC_IMPACT_LINES = {
     "macro": "금리와 달러, 변동성 흐름을 읽는 데 바로 이어지는 기사예요.",
     "us_equity": "미국 증시 전반의 방향과 시장 폭을 읽는 데 도움이 되는 기사예요.",
-    "ai_bigtech": "AI 투자와 빅테크 실적 기대를 해석하는 데 도움이 되는 기사예요.",
     "bitcoin": "비트코인 가격 심리와 ETF 흐름을 이해하는 데 도움이 되는 기사예요.",
 }
 
@@ -174,11 +173,6 @@ FEDERAL_RESERVE_YEARLY_PRESS_INDEX = re.compile(
     r"^/newsevents/pressreleases/\d{4}-press\.htm$",
     re.IGNORECASE,
 )
-BROADCOM_INDEX_PATHS = {
-    "/latest",
-    "/releases",
-    "/emea/releases",
-}
 
 
 @dataclass(frozen=True)
@@ -240,23 +234,6 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
             "Dow Jones, futures, or risk sentiment article or weekly review "
             "published within the last week in English. Prefer reliable financial reporting. "
             "Exclude non-English pages, data pages, and archive pages.",
-        ),
-        retry_recency_filter="week",
-    ),
-    SearchTopic(
-        name="ai_bigtech",
-        query=(
-            "Latest AI and big tech market-moving article published within the last 24 hours on "
-            "Nvidia, Microsoft, Apple, Amazon, Google, Meta, AMD, TSMC, ASML, or Broadcom. "
-            "Prefer reliable English-language reporting and news analysis. Exclude market data "
-            "pages, app listings, podcast pages, category pages, archive pages, and summary pages."
-        ),
-        retry_query=(
-            "Latest AI infrastructure, data center, semiconductor, or big tech capex article or "
-            "company newsroom release published within the last week. Prefer reliable "
-            "English-language reporting, news analysis, and company IR/newsroom. Exclude market "
-            "data pages, stock quote pages, summary pages, category pages, archive pages, and "
-            "podcast pages."
         ),
         retry_recency_filter="week",
     ),
@@ -759,16 +736,6 @@ def _is_topic_landing_page(*, topic: str, url: str, title: str) -> bool:
         if path in FEDERAL_RESERVE_INDEX_PATHS:
             return True
         if FEDERAL_RESERVE_YEARLY_PRESS_INDEX.match(path):
-            return True
-
-    if topic == "ai_bigtech" and domain_matches(domain, "news.broadcom.com"):
-        if path in BROADCOM_INDEX_PATHS or path.startswith("/category/"):
-            return True
-    if topic == "ai_bigtech" and domain_matches(domain, "about.fb.com"):
-        if path in {"/news", "/news/"}:
-            return True
-    if topic == "ai_bigtech" and domain_matches(domain, "reuters.com"):
-        if path in {"/business/tech-ai", "/business/tech-ai/"}:
             return True
 
     if topic == "bitcoin":

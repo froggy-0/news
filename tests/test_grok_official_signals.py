@@ -52,13 +52,13 @@ class TransportTimeoutError(Exception):
 
 
 VERIFIED_GROUPS = {
-    "ai_bigtech_primary": [
+    "macro_regulator": [
         {
-            "entity_id": "amd",
-            "entity_name": "AMD",
-            "ticker": "AMD",
-            "newsroom_or_ir_url": "https://www.amd.com/en/newsroom.html",
-            "x_handle": "AMD",
+            "entity_id": "federal_reserve",
+            "entity_name": "Federal Reserve",
+            "ticker": "",
+            "newsroom_or_ir_url": "https://www.federalreserve.gov/newsevents.htm",
+            "x_handle": "FederalReserve",
             "x_search_priority": 1,
         }
     ],
@@ -84,13 +84,13 @@ def test_fetch_official_x_signals_collects_verified_groups(monkeypatch):
                 {
                     "items": [
                         {
-                            "entity_id": "amd",
-                            "headline": "AMD가 새 AI 서버 투자 계획을 공개했어요",
-                            "summary": "공식 계정이 데이터센터 투자 계획을 설명했어요.",
-                            "why_it_matters": "AI 투자 지출 기대를 다시 키울 수 있어요.",
+                            "entity_id": "federal_reserve",
+                            "headline": "연준이 금리 동결을 결정했어요",
+                            "summary": "공식 계정이 금리 결정을 안내했어요.",
+                            "why_it_matters": "거시경제 해석에 직접 참고할 수 있어요.",
                             "posted_at": "2026-03-13T01:00:00Z",
-                            "source_handle": "AMD",
-                            "citations": ["https://x.com/AMD/status/1"],
+                            "source_handle": "FederalReserve",
+                            "citations": ["https://x.com/FederalReserve/status/1"],
                         }
                     ]
                 }
@@ -128,15 +128,15 @@ def test_fetch_official_x_signals_collects_verified_groups(monkeypatch):
 
     assert len(calls) == 2
     assert calls[0]["model"] == "grok-test-model"
-    assert calls[0]["tools"][0]["kwargs"]["allowed_x_handles"] == ["AMD"]
+    assert calls[0]["tools"][0]["kwargs"]["allowed_x_handles"] == ["FederalReserve"]
     assert calls[1]["tools"][0]["kwargs"]["allowed_x_handles"] == ["Fidelity"]
     assert calls[0]["tool_choice"] == "required"
     assert prompts
     assert [item.provider for item in items] == ["grok_official_x", "grok_official_x"]
     assert items[0].title == "Fidelity가 ETF 운용 관련 공지를 올렸어요"
     assert items[0].topic == "bitcoin"
-    assert items[1].topic == "ai_bigtech"
-    assert items[1].citations == ["https://x.com/AMD/status/1"]
+    assert items[1].topic == "macro"
+    assert items[1].citations == ["https://x.com/FederalReserve/status/1"]
     assert items[1].published_at == datetime(2026, 3, 13, 1, 0, tzinfo=timezone.utc)
 
 
@@ -149,25 +149,25 @@ def test_fetch_official_x_signals_uses_response_citations_fallback(monkeypatch):
                 {
                     "items": [
                         {
-                            "entity_id": "amd",
-                            "headline": "AMD가 공식 일정을 다시 안내했어요",
-                            "summary": "공식 계정이 이벤트 일정을 다시 정리했어요.",
-                            "why_it_matters": "이벤트 일정 확인에 직접 쓸 수 있어요.",
+                            "entity_id": "federal_reserve",
+                            "headline": "연준이 금리 동결을 결정했어요",
+                            "summary": "공식 계정이 금리 결정을 안내했어요.",
+                            "why_it_matters": "거시경제 해석에 직접 참고할 수 있어요.",
                             "posted_at": "2026-03-13T01:00:00Z",
-                            "source_handle": "AMD",
+                            "source_handle": "FederalReserve",
                             "citations": [],
                         }
                     ]
                 }
             ),
-            citations=[{"url": "https://x.com/AMD/status/3"}],
+            citations=[{"url": "https://x.com/FederalReserve/status/3"}],
         )
     ]
 
     monkeypatch.setattr(
         gxs,
         "grouped_verified_x_entities",
-        lambda: {"ai_bigtech_primary": VERIFIED_GROUPS["ai_bigtech_primary"]},
+        lambda: {"macro_regulator": VERIFIED_GROUPS["macro_regulator"]},
     )
     monkeypatch.setattr(gxs, "x_search", lambda **kwargs: {"name": "x_search", "kwargs": kwargs})
     monkeypatch.setattr(gxs, "_build_client", lambda api_key: _Client(responses, calls, prompts))
@@ -179,8 +179,8 @@ def test_fetch_official_x_signals_uses_response_citations_fallback(monkeypatch):
         max_items=2,
     )
 
-    assert items[0].citations == ["https://x.com/AMD/status/3"]
-    assert items[0].url == "https://x.com/AMD/status/3"
+    assert items[0].citations == ["https://x.com/FederalReserve/status/3"]
+    assert items[0].url == "https://x.com/FederalReserve/status/3"
 
 
 def test_fetch_official_x_signals_does_not_fan_out_group_citations(monkeypatch):
@@ -192,12 +192,12 @@ def test_fetch_official_x_signals_does_not_fan_out_group_citations(monkeypatch):
                 {
                     "items": [
                         {
-                            "entity_id": "amd",
-                            "headline": "AMD가 공식 일정 공지를 올렸어요",
-                            "summary": "공식 계정이 이벤트 일정을 다시 정리했어요.",
-                            "why_it_matters": "이벤트 일정 확인에 직접 쓸 수 있어요.",
+                            "entity_id": "federal_reserve",
+                            "headline": "연준이 금리 동결을 결정했어요",
+                            "summary": "공식 계정이 금리 결정을 안내했어요.",
+                            "why_it_matters": "거시경제 해석에 직접 참고할 수 있어요.",
                             "posted_at": "2026-03-13T01:00:00Z",
-                            "source_handle": "AMD",
+                            "source_handle": "FederalReserve",
                             "citations": [],
                         },
                         {
@@ -219,11 +219,9 @@ def test_fetch_official_x_signals_does_not_fan_out_group_citations(monkeypatch):
     monkeypatch.setattr(
         gxs,
         "grouped_verified_x_entities",
-        lambda: {
-            "mixed": VERIFIED_GROUPS["ai_bigtech_primary"] + VERIFIED_GROUPS["btc_etf_primary"]
-        },
+        lambda: {"mixed": VERIFIED_GROUPS["macro_regulator"] + VERIFIED_GROUPS["btc_etf_primary"]},
     )
-    monkeypatch.setattr(gxs, "GROUP_TOPIC_MAP", {"mixed": "ai_bigtech"})
+    monkeypatch.setattr(gxs, "GROUP_TOPIC_MAP", {"mixed": "macro"})
     monkeypatch.setattr(gxs, "x_search", lambda **kwargs: {"name": "x_search", "kwargs": kwargs})
     monkeypatch.setattr(gxs, "_build_client", lambda api_key: _Client(responses, calls, prompts))
 
@@ -237,7 +235,7 @@ def test_fetch_official_x_signals_does_not_fan_out_group_citations(monkeypatch):
     assert items[0].citations == []
     assert items[0].url == "https://x.com/Fidelity"
     assert items[1].citations == []
-    assert items[1].url == "https://x.com/AMD"
+    assert items[1].url == "https://x.com/FederalReserve"
 
 
 def test_fetch_official_x_signals_returns_empty_without_api_key(monkeypatch):
@@ -263,13 +261,13 @@ def test_fetch_official_x_signals_records_usage(monkeypatch, tmp_path):
                 {
                     "items": [
                         {
-                            "entity_id": "amd",
-                            "headline": "AMD가 새 AI 서버 투자 계획을 공개했어요",
-                            "summary": "공식 계정이 데이터센터 투자 계획을 설명했어요.",
-                            "why_it_matters": "AI 투자 지출 기대를 다시 키울 수 있어요.",
+                            "entity_id": "federal_reserve",
+                            "headline": "연준이 금리 동결을 결정했어요",
+                            "summary": "공식 계정이 금리 결정을 안내했어요.",
+                            "why_it_matters": "거시경제 해석에 직접 참고할 수 있어요.",
                             "posted_at": "2026-03-13T01:00:00Z",
-                            "source_handle": "AMD",
-                            "citations": ["https://x.com/AMD/status/1"],
+                            "source_handle": "FederalReserve",
+                            "citations": ["https://x.com/FederalReserve/status/1"],
                         }
                     ]
                 }
@@ -285,7 +283,7 @@ def test_fetch_official_x_signals_records_usage(monkeypatch, tmp_path):
     monkeypatch.setattr(
         gxs,
         "grouped_verified_x_entities",
-        lambda: {"ai_bigtech_primary": VERIFIED_GROUPS["ai_bigtech_primary"]},
+        lambda: {"macro_regulator": VERIFIED_GROUPS["macro_regulator"]},
     )
     monkeypatch.setattr(gxs, "x_search", lambda **kwargs: {"name": "x_search", "kwargs": kwargs})
     monkeypatch.setattr(gxs, "_build_client", lambda api_key: _Client(responses, calls, prompts))
@@ -307,9 +305,9 @@ def test_fetch_official_x_signals_records_usage(monkeypatch, tmp_path):
     events = [event for event in observer.events if event["event"] == "grok_signals_collected"]
     assert len(events) == 1
     assert events[0]["count"] == 1
-    assert events[0]["items"][0]["text"] == "AMD가 새 AI 서버 투자 계획을 공개했어요"
-    assert events[0]["items"][0]["url"] == "https://x.com/AMD/status/1"
-    assert events[0]["items"][0]["author"] == "AMD"
+    assert events[0]["items"][0]["text"] == "연준이 금리 동결을 결정했어요"
+    assert events[0]["items"][0]["url"] == "https://x.com/FederalReserve/status/1"
+    assert events[0]["items"][0]["author"] == "FederalReserve"
     assert "collected_at" in events[0]["items"][0]
 
 
@@ -323,13 +321,13 @@ def test_fetch_official_x_signals_reads_cached_prompt_text_tokens(monkeypatch, t
                 {
                     "items": [
                         {
-                            "entity_id": "amd",
-                            "headline": "AMD가 새 AI 서버 투자 계획을 공개했어요",
-                            "summary": "공식 계정이 데이터센터 투자 계획을 설명했어요.",
-                            "why_it_matters": "AI 투자 지출 기대를 다시 키울 수 있어요.",
+                            "entity_id": "federal_reserve",
+                            "headline": "연준이 금리 동결을 결정했어요",
+                            "summary": "공식 계정이 금리 결정을 안내했어요.",
+                            "why_it_matters": "거시경제 해석에 직접 참고할 수 있어요.",
                             "posted_at": "2026-03-13T01:00:00Z",
-                            "source_handle": "AMD",
-                            "citations": ["https://x.com/AMD/status/1"],
+                            "source_handle": "FederalReserve",
+                            "citations": ["https://x.com/FederalReserve/status/1"],
                         }
                     ]
                 }
@@ -345,7 +343,7 @@ def test_fetch_official_x_signals_reads_cached_prompt_text_tokens(monkeypatch, t
     monkeypatch.setattr(
         gxs,
         "grouped_verified_x_entities",
-        lambda: {"ai_bigtech_primary": VERIFIED_GROUPS["ai_bigtech_primary"]},
+        lambda: {"macro_regulator": VERIFIED_GROUPS["macro_regulator"]},
     )
     monkeypatch.setattr(gxs, "x_search", lambda **kwargs: {"name": "x_search", "kwargs": kwargs})
     monkeypatch.setattr(gxs, "_build_client", lambda api_key: _Client(responses, calls, prompts))
@@ -372,13 +370,13 @@ def test_fetch_official_x_signals_leaves_usage_null_when_missing(monkeypatch, tm
                 {
                     "items": [
                         {
-                            "entity_id": "amd",
-                            "headline": "AMD가 새 AI 서버 투자 계획을 공개했어요",
-                            "summary": "공식 계정이 데이터센터 투자 계획을 설명했어요.",
-                            "why_it_matters": "AI 투자 지출 기대를 다시 키울 수 있어요.",
+                            "entity_id": "federal_reserve",
+                            "headline": "연준이 금리 동결을 결정했어요",
+                            "summary": "공식 계정이 금리 결정을 안내했어요.",
+                            "why_it_matters": "거시경제 해석에 직접 참고할 수 있어요.",
                             "posted_at": "2026-03-13T01:00:00Z",
-                            "source_handle": "AMD",
-                            "citations": ["https://x.com/AMD/status/1"],
+                            "source_handle": "FederalReserve",
+                            "citations": ["https://x.com/FederalReserve/status/1"],
                         }
                     ]
                 }
@@ -389,7 +387,7 @@ def test_fetch_official_x_signals_leaves_usage_null_when_missing(monkeypatch, tm
     monkeypatch.setattr(
         gxs,
         "grouped_verified_x_entities",
-        lambda: {"ai_bigtech_primary": VERIFIED_GROUPS["ai_bigtech_primary"]},
+        lambda: {"macro_regulator": VERIFIED_GROUPS["macro_regulator"]},
     )
     monkeypatch.setattr(gxs, "x_search", lambda **kwargs: {"name": "x_search", "kwargs": kwargs})
     monkeypatch.setattr(gxs, "_build_client", lambda api_key: _Client(responses, calls, prompts))
@@ -422,13 +420,13 @@ def test_fetch_official_x_signals_retries_timeout_like_error(monkeypatch):
                 {
                     "items": [
                         {
-                            "entity_id": "amd",
-                            "headline": "AMD가 새 AI 서버 투자 계획을 공개했어요",
-                            "summary": "공식 계정이 데이터센터 투자 계획을 설명했어요.",
-                            "why_it_matters": "AI 투자 지출 기대를 다시 키울 수 있어요.",
+                            "entity_id": "federal_reserve",
+                            "headline": "연준이 금리 동결을 결정했어요",
+                            "summary": "공식 계정이 금리 결정을 안내했어요.",
+                            "why_it_matters": "거시경제 해석에 직접 참고할 수 있어요.",
                             "posted_at": "2026-03-13T01:00:00Z",
-                            "source_handle": "AMD",
-                            "citations": ["https://x.com/AMD/status/1"],
+                            "source_handle": "FederalReserve",
+                            "citations": ["https://x.com/FederalReserve/status/1"],
                         }
                     ]
                 }
@@ -446,7 +444,7 @@ def test_fetch_official_x_signals_retries_timeout_like_error(monkeypatch):
     monkeypatch.setattr(
         gxs,
         "grouped_verified_x_entities",
-        lambda: {"ai_bigtech_primary": VERIFIED_GROUPS["ai_bigtech_primary"]},
+        lambda: {"macro_regulator": VERIFIED_GROUPS["macro_regulator"]},
     )
     monkeypatch.setattr(gxs, "x_search", lambda **kwargs: {"name": "x_search", "kwargs": kwargs})
     monkeypatch.setattr(gxs, "_build_client", lambda api_key: _Client(responses, calls, prompts))
@@ -459,7 +457,7 @@ def test_fetch_official_x_signals_retries_timeout_like_error(monkeypatch):
     )
 
     assert len(calls) == 2
-    assert items[0].title == "AMD가 새 AI 서버 투자 계획을 공개했어요"
+    assert items[0].title == "연준이 금리 동결을 결정했어요"
     assert sleeps and round(sleeps[0], 2) == 1.5
 
 
@@ -472,7 +470,7 @@ def test_fetch_official_x_signals_records_empty_reason(monkeypatch, tmp_path):
     monkeypatch.setattr(
         gxs,
         "grouped_verified_x_entities",
-        lambda: {"ai_bigtech_primary": VERIFIED_GROUPS["ai_bigtech_primary"]},
+        lambda: {"macro_regulator": VERIFIED_GROUPS["macro_regulator"]},
     )
     monkeypatch.setattr(gxs, "x_search", lambda **kwargs: {"name": "x_search", "kwargs": kwargs})
     monkeypatch.setattr(gxs, "_build_client", lambda api_key: _Client(responses, calls, prompts))

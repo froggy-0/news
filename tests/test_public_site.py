@@ -319,7 +319,7 @@ def test_build_public_brief_prefers_public_context_for_full_lists() -> None:
                 "url": "https://example.com/news-2",
                 "source": "Bloomberg",
                 "published_at": "2026-03-21T07:40:00+09:00",
-                "topic": "ai_bigtech",
+                "topic": "us_equity",
                 "source_tier": 1,
                 "summary": "두 번째 공개 뉴스 요약",
                 "why_it_matters": "두 번째 공개 뉴스 해석",
