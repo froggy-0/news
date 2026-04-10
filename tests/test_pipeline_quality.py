@@ -142,7 +142,7 @@ def test_assess_data_quality_accepts_official_signals_as_authoritative_sources()
             "domain": "x.com",
             "source": "@AMD",
             "age_hours": 2.0,
-            "topic": "ai_bigtech",
+            "topic": "us_equity",
             "provider": "grok_official_x",
             "official_source": True,
             "why_it_matters": "공식 투자 계획 확인에 직접 참고할 수 있어요.",

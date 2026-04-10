@@ -33,7 +33,6 @@ logger = logging.getLogger(__name__)
 GROK_KEYWORD_PROVIDER = providers.RUNTIME_GROK_KEYWORD
 
 MACRO_EQUITY_GROUP = "macro_and_equity"
-AI_BIGTECH_GROUP = "ai_bigtech_primary"
 BITCOIN_CRYPTO_GROUP = "bitcoin_crypto"
 
 MACRO_EQUITY_PROMPT = """Search X for the most significant market-moving posts from the last {lookback_hours} hours.
@@ -52,24 +51,6 @@ For each post, extract as JSON array "signals":
 - posted_at: ISO8601 timestamp
 
 Return the top {max_items} most impactful posts. Skip routine marketing and non-market posts.
-Output format: {{"signals": [...]}}"""
-
-AI_BIGTECH_PROMPT = """Search X for the most significant AI and Big Tech posts from the last {lookback_hours} hours.
-Focus on:
-1. NVIDIA, AMD, TSMC, ASML semiconductor news and analyst commentary
-2. Microsoft, Apple, Amazon, Google, Meta strategic moves
-3. AI infrastructure, data center capex, model announcements
-4. Earnings guidance, revenue signals, product launches
-
-For each post, extract as JSON array "signals":
-- headline: one-line summary
-- summary: core market insight in 1-2 sentences
-- why_it_matters: market implication for investors
-- sentiment: bullish / bearish / neutral
-- source_handle: @handle of the poster
-- posted_at: ISO8601 timestamp
-
-Return the top {max_items} most market-moving posts. Skip marketing, promotional, and non-market posts.
 Output format: {{"signals": [...]}}"""
 
 BITCOIN_CRYPTO_PROMPT = """Search X for the most significant Bitcoin and crypto market posts from the last {lookback_hours} hours.
@@ -92,17 +73,15 @@ Output format: {{"signals": [...]}}"""
 
 GROUP_PROMPTS = {
     MACRO_EQUITY_GROUP: MACRO_EQUITY_PROMPT,
-    AI_BIGTECH_GROUP: AI_BIGTECH_PROMPT,
     BITCOIN_CRYPTO_GROUP: BITCOIN_CRYPTO_PROMPT,
 }
 
 GROUP_TOPIC_MAP = {
     MACRO_EQUITY_GROUP: "macro",
-    AI_BIGTECH_GROUP: "ai_bigtech",
     BITCOIN_CRYPTO_GROUP: "bitcoin",
 }
 
-search_groups = [MACRO_EQUITY_GROUP, AI_BIGTECH_GROUP, BITCOIN_CRYPTO_GROUP]
+search_groups = [MACRO_EQUITY_GROUP, BITCOIN_CRYPTO_GROUP]
 
 WEEKEND_CONTEXT = (
     "\nNote: It is currently the weekend or Monday morning. "
@@ -347,6 +326,9 @@ def fetch_x_keyword_signals(
     lookback_hours: int = 24,
     max_items: int = 6,
     observer: PipelineObserver | None = None,
+    skip_topics: frozenset[str] | None = None,
+    topic_coverage: dict[str, int] | None = None,
+    coverage_threshold: int = 0,
 ) -> tuple[list[XSignal], list[NewsItem], dict[str, list[str]]]:
     """키워드 기반 X Search로 시장 반응 시그널을 수집한다.
 
@@ -363,6 +345,9 @@ def fetch_x_keyword_signals(
             reason="missing_api_key",
         )
         return [], [], {}
+
+    executed_groups = 0
+    skipped_groups = 0
 
     all_handles = grouped_verified_x_handles()
 
@@ -384,11 +369,37 @@ def fetch_x_keyword_signals(
             )
             break
 
+        # 티어드 수집 Skip 체크
+        topic = GROUP_TOPIC_MAP.get(group, "us_equity")
+        if skip_topics and topic in skip_topics:
+            official_count = (topic_coverage or {}).get(topic, 0)
+            log_structured(
+                logger,
+                event="phase.skip",
+                message=f"Official 커버리지가 충분해서 {group} 키워드 검색을 건너뛸게요.",
+                level=logging.DEBUG,
+                provider=GROK_KEYWORD_PROVIDER,
+                reason="official_coverage_sufficient",
+                group=group,
+                topic=topic,
+                official_count=official_count,
+                threshold=coverage_threshold,
+            )
+            if observer:
+                observer.log_event(
+                    "grok_x_keyword_skipped",
+                    group=group,
+                    topic=topic,
+                    official_count=official_count,
+                    threshold=coverage_threshold,
+                )
+            skipped_groups += 1
+            continue
+
         if group == BITCOIN_CRYPTO_GROUP:
             handles = _bitcoin_crypto_handles(all_handles)
         else:
             handles = all_handles.get(group, [])
-        topic = GROUP_TOPIC_MAP.get(group, "us_equity")
 
         try:
             raw_signals, usage, keywords = execute_with_provider_retry(
@@ -439,6 +450,7 @@ def fetch_x_keyword_signals(
                 group=group,
                 kept_count=len(raw_signals),
             )
+            executed_groups += 1
         except HttpFetchError as exc:
             if observer:
                 observer.log_event(
@@ -460,6 +472,15 @@ def fetch_x_keyword_signals(
                     reason=str(exc),
                     error_type=type(exc).__name__,
                 )
+
+    log_structured(
+        logger,
+        event="selection.complete",
+        message="Grok X Keyword 전체 수집을 마쳤어요.",
+        provider=GROK_KEYWORD_PROVIDER,
+        executed_groups=executed_groups,
+        skipped_groups=skipped_groups,
+    )
 
     return all_signals, all_news_items, keywords_by_sector
 

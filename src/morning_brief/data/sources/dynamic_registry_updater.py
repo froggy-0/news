@@ -41,7 +41,6 @@ DYNAMIC_REGISTRY_MODEL = "grok-4-1-fast-non-reasoning"
 # Grok JSON 응답 키 → 코드 그룹 상수값 매핑
 _RESPONSE_KEY_TO_GROUP: dict[str, str] = {
     "crypto": "crypto_and_etf",
-    "ai_bigtech": "ai_bigtech_primary",
     "macro_and_equity": "macro_and_equity",
     "btc_etf": "btc_etf_primary",
 }
@@ -49,7 +48,6 @@ _RESPONSE_KEY_TO_GROUP: dict[str, str] = {
 # 코드 그룹 상수값 목록 (순서 고정 — 캐싱 안정)
 _SEARCH_GROUPS = [
     "crypto_and_etf",
-    "ai_bigtech_primary",
     "macro_and_equity",
     "btc_etf_primary",
 ]
@@ -62,7 +60,6 @@ FIXED_SYSTEM_PROMPT = """You are a financial market intelligence curator special
 
 Your task is to recommend verified X accounts for each of the following groups:
 - crypto_and_etf: Crypto assets, BTC/ETH ETFs, crypto regulatory news
-- ai_bigtech_primary: AI technology, semiconductor, big tech companies
 - macro_and_equity: Macroeconomics, Fed policy, equity markets, Treasury
 - btc_etf_primary: Bitcoin ETF issuers, institutional BTC adoption
 
@@ -82,7 +79,6 @@ Output format (strict JSON):
       {"handle": "SECGov", "trust_score": 5},
       {"handle": "CoinDesk", "trust_score": 4}
     ],
-    "ai_bigtech_primary": [...],
     "macro_and_equity": [...],
     "btc_etf_primary": [...]
   }

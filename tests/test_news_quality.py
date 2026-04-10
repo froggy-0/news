@@ -74,9 +74,6 @@ def test_domain_score_rejects_substring_spoof():
 def test_preferred_domain_accepts_regulatory_and_official_ir_sources():
     assert news._is_preferred_domain("https://www.federalreserve.gov/newsevents/pressreleases.htm")
     assert news._is_preferred_domain("https://www.sec.gov/news/press-release/example")
-    assert news._is_preferred_domain(
-        "https://investor.nvidia.com/news/press-release-details/2026/example/default.aspx"
-    )
 
 
 def test_source_tier_promotes_regulatory_domains_to_tier_1():
@@ -88,19 +85,11 @@ def test_source_tier_promotes_regulatory_domains_to_tier_1():
                 source="Federal Reserve",
                 published_at=datetime.now(timezone.utc),
             ),
-            NewsItem(
-                title="NVIDIA IR release",
-                url="https://investor.nvidia.com/news/press-release-details/2026/example/default.aspx",
-                source="NVIDIA IR",
-                published_at=datetime.now(timezone.utc),
-            ),
         ]
     )
 
     assert packet[0]["source_tier"] == "tier_1"
     assert packet[0]["preferred_source"] is True
-    assert packet[1]["source_tier"] == "tier_2"
-    assert packet[1]["preferred_source"] is True
 
 
 def test_dedup_and_rank_limits_single_domain_concentration():
@@ -823,7 +812,7 @@ def test_build_news_packet_skips_legacy_when_perplexity_quality_is_good(monkeypa
                 url="https://www.cnbc.com/2026/03/13/nvidia-demand-remains-firm.html",
                 source="CNBC",
                 published_at=now - timedelta(hours=2),
-                topic="ai_bigtech",
+                topic="us_equity",
                 provider="perplexity_search",
                 why_it_matters="빅테크 투자 심리를 읽는 데 도움이 돼요.",
                 citations=["https://www.cnbc.com/2026/03/13/nvidia-demand-remains-firm.html"],
@@ -850,7 +839,7 @@ def test_build_news_packet_skips_legacy_when_perplexity_quality_is_good(monkeypa
     packet, _, _, _ = news.build_news_packet(settings=load_settings())
 
     assert len(packet) == 4
-    assert {item["topic"] for item in packet} == {"macro", "us_equity", "ai_bigtech", "bitcoin"}
+    assert {item["topic"] for item in packet} == {"macro", "us_equity", "bitcoin"}
 
 
 def test_build_news_packet_includes_items_from_any_domain(
@@ -971,11 +960,11 @@ def test_build_news_packet_does_not_trigger_legacy_fallback_for_uncited_grok_ite
         "morning_brief.data.news.fetch_official_x_signals",
         lambda **_: [
             NewsItem(
-                title="AMD official update",
-                url="https://ir.amd.com/",
-                source="@AMD",
+                title="CNBC official update",
+                url="https://x.com/CNBC/status/1",
+                source="@CNBC",
                 published_at=now - timedelta(minutes=30),
-                topic="ai_bigtech",
+                topic="us_equity",
                 provider="grok_official_x",
                 why_it_matters="공식 메시지라 직접 확인 근거가 돼요.",
                 citations=[],
@@ -1028,15 +1017,15 @@ def test_build_news_packet_merges_official_x_signals_before_legacy(monkeypatch):
         "morning_brief.data.news.fetch_official_x_signals",
         lambda **_: [
             NewsItem(
-                title="AMD가 데이터센터 투자 계획을 다시 확인했어요",
-                url="https://x.com/AMD/status/1",
-                source="@AMD",
+                title="CNBC가 데이터센터 투자 계획을 다시 확인했어요",
+                url="https://x.com/CNBC/status/1",
+                source="@CNBC",
                 published_at=now - timedelta(minutes=30),
-                topic="ai_bigtech",
+                topic="us_equity",
                 provider="grok_official_x",
                 summary="공식 계정이 투자 계획을 다시 설명했어요.",
                 why_it_matters="AI 투자 기대를 해석할 때 직접 참고할 수 있어요.",
-                citations=["https://x.com/AMD/status/1"],
+                citations=["https://x.com/CNBC/status/1"],
             ),
             NewsItem(
                 title="Fidelity가 ETF 운용 업데이트를 올렸어요",
@@ -1311,7 +1300,7 @@ def test_cap_signals_by_topic_total_max():
     """3 topics × 3개 = 9개지만 total_max=6이면 6개만 반환한다."""
     signals = (
         [_make_signal("macro") for _ in range(3)]
-        + [_make_signal("ai_bigtech") for _ in range(3)]
+        + [_make_signal("us_equity") for _ in range(3)]
         + [_make_signal("bitcoin") for _ in range(3)]
     )
     result = news._cap_signals_by_topic(signals, total_max=6, per_topic_max=4)

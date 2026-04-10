@@ -41,8 +41,8 @@ class TestParseSonarContent:
         assert result["topic"] == "bitcoin"
 
     def test_missing_fields_get_defaults(self):
-        raw = '{"topic":"ai_bigtech"}'
-        result = _parse_sonar_content(raw, "ai_bigtech")
+        raw = '{"topic":"us_equity"}'
+        result = _parse_sonar_content(raw, "us_equity")
         assert result["summary_text"] == ""
         assert result["key_data_points"] == []
         assert result["market_implication"] == ""

@@ -345,7 +345,7 @@ def test_fallback_brief_includes_korean_investor_signals():
             "official_etf_daily_flow_btc": None,
             "official_etf_daily_flow_usd": None,
         },
-        "news": [{"topic": "ai_bigtech", "title": "Example", "why_it_matters": "AI 투자 기대"}],
+        "news": [{"topic": "us_equity", "title": "Example", "why_it_matters": "AI 투자 기대"}],
         "data_quality": {"status": "ok", "warnings": []},
     }
 
@@ -1077,9 +1077,9 @@ def test_fallback_news_lines_skip_file_titles_and_none_like_values():
             "why_it_matters": None,
         },
         {
-            "title": "AMD Deepens Strategic Collaboration with Samsung",
-            "url": "https://x.com/AMD",
-            "topic": "ai_bigtech",
+            "title": "Bitcoin ETF Inflows Surge to Record High",
+            "url": "https://x.com/BitcoinETF",
+            "topic": "bitcoin",
             "why_it_matters": None,
         },
     ]
@@ -1088,5 +1088,5 @@ def test_fallback_news_lines_skip_file_titles_and_none_like_values():
 
     assert "monetary20260318a1.htm" not in lines
     assert "None None" not in lines
-    assert "AI·빅테크 관련 기사 (@AMD)" in lines
-    assert "AMD Deepens Strategic Collaboration with Samsung" not in lines
+    assert "비트코인 관련 기사 (@BitcoinETF)" in lines
+    assert "Bitcoin ETF Inflows Surge to Record High" not in lines

@@ -16,8 +16,8 @@ from morning_brief.data.sources.grok_x_keyword import (
 
 
 def test_search_groups_count_and_includes_bitcoin_crypto():
-    """Property 3: search_groups가 정확히 3개이고 BITCOIN_CRYPTO_GROUP 포함."""
-    assert len(search_groups) == 3
+    """Property 3: search_groups가 정확히 2개이고 BITCOIN_CRYPTO_GROUP 포함."""
+    assert len(search_groups) == 2
     assert BITCOIN_CRYPTO_GROUP in search_groups
 
 

@@ -698,7 +698,6 @@ class TestPriorityOrdering:
         # 각 그룹에 15개 핸들을 반환하는 mock
         groups_content = {
             "crypto": [{"handle": f"Crypto{i:02d}", "trust_score": 4} for i in range(15)],
-            "ai_bigtech": [{"handle": f"AI{i:02d}", "trust_score": 4} for i in range(15)],
             "macro_and_equity": [{"handle": f"Macro{i:02d}", "trust_score": 4} for i in range(15)],
             "btc_etf": [{"handle": f"BTC{i:02d}", "trust_score": 4} for i in range(15)],
         }

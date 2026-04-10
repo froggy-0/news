@@ -493,7 +493,7 @@ def test_fetch_news_from_perplexity_filters_non_newsroom_apple_urls(monkeypatch)
         "TOPIC_SPECS",
         (
             ps.SearchTopic(
-                name="ai_bigtech",
+                name="us_equity",
                 query="ai query",
                 retry_query="",
             ),
@@ -539,7 +539,7 @@ def test_fetch_news_from_perplexity_filters_service_status_pages(monkeypatch):
         "TOPIC_SPECS",
         (
             ps.SearchTopic(
-                name="ai_bigtech",
+                name="us_equity",
                 query="ai query",
                 retry_query="",
             ),
@@ -585,7 +585,7 @@ def test_fetch_news_from_perplexity_filters_paid_partner_pages(monkeypatch):
         "TOPIC_SPECS",
         (
             ps.SearchTopic(
-                name="ai_bigtech",
+                name="us_equity",
                 query="ai query",
                 retry_query="",
             ),
@@ -772,10 +772,10 @@ def test_parse_results_filters_fed_index_pages_but_keeps_speech_pages():
     assert items[0].url == "https://www.federalreserve.gov/newsevents/speech/waller20260313a.htm"
 
 
-def test_parse_results_filters_broadcom_category_and_archive_pages():
+def test_parse_results_does_not_filter_broadcom_pages_after_ai_bigtech_removal():
     topic = ps.SearchTopic(
-        name="ai_bigtech",
-        query="ai query",
+        name="us_equity",
+        query="equity query",
         retry_query="",
     )
 
@@ -805,37 +805,16 @@ def test_parse_results_filters_broadcom_category_and_archive_pages():
         topic=topic,
     )
 
-    assert len(items) == 1
-    assert items[0].url == (
-        "https://news.broadcom.com/releases/broadcom-launches-new-optical-interconnect-platform"
-    )
+    assert len(items) == 3
 
 
 def test_parse_results_filters_reuters_quote_and_topic_index_pages():
-    ai_topic = ps.SearchTopic(
-        name="ai_bigtech",
-        query="ai query",
-        retry_query="",
-    )
     equity_topic = ps.SearchTopic(
         name="us_equity",
         query="equity query",
         retry_query="",
     )
 
-    ai_items = ps._parse_results(
-        payload={
-            "results": [
-                {
-                    "title": "AIの進化と社会 | 最新の自動車産業の未来ニュース - ロイター",
-                    "url": "https://www.reuters.com/business/tech-ai/",
-                    "snippet": "Topic landing page.",
-                    "date": "2026-03-13",
-                }
-            ]
-        },
-        topic=ai_topic,
-    )
     equity_items = ps._parse_results(
         payload={
             "results": [
@@ -850,7 +829,6 @@ def test_parse_results_filters_reuters_quote_and_topic_index_pages():
         topic=equity_topic,
     )
 
-    assert ai_items == []
     assert equity_items == []
 
 
@@ -936,11 +914,6 @@ def test_parse_results_filters_sec_taxonomy_notice_and_meta_news_root():
         query="bitcoin query",
         retry_query="",
     )
-    ai_topic = ps.SearchTopic(
-        name="ai_bigtech",
-        query="ai query",
-        retry_query="",
-    )
 
     bitcoin_items = ps._parse_results(
         payload={
@@ -955,22 +928,8 @@ def test_parse_results_filters_sec_taxonomy_notice_and_meta_news_root():
         },
         topic=bitcoin_topic,
     )
-    ai_items = ps._parse_results(
-        payload={
-            "results": [
-                {
-                    "title": "Meta Newsroom",
-                    "url": "https://about.fb.com/news/",
-                    "snippet": "News landing page.",
-                    "date": "2026-03-13",
-                }
-            ]
-        },
-        topic=ai_topic,
-    )
 
     assert bitcoin_items == []
-    assert ai_items == []
 
 
 def test_fetch_news_from_perplexity_records_raw_candidates_when_everything_is_filtered(
@@ -1323,7 +1282,7 @@ def test_parse_results_filters_ft_market_data_pages():
 
 def test_parse_results_filters_apple_and_non_english_results():
     topic = ps.SearchTopic(
-        name="ai_bigtech",
+        name="us_equity",
         query="ai query",
         retry_query="",
     )

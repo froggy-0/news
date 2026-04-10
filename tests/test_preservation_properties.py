@@ -332,7 +332,6 @@ class TestPerplexitySonarPreservation:
 
         assert "macro" in TOPIC_NAMES
         assert "us_equity" in TOPIC_NAMES
-        assert "ai_bigtech" in TOPIC_NAMES
         assert "bitcoin" in TOPIC_NAMES
 
     def test_perplexity_sonar_imported_in_news_module(self):

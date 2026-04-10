@@ -105,7 +105,7 @@ def test_run_pipeline_writes_observability_and_perplexity_audit(monkeypatch, tmp
                 "source_tier": "tier_1",
                 "preferred_source": True,
                 "age_hours": 1.0,
-                "topic": "ai_bigtech",
+                "topic": "us_equity",
                 "provider": "perplexity_search",
             },
             {

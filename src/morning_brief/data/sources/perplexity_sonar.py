@@ -51,7 +51,7 @@ SONAR_DENY_DOMAINS = [
     "-jp.reuters.com",
 ]
 
-TOPIC_NAMES = ("macro", "us_equity", "ai_bigtech", "bitcoin")
+TOPIC_NAMES = ("macro", "us_equity", "bitcoin")
 URL_TOKEN_RE = re.compile(r"[A-Za-z]{2,}")
 
 TOPIC_SUMMARY_SCHEMA: dict[str, Any] = {

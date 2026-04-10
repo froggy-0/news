@@ -122,13 +122,6 @@ def test_registry_validation_errors_when_group_exceeds_limit(monkeypatch, tmp_pa
 # Task 3.1: Verify new entities exist with correct attributes
 # ---------------------------------------------------------------------------
 
-_NEW_AI_BIGTECH_PRIMARY = [
-    ("google", "Google", "ai_bigtech_primary", 2),
-    ("amazon", "AmazonNews", "ai_bigtech_primary", 2),
-    ("tesla", "Tesla", "ai_bigtech_primary", 2),
-    ("broadcom", "Broadcom", "ai_bigtech_primary", 2),
-]
-
 _NEW_CRYPTO_AND_ETF = [
     ("vaneck", "vaneck_us", "crypto_and_etf", 2),
     ("franklin_templeton", "FTI_US", "crypto_and_etf", 2),
@@ -140,7 +133,7 @@ _NEW_MACRO_AND_EQUITY = [
     ("potus", "POTUS", "macro_and_equity", 1),
 ]
 
-_ALL_NEW_ENTITIES = _NEW_AI_BIGTECH_PRIMARY + _NEW_CRYPTO_AND_ETF + _NEW_MACRO_AND_EQUITY
+_ALL_NEW_ENTITIES = _NEW_CRYPTO_AND_ETF + _NEW_MACRO_AND_EQUITY
 
 
 def test_new_entity_ids_exist_in_registry():
@@ -181,7 +174,7 @@ def test_grouped_handle_counts():
     registry.load_official_signal_registry.cache_clear()
     handles = registry.grouped_verified_x_handles()
 
-    assert len(handles["ai_bigtech_primary"]) == 9
+    assert "ai_bigtech_primary" not in handles
     assert len(handles["crypto_and_etf"]) == 10
     assert len(handles["macro_and_equity"]) == 11
 
@@ -198,15 +191,10 @@ _ORIGINAL_25_ENTITY_IDS = [
     "federal_reserve",
     "us_treasury",
     "sec",
-    "amd",
     "fidelity",
     "blackrock_ishares",
-    "nvidia",
-    "microsoft",
-    "meta",
     "apple",
     "tsmc",
-    "asml",
     "bitwise",
     "grayscale",
     "ark_21shares",
@@ -224,7 +212,7 @@ _ORIGINAL_25_ENTITY_IDS = [
 
 
 def test_original_entities_still_present():
-    """All 25 original entities remain in the registry."""
+    """Original entities (excluding removed ai_bigtech) remain in the registry."""
     registry.load_official_signal_registry.cache_clear()
     entities = registry.list_official_signal_entities(enabled_only=False)
     entity_ids = {e["entity_id"] for e in entities}

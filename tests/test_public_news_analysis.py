@@ -189,7 +189,7 @@ def test_enrich_public_news_packet_thin_input_produces_nonempty_result(monkeypat
                 "title": "Major AI Lab Announces Next-Gen Model",
                 "url": "https://example.com/ai-lab-model",
                 "source": "TechCrunch",
-                "topic": "ai_bigtech",
+                "topic": "us_equity",
             }
         ],
         settings=settings,
