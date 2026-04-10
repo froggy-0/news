@@ -11,7 +11,7 @@ import logging
 import time
 from dataclasses import dataclass
 from math import ceil
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
     from morning_brief.config import Settings
@@ -49,6 +49,14 @@ _MAX_TOTAL_TOKENS = 512
 _MAX_ITEMS_LIMIT = 120
 _XSIGNAL_SLOT_RATIO = 0.20
 _XSIGNAL_SLOT_MAX = 24
+
+
+def _first_non_empty(*values: object) -> str:
+    for value in values:
+        text = str(value or "").strip()
+        if text:
+            return text
+    return ""
 
 
 class FinBertScorer:
@@ -236,10 +244,51 @@ def _select_items_for_scoring(
     return selected, skipped
 
 
+def build_news_sentiment_text(item: dict[str, Any]) -> str:
+    return FinBertScorer.combine_fields(
+        str(item.get("title", "")),
+        str(item.get("summary", "")),
+        str(item.get("why_it_matters", "")),
+    )
+
+
+def build_public_news_sentiment_text(item: dict[str, Any]) -> str:
+    title = _first_non_empty(item.get("rawTitle"), item.get("title"))
+    summary = _first_non_empty(
+        item.get("rawSummary"),
+        item.get("summaryKo"),
+        item.get("summary_ko"),
+        item.get("summary"),
+    )
+    interpretation = _first_non_empty(
+        item.get("rawInterpretation"),
+        item.get("interpretation"),
+        item.get("interpretation_ko"),
+        item.get("why_it_matters"),
+    )
+    return FinBertScorer.combine_fields(title, summary, interpretation)
+
+
+def build_public_signal_sentiment_text(item: dict[str, Any]) -> str:
+    content = _first_non_empty(
+        item.get("rawContent"),
+        item.get("content"),
+        item.get("summary"),
+        item.get("headline"),
+    )
+    impact = _first_non_empty(
+        item.get("impact"),
+        item.get("why_it_matters"),
+    )
+    return FinBertScorer.combine_fields(content, impact)
+
+
 def enrich_news_packet(
     items: list[dict[str, Any]],
     settings: Settings,
     observer: PipelineObserver | None = None,
+    *,
+    text_builder: Callable[[dict[str, Any]], str] | None = None,
 ) -> str:
     """news_packet의 각 항목에 sentiment_score/confidence 부여.
 
@@ -260,17 +309,11 @@ def enrich_news_packet(
 
     try:
         scorer = FinBertScorer(settings)
+        text_builder = text_builder or build_news_sentiment_text
 
         selected, skipped = _select_items_for_scoring(items)
 
-        texts = [
-            scorer.combine_fields(
-                str(items[i].get("title", "")),
-                str(items[i].get("summary", "")),
-                str(items[i].get("why_it_matters", "")),
-            )
-            for i in selected
-        ]
+        texts = [text_builder(items[i]) for i in selected]
 
         if observer:
             with observer.phase("finbert"):
@@ -333,3 +376,28 @@ def enrich_x_signals(
 
     except Exception:
         logger.warning("FinBERT XSignal enrichment 실패", exc_info=True)
+
+
+def enrich_public_signal_items(
+    items: list[dict[str, Any]],
+    settings: Settings,
+    observer: PipelineObserver | None = None,
+) -> str:
+    return enrich_news_packet(
+        items,
+        settings,
+        observer,
+        text_builder=build_public_signal_sentiment_text,
+    )
+
+
+__all__ = [
+    "FinBertScorer",
+    "SentimentResult",
+    "build_news_sentiment_text",
+    "build_public_news_sentiment_text",
+    "build_public_signal_sentiment_text",
+    "enrich_news_packet",
+    "enrich_public_signal_items",
+    "enrich_x_signals",
+]
