@@ -1309,6 +1309,8 @@ def _news_items_v2(
                 "url": url,
                 "urgency": "high" if _source_tier_value(item) == 1 else "medium",
                 "tags": [_topic_label(topic)],
+                "sentiment_score": item.get("sentiment_score"),
+                "sentiment_confidence": item.get("sentiment_confidence"),
             }
         )
     return results
