@@ -510,6 +510,17 @@ class PipelineObserver:
             )
         return " | ".join(parts)
 
+    def cost_by_provider_line(self) -> str:
+        payload = self.provider_usage_summary_payload()
+        if not payload:
+            return ""
+        parts = []
+        for provider, metrics in payload.items():
+            cost = metrics.get("cost_usd")
+            cost_str = "null" if cost is None else str(cost)
+            parts.append(f"{provider}={cost_str}")
+        return ", ".join(parts)
+
     def write_outputs(
         self,
         *,
@@ -564,6 +575,7 @@ class PipelineObserver:
                 status=status,
                 total_duration_ms=summary.get("total_duration_ms"),
                 total_cost_usd=_total_cost_usd(usage_summary),
+                cost_by_provider=self.cost_by_provider_line() or None,
                 app_events_path=str(app_events_path),
                 pipeline_run_path=str(run_file),
                 perplexity_audit_path=str(audit_file),

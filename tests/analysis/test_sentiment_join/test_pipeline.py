@@ -17,7 +17,8 @@ def _settings(tmp_path: Path) -> SentimentJoinSettings:
     return SentimentJoinSettings(
         lookback_days=30,
         output_dir=tmp_path,
-        r2_public_bucket="https://bucket.example",
+        r2_public_bucket="news-data",
+        r2_base_url="https://bucket.example",
         r2_max_concurrency=10,
         retain_days=30,
         kis_app_key="",

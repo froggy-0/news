@@ -12,6 +12,7 @@ class SentimentJoinSettings:
     lookback_days: int
     output_dir: Path
     r2_public_bucket: str
+    r2_base_url: str
     r2_max_concurrency: int
     retain_days: int
     kis_app_key: str
@@ -68,6 +69,7 @@ def load_sentiment_join_settings() -> SentimentJoinSettings:
         lookback_days=lookback_days,
         output_dir=output_dir,
         r2_public_bucket=os.getenv("R2_PUBLIC_BUCKET", "").strip(),
+        r2_base_url=os.getenv("NEXT_PUBLIC_R2_BASE_URL", "").strip(),
         r2_max_concurrency=r2_max_concurrency,
         retain_days=retain_days,
         kis_app_key=os.getenv("KIS_APP_KEY", "").strip(),

@@ -92,7 +92,7 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
 
         sentiment_df = fetch_r2_sentiment(
             sentiment_dates,
-            settings.r2_public_bucket,
+            settings.r2_base_url,
             max_concurrency=settings.r2_max_concurrency,
         )
         _log_source_complete(
