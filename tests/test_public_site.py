@@ -1027,6 +1027,52 @@ def test_build_public_brief_uses_public_context_sentiment_status_and_count() -> 
     assert payload["allNews"][1]["sentimentScore"] == -0.28
 
 
+def test_build_public_brief_news_sentiment_includes_unfiltered_articles() -> None:
+    """한국어 번역 없어 display에서 제외된 기사도 sentimentScore가 있으면 newsSentiment에 집계된다."""
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+    public_context = {
+        "sentiment_status": "ok",
+        "all_news": [
+            {
+                "title": "번역된 뉴스",
+                "url": "https://example.com/news-1",
+                "source": "Reuters",
+                "published_at": "2026-03-21T07:50:00+09:00",
+                "topic": "macro",
+                "source_tier": 1,
+                "summary": "요약",
+                "why_it_matters": "해석",
+                "sentiment_score": 0.5,
+                "sentiment_confidence": 0.9,
+            },
+            {
+                # summaryKo/interpretation 없음 → display_news에서 제외되지만 all_news에 존재
+                "title": "번역 미완성 뉴스",
+                "url": "https://example.com/news-2",
+                "source": "Bloomberg",
+                "published_at": "2026-03-21T07:40:00+09:00",
+                "topic": "macro",
+                "source_tier": 1,
+                "summary": "",
+                "why_it_matters": "",
+                "sentiment_score": -0.4,
+                "sentiment_confidence": 0.85,
+            },
+        ],
+        "all_x_signals": [],
+    }
+    payload = build_public_brief(
+        packet=_packet(),
+        briefing=_briefing(),
+        run_at=run_at,
+        public_context=public_context,
+    )
+    # display_news는 1개(번역 있는 것만), all_news는 2개 → newsSentiment.count == 2
+    assert payload["meta"]["newsSentiment"]["count"] == 2
+    # allNews에는 display 통과한 1개만 노출
+    assert len(payload["allNews"]) == 1
+
+
 def test_build_public_brief_signal_sentiment_status_independent() -> None:
     """sentimentStatus(뉴스)와 signalSentimentStatus(시그널)는 독립적으로 반영된다."""
     run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))

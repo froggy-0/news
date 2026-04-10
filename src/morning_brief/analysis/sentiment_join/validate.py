@@ -16,6 +16,9 @@ MASTER_SCHEMA = pa.DataFrameSchema(
         "news_sentiment_mean": pa.Column(float, pa.Check.between(-1.0, 1.0), nullable=False),
         "news_sentiment_std": pa.Column(float, pa.Check.ge(0), nullable=True),
         "n_articles": pa.Column("Int64", pa.Check.ge(0), nullable=True),
+        "signal_sentiment_mean": pa.Column(float, pa.Check.between(-1.0, 1.0), nullable=True),
+        "signal_sentiment_std": pa.Column(float, pa.Check.ge(0), nullable=True),
+        "n_signals": pa.Column("Int64", pa.Check.ge(0), nullable=True),
         "fng_value": pa.Column("Int64", pa.Check.between(0, 100), nullable=True),
         "btc_log_return": pa.Column(float, nullable=True),
         "btc_return": pa.Column(float, nullable=True),
@@ -29,7 +32,7 @@ MASTER_SCHEMA = pa.DataFrameSchema(
 
 def validate_master(df: pd.DataFrame) -> None:
     try:
-        for column in ("n_articles", "fng_value"):
+        for column in ("n_articles", "fng_value", "n_signals"):
             if str(df[column].dtype) != "Int64":
                 raise SchemaError(
                     schema=MASTER_SCHEMA,

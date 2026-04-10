@@ -21,6 +21,9 @@ def _empty_sentiment_frame(dates: list[str]) -> pd.DataFrame:
             "news_sentiment_mean": [np.nan] * len(dates),
             "news_sentiment_std": [np.nan] * len(dates),
             "n_articles": pd.array([pd.NA] * len(dates), dtype="Int64"),
+            "signal_sentiment_mean": [np.nan] * len(dates),
+            "signal_sentiment_std": [np.nan] * len(dates),
+            "n_signals": pd.array([pd.NA] * len(dates), dtype="Int64"),
         }
     )
 
@@ -31,6 +34,9 @@ def _nan_sentiment_row(date: str) -> dict[str, object]:
         "news_sentiment_mean": np.nan,
         "news_sentiment_std": np.nan,
         "n_articles": pd.NA,
+        "signal_sentiment_mean": np.nan,
+        "signal_sentiment_std": np.nan,
+        "n_signals": pd.NA,
     }
 
 
@@ -58,12 +64,30 @@ def _parse_sentiment_payload(date: str, payload: dict[str, Any]) -> dict[str, ob
         return _nan_sentiment_row(date)
 
     std = aggregate.get("std")
-    return {
+    row: dict[str, object] = {
         "date": date,
         "news_sentiment_mean": float(mean),
         "news_sentiment_std": float(std) if isinstance(std, (int, float)) else np.nan,
         "n_articles": _coerce_int(aggregate.get("count")),
+        "signal_sentiment_mean": np.nan,
+        "signal_sentiment_std": np.nan,
+        "n_signals": pd.NA,
     }
+
+    # signalSentimentStatus가 없는 구버전 JSON은 "skipped"로 처리
+    signal_status = str(meta.get("signalSentimentStatus", "skipped")).strip().lower()
+    sig_agg = meta.get("signalSentiment")
+    if isinstance(sig_agg, dict) and signal_status != "skipped":
+        sig_mean = sig_agg.get("mean")
+        if sig_mean is not None:
+            sig_std = sig_agg.get("std")
+            row["signal_sentiment_mean"] = float(sig_mean)
+            row["signal_sentiment_std"] = (
+                float(sig_std) if isinstance(sig_std, (int, float)) else np.nan
+            )
+            row["n_signals"] = _coerce_int(sig_agg.get("count"))
+
+    return row
 
 
 def _fetch_single_date(date: str, *, r2_public_bucket: str) -> tuple[dict[str, object], bool]:
@@ -125,6 +149,7 @@ def fetch_r2_sentiment(
 
     frame = pd.DataFrame(rows).sort_values("date").reset_index(drop=True)
     frame["n_articles"] = pd.array(frame["n_articles"], dtype="Int64")
+    frame["n_signals"] = pd.array(frame["n_signals"], dtype="Int64")
     frame.attrs["fallback_used"] = False
     return frame
 

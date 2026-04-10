@@ -43,6 +43,9 @@ def _sentiment_df(main_dates: list[str]) -> pd.DataFrame:
             "news_sentiment_mean": [0.1] * len(main_dates),
             "news_sentiment_std": [0.05] * len(main_dates),
             "n_articles": pd.array([3] * len(main_dates), dtype="Int64"),
+            "signal_sentiment_mean": [0.05] * len(main_dates),
+            "signal_sentiment_std": [0.02] * len(main_dates),
+            "n_signals": pd.array([6] * len(main_dates), dtype="Int64"),
         }
     )
 

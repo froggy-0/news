@@ -18,7 +18,9 @@ def test_fetch_r2_sentiment_maps_count_to_n_articles(
         return {
             "meta": {
                 "sentimentStatus": "ok",
+                "signalSentimentStatus": "ok",
                 "newsSentiment": {"mean": 0.25, "std": 0.1, "count": 3},
+                "signalSentiment": {"mean": 0.1, "std": 0.05, "count": 6},
             }
         }
 
@@ -30,6 +32,10 @@ def test_fetch_r2_sentiment_maps_count_to_n_articles(
     assert df.loc[0, "news_sentiment_std"] == 0.1
     assert df.loc[0, "n_articles"] == 3
     assert df["n_articles"].dtype == pd.Int64Dtype()
+    assert df.loc[0, "signal_sentiment_mean"] == 0.1
+    assert df.loc[0, "signal_sentiment_std"] == 0.05
+    assert df.loc[0, "n_signals"] == 6
+    assert df["n_signals"].dtype == pd.Int64Dtype()
 
 
 def test_fetch_r2_sentiment_sets_nan_for_skipped_status(
@@ -41,7 +47,9 @@ def test_fetch_r2_sentiment_sets_nan_for_skipped_status(
         lambda *args, **kwargs: {
             "meta": {
                 "sentimentStatus": "skipped",
+                "signalSentimentStatus": "ok",
                 "newsSentiment": {"mean": 0.25, "std": 0.1, "count": 4},
+                "signalSentiment": {"mean": 0.1, "std": 0.05, "count": 6},
             }
         },
     )
@@ -51,6 +59,9 @@ def test_fetch_r2_sentiment_sets_nan_for_skipped_status(
     assert pd.isna(df.loc[0, "news_sentiment_mean"])
     assert pd.isna(df.loc[0, "news_sentiment_std"])
     assert pd.isna(df.loc[0, "n_articles"])
+    assert pd.isna(df.loc[0, "signal_sentiment_mean"])
+    assert pd.isna(df.loc[0, "signal_sentiment_std"])
+    assert pd.isna(df.loc[0, "n_signals"])
 
 
 def test_fetch_r2_sentiment_keeps_degraded_value(
@@ -62,7 +73,9 @@ def test_fetch_r2_sentiment_keeps_degraded_value(
         lambda *args, **kwargs: {
             "meta": {
                 "sentimentStatus": "degraded",
+                "signalSentimentStatus": "ok",
                 "newsSentiment": {"mean": -0.4, "std": 0.3, "count": 2},
+                "signalSentiment": {"mean": 0.2, "std": 0.1, "count": 4},
             }
         },
     )
@@ -72,6 +85,8 @@ def test_fetch_r2_sentiment_keeps_degraded_value(
     assert df.loc[0, "news_sentiment_mean"] == -0.4
     assert df.loc[0, "news_sentiment_std"] == 0.3
     assert df.loc[0, "n_articles"] == 2
+    assert df.loc[0, "signal_sentiment_mean"] == 0.2
+    assert df.loc[0, "n_signals"] == 4
 
 
 def test_fetch_r2_sentiment_sets_nan_when_mean_is_null(
@@ -83,7 +98,9 @@ def test_fetch_r2_sentiment_sets_nan_when_mean_is_null(
         lambda *args, **kwargs: {
             "meta": {
                 "sentimentStatus": "ok",
+                "signalSentimentStatus": "ok",
                 "newsSentiment": {"mean": None, "std": 0.3, "count": 2},
+                "signalSentiment": {"mean": 0.1, "std": 0.05, "count": 4},
             }
         },
     )
@@ -93,6 +110,9 @@ def test_fetch_r2_sentiment_sets_nan_when_mean_is_null(
     assert pd.isna(df.loc[0, "news_sentiment_mean"])
     assert pd.isna(df.loc[0, "news_sentiment_std"])
     assert pd.isna(df.loc[0, "n_articles"])
+    # 뉴스 NaN이면 전체 행이 NaN (기존 동작 유지)
+    assert pd.isna(df.loc[0, "signal_sentiment_mean"])
+    assert pd.isna(df.loc[0, "n_signals"])
 
 
 def test_fetch_r2_sentiment_handles_partial_404(
@@ -102,7 +122,9 @@ def test_fetch_r2_sentiment_handles_partial_404(
         "2026-04-10": {
             "meta": {
                 "sentimentStatus": "ok",
+                "signalSentimentStatus": "ok",
                 "newsSentiment": {"mean": 0.2, "std": 0.1, "count": 2},
+                "signalSentiment": {"mean": 0.05, "std": 0.02, "count": 5},
             }
         }
     }
@@ -124,8 +146,12 @@ def test_fetch_r2_sentiment_handles_partial_404(
     missing_row = df.loc[df["date"] == "2026-04-09"].iloc[0]
     assert pd.isna(missing_row["news_sentiment_mean"])
     assert pd.isna(missing_row["n_articles"])
+    assert pd.isna(missing_row["signal_sentiment_mean"])
+    assert pd.isna(missing_row["n_signals"])
     present_row = df.loc[df["date"] == "2026-04-10"].iloc[0]
     assert present_row["news_sentiment_mean"] == 0.2
+    assert present_row["signal_sentiment_mean"] == 0.05
+    assert present_row["n_signals"] == 5
 
 
 def test_fetch_r2_sentiment_logs_warning_on_total_failure(
@@ -145,4 +171,56 @@ def test_fetch_r2_sentiment_logs_warning_on_total_failure(
         )
 
     assert df["news_sentiment_mean"].isna().all()
+    assert df["signal_sentiment_mean"].isna().all()
     assert any(getattr(record, "event", None) == "source.failed" for record in caplog.records)
+
+
+def test_fetch_r2_sentiment_legacy_json_without_signal_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """signalSentimentStatus 필드가 없는 구버전 JSON은 signal 컬럼을 NaN으로 채운다."""
+    monkeypatch.setattr(
+        r2_sentiment,
+        "get_json_with_retry",
+        lambda *args, **kwargs: {
+            "meta": {
+                "sentimentStatus": "ok",
+                # signalSentimentStatus 없음 (구버전)
+                "newsSentiment": {"mean": 0.3, "std": 0.1, "count": 5},
+                "signalSentiment": {"mean": 0.1, "std": 0.05, "count": 8},
+            }
+        },
+    )
+
+    df = r2_sentiment.fetch_r2_sentiment(["2026-04-10"], "https://bucket.example", 2)
+
+    assert df.loc[0, "news_sentiment_mean"] == 0.3
+    assert df.loc[0, "n_articles"] == 5
+    # signalSentimentStatus 없으면 "skipped"로 처리 → signal NaN
+    assert pd.isna(df.loc[0, "signal_sentiment_mean"])
+    assert pd.isna(df.loc[0, "n_signals"])
+
+
+def test_fetch_r2_sentiment_signal_skipped_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """signalSentimentStatus가 skipped이면 signal 컬럼은 NaN이지만 뉴스는 정상."""
+    monkeypatch.setattr(
+        r2_sentiment,
+        "get_json_with_retry",
+        lambda *args, **kwargs: {
+            "meta": {
+                "sentimentStatus": "ok",
+                "signalSentimentStatus": "skipped",
+                "newsSentiment": {"mean": 0.15, "std": 0.08, "count": 7},
+                "signalSentiment": {"mean": None, "std": None, "count": 0},
+            }
+        },
+    )
+
+    df = r2_sentiment.fetch_r2_sentiment(["2026-04-10"], "https://bucket.example", 2)
+
+    assert df.loc[0, "news_sentiment_mean"] == 0.15
+    assert df.loc[0, "n_articles"] == 7
+    assert pd.isna(df.loc[0, "signal_sentiment_mean"])
+    assert pd.isna(df.loc[0, "n_signals"])

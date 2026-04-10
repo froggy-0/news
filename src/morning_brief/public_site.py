@@ -259,7 +259,7 @@ def build_public_brief(
                 if public_context
                 else "skipped"
             ),
-            "newsSentiment": _compute_sentiment_aggregate(display_news),
+            "newsSentiment": _compute_sentiment_aggregate(all_news),
             "signalSentiment": _compute_sentiment_aggregate(all_x_signals),
             "sentimentByCategory": _compute_sentiment_by_category(display_news),
         },
