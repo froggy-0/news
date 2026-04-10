@@ -16,6 +16,7 @@ make lint         # Ruff 포맷/린트 검사
 make typecheck    # mypy strict 타입 검사
 make test         # pytest 전체 실행
 make check        # lint + test + typecheck 통합 검사
+make sentiment-join # 감성-시계열 결합 분석용 Parquet 생성
 
 # 단일 테스트 실행
 pytest tests/test_brief_review.py -v
@@ -25,6 +26,10 @@ pytest tests/test_pipeline_quality.py::test_name -v
 python main.py once               # 브리핑 1회 실행
 python main.py once --print-brief # 실행 후 결과 출력
 python main.py schedule           # 매일 08:00 KST 스케줄 실행
+
+# 분석 배치 직접 실행
+./scripts/build_sentiment_join.py
+SENTIMENT_JOIN_LOOKBACK_DAYS=90 make sentiment-join
 ```
 
 ### Frontend
@@ -71,6 +76,21 @@ npm run deploy:production   # Cloudflare production 배포
 - `src/morning_brief/templates/` — Jinja2 이메일/마크다운 템플릿
 - `src/morning_brief/prompts/` — LLM 프롬프트
 - `src/morning_brief/data/finbert_sentiment.py` — FinBERT 감성 분석 (선택적)
+
+### Sentiment Join Analysis Pipeline
+
+기존 브리핑 발송 파이프라인과 분리된 분석용 배치입니다.
+
+- 진입점: `scripts/build_sentiment_join.py`
+- Make 타겟: `make sentiment-join`
+- 구현 위치: `src/morning_brief/analysis/sentiment_join/`
+- 출력물: `data/sentiment_join/master_{YYYYMMDD}.parquet`
+- 주요 환경변수:
+  - `SENTIMENT_JOIN_LOOKBACK_DAYS`
+  - `SENTIMENT_JOIN_OUTPUT_DIR`
+  - `SENTIMENT_JOIN_R2_MAX_CONCURRENCY`
+  - `SENTIMENT_JOIN_RETAIN_DAYS`
+- 분석 의존성: `requirements-analysis.txt` (`pandera`, `pyarrow`, `pandas`, `numpy`)
 
 ### Frontend
 

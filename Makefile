@@ -5,7 +5,7 @@ MYPY := $(PYTHON) -m mypy
 PRE_COMMIT := $(PYTHON) -m pre_commit
 PRE_COMMIT_HOME ?= .cache/pre-commit
 
-.PHONY: install-dev fmt lint test typecheck check validate-pre-commit
+.PHONY: install-dev fmt lint test typecheck check validate-pre-commit sentiment-join
 
 install-dev:
 	$(PYTHON) -m pip install --disable-pip-version-check -r requirements-dev.txt
@@ -28,3 +28,6 @@ check: lint test typecheck
 
 validate-pre-commit:
 	PRE_COMMIT_HOME=$(PRE_COMMIT_HOME) $(PRE_COMMIT) validate-config
+
+sentiment-join:
+	$(PYTHON) scripts/build_sentiment_join.py

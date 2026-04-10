@@ -1,0 +1,840 @@
+{
+  "meta": {
+    "date": "2026-04-01",
+    "generatedAt": "2026-04-01T18:56:34.739152+09:00",
+    "dataQuality": "ok",
+    "qualityNotes": [],
+    "displayHeadline": "미국 주식시장이 지정학적 긴장 완화 기대와 유가 하락에 힘입어 리스크온 성격의 반등을 보였고, 특히 반도체·기술주가 강하게 움직였어요.",
+    "sourceCounts": {
+      "newsCandidates": 24,
+      "newsRanked": 12,
+      "newsFeatured": 5,
+      "newsAll": 12,
+      "xSignalCandidates": 12,
+      "xSignalRanked": 12,
+      "xSignalFeatured": 6,
+      "xSignalAll": 12
+    },
+    "translationStatus": "ok",
+    "publicNewsAnalysis": {
+      "candidateCount": 12,
+      "requestedCount": 12,
+      "successCount": 12,
+      "failedCount": 0,
+      "skippedCount": 0,
+      "status": "ok"
+    }
+  },
+  "marketSnapshot": {
+    "items": [
+      {
+        "symbol": "US10Y",
+        "label": "미국 10년물",
+        "value": "4.35%",
+        "change": "-9bp",
+        "trend": "down",
+        "isCached": false,
+        "history": [
+          4.44,
+          4.35
+        ]
+      },
+      {
+        "symbol": "DXY",
+        "label": "달러 인덱스",
+        "value": "112.78",
+        "change": "+0.26%",
+        "trend": "up",
+        "isCached": false,
+        "history": [
+          112.4842,
+          112.7767
+        ]
+      },
+      {
+        "symbol": "VIX",
+        "label": "VIX",
+        "value": "30.61",
+        "change": "-1.42%",
+        "trend": "down",
+        "isCached": false,
+        "history": [
+          31.0509,
+          30.61
+        ]
+      },
+      {
+        "symbol": "SPX",
+        "label": "S&P 500",
+        "value": "650.34",
+        "change": "+2.91%",
+        "trend": "up",
+        "isCached": false,
+        "history": [
+          631.9502,
+          650.34
+        ]
+      },
+      {
+        "symbol": "QQQ",
+        "label": "나스닥 100",
+        "value": "577.18",
+        "change": "+3.39%",
+        "trend": "up",
+        "isCached": false,
+        "history": [
+          558.2552,
+          577.18
+        ]
+      },
+      {
+        "symbol": "SOXX",
+        "label": "반도체 ETF",
+        "value": "328.66",
+        "change": "+6.09%",
+        "trend": "up",
+        "isCached": false,
+        "history": [
+          309.7936,
+          328.66
+        ]
+      },
+      {
+        "symbol": "BTC",
+        "label": "비트코인 현물",
+        "value": "$68,539",
+        "change": "+3.33%",
+        "trend": "up",
+        "isCached": false,
+        "history": [
+          66330.2042,
+          68539.0
+        ]
+      }
+    ]
+  },
+  "aiJudgment": {
+    "headline": "미국 주식시장이 지정학적 긴장 완화 기대와 유가 하락에 힘입어 리스크온 성격의 반등을 보였고, 특히 반도체·기술주가 강하게 움직였어요.",
+    "body": "데이터 품질: 제공된 데이터 상태는 정상(ok)이에요.\n\n0. 오늘의 핵심\n- 미국 주식시장이 지정학적 긴장 완화 기대와 유가 하락에 힘입어 리스크온 성격의 반등을 보였고, 특히 반도체·기술주가 강하게 움직였어요.\n- 비트코인은 기관 ETF 흐름이 혼재된 가운데 현물가가 68,539달러를 기록하며 기술적 저항과 지지 사이에서 등락하고 있어요.\n- 노동시장 지표(JOLTS)는 고용 모멘텀 약화를 시사해 연준의 정책 경로(동결 기대)를 뒷받침하는 신호로도 해석돼요.\n\n이상 움직임\n- VIX(시장 불안지표)가 30.61로 높은 수준이 유지되고 있어요. VIX는 높을수록 투자자들이 불안해한다는 뜻이에요.\n\n1. 거시 지표 Dashboard\n- 미국 10년물: 4.35% (전일 대비 -9bp)\n- 미국 2년물: 3.82% (전일 대비 -6bp)\n- 미국 3개월물: 이번 집계에서 확인되지 않았어요\n- 달러 인덱스(DXY): 112.7767 (전일 대비 +0.26%)\n- VIX: 30.61 (전일 대비 -1.42%) — VIX는 시장의 불안감을 숫자로 나타낸 지표예요. 높을수록 투자자들이 불안해한다는 뜻이에요.\n- 원/달러: 이번 집계에서 확인되지 않았어요\n- 나스닥 선물: 이번 집계에서 확인되지 않았어요\n\n(수치 기준 시점: market_data_json 생성 시점 2026-04-01 09:51:51 UTC)\n\n2. 미국 증시\n- 주요 지수\n- SPY (S&P500 ETF): 650.34 (전일 대비 +2.91%)\n- QQQ (나스닥 ETF): 577.18 (전일 대비 +3.39%)\n- SOXX (반도체 섹터 ETF): 328.66 (전일 대비 +6.09%)\n\n- 빅테크/주요 기술주 (변동 폭 큰 순서, 가능한 수치만 표기)\n1) MRVL: (최근 언급된 변동 +12.8%) — 가격 데이터는 이번 집계에서 확인되지 않았어요\n2) INTC: +7.1% — 가격 데이터는 이번 집계에서 확인되지 않았어요\n3) META: >+6% — 가격 데이터는 이번 집계에서 확인되지 않았어요\n4) NVDA: $165.17 (최근 종가, YTD -11.4%; 당일 등락 +5.6% 언급) — 일부 수치만 제공돼요\n5) MSFT: (전일 대비 +3% 언급) — 가격 데이터는 이번 집계에서 확인되지 않았어요\n6) AAPL: (구체적 당일 변동 확인되지 않았어요) — 가격 데이터는 이번 집계에서 확인되지 않았어요\n\n(참고: 개별 주가·거래량 전일 대비 수치는 제공된 요약에서 발췌했으며, 일부 종목은 이번 집계에서 상세 가격이 확인되지 않았어요)\n\n3. BTC & 크립토\n- BTC 현물가: 68,539.0 USD (전일 대비 +3.33%) — 이 값은 입력된 bitcoin.spot.price와 정확히 일치해요.\n- 공포·탐욕지수: 8 / 100 — 극단적 공포 (값이 0~100 기준에서 8로 매우 낮아 투자심리가 위축돼 있음을 뜻해요)\n- BTC 현물 ETF 개별(IBIT, FBTC, ARKB, BITB, GBTC)\n- IBIT (iShares): AUM $53,052,862,326.0, 총 보유 BTC 782,069.66, 일자 Mar 31, 2026, 일일 거래량 41,352,858 — 가격·등락률은 이번 집계에서 확인되지 않았어요\n- FBTC: 이번 집계에서 확인되지 않았어요 (가격·등락·거래량)\n- ARKB: 이번 집계에서 확인되지 않았어요 (가격·등락·거래량)\n- BITB (Bitwise): AUM $2,550,050,872.6, 총 보유 BTC 37,566.81019278, 일자 04/01/2026, 일일 거래량 2,521,536 — 가격·등락률은 이번 집계에서 확인되지 않았어요\n- GBTC: 이번 집계에서 확인되지 않았어요 (가격·등락·거래량)\n- 공식 ETF 합계(입력 기준): 총 BTC 보유량 819,636.47019278 BTC, 총 AUM $55,602,913,198.6 (as-of 입력값 기준)\n- 기관 보유 현황: 개별 ETF 스냅샷 일부(IBIT, BITB)만 제공돼요; 그 외 ETF의 보유 현황은 이번 집계에서 확인되지 않았어요\n\n4-1. 이슈 브리핑\n- 주식·반도체 랠리\n지정학적 긴장 완화 기대와 유가 완화가 맞물려 S&P와 나스닥이 각각 2.9%, 3.8% 상승했어요.\n\n특히 반도체(SOXX +6.09%)와 AI 관련 기술주가 크게 올라 리스크 선호가 순간적으로 강화된 모습이에요.\n\n- 노동시장 약화 신호\nJOLTS(구인건수)와 민간 고용지표가 10년 내 최저 수준을 보이며 고용 모멘텀 약화를 시사했어요.\n\n고용 약화는 장기적으로는 연준의 금리 기조(동결·완화 기대)에 영향을 줄 수 있어요.\n\n- 비트코인: ETF와 기술적 갈림길\n비트코인은 현물 ETF의 혼재된 흐름과 거래량 축소라는 배경에서 68,539달러 수준을 유지하고 있어요.\n\n기관 매수 신호와 동시에 일별 ETF 흐름의 약화가 관찰돼 단기적 방향성은 불확실해요.\n\n5-1. 주간 맥락 연결\n- 월요일: 지난주에는 지정학 리스크와 유가 급등으로 3월이 약세로 끝났는데, 오늘은 긴장 완화 기대가 반영돼 강한 반등이 나왔어요. 이번 주에는 4월 초 고용 지표가 큰 변수가 돼요.\n- 화~목: 이번 주 중간 발표(예: 제조·고용 관련 지표) 전후로 위험자산의 방향이 결정될 수 있어요. 비트코인은 ETF 흐름과 함께 고용보고서의 시장 해석을 실시간으로 반영할 가능성이 커요.\n- 금요일: 주간 마감 시점에서는 고용보고서(4월 3일)가 핵심 이벤트라 주말을 앞두고 포지션 조정이 잦을 수 있어요. 한 주 결산에서 시장은 성장·금리·지정학 신호를 종합해 재조정할 가능성이 높아요.",
+    "summaryLead": "비트코인은 기관 ETF 흐름이 혼재된 가운데 현물가가 68,539달러를 기록하며 기술적 저항과 지지 사이에서 등락하고 있어요.",
+    "summarySupport": "노동시장 지표(JOLTS)는 고용 모멘텀 약화를 시사해 연준의 정책 경로(동결 기대)를 뒷받침하는 신호로도 해석돼요."
+  },
+  "topicSummaries": [
+    {
+      "topic": "macro",
+      "label": "거시경제",
+      "summary": "연준의 4월 금리 동결 확률 98.4%로 정책 안정 기대가 강화되며 채권 및 주식 시장 변동성이 낮아질 전망이다.",
+      "keyMetric": "4월 FOMC 금리 동결 확률 · 98.4%",
+      "relatedStocks": null
+    },
+    {
+      "topic": "us-stocks",
+      "label": "미국 주식",
+      "summary": "중동 긴장 완화 기대에 따른 안도감이 위험선호를 지지해 특히 기술주를 중심으로 주식이 상승했으나 관심은 미 제조업 지표와 지속되는 지정학적 리스크로 옮겨갔습니다.",
+      "keyMetric": "S&P 500 · 6,528.52 · +2.9%",
+      "relatedStocks": [
+        "MRVL +12.8%",
+        "NVDA +5.6%",
+        "INTC +7.1%",
+        "META >+6%",
+        "MSFT +3%",
+        "CVX -1.8%"
+      ]
+    },
+    {
+      "topic": "bigtech",
+      "label": "빅테크·AI",
+      "summary": "지정학적 리스크로 인한 기술주 약세에도 NVDA와 AAPL의 펀더멘털은 견고해 단기 매수 기회로 작용할 전망이다.",
+      "keyMetric": "NVDA 최근 분기 EPS · $1.62 · +82% YoY",
+      "relatedStocks": [
+        "NVDA -11.4% YTD",
+        "AAPL 약세 (구체 수치 미확인)"
+      ]
+    },
+    {
+      "topic": "bitcoin",
+      "label": "비트코인",
+      "summary": "비트코인은 $67,000 지지선 방어 여부에 따라 $62k 하락 또는 7.1% 상승 가능성이 공존하며 S&P 500 등 전통 시장과 동조화로 리스크 자산 변동성 확대될 전망입니다.",
+      "keyMetric": "BTC 스팟 가격 · $66,000~$69,000 · +2.43% (24h, 일부 소스)",
+      "relatedStocks": [
+        "BTC +2.43% (24h 일부)",
+        "ETH N/A (근처 $2,100)"
+      ]
+    }
+  ],
+  "techStocks": [
+    {
+      "symbol": "TSM",
+      "name": "TSM",
+      "price": "$337.95",
+      "change": "+6.78%",
+      "trend": "up",
+      "absChangeNum": 6.78,
+      "isCached": false
+    },
+    {
+      "symbol": "META",
+      "name": "META",
+      "price": "$572.13",
+      "change": "+6.67%",
+      "trend": "up",
+      "absChangeNum": 6.67,
+      "isCached": false
+    },
+    {
+      "symbol": "NVDA",
+      "name": "NVDA",
+      "price": "$174.40",
+      "change": "+5.59%",
+      "trend": "up",
+      "absChangeNum": 5.59,
+      "isCached": false
+    },
+    {
+      "symbol": "AVGO",
+      "name": "AVGO",
+      "price": "$309.51",
+      "change": "+5.49%",
+      "trend": "up",
+      "absChangeNum": 5.49,
+      "isCached": false
+    },
+    {
+      "symbol": "ASML",
+      "name": "ASML",
+      "price": "$1,320.83",
+      "change": "+5.33%",
+      "trend": "up",
+      "absChangeNum": 5.33,
+      "isCached": false
+    },
+    {
+      "symbol": "GOOGL",
+      "name": "GOOGL",
+      "price": "$287.56",
+      "change": "+5.14%",
+      "trend": "up",
+      "absChangeNum": 5.14,
+      "isCached": false
+    },
+    {
+      "symbol": "AMD",
+      "name": "AMD",
+      "price": "$203.43",
+      "change": "+3.77%",
+      "trend": "up",
+      "absChangeNum": 3.77,
+      "isCached": false
+    },
+    {
+      "symbol": "AMZN",
+      "name": "AMZN",
+      "price": "$208.27",
+      "change": "+3.64%",
+      "trend": "up",
+      "absChangeNum": 3.64,
+      "isCached": false
+    },
+    {
+      "symbol": "MSFT",
+      "name": "MSFT",
+      "price": "$370.17",
+      "change": "+3.12%",
+      "trend": "up",
+      "absChangeNum": 3.12,
+      "isCached": false
+    },
+    {
+      "symbol": "AAPL",
+      "name": "AAPL",
+      "price": "$253.79",
+      "change": "+2.90%",
+      "trend": "up",
+      "absChangeNum": 2.9,
+      "isCached": false
+    }
+  ],
+  "bitcoin": {
+    "price": "$68,539",
+    "change": "+3.33%",
+    "trend": "up",
+    "fearGreedIndex": {
+      "value": 8,
+      "label": "극단적 공포"
+    },
+    "etf": {
+      "totalHolding": "819,636.47 BTC",
+      "totalAum": "$55,602,913,199",
+      "issuers": [
+        {
+          "name": "BITB",
+          "holding": "37,567 BTC",
+          "aum": "$2,550,050,873",
+          "sourceUrl": "https://bitbetf.com/"
+        },
+        {
+          "name": "IBIT",
+          "holding": "782,070 BTC",
+          "aum": "$53,052,862,326",
+          "sourceUrl": "https://www.ishares.com/us/products/333011/ishares-bitcoin-trust-etf"
+        }
+      ]
+    }
+  },
+  "featuredXSignals": [
+    {
+      "id": "x-1",
+      "postedAt": "2026-03-31T20:17:30+00:00",
+      "impact": "지정학적 위험 프리미엄이 축소되는 신호로 주식의 안도 랠리 가능성과 에너지 섹터에서의 이탈을 시사합니다.",
+      "sentiment": "bullish",
+      "content": "미국 주식은 유가 하락에 힘입어 강하게 반등했으며 시장 심리가 개선되어 S&P 500은 2.9% 상승하고 나스닥은 3.8% 올랐고 금리 민감 자산이 강세를 보였습니다.",
+      "rawContent": "US equities rallied sharply as oil prices eased, boosting market sentiment; S&P 500 jumped 2.9% while Nasdaq rose 3.8%, with rate-sensitive assets gaining."
+    },
+    {
+      "id": "x-2",
+      "postedAt": "2026-03-31T14:00:57+00:00",
+      "impact": "이는 노동시장 완화라는 관측을 강화해 연준의 경기 지원용 금리 인하 가능성을 높입니다.",
+      "sentiment": "bearish",
+      "content": "미국의 2월 JOLTS 구인건수는 688.2만 건으로 컨센서스 691.8만 건보다 적어 전쟁 이전 추세 속에서 노동수요가 둔화되고 있음을 나타냅니다.",
+      "rawContent": "US February JOLTS job openings at 6.882 million versus consensus 6.918M, indicating cooling labor demand amid pre-war trends."
+    },
+    {
+      "id": "x-3",
+      "postedAt": "2026-03-30T13:13:52+00:00",
+      "impact": "이는 금리 시장의 매파적 재가격을 반박하며 긴축 정책 없이도 국채와 주식이 안정될 수 있음을 시사합니다.",
+      "sentiment": "bullish",
+      "content": "골드만은 유가 급등 공포가 과장됐다고 주장하며 1990년 등 역사적 선례에서는 물가 급등에도 불구하고 성장 둔화로 연준이 금리를 인하했다고 지적합니다.",
+      "rawContent": "Goldman argues oil surge fears overdone; historical precedents like 1990 show Fed cuts amid growth weakness despite inflation spikes."
+    },
+    {
+      "id": "x-4",
+      "postedAt": "2026-03-31T09:02:29+00:00",
+      "impact": "연준의 완화 기대 전환을 시사하며 채권과 경기민감주에 긍정적입니다.",
+      "sentiment": "bullish",
+      "content": "파월 발언으로 이란 전쟁 영향과 약한 고용 지표를 고려해 금리 인상 확률을 낮추자 10년물 국채 수익률이 하락했습니다.",
+      "rawContent": "10Y Treasury yields decline as Powell's remarks lead traders to dial back rate hike odds in light of Iran war impacts and weak jobs data."
+    },
+    {
+      "id": "x-5",
+      "postedAt": "2026-03-31T17:56:02+00:00",
+      "impact": "이는 NVIDIA와 하이퍼스케일러를 포함한 반도체 및 빅테크 공급망을 위해 AI 인프라와 데이터센터에 대한 지속적인 대규모 투자와 확장을 의미합니다.",
+      "sentiment": "bullish",
+      "content": "Broadcom의 새로운 400G/레인 광학 DSP와 광부품은 AI 데이터센터에서 4x400G 광링크의 대규모 배치를 가능하게 해 차세대 204.8Tbps 스위칭 플랫폼을 지원합니다.",
+      "rawContent": "Broadcom’s new 400G/lane optical DSP and optics enable mass deployment of 4x400G fiber links in AI data centers, supporting next-gen 204.8-Tbps switching platforms."
+    },
+    {
+      "id": "x-6",
+      "postedAt": "2026-03-31T08:00:00+00:00",
+      "impact": "이는 증가하는 수요 속에서 NVIDIA, AMD 등 AI 칩 생산을 위해 반도체 제조 비용 최적화에서 ASML의 핵심적 역할을 보여줍니다.",
+      "sentiment": "bullish",
+      "content": "ASML이 생산 지원 및 원가 절감 이니셔티브로 Texas Instruments로부터 상을 받아 팹의 패턴당 비용 절감을 위한 공동 데이터 기반 노력을 부각했습니다.",
+      "rawContent": "ASML received award from Texas Instruments for excellence in production support and cost reduction initiatives, highlighting joint data-driven efforts to lower cost per pattern in fabs."
+    }
+  ],
+  "allXSignals": [
+    {
+      "id": "x-1",
+      "postedAt": "2026-03-31T20:17:30+00:00",
+      "impact": "지정학적 위험 프리미엄이 축소되는 신호로 주식의 안도 랠리 가능성과 에너지 섹터에서의 이탈을 시사합니다.",
+      "sentiment": "bullish",
+      "content": "미국 주식은 유가 하락에 힘입어 강하게 반등했으며 시장 심리가 개선되어 S&P 500은 2.9% 상승하고 나스닥은 3.8% 올랐고 금리 민감 자산이 강세를 보였습니다.",
+      "rawContent": "US equities rallied sharply as oil prices eased, boosting market sentiment; S&P 500 jumped 2.9% while Nasdaq rose 3.8%, with rate-sensitive assets gaining."
+    },
+    {
+      "id": "x-2",
+      "postedAt": "2026-03-31T14:00:57+00:00",
+      "impact": "이는 노동시장 완화라는 관측을 강화해 연준의 경기 지원용 금리 인하 가능성을 높입니다.",
+      "sentiment": "bearish",
+      "content": "미국의 2월 JOLTS 구인건수는 688.2만 건으로 컨센서스 691.8만 건보다 적어 전쟁 이전 추세 속에서 노동수요가 둔화되고 있음을 나타냅니다.",
+      "rawContent": "US February JOLTS job openings at 6.882 million versus consensus 6.918M, indicating cooling labor demand amid pre-war trends."
+    },
+    {
+      "id": "x-3",
+      "postedAt": "2026-03-30T13:13:52+00:00",
+      "impact": "이는 금리 시장의 매파적 재가격을 반박하며 긴축 정책 없이도 국채와 주식이 안정될 수 있음을 시사합니다.",
+      "sentiment": "bullish",
+      "content": "골드만은 유가 급등 공포가 과장됐다고 주장하며 1990년 등 역사적 선례에서는 물가 급등에도 불구하고 성장 둔화로 연준이 금리를 인하했다고 지적합니다.",
+      "rawContent": "Goldman argues oil surge fears overdone; historical precedents like 1990 show Fed cuts amid growth weakness despite inflation spikes."
+    },
+    {
+      "id": "x-4",
+      "postedAt": "2026-03-31T09:02:29+00:00",
+      "impact": "연준의 완화 기대 전환을 시사하며 채권과 경기민감주에 긍정적입니다.",
+      "sentiment": "bullish",
+      "content": "파월 발언으로 이란 전쟁 영향과 약한 고용 지표를 고려해 금리 인상 확률을 낮추자 10년물 국채 수익률이 하락했습니다.",
+      "rawContent": "10Y Treasury yields decline as Powell's remarks lead traders to dial back rate hike odds in light of Iran war impacts and weak jobs data."
+    },
+    {
+      "id": "x-5",
+      "postedAt": "2026-03-31T17:56:02+00:00",
+      "impact": "이는 NVIDIA와 하이퍼스케일러를 포함한 반도체 및 빅테크 공급망을 위해 AI 인프라와 데이터센터에 대한 지속적인 대규모 투자와 확장을 의미합니다.",
+      "sentiment": "bullish",
+      "content": "Broadcom의 새로운 400G/레인 광학 DSP와 광부품은 AI 데이터센터에서 4x400G 광링크의 대규모 배치를 가능하게 해 차세대 204.8Tbps 스위칭 플랫폼을 지원합니다.",
+      "rawContent": "Broadcom’s new 400G/lane optical DSP and optics enable mass deployment of 4x400G fiber links in AI data centers, supporting next-gen 204.8-Tbps switching platforms."
+    },
+    {
+      "id": "x-6",
+      "postedAt": "2026-03-31T08:00:00+00:00",
+      "impact": "이는 증가하는 수요 속에서 NVIDIA, AMD 등 AI 칩 생산을 위해 반도체 제조 비용 최적화에서 ASML의 핵심적 역할을 보여줍니다.",
+      "sentiment": "bullish",
+      "content": "ASML이 생산 지원 및 원가 절감 이니셔티브로 Texas Instruments로부터 상을 받아 팹의 패턴당 비용 절감을 위한 공동 데이터 기반 노력을 부각했습니다.",
+      "rawContent": "ASML received award from Texas Instruments for excellence in production support and cost reduction initiatives, highlighting joint data-driven efforts to lower cost per pattern in fabs."
+    },
+    {
+      "id": "x-7",
+      "postedAt": "2026-03-31T18:45:03+00:00",
+      "impact": "긍정적인 제품 리뷰는 AMD의 AI PC 포지셔닝을 강화하며, 이는 Microsoft 등 기업들의 소비자용 AI 추진과 관련이 있습니다.",
+      "sentiment": "bullish",
+      "content": "PC Gamer 리뷰는 AMD 기술을 탑재한 Acer Nitro V 16 AI 노트북이 우수한 배터리 수명과 함께 게임 및 생산성 성능이 견고하다고 평가했습니다.",
+      "rawContent": "PC Gamer review praises Acer Nitro V 16 AI laptop using AMD tech for solid gaming and productivity performance with superior battery life."
+    },
+    {
+      "id": "x-8",
+      "postedAt": "2026-03-31T22:42:00+00:00",
+      "impact": "이는 진화하는 AI 데이터센터 아키텍처에 대한 통찰을 제공하며, 대형 기술기업의 자본지출 및 인프라 관련 업체에 영향을 미칩니다.",
+      "sentiment": "bullish",
+      "content": "Broadcom 임원은 OFC 2026에서 차세대 AI 데이터센터를 형성하는 스케일업·스케일아웃·스케일어크로스 트렌드에 대해 논의했습니다.",
+      "rawContent": "Broadcom exec discusses scale-up, scale-out, and scale-across trends shaping next-gen AI data centers at OFC 2026."
+    },
+    {
+      "id": "x-9",
+      "postedAt": "2026-03-30T08:41:09+00:00",
+      "impact": "이는 기관 투자 심리의 변화를 시사하며 거시적 리스크로 인해 BTC 가격에 압박이 될 가능성으로 최근의 유입 흐름이 반전되었습니다.",
+      "sentiment": "bearish",
+      "content": "디지털 자산 펀드는 이란 분쟁 우려와 FOMC 금리 인상 기대 속에 4억1400만 달러의 자금 유출을 기록해 5주 만에 첫 유출을 보였으며, 총 운용자산은 현재 1290억 달러입니다.",
+      "rawContent": "Digital asset funds recorded $414M outflows amid Iran conflict fears and FOMC rate hike expectations, marking the first outflows in five weeks. Total assets under management now stand at $129B."
+    },
+    {
+      "id": "x-10",
+      "postedAt": "2026-03-30T10:30:02+00:00",
+      "impact": "최근 상승 속에서 기관 투자자들의 차익실현 또는 리스크 축소를 강조하며, 전체 암호화폐 ETF 활동에도 불구하고 신중함을 시사합니다.",
+      "sentiment": "bearish",
+      "content": "비트코인 ETF는 지난주 순유출 2억9630만 달러를 기록했으며 블랙록 고객은 1억5800만 달러어치 BTC를 매도했고, ETH ETF는 피델리티의 1억4100만 달러 매수에도 불구하고 2억640만 달러 유출을 보였습니다.",
+      "rawContent": "Bitcoin ETFs saw $296.3M net outflows last week, with BlackRock clients selling $158M BTC, while ETH ETFs had $206.4M outflows despite Fidelity's $141M buy."
+    },
+    {
+      "id": "x-11",
+      "postedAt": "2026-03-31T17:35:56+00:00",
+      "impact": "긍정적 규제 소식과 약화된 기관 수요의 괴리를 보여주며, BTC가 6만7천 달러인 상황에서 주요한 약세 신호입니다.",
+      "sentiment": "bearish",
+      "content": "BTC 스팟 ETF 순유입은 2월 33억 달러에서 3월 8억9000만 달러로 감소했으며, SEC/CFTC가 16개 암호자산을 상품으로 분류해 신규 ETF 가능성을 열어줬습니다.",
+      "rawContent": "BTC spot ETF net inflows dropped to $890M in March from $3.3B in February, even as SEC/CFTC classified 16 crypto assets as commodities paving way for new ETFs."
+    },
+    {
+      "id": "x-12",
+      "postedAt": "2026-04-01T07:30:22+00:00",
+      "impact": "최근 유출 후 기관 수요가 반등했음을 시사하며 BTC 가격 안정화의 잠재적 지지 요인입니다.",
+      "sentiment": "bullish",
+      "content": "비트코인 ETF는 3월 31일 순유입 1억1763만 달러, ETH ETF는 +3,117만 달러를 기록했고 기타는 횡보했습니다.",
+      "rawContent": "Bitcoin ETFs recorded positive net flows of $117.63M on March 31, with ETH ETFs at +$31.17M, while others flat."
+    }
+  ],
+  "featuredNews": [
+    {
+      "id": "news-1",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "비트코인(BTC) 일간 시장 분석 2026년 3월 18일",
+      "interpretation": "기관 ETF 유입과 거래소 잔고 축소가 구조적 지지를 제공하지만 약한 현물 거래량과 최근 주간 순유출은 추가 하방 리스크를 시사한다.",
+      "summaryKo": "비트코인이 2026년 1분기를 $67,500 이상으로 마감하면서 4일 중 3일 상승했고, 4월 1일 기준 약 $68,283에 거래됐다. 기관의 스팟 ETF 자금 유입(월간 순유입 약 $1.6B)과 CFTC의 상품지정 등 규제 명확성이 수요를 뒷받침하는 한편, 거래소 잔고 감소와 약한 현물 거래량은 향후 방향성에 불확실성을 남긴다.",
+      "rawTitle": "Bitcoin (BTC) Daily Market Analysis 18 March 2026",
+      "source": "coinstats.app",
+      "sourceTier": "standard",
+      "url": "https://coinstats.app/ai/a/latest-news-for-bitcoin",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-2",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "비트코인의 4월 기로: ETF 유입 대 구조적 약점",
+      "interpretation": "약해진 ETF 유입과 고래 매도, 연준의 금리 유지 신호는 단기적으로 비트코인 하방 리스크를 높이며 4월3일 고용지표가 방향을 가를 가능성이 큽니다.",
+      "summaryKo": "기사는 비트코인이 머리-어깨형 패턴을 형성 중이며 목선 약 $68,600 붕괴 시 하방 확인, $70,800~$72,800 저항 구간과 $76,000 반등 필요성을 지적합니다. 약한 ETF 자금흐름과 고래 매도, 4월3일 고용지표가 결정적 촉매로 언급됩니다.",
+      "rawTitle": "Bitcoin's April Crossroads: ETF Flows vs. Structural Weakness",
+      "source": "www.ainvest.com",
+      "sourceTier": "standard",
+      "url": "https://www.ainvest.com/news/bitcoin-april-crossroads-etf-flows-structural-weakness-2604",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-3",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "데이터: 어제 비트코인 현물 ETF의 총 순유입은 $118 ...",
+      "interpretation": "순유입이 지속되고 IBIT에 자금이 집중되는 점은 기관 수요와 긍정적 가격 심리를 시사하며 규제 진전은 장기적 수요 안정에 우호적일 수 있다.",
+      "summaryKo": "지난달 4월 1일 기준 비트코인 현물 ETF의 하루 총 순유입이 1.18억 달러였고, 블랙록의 IBIT이 하루 순유입 9,842.18만 달러로 가장 많았으며 누적 순유입은 IBIT 63.204억 달러·FBTC 11.032억 달러, 총 ETF 순자산은 874.6억 달러(ETF 순자산 비중 6.4%)로 집계됐다. 기사에서는 호주가 포괄적 디지털자산 규제 법안을 통과시켰다고 전한다.",
+      "rawTitle": "Data: The total net inflow of Bitcoin spot ETFs yesterday was $118 ...",
+      "source": "www.weex.com",
+      "sourceTier": "standard",
+      "url": "https://www.weex.com/news/detail/data-the-total-net-inflow-of-bitcoin-spot-etfs-yesterday-was-118-million-with-blackrocks-ibit-leading-at-a-net-inflow-of-984218-million-616246",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-4",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "비트코인 변동성 직면: ETF 수요는 증가했으나 '고통' 신호는 부재 | Whalesbook",
+      "interpretation": "ETF 유입에 의존한 수요가 강하지만 온체인 손실·투자자 항복이 없어, 시장은 고베타·변동성 위험에 더 취약해졌습니다.",
+      "summaryKo": "비트코인은 2026년 3월 ETF 순유입(기사 기준 $1B)을 보이는 등 수요가 지속되는 반면, 온체인상 전형적 '고통(pain)' 신호는 부재해 평균 보유자가 아직 미실현 이익 상태인 등 전통적 저점 전개와는 괴리가 나타납니다. 코인베이스 프리미엄이 음수로 전환되고 실현가격 대비 프리미엄의 급격한 압축, 미·주식과의 상관 회복(약 0.13) 등은 수급 성격과 리스크 성향이 변하고 있음을 시사합니다.",
+      "rawTitle": "Bitcoin Faces Volatility: ETF Demand Rises, But 'Pain' Signal Missing | Whalesbook",
+      "source": "www.whalesbook.com",
+      "sourceTier": "standard",
+      "url": "https://www.whalesbook.com/news/English/crypto/Bitcoin-Faces-Volatility-ETF-Demand-Rises-But-Pain-Signal-Missing/69cc906e3f30946a723d394b",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-5",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "비트코인 ETF 유입, 올해 처음으로 $5억 돌파 ...",
+      "interpretation": "대규모 ETF 자금 유입은 기관·수요 회복 신호로 해석될 수 있어 비트코인 시장에 단기적 상승 모멘텀을 제공할 가능성이 큽니다.",
+      "summaryKo": "비트코인 현물 ETF가 이번 주 약 5.6억 달러의 유입을 기록하며 올해 처음으로 5억 달러를 초과했고, 이 흐름은 기록적 순유출 추세를 반전시킬 가능성이 제기됩니다. 이더리움 현물 ETF도 이번 주 약 1.17억 달러 유입을 보였고, 비트코인과 이더리움 가격은 각각 약 $68,000 근처와 $2,100대를 기록했습니다.",
+      "rawTitle": "Bitcoin ETF Inflows Exceed $500M for the First Time This Year ...",
+      "source": "intellectia.ai",
+      "sourceTier": "standard",
+      "url": "https://intellectia.ai/news/stock/bitcoin-etf-inflows-exceed-500m-for-the-first-time-this-year-poised-to-end-record-outflow-trend",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    }
+  ],
+  "allNews": [
+    {
+      "id": "news-1",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "비트코인(BTC) 일간 시장 분석 2026년 3월 18일",
+      "interpretation": "기관 ETF 유입과 거래소 잔고 축소가 구조적 지지를 제공하지만 약한 현물 거래량과 최근 주간 순유출은 추가 하방 리스크를 시사한다.",
+      "summaryKo": "비트코인이 2026년 1분기를 $67,500 이상으로 마감하면서 4일 중 3일 상승했고, 4월 1일 기준 약 $68,283에 거래됐다. 기관의 스팟 ETF 자금 유입(월간 순유입 약 $1.6B)과 CFTC의 상품지정 등 규제 명확성이 수요를 뒷받침하는 한편, 거래소 잔고 감소와 약한 현물 거래량은 향후 방향성에 불확실성을 남긴다.",
+      "rawTitle": "Bitcoin (BTC) Daily Market Analysis 18 March 2026",
+      "source": "coinstats.app",
+      "sourceTier": "standard",
+      "url": "https://coinstats.app/ai/a/latest-news-for-bitcoin",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-2",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "비트코인의 4월 기로: ETF 유입 대 구조적 약점",
+      "interpretation": "약해진 ETF 유입과 고래 매도, 연준의 금리 유지 신호는 단기적으로 비트코인 하방 리스크를 높이며 4월3일 고용지표가 방향을 가를 가능성이 큽니다.",
+      "summaryKo": "기사는 비트코인이 머리-어깨형 패턴을 형성 중이며 목선 약 $68,600 붕괴 시 하방 확인, $70,800~$72,800 저항 구간과 $76,000 반등 필요성을 지적합니다. 약한 ETF 자금흐름과 고래 매도, 4월3일 고용지표가 결정적 촉매로 언급됩니다.",
+      "rawTitle": "Bitcoin's April Crossroads: ETF Flows vs. Structural Weakness",
+      "source": "www.ainvest.com",
+      "sourceTier": "standard",
+      "url": "https://www.ainvest.com/news/bitcoin-april-crossroads-etf-flows-structural-weakness-2604",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-3",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "데이터: 어제 비트코인 현물 ETF의 총 순유입은 $118 ...",
+      "interpretation": "순유입이 지속되고 IBIT에 자금이 집중되는 점은 기관 수요와 긍정적 가격 심리를 시사하며 규제 진전은 장기적 수요 안정에 우호적일 수 있다.",
+      "summaryKo": "지난달 4월 1일 기준 비트코인 현물 ETF의 하루 총 순유입이 1.18억 달러였고, 블랙록의 IBIT이 하루 순유입 9,842.18만 달러로 가장 많았으며 누적 순유입은 IBIT 63.204억 달러·FBTC 11.032억 달러, 총 ETF 순자산은 874.6억 달러(ETF 순자산 비중 6.4%)로 집계됐다. 기사에서는 호주가 포괄적 디지털자산 규제 법안을 통과시켰다고 전한다.",
+      "rawTitle": "Data: The total net inflow of Bitcoin spot ETFs yesterday was $118 ...",
+      "source": "www.weex.com",
+      "sourceTier": "standard",
+      "url": "https://www.weex.com/news/detail/data-the-total-net-inflow-of-bitcoin-spot-etfs-yesterday-was-118-million-with-blackrocks-ibit-leading-at-a-net-inflow-of-984218-million-616246",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-4",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "비트코인 변동성 직면: ETF 수요는 증가했으나 '고통' 신호는 부재 | Whalesbook",
+      "interpretation": "ETF 유입에 의존한 수요가 강하지만 온체인 손실·투자자 항복이 없어, 시장은 고베타·변동성 위험에 더 취약해졌습니다.",
+      "summaryKo": "비트코인은 2026년 3월 ETF 순유입(기사 기준 $1B)을 보이는 등 수요가 지속되는 반면, 온체인상 전형적 '고통(pain)' 신호는 부재해 평균 보유자가 아직 미실현 이익 상태인 등 전통적 저점 전개와는 괴리가 나타납니다. 코인베이스 프리미엄이 음수로 전환되고 실현가격 대비 프리미엄의 급격한 압축, 미·주식과의 상관 회복(약 0.13) 등은 수급 성격과 리스크 성향이 변하고 있음을 시사합니다.",
+      "rawTitle": "Bitcoin Faces Volatility: ETF Demand Rises, But 'Pain' Signal Missing | Whalesbook",
+      "source": "www.whalesbook.com",
+      "sourceTier": "standard",
+      "url": "https://www.whalesbook.com/news/English/crypto/Bitcoin-Faces-Volatility-ETF-Demand-Rises-But-Pain-Signal-Missing/69cc906e3f30946a723d394b",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-5",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "비트코인 ETF 유입, 올해 처음으로 $5억 돌파 ...",
+      "interpretation": "대규모 ETF 자금 유입은 기관·수요 회복 신호로 해석될 수 있어 비트코인 시장에 단기적 상승 모멘텀을 제공할 가능성이 큽니다.",
+      "summaryKo": "비트코인 현물 ETF가 이번 주 약 5.6억 달러의 유입을 기록하며 올해 처음으로 5억 달러를 초과했고, 이 흐름은 기록적 순유출 추세를 반전시킬 가능성이 제기됩니다. 이더리움 현물 ETF도 이번 주 약 1.17억 달러 유입을 보였고, 비트코인과 이더리움 가격은 각각 약 $68,000 근처와 $2,100대를 기록했습니다.",
+      "rawTitle": "Bitcoin ETF Inflows Exceed $500M for the First Time This Year ...",
+      "source": "intellectia.ai",
+      "sourceTier": "standard",
+      "url": "https://intellectia.ai/news/stock/bitcoin-etf-inflows-exceed-500m-for-the-first-time-this-year-poised-to-end-record-outflow-trend",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-6",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "비트코인 ETF 순유입 $69.4M 기록 - Whale Alert",
+      "interpretation": "비트코인 ETF에 대한 상대적 수요 회복이 관측되어 비트코인 관련 자금 유입이 지속될 가능성이 높아졌다.",
+      "summaryKo": "비트코인 ETF들이 순유입 $69.44M을 기록했으며 주요 기여 펀드는 ARKB($33.03M), FBTC($28.89M), IBIT($7.52M)였다. 비트코인 ETF 순자산은 $85.47B, 거래량은 $2.38B였고 이더리움 ETF는 순유입 $4.96M(순자산 $11.51B, 거래량 $1.05B)을 보였으며 솔라나·XRP ETF는 소규모 순유출을 기록했다.",
+      "rawTitle": "Bitcoin ETFs log $69.4M net inflow - Whale Alert",
+      "source": "whale-alert.io",
+      "sourceTier": "standard",
+      "url": "https://whale-alert.io/stories/c39f01710156f8/Bitcoin-ETFs-log-694M-net-inflow-Morgan-Stanley-wins-bitcoin-ETF-approval-as-markets-rally",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-7",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "미국 비트코인 ETF, 지난달 13억2000만 달러 유입…'로 복귀'",
+      "interpretation": "비트코인 ETF에 자금 유입이 재개돼 수요 신호가 있으나 거래대금 감소는 신중한 수급과 낮은 변동성을 시사한다.",
+      "summaryKo": "미국 스팟 비트코인 ETF가 지난달 순유입 13.2억 달러를 기록해 5개월 만에 월별 순유입으로 전환했으나, ETF 거래대금은 약 790억 달러로 2월 대비 약 15% 감소했다. 스팟 이더리움 ETF는 4,600만 달러 순유출, 스팟 XRP ETF는 3,100만 달러 순유출을 기록했으나 분기 기준 XRP 순유입은 약 4,300만 달러였다.",
+      "rawTitle": "U.S. Bitcoin ETF absorbs $1.32 billion last month…returns to ' ...",
+      "source": "en.bloomingbit.io",
+      "sourceTier": "standard",
+      "url": "https://en.bloomingbit.io/feed/news/109037",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-8",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bigtech",
+      "title": "GPU 대형주 엔비디아(NVIDIA)와 AMD, AI 과열 속 7,110억 달러 경고 발령",
+      "interpretation": "AI 인프라 수요 강세는 반도체·서플라이체인에 대한 설비투자를 지지하지만, 과도한 기대는 관련 대형주 변동성 및 밸류에이션 조정으로 이어질 수 있습니다.",
+      "summaryKo": "엔비디아와 AMD의 실적 발표 후 48시간 내 시가총액이 합계 7,110억 달러 감소했고, 기사에서는 엔비디아 데이터센터 매출·AMD 매출 증가와 GPU 가격 인상·마진 개선을 강조하며 과도한 AI 기대가 밸류에이션 리스크를 키운다고 지적합니다.",
+      "rawTitle": "GPU Giants Nvidia and AMD Issue $711 Billion Warning Amid AI Hype",
+      "source": "intellectia.ai",
+      "sourceTier": "standard",
+      "url": "https://intellectia.ai/news/etf/gpu-giants-nvidia-and-amd-issue-711-billion-warning-amid-ai-hype",
+      "urgency": "medium",
+      "tags": [
+        "빅테크"
+      ]
+    },
+    {
+      "id": "news-9",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bigtech",
+      "title": "\"엔비디아(NVIDIA)가 하룻밤에 20억 달러를 썼다 — 그리고 AMD는 끝났다\"",
+      "interpretation": "엔비디아가 시스템·인터커넥트 중심의 파트너십으로 AI 인프라 통제력을 강화하면 반도체 공급망과 경쟁사(예: AMD)에 구조적 압박을 줄 수 있습니다.",
+      "summaryKo": "해당 영상은 엔비디아가 마벨(Marvell)에 20억 달러를 즉시 투자하고 NVLink Fusion 전략적 파트너십을 발표해 마벨에 베라(Vera) CPU·NVLink·랙스케일 AI 컴퓨트 플랫폼 접근권과 실리콘 포토닉스 협업을 제공했다고 보도하며, 발표 직후 마벨 주가가 약 13% 상승하고 AMD는 약 4% 하락했다고 전합니다.",
+      "rawTitle": "\"NVIDIA Spent $2 BILLION Overnight — And AMD Is Finished\"",
+      "source": "www.youtube.com",
+      "sourceTier": "standard",
+      "url": "https://www.youtube.com/watch?v=6yBH_Cu3dPM",
+      "urgency": "medium",
+      "tags": [
+        "빅테크"
+      ]
+    },
+    {
+      "id": "news-10",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "macro",
+      "title": "연준 회의 실황 | 다우존스 | 미국 주식시장 ...",
+      "interpretation": "연준의 ‘금리 장기화’ 경계로 위험자산이 약세를 보이고 달러·채권 수요가 지지되며 금리 인하 시점은 후퇴할 가능성이 커졌습니다.",
+      "summaryKo": "연준은 기준금리를 3.5%~3.75%에서 동결하고 연내 단 한 번의 인하 전망을 제시하며 물가 전망을 상향(연말 PCE 2.7%)했으며, 발표 직후 다우가 약 768포인트(1.64%) 급락하고 S&P·나스닥도 1.3%대 하락, 달러 강세와 유가 상승이 이어졌습니다.",
+      "rawTitle": "FED Meeting Live | Dow Jones | US Stock Market ...",
+      "source": "economictimes.indiatimes.com",
+      "sourceTier": "standard",
+      "url": "https://economictimes.indiatimes.com/markets/us-stocks/news/fed-meeting-live-us-stock-market-today-dow-jones-nasdaq-sp-500-jerome-powell-fomc-meet-rate-cut-news-iran-israel-war/liveblog/129656253.cms",
+      "urgency": "medium",
+      "tags": [
+        "거시경제"
+      ]
+    },
+    {
+      "id": "news-11",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "macro",
+      "title": "분석-재무시장(국채) 다음 시험대: 상승하는 전쟁 비용",
+      "interpretation": "전쟁비용이 재정적자를 키우면 채권공급·수익률 상승 압력으로 이어져 연준의 금리 경로와 시장금리에 추가적 상방 리스크가 된다.",
+      "summaryKo": "미국-이란 충돌로 에너지 가격과 물가 위험이 높아지며 국채 수익률이 상승한 가운데, 장기화된 전쟁 관련 방위비·환불·경기부양 가능성 등 추가적 재정비용이 미국 재정적자를 더욱 악화시켜 채권시장에 부담이 될 수 있다고 분석했다. 단기 금리 상승이 두드러졌고 10년물 수익률은 한때 4.5%에 근접했으며, 미 국채 일부 입찰에서 수요 약화가 관찰됐다.",
+      "rawTitle": "ANALYSIS-Treasury market's next test: rising war costs",
+      "source": "wealthinsights.metrobank.com.ph",
+      "sourceTier": "standard",
+      "url": "https://wealthinsights.metrobank.com.ph/reuters/analysis-treasury-markets-next-test-rising-war-costs",
+      "urgency": "medium",
+      "tags": [
+        "거시경제"
+      ]
+    },
+    {
+      "id": "news-12",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "us-stocks",
+      "title": "반도체 아카이브 - Zacks.com",
+      "interpretation": "반도체·AI 관련 대형주가 지수 주도력을 유지할 가능성이 크고, 일부 기업은 제품 믹스 변화로 마진 압박을 겪어 섹터 내 수익성 차별화가 심화될 전망이다.",
+      "summaryKo": "2026년 초 NVIDIA와 Apple은 다소 부진한 출발을 보였지만, 두 회사는 여전히 강한 현금창출력·우호적인 EPS 리비전·견조한 수요 전망으로 최상위 종목으로 평가된다. 한편 AI·양자 트렌드 속에서 NVIDIA와 IBM이 주목받고, Broadcom은 AI 성장으로 제품 믹스가 바뀌며 총이익률이 하락하는 모습이 관찰된다.",
+      "rawTitle": "Semiconductor Archive - Zacks.com",
+      "source": "www.zacks.com",
+      "sourceTier": "standard",
+      "url": "https://www.zacks.com/topics/semiconductor",
+      "urgency": "medium",
+      "tags": [
+        "미국증시"
+      ]
+    }
+  ],
+  "xSignals": [
+    {
+      "id": "x-1",
+      "postedAt": "2026-03-31T20:17:30+00:00",
+      "impact": "지정학적 위험 프리미엄이 축소되는 신호로 주식의 안도 랠리 가능성과 에너지 섹터에서의 이탈을 시사합니다.",
+      "sentiment": "bullish",
+      "content": "미국 주식은 유가 하락에 힘입어 강하게 반등했으며 시장 심리가 개선되어 S&P 500은 2.9% 상승하고 나스닥은 3.8% 올랐고 금리 민감 자산이 강세를 보였습니다.",
+      "rawContent": "US equities rallied sharply as oil prices eased, boosting market sentiment; S&P 500 jumped 2.9% while Nasdaq rose 3.8%, with rate-sensitive assets gaining."
+    },
+    {
+      "id": "x-2",
+      "postedAt": "2026-03-31T14:00:57+00:00",
+      "impact": "이는 노동시장 완화라는 관측을 강화해 연준의 경기 지원용 금리 인하 가능성을 높입니다.",
+      "sentiment": "bearish",
+      "content": "미국의 2월 JOLTS 구인건수는 688.2만 건으로 컨센서스 691.8만 건보다 적어 전쟁 이전 추세 속에서 노동수요가 둔화되고 있음을 나타냅니다.",
+      "rawContent": "US February JOLTS job openings at 6.882 million versus consensus 6.918M, indicating cooling labor demand amid pre-war trends."
+    },
+    {
+      "id": "x-3",
+      "postedAt": "2026-03-30T13:13:52+00:00",
+      "impact": "이는 금리 시장의 매파적 재가격을 반박하며 긴축 정책 없이도 국채와 주식이 안정될 수 있음을 시사합니다.",
+      "sentiment": "bullish",
+      "content": "골드만은 유가 급등 공포가 과장됐다고 주장하며 1990년 등 역사적 선례에서는 물가 급등에도 불구하고 성장 둔화로 연준이 금리를 인하했다고 지적합니다.",
+      "rawContent": "Goldman argues oil surge fears overdone; historical precedents like 1990 show Fed cuts amid growth weakness despite inflation spikes."
+    },
+    {
+      "id": "x-4",
+      "postedAt": "2026-03-31T09:02:29+00:00",
+      "impact": "연준의 완화 기대 전환을 시사하며 채권과 경기민감주에 긍정적입니다.",
+      "sentiment": "bullish",
+      "content": "파월 발언으로 이란 전쟁 영향과 약한 고용 지표를 고려해 금리 인상 확률을 낮추자 10년물 국채 수익률이 하락했습니다.",
+      "rawContent": "10Y Treasury yields decline as Powell's remarks lead traders to dial back rate hike odds in light of Iran war impacts and weak jobs data."
+    },
+    {
+      "id": "x-5",
+      "postedAt": "2026-03-31T17:56:02+00:00",
+      "impact": "이는 NVIDIA와 하이퍼스케일러를 포함한 반도체 및 빅테크 공급망을 위해 AI 인프라와 데이터센터에 대한 지속적인 대규모 투자와 확장을 의미합니다.",
+      "sentiment": "bullish",
+      "content": "Broadcom의 새로운 400G/레인 광학 DSP와 광부품은 AI 데이터센터에서 4x400G 광링크의 대규모 배치를 가능하게 해 차세대 204.8Tbps 스위칭 플랫폼을 지원합니다.",
+      "rawContent": "Broadcom’s new 400G/lane optical DSP and optics enable mass deployment of 4x400G fiber links in AI data centers, supporting next-gen 204.8-Tbps switching platforms."
+    },
+    {
+      "id": "x-6",
+      "postedAt": "2026-03-31T08:00:00+00:00",
+      "impact": "이는 증가하는 수요 속에서 NVIDIA, AMD 등 AI 칩 생산을 위해 반도체 제조 비용 최적화에서 ASML의 핵심적 역할을 보여줍니다.",
+      "sentiment": "bullish",
+      "content": "ASML이 생산 지원 및 원가 절감 이니셔티브로 Texas Instruments로부터 상을 받아 팹의 패턴당 비용 절감을 위한 공동 데이터 기반 노력을 부각했습니다.",
+      "rawContent": "ASML received award from Texas Instruments for excellence in production support and cost reduction initiatives, highlighting joint data-driven efforts to lower cost per pattern in fabs."
+    }
+  ],
+  "news": [
+    {
+      "id": "news-1",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "비트코인(BTC) 일간 시장 분석 2026년 3월 18일",
+      "interpretation": "기관 ETF 유입과 거래소 잔고 축소가 구조적 지지를 제공하지만 약한 현물 거래량과 최근 주간 순유출은 추가 하방 리스크를 시사한다.",
+      "summaryKo": "비트코인이 2026년 1분기를 $67,500 이상으로 마감하면서 4일 중 3일 상승했고, 4월 1일 기준 약 $68,283에 거래됐다. 기관의 스팟 ETF 자금 유입(월간 순유입 약 $1.6B)과 CFTC의 상품지정 등 규제 명확성이 수요를 뒷받침하는 한편, 거래소 잔고 감소와 약한 현물 거래량은 향후 방향성에 불확실성을 남긴다.",
+      "rawTitle": "Bitcoin (BTC) Daily Market Analysis 18 March 2026",
+      "source": "coinstats.app",
+      "sourceTier": "standard",
+      "url": "https://coinstats.app/ai/a/latest-news-for-bitcoin",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-2",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "비트코인의 4월 기로: ETF 유입 대 구조적 약점",
+      "interpretation": "약해진 ETF 유입과 고래 매도, 연준의 금리 유지 신호는 단기적으로 비트코인 하방 리스크를 높이며 4월3일 고용지표가 방향을 가를 가능성이 큽니다.",
+      "summaryKo": "기사는 비트코인이 머리-어깨형 패턴을 형성 중이며 목선 약 $68,600 붕괴 시 하방 확인, $70,800~$72,800 저항 구간과 $76,000 반등 필요성을 지적합니다. 약한 ETF 자금흐름과 고래 매도, 4월3일 고용지표가 결정적 촉매로 언급됩니다.",
+      "rawTitle": "Bitcoin's April Crossroads: ETF Flows vs. Structural Weakness",
+      "source": "www.ainvest.com",
+      "sourceTier": "standard",
+      "url": "https://www.ainvest.com/news/bitcoin-april-crossroads-etf-flows-structural-weakness-2604",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-3",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "데이터: 어제 비트코인 현물 ETF의 총 순유입은 $118 ...",
+      "interpretation": "순유입이 지속되고 IBIT에 자금이 집중되는 점은 기관 수요와 긍정적 가격 심리를 시사하며 규제 진전은 장기적 수요 안정에 우호적일 수 있다.",
+      "summaryKo": "지난달 4월 1일 기준 비트코인 현물 ETF의 하루 총 순유입이 1.18억 달러였고, 블랙록의 IBIT이 하루 순유입 9,842.18만 달러로 가장 많았으며 누적 순유입은 IBIT 63.204억 달러·FBTC 11.032억 달러, 총 ETF 순자산은 874.6억 달러(ETF 순자산 비중 6.4%)로 집계됐다. 기사에서는 호주가 포괄적 디지털자산 규제 법안을 통과시켰다고 전한다.",
+      "rawTitle": "Data: The total net inflow of Bitcoin spot ETFs yesterday was $118 ...",
+      "source": "www.weex.com",
+      "sourceTier": "standard",
+      "url": "https://www.weex.com/news/detail/data-the-total-net-inflow-of-bitcoin-spot-etfs-yesterday-was-118-million-with-blackrocks-ibit-leading-at-a-net-inflow-of-984218-million-616246",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-4",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "비트코인 변동성 직면: ETF 수요는 증가했으나 '고통' 신호는 부재 | Whalesbook",
+      "interpretation": "ETF 유입에 의존한 수요가 강하지만 온체인 손실·투자자 항복이 없어, 시장은 고베타·변동성 위험에 더 취약해졌습니다.",
+      "summaryKo": "비트코인은 2026년 3월 ETF 순유입(기사 기준 $1B)을 보이는 등 수요가 지속되는 반면, 온체인상 전형적 '고통(pain)' 신호는 부재해 평균 보유자가 아직 미실현 이익 상태인 등 전통적 저점 전개와는 괴리가 나타납니다. 코인베이스 프리미엄이 음수로 전환되고 실현가격 대비 프리미엄의 급격한 압축, 미·주식과의 상관 회복(약 0.13) 등은 수급 성격과 리스크 성향이 변하고 있음을 시사합니다.",
+      "rawTitle": "Bitcoin Faces Volatility: ETF Demand Rises, But 'Pain' Signal Missing | Whalesbook",
+      "source": "www.whalesbook.com",
+      "sourceTier": "standard",
+      "url": "https://www.whalesbook.com/news/English/crypto/Bitcoin-Faces-Volatility-ETF-Demand-Rises-But-Pain-Signal-Missing/69cc906e3f30946a723d394b",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-5",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "비트코인 ETF 유입, 올해 처음으로 $5억 돌파 ...",
+      "interpretation": "대규모 ETF 자금 유입은 기관·수요 회복 신호로 해석될 수 있어 비트코인 시장에 단기적 상승 모멘텀을 제공할 가능성이 큽니다.",
+      "summaryKo": "비트코인 현물 ETF가 이번 주 약 5.6억 달러의 유입을 기록하며 올해 처음으로 5억 달러를 초과했고, 이 흐름은 기록적 순유출 추세를 반전시킬 가능성이 제기됩니다. 이더리움 현물 ETF도 이번 주 약 1.17억 달러 유입을 보였고, 비트코인과 이더리움 가격은 각각 약 $68,000 근처와 $2,100대를 기록했습니다.",
+      "rawTitle": "Bitcoin ETF Inflows Exceed $500M for the First Time This Year ...",
+      "source": "intellectia.ai",
+      "sourceTier": "standard",
+      "url": "https://intellectia.ai/news/stock/bitcoin-etf-inflows-exceed-500m-for-the-first-time-this-year-poised-to-end-record-outflow-trend",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    }
+  ]
+}
