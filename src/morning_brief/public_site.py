@@ -254,6 +254,11 @@ def build_public_brief(
             "sentimentStatus": (
                 public_context.get("sentiment_status", "skipped") if public_context else "skipped"
             ),
+            "signalSentimentStatus": (
+                public_context.get("signal_sentiment_status", "skipped")
+                if public_context
+                else "skipped"
+            ),
             "newsSentiment": _compute_sentiment_aggregate(display_news),
             "signalSentiment": _compute_sentiment_aggregate(all_x_signals),
             "sentimentByCategory": _compute_sentiment_by_category(display_news),
@@ -1130,10 +1135,12 @@ def _x_signals(
         if sentiment not in {"bullish", "bearish", "neutral"}:
             sentiment = "neutral"
         posted_at = str(signal.get("posted_at", "")).strip() or run_at.isoformat()
-        raw_content = content if not _contains_korean(content) else None
+        raw_content_value = str(signal.get("rawContent", "")).strip()
+        raw_content = raw_content_value or (content if not _contains_korean(content) else None)
         content_ko = (
             _best_korean_text(
                 str(signal.get("summary", "")).strip(),
+                str(signal.get("content", "")).strip(),
                 str(signal.get("headline", "")).strip(),
                 str(signal.get("why_it_matters", "")).strip(),
             )
@@ -1141,6 +1148,7 @@ def _x_signals(
         )
         impact_ko = (
             _best_korean_text(
+                str(signal.get("impact", "")).strip(),
                 str(signal.get("why_it_matters", "")).strip(),
                 str(signal.get("summary", "")).strip(),
             )
@@ -1154,6 +1162,8 @@ def _x_signals(
                 "sentiment": sentiment,
                 "content": content_ko,
                 "rawContent": raw_content,
+                "sentiment_score": signal.get("sentiment_score"),
+                "sentiment_confidence": signal.get("sentiment_confidence"),
             }
         )
     return results
@@ -1177,13 +1187,18 @@ def _news_items(
         topic = _normalize_news_topic(item.get("topic"))
         raw_summary = str(item.get("summary", "")).strip()
         raw_why = str(item.get("why_it_matters", "")).strip()
+        raw_title_value = str(item.get("rawTitle", "")).strip()
+        raw_summary_value = str(item.get("rawSummary", "")).strip()
+        raw_interpretation_value = str(item.get("rawInterpretation", "")).strip()
         summary_ko = _best_korean_text(
             str(item.get("summary_ko", "")).strip(),
+            str(item.get("summaryKo", "")).strip(),
             raw_summary,
             raw_why,
         )
         interpretation_ko = _best_korean_text(
             str(item.get("interpretation_ko", "")).strip(),
+            str(item.get("interpretation", "")).strip(),
             raw_why,
             raw_summary,
         )
@@ -1195,16 +1210,18 @@ def _news_items(
                 "title": title,
                 "interpretation": interpretation_ko,
                 "summaryKo": summary_ko,
-                "rawTitle": title if not _contains_korean(title) else None,
-                "rawSummary": raw_summary
-                if raw_summary and not _contains_korean(raw_summary)
-                else None,
-                "rawInterpretation": raw_why if raw_why and not _contains_korean(raw_why) else None,
+                "rawTitle": raw_title_value or (title if not _contains_korean(title) else None),
+                "rawSummary": raw_summary_value
+                or (raw_summary if raw_summary and not _contains_korean(raw_summary) else None),
+                "rawInterpretation": raw_interpretation_value
+                or (raw_why if raw_why and not _contains_korean(raw_why) else None),
                 "source": str(item.get("source", "")).strip() or _source_from_url(url),
                 "sourceTier": "tier1" if _source_tier_value(item) == 1 else "standard",
                 "url": url,
                 "urgency": "high" if _source_tier_value(item) == 1 else "medium",
                 "tags": [_topic_label(topic)],
+                "sentiment_score": item.get("sentiment_score"),
+                "sentiment_confidence": item.get("sentiment_confidence"),
             }
         )
     return fallback_items
@@ -1233,10 +1250,12 @@ def _x_signals_v2(
         if sentiment not in {"bullish", "bearish", "neutral"}:
             sentiment = "neutral"
         posted_at = str(signal.get("posted_at", "")).strip() or run_at.isoformat()
-        raw_content = content if not _contains_korean(content) else None
+        raw_content_value = str(signal.get("rawContent", "")).strip()
+        raw_content = raw_content_value or (content if not _contains_korean(content) else None)
         content_ko = (
             _best_korean_text(
                 str(signal.get("summary", "")).strip(),
+                str(signal.get("content", "")).strip(),
                 str(signal.get("headline", "")).strip(),
                 str(signal.get("why_it_matters", "")).strip(),
             )
@@ -1244,6 +1263,7 @@ def _x_signals_v2(
         )
         impact_ko = (
             _best_korean_text(
+                str(signal.get("impact", "")).strip(),
                 str(signal.get("why_it_matters", "")).strip(),
                 str(signal.get("summary", "")).strip(),
             )
@@ -1257,6 +1277,8 @@ def _x_signals_v2(
                 "sentiment": sentiment,
                 "content": content_ko,
                 "rawContent": raw_content,
+                "sentiment_score": signal.get("sentiment_score"),
+                "sentiment_confidence": signal.get("sentiment_confidence"),
             }
         )
     return results

@@ -127,28 +127,61 @@ def run_pipeline(settings: Settings) -> str:
         )
 
         # ── FinBERT sentiment enrichment ──
+        from morning_brief.data.finbert_sentiment import (
+            build_public_news_sentiment_text as _build_public_news_text,
+        )
         from morning_brief.data.finbert_sentiment import enrich_news_packet as _enrich_news
+        from morning_brief.data.finbert_sentiment import (
+            enrich_public_signal_items as _enrich_public_signals,
+        )
         from morning_brief.data.finbert_sentiment import enrich_x_signals as _enrich_signals
 
-        sentiment_status = _enrich_news(news_packet, settings, observer)
+        _enrich_news(news_packet, settings, observer)
         _enrich_signals(x_signals, settings, observer)
-        public_context["sentiment_status"] = sentiment_status
-        # public_context["all_news"] 항목에도 sentiment 전파
-        for pn_item in public_context.get("all_news", []):
-            if isinstance(pn_item, dict):
-                pn_item.setdefault("sentiment_score", None)
-                pn_item.setdefault("sentiment_confidence", None)
-        # email packet의 sentiment를 public_context all_news에 매칭 전파
-        score_by_url: dict[str, tuple[float | None, float | None]] = {}
-        for item in news_packet:
-            url = item.get("url", "")
-            if url and item.get("sentiment_score") is not None:
-                score_by_url[url] = (item["sentiment_score"], item["sentiment_confidence"])
-        for pn_item in public_context.get("all_news", []):
-            if isinstance(pn_item, dict) and pn_item.get("url") in score_by_url:
-                s, c = score_by_url[pn_item["url"]]
-                pn_item["sentiment_score"] = s
-                pn_item["sentiment_confidence"] = c
+        raw_public_news = public_context.get("all_news", [])
+        if isinstance(raw_public_news, list):
+            public_news = raw_public_news
+            if any(not isinstance(item, dict) for item in public_news):
+                public_news = [item for item in public_news if isinstance(item, dict)]
+                public_context["all_news"] = public_news
+        else:
+            public_news = []
+        public_context["sentiment_status"] = _enrich_news(
+            public_news,
+            settings,
+            observer,
+            text_builder=_build_public_news_text,
+        )
+        raw_all_public_signals = public_context.get("all_x_signals", [])
+        if isinstance(raw_all_public_signals, list):
+            public_signal_items = raw_all_public_signals
+            if any(not isinstance(item, dict) for item in public_signal_items):
+                public_signal_items = [
+                    item for item in public_signal_items if isinstance(item, dict)
+                ]
+                public_context["all_x_signals"] = public_signal_items
+        else:
+            public_signal_items = []
+        raw_featured_public_signals = public_context.get("featured_x_signals", [])
+        if isinstance(raw_featured_public_signals, list):
+            featured_public_signal_items = raw_featured_public_signals
+            if any(not isinstance(item, dict) for item in featured_public_signal_items):
+                featured_public_signal_items = [
+                    item for item in featured_public_signal_items if isinstance(item, dict)
+                ]
+                public_context["featured_x_signals"] = featured_public_signal_items
+        else:
+            featured_public_signal_items = []
+        public_context["signal_sentiment_status"] = _enrich_public_signals(
+            public_signal_items,
+            settings,
+            observer,
+        )
+        _enrich_public_signals(
+            featured_public_signal_items,
+            settings,
+            observer,
+        )
 
         packet = {
             **market_packet,
