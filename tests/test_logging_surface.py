@@ -15,6 +15,7 @@ EXPECTED_GET_LOGGER_FILES = {
     "src/morning_brief/analysis/sentiment_join/sources/fng.py",
     "src/morning_brief/analysis/sentiment_join/sources/r2_sentiment.py",
     "src/morning_brief/analysis/sentiment_join/sources/usdkrw_prices.py",
+    "src/morning_brief/analysis/sentiment_join/storage.py",
     "src/morning_brief/analysis/sentiment_join/validate.py",
     "src/morning_brief/brief_review.py",
     "src/morning_brief/briefing.py",

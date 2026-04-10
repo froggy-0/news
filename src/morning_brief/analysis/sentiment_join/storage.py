@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -7,6 +8,10 @@ from pathlib import Path
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+
+from morning_brief.logging_utils import log_structured
+
+logger = logging.getLogger(__name__)
 
 MASTER_FILE_RE = re.compile(r"^master_(\d{8})\.parquet$")
 
@@ -51,7 +56,42 @@ def upload_to_r2(
     r2_secret_access_key: str,
     r2_public_bucket: str,
 ) -> None:
-    return
+    if not r2_s3_endpoint:
+        return
+
+    import boto3
+
+    try:
+        client = boto3.client(
+            "s3",
+            endpoint_url=r2_s3_endpoint,
+            aws_access_key_id=r2_access_key_id,
+            aws_secret_access_key=r2_secret_access_key,
+            region_name="auto",
+        )
+        body = local_path.read_bytes()
+        client.put_object(
+            Bucket=r2_public_bucket,
+            Key=r2_key,
+            Body=body,
+            ContentType="application/octet-stream",
+            CacheControl="public, max-age=3600",
+        )
+        log_structured(
+            logger,
+            event="r2.uploaded",
+            message="Parquet 파일을 R2에 업로드했습니다.",
+            key=r2_key,
+            size_bytes=len(body),
+        )
+    except Exception as exc:
+        log_structured(
+            logger,
+            event="r2.upload_failed",
+            message="R2 업로드에 실패했습니다.",
+            level=logging.WARNING,
+            reason=str(exc),
+        )
 
 
 __all__ = ["cleanup_old_files", "save_parquet", "upload_to_r2"]

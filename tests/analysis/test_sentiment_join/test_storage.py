@@ -93,3 +93,57 @@ def test_upload_to_r2_stub_returns_without_error(tmp_path: Path) -> None:
         r2_secret_access_key="",
         r2_public_bucket="",
     )
+
+
+def test_upload_to_r2_skips_when_no_endpoint(tmp_path: Path) -> None:
+    from unittest.mock import patch
+
+    path = save_parquet(_sample_df(), tmp_path, "20260410")
+    with patch("boto3.client") as mock_client:
+        upload_to_r2(
+            path,
+            "sentiment_join/master_20260410.parquet",
+            r2_s3_endpoint="",
+            r2_access_key_id="key",
+            r2_secret_access_key="secret",
+            r2_public_bucket="bucket",
+        )
+        mock_client.assert_not_called()
+
+
+def test_upload_to_r2_calls_put_object(tmp_path: Path) -> None:
+    from unittest.mock import MagicMock, patch
+
+    path = save_parquet(_sample_df(), tmp_path, "20260410")
+    mock_client = MagicMock()
+    with patch("boto3.client", return_value=mock_client):
+        upload_to_r2(
+            path,
+            "sentiment_join/master_20260410.parquet",
+            r2_s3_endpoint="https://r2.example.com",
+            r2_access_key_id="key",
+            r2_secret_access_key="secret",
+            r2_public_bucket="my-bucket",
+        )
+        mock_client.put_object.assert_called_once()
+        call_kwargs = mock_client.put_object.call_args[1]
+        assert call_kwargs["Bucket"] == "my-bucket"
+        assert call_kwargs["Key"] == "sentiment_join/master_20260410.parquet"
+        assert call_kwargs["ContentType"] == "application/octet-stream"
+
+
+def test_upload_to_r2_swallows_exception(tmp_path: Path) -> None:
+    from unittest.mock import MagicMock, patch
+
+    path = save_parquet(_sample_df(), tmp_path, "20260410")
+    mock_client = MagicMock()
+    mock_client.put_object.side_effect = RuntimeError("network error")
+    with patch("boto3.client", return_value=mock_client):
+        upload_to_r2(
+            path,
+            "sentiment_join/master_20260410.parquet",
+            r2_s3_endpoint="https://r2.example.com",
+            r2_access_key_id="key",
+            r2_secret_access_key="secret",
+            r2_public_bucket="my-bucket",
+        )
