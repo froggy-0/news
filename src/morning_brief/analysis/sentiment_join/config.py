@@ -48,8 +48,8 @@ def load_sentiment_join_settings() -> SentimentJoinSettings:
         minimum=0,
         maximum=10_000,
     )
-    if lookback_days < 30 or lookback_days > 730:
-        raise ValueError("SENTIMENT_JOIN_LOOKBACK_DAYS must be between 30 and 730")
+    if lookback_days < 1 or lookback_days > 730:
+        raise ValueError("SENTIMENT_JOIN_LOOKBACK_DAYS must be between 1 and 730")
 
     output_dir = Path(os.getenv("SENTIMENT_JOIN_OUTPUT_DIR", "data/sentiment_join")).resolve()
     r2_max_concurrency = _env_bounded_int(
