@@ -32,6 +32,7 @@ files = [
     "src/morning_brief/brief_formatting.py",
     "src/morning_brief/brief_review.py",
     "src/morning_brief/briefing.py",
+    "src/morning_brief/analysis",
     "src/morning_brief/config.py",
     "src/morning_brief/emailer.py",
     "src/morning_brief/observability.py",

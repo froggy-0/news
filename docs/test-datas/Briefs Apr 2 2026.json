@@ -1,0 +1,841 @@
+{
+  "meta": {
+    "date": "2026-04-02",
+    "generatedAt": "2026-04-02T08:32:12.446527+09:00",
+    "dataQuality": "degraded",
+    "qualityNotes": [
+      "우선 신뢰 출처 뉴스와 공식 시그널을 합쳐도 충분하지 않습니다"
+    ],
+    "displayHeadline": "미국 증시는 지정학적 긴장 완화와 유가 하락 소식에 힘입어 강하게 반등했고, 위험자산 선호가 일시적으로 높아졌어요.",
+    "sourceCounts": {
+      "newsCandidates": 24,
+      "newsRanked": 12,
+      "newsFeatured": 5,
+      "newsAll": 12,
+      "xSignalCandidates": 12,
+      "xSignalRanked": 12,
+      "xSignalFeatured": 6,
+      "xSignalAll": 12
+    },
+    "translationStatus": "ok",
+    "publicNewsAnalysis": {
+      "candidateCount": 12,
+      "requestedCount": 12,
+      "successCount": 12,
+      "failedCount": 0,
+      "skippedCount": 0,
+      "status": "ok"
+    }
+  },
+  "marketSnapshot": {
+    "items": [
+      {
+        "symbol": "US10Y",
+        "label": "미국 10년물",
+        "value": "4.30%",
+        "change": "-5bp",
+        "trend": "down",
+        "isCached": false,
+        "history": [
+          4.35,
+          4.3
+        ]
+      },
+      {
+        "symbol": "DXY",
+        "label": "달러 인덱스",
+        "value": "112.78",
+        "change": "+0.26%",
+        "trend": "up",
+        "isCached": false,
+        "history": [
+          112.4842,
+          112.7767
+        ]
+      },
+      {
+        "symbol": "VIX",
+        "label": "VIX",
+        "value": "25.25",
+        "change": "-17.51%",
+        "trend": "down",
+        "isCached": false,
+        "history": [
+          30.6098,
+          25.25
+        ]
+      },
+      {
+        "symbol": "SPX",
+        "label": "S&P 500",
+        "value": "655.24",
+        "change": "+0.75%",
+        "trend": "up",
+        "isCached": false,
+        "history": [
+          650.3623,
+          655.24
+        ]
+      },
+      {
+        "symbol": "QQQ",
+        "label": "나스닥 100",
+        "value": "584.31",
+        "change": "+1.24%",
+        "trend": "up",
+        "isCached": false,
+        "history": [
+          577.1533,
+          584.31
+        ]
+      },
+      {
+        "symbol": "SOXX",
+        "label": "반도체 ETF",
+        "value": "338.54",
+        "change": "+3.01%",
+        "trend": "up",
+        "isCached": false,
+        "history": [
+          328.6477,
+          338.54
+        ]
+      },
+      {
+        "symbol": "BTC",
+        "label": "비트코인 현물",
+        "value": "$68,104",
+        "change": "-0.13%",
+        "trend": "down",
+        "isCached": false,
+        "history": [
+          68192.6504,
+          68104.0
+        ]
+      }
+    ]
+  },
+  "aiJudgment": {
+    "headline": "미국 증시는 지정학적 긴장 완화와 유가 하락 소식에 힘입어 강하게 반등했고, 위험자산 선호가 일시적으로 높아졌어요.",
+    "body": "[데이터 품질 알림] 우선 신뢰 출처 뉴스와 공식 시그널을 합쳐도 충분하지 않습니다.\n\n데이터 품질 주의: 이번 집계의 data_quality.status가 \"degraded\"로 나와서 일부 뉴스·지표가 충분히 검증되지 않았어요.\n\n신뢰도 낮은 항목은 본문에서 별도 표기했어요.\n\n0. 오늘의 핵심\n- 미국 증시는 지정학적 긴장 완화와 유가 하락 소식에 힘입어 강하게 반등했고, 위험자산 선호가 일시적으로 높아졌어요.\n- 채권 금리는 소폭 하락했고 VIX(시장의 불안감 지표)는 크게 내려가 투자자 심리가 덜 불안해졌어요.\n- 비트코인은 현물 ETF 수급과 함께 68,104달러 근처에서 비교적 안정된 흐름을 보였어요.\n\n- 이상 움직임: VIX가 25.25로 전일 대비 -17.51% 하락해 변동성 지표가 빠르게 가라앉은 점은 주목할 만해요. (VIX는 높을수록 시장이 불안해하는 걸 숫자로 보여줘요)\n\n1. 거시 지표 Dashboard\n- 미국 10년물: 4.30% (전일 대비 -5bp)\n- 미국 2년물: 3.79% (전일 대비 -3bp)\n- 미국 3개월물: 이번 집계에서 확인되지 않았어요\n- 달러 인덱스 (DXY): 112.7767 (전일 대비 +0.26%) — 달러가 소폭 강세예요\n- VIX: 25.25 (전일 대비 -17.51%) — VIX는 시장의 불안감을 숫자로 나타낸 지표예요. 수치가 크게 내려가 투자자들이 한숨 놓은 모양새예요\n- 원/달러: 이번 집계에서 확인되지 않았어요\n- 나스닥 선물: 이번 집계에서 확인되지 않았어요\n\n(금리 수치는 bp 단위 변동을 포함해 표기했어요.\n\n일부 지표는 이번 집계에서 확인되지 않아 생략했어요.)\n\n2. 미국 증시\n- SPY (S&P500): $655.24 (전일 종가 대비 +0.75%) — 대표 500개 기업의 평균 주가가 소폭 올랐어요.\n- QQQ (NASDAQ): $584.31 (전일 종가 대비 +1.24%) — 기술주 중심의 지수가 SPY보다 더 많이 올랐어요.\n- SOXX (반도체 섹터): $338.54 (전일 종가 대비 +3.01%) — 반도체 섹터가 오늘 상대적으로 강한 흐름이에요.\n\n- 빅테크 10종: 이번 집계에서 상세 종목별 가격·등락치는 확인되지 않았어요. (원자료에 tech_stocks 항목이 비어 있어요)\n\n3. BTC & 크립토\n- BTC 현물가: $68,104.0 (전일 종가 기준, 전일 대비 -0.13%) — 입력된 숫자를 그대로 사용했어요.\n- 공포탐욕지수: 8 / 극단적 공포 (값은 100 기준의 지표예요. 낮을수록 투자자 심리가 매우 위축돼 있다는 뜻이에요)\n- BTC 현물 ETF (공식 스냅샷 기준):\n- IBIT (iShares): 가격 정보 이번 집계에서 확인되지 않았어요; 다만 2026-03-31 기준 AUM $53,052,862,326, 총 BTC 782,069.66 보유가 보고돼 있어요.\n- BITB (Bitwise): 가격 정보 이번 집계에서 확인되지 않았어요; 2026-04-01 기준 AUM $2,550,050,872.6, 총 BTC 37,566.81019278 보유가 보고돼 있어요.\n- FBTC, ARKB, GBTC: 이번 집계에서 관련 공식 스냅샷이 확인되지 않았어요.\n- 공식 ETF 총 BTC 보유량: 819,636.47019278 BTC (입력된 집계 기준)\n- 공식 ETF 총 AUM: $55,602,913,198.6 (입력된 집계 기준)\n\n(참고: ETF 보조 수치는 공식 스냅샷 항목만 사용했어요.\n\n일부 ETF의 가격·거래량은 이번 집계에서 제공되지 않았어요.)\n\n4-1. 이슈 브리핑\n- 지정학적 리스크 완화와 유가 하락이 위험자산으로의 자금 유입을 촉진했어요. 트럼프·이란 관련 발언으로 전일 장에서 주식이 큰 폭으로 오른 점이 대표적이에요. 이는 단기적으로 주식·비트코인에 우호적이었지만, 약한 매수 폭을 의미하는 '약한 종목 너비'도 관찰돼요.\n- 국채 금리는 소폭 하락했지만 여전히 높은 수준(10년 4.30%)에 머무르고 있어요. 금리가 내려가면서 성장주에 대한 부담이 일부 완화됐고, VIX 급락은 투자 심리 개선을 시사해요.\n- 대형 테크 기업들의 AI·데이터센터 투자 확대 속에 인력 구조조정(예: Oracle 대규모 감원 소식)이 병행돼 업종 내 재편이 가속화되고 있어요. 인프라 수요는 반도체·네트워크 장비 수요를 끌어올리는 반면 인건비 구조는 기업 이익률에 압박을 줄 수 있어요.\n\n5-1. 주간 맥락 연결\n- 월요일: 지난주 지정학 리스크로 하락했던 시장이 주초에 지정학적 완화·유가 하락 기대에 반응하며 큰 폭의 반등을 보였어요. 이번 주는 CPI(4월 10일 예정) 같은 주요 물가 지표가 시장을 다시 흔들 수 있어요.\n- 화~목: 이번 주 주요 실물지표(ADP, ISM Manufacturing, 소매판매) 발표 전후로 시장은 민감하게 반응할 가능성이 있어요. 데이터가 강하면 금리·달러가 상승하고, 약하면 위험자산이 더 오를 수 있어요.\n- 금요일: 주말을 앞두고 지표·연설 결과와 연동된 포지션 정리에 따라 변동성이 커질 수 있으니 주말 전 포지션 관리가 중요해 보여요.",
+    "summaryLead": "채권 금리는 소폭 하락했고 VIX(시장의 불안감 지표)는 크게 내려가 투자자 심리가 덜 불안해졌어요.",
+    "summarySupport": "비트코인은 현물 ETF 수급과 함께 68,104달러 근처에서 비교적 안정된 흐름을 보였어요."
+  },
+  "topicSummaries": [
+    {
+      "topic": "macro",
+      "label": "거시경제",
+      "summary": "에너지 가격 안정으로 인플레이션 우려가 완화되며 금융주 랠리를 촉진하나, Fed 매파 신호와 지정학 리스크로 금리 인상 가능성이 시장 불확실성을 높일 전망이다.",
+      "keyMetric": "Fed Funds Rate · 3.5%-3.75% · 동결",
+      "relatedStocks": null
+    },
+    {
+      "topic": "us-stocks",
+      "label": "미국 주식",
+      "summary": "강한 랠리는 지정학적 리스크로부터 단기 완화를 시사하지만 약한 종목 확산과 저항 수준은 오늘 하방 리스크가 남아 있는 데드캣 바운스 가능성을 시사합니다.",
+      "keyMetric": "S&P 500 Close · 6,529 · +291 pts (+2.91%)",
+      "relatedStocks": [
+        "LLY",
+        "GOOGL",
+        "META"
+      ]
+    },
+    {
+      "topic": "bigtech",
+      "label": "빅테크·AI",
+      "summary": "Oracle의 대규모 인력 감축과 업계 전반의 감원은 기술 기업들이 전통적 고용보다 AI 인프라 지출을 우선시하고 있음을 보여주며, 고객들이 AI 대안으로 협상력을 얻으면서 엔터프라이즈 소프트웨어 마진을 압박하고 있습니다.",
+      "keyMetric": "Oracle Global Job Cuts · 30,000 positions · Immediate elimination",
+      "relatedStocks": [
+        "ORCL Data unavailable",
+        "MSFT Data unavailable",
+        "AMZN Data unavailable",
+        "GOOGL Data unavailable"
+      ]
+    },
+    {
+      "topic": "bitcoin",
+      "label": "비트코인",
+      "summary": "지정학적 긴장 완화와 ETF 유입으로 비트코인 지지선 유지 속 위험자산 반등이 지속될 가능성이 높아 시장 변동성이 줄어들 전망입니다.",
+      "keyMetric": "BTC Spot Price · $68,000 · +0.2% ~ +3.1%",
+      "relatedStocks": [
+        "BTC +0.4%",
+        "ETH +1.6%"
+      ]
+    }
+  ],
+  "techStocks": [
+    {
+      "symbol": "GOOGL",
+      "name": "GOOGL",
+      "price": "$297.39",
+      "change": "+3.42%",
+      "trend": "up",
+      "absChangeNum": 3.42,
+      "isCached": false
+    },
+    {
+      "symbol": "AMD",
+      "name": "AMD",
+      "price": "$210.21",
+      "change": "+3.33%",
+      "trend": "up",
+      "absChangeNum": 3.33,
+      "isCached": false
+    },
+    {
+      "symbol": "ASML",
+      "name": "ASML",
+      "price": "$1,359.76",
+      "change": "+2.95%",
+      "trend": "up",
+      "absChangeNum": 2.95,
+      "isCached": false
+    },
+    {
+      "symbol": "AVGO",
+      "name": "AVGO",
+      "price": "$313.49",
+      "change": "+1.29%",
+      "trend": "up",
+      "absChangeNum": 1.29,
+      "isCached": false
+    },
+    {
+      "symbol": "META",
+      "name": "META",
+      "price": "$579.23",
+      "change": "+1.24%",
+      "trend": "up",
+      "absChangeNum": 1.24,
+      "isCached": false
+    },
+    {
+      "symbol": "AMZN",
+      "name": "AMZN",
+      "price": "$210.57",
+      "change": "+1.10%",
+      "trend": "up",
+      "absChangeNum": 1.1,
+      "isCached": false
+    },
+    {
+      "symbol": "TSM",
+      "name": "TSM",
+      "price": "$341.49",
+      "change": "+1.05%",
+      "trend": "up",
+      "absChangeNum": 1.05,
+      "isCached": false
+    },
+    {
+      "symbol": "NVDA",
+      "name": "NVDA",
+      "price": "$175.75",
+      "change": "+0.77%",
+      "trend": "up",
+      "absChangeNum": 0.77,
+      "isCached": false
+    },
+    {
+      "symbol": "AAPL",
+      "name": "AAPL",
+      "price": "$255.63",
+      "change": "+0.73%",
+      "trend": "up",
+      "absChangeNum": 0.73,
+      "isCached": false
+    },
+    {
+      "symbol": "MSFT",
+      "name": "MSFT",
+      "price": "$369.37",
+      "change": "-0.22%",
+      "trend": "down",
+      "absChangeNum": 0.22,
+      "isCached": false
+    }
+  ],
+  "bitcoin": {
+    "price": "$68,104",
+    "change": "-0.13%",
+    "trend": "down",
+    "fearGreedIndex": {
+      "value": 8,
+      "label": "극단적 공포"
+    },
+    "etf": {
+      "totalHolding": "819,636.47 BTC",
+      "totalAum": "$55,602,913,199",
+      "issuers": [
+        {
+          "name": "BITB",
+          "holding": "37,567 BTC",
+          "aum": "$2,550,050,873",
+          "sourceUrl": "https://bitbetf.com/"
+        },
+        {
+          "name": "IBIT",
+          "holding": "782,070 BTC",
+          "aum": "$53,052,862,326",
+          "sourceUrl": "https://www.ishares.com/us/products/333011/ishares-bitcoin-trust-etf"
+        }
+      ]
+    }
+  },
+  "featuredXSignals": [
+    {
+      "id": "x-1",
+      "postedAt": "2026-03-30T13:13:52+00:00",
+      "impact": "매파적 금리 우려에 반박하며 연준이 에너지로 인한 물가보다 성장 우선으로 정책을 펼쳐 주식과 채권이 안정될 수 있다고 제시합니다.",
+      "sentiment": "bullish",
+      "content": "골드만은 유가가 115달러를 넘자 투자자들이 연준의 추가 금리 인상을 과대평가하고 있다고 보고하며, 1990년처럼 성장 둔화 속에서도 유가 충격이 있을 때 연준이 금리를 인하한 전례를 언급합니다.",
+      "rawContent": "Goldman argues investors are overestimating Fed rate hikes due to surging oil prices above $115, citing historical precedents like 1990 where Fed cut rates amid weakening growth despite oil shocks."
+    },
+    {
+      "id": "x-2",
+      "postedAt": "2026-03-30T19:15:38+00:00",
+      "impact": "블랙록의 비둘기적 견해는 통화 완화 기대를 높여 주식 등 위험자산을 지지합니다.",
+      "sentiment": "bullish",
+      "content": "블랙록의 릭 리더는 현 경제 여건에서 연준이 금리를 인하해야 하며 인하할 가능성이 높다고 말합니다.",
+      "rawContent": "BlackRock's Rick Rieder states the Fed should cut interest rates and believes they likely will, amid current economic conditions."
+    },
+    {
+      "id": "x-3",
+      "postedAt": "2026-03-30T10:14:33+00:00",
+      "impact": "최근 시장 하락은 펀더멘털이 아닌 기술적 하락이라며 실적이 뚜렷해지면 반등 가능성이 있다고 안심시킵니다.",
+      "sentiment": "bullish",
+      "content": "S&P 500은 고점 대비 9.2% 하락했고 주가수익비율(P/E)은 18% 하락했지만, 이는 펀더멘털 악화보다 가속화된 이익 성장으로 설명됩니다.",
+      "rawContent": "S&P 500 down 9.2% from highs with P/E ratio down 18%, but the gap explained by accelerating earnings growth rather than deteriorating fundamentals."
+    },
+    {
+      "id": "x-4",
+      "postedAt": "2026-03-31T14:18:39+00:00",
+      "impact": "완화된 고용 지표는 경기 침체 위험 없이 수요 둔화를 보여줘 연준 금리 인하 논리를 뒷받침하며 주식에 우호적입니다.",
+      "sentiment": "bullish",
+      "content": "민간 고용 증가율이 2월 3.3%로 2010년(실업률 9.7%) 이후 최저로 떨어졌으나 해고율은 낮아 ‘고용 보류’ 노동시장이 지속되고 있습니다.",
+      "rawContent": "Private-sector hiring rate fell to 3.3% in February, lowest since 2010 when unemployment was 9.7%, but layoff rates remain low, signaling a 'no-hire, no-fire' labor market."
+    },
+    {
+      "id": "x-5",
+      "postedAt": "2026-04-01T11:15:08+00:00",
+      "impact": "이는 Meta의 공격적인 AI 데이터센터 CAPEX와 전략적 확장에 대한 애널리스트의 강한 신뢰를 나타내며 주가와 섹터에 긍정적일 수 있습니다.",
+      "sentiment": "bullish",
+      "content": "애널리스트는 Meta의 7GW 전력 확충이 Hyperion 데이터센터 확장에 힘을 실어준다고 강조했습니다.",
+      "rawContent": "Analyst highlights Meta's 7GW power buildout supporting Hyperion data center growth."
+    },
+    {
+      "id": "x-6",
+      "postedAt": "2026-04-01T13:12:03+00:00",
+      "impact": "아마존의 장기 AI 인프라 전략은 NVIDIA GPU 의존도를 낮춰 반도체 및 빅테크의 CAPEX 역학에 영향을 미칠 것입니다.",
+      "sentiment": "bullish",
+      "content": "아마존의 데이터센터 구축은 수요 중심으로 진행되며, Trainium 칩 테스트를 위한 80억 달러 Anthropic 투자, 매니지드 서비스 마진, 유연한 GPU 계약, 마진 보호를 위한 Trainium 전환 계획을 설명합니다.",
+      "rawContent": "Explains Amazon's data center build around demand, $8B Anthropic investment to test Trainium chips, managed services margins, flexible GPU contracts, and plan to migrate to cheaper Trainium to protect margins."
+    }
+  ],
+  "allXSignals": [
+    {
+      "id": "x-1",
+      "postedAt": "2026-03-30T13:13:52+00:00",
+      "impact": "매파적 금리 우려에 반박하며 연준이 에너지로 인한 물가보다 성장 우선으로 정책을 펼쳐 주식과 채권이 안정될 수 있다고 제시합니다.",
+      "sentiment": "bullish",
+      "content": "골드만은 유가가 115달러를 넘자 투자자들이 연준의 추가 금리 인상을 과대평가하고 있다고 보고하며, 1990년처럼 성장 둔화 속에서도 유가 충격이 있을 때 연준이 금리를 인하한 전례를 언급합니다.",
+      "rawContent": "Goldman argues investors are overestimating Fed rate hikes due to surging oil prices above $115, citing historical precedents like 1990 where Fed cut rates amid weakening growth despite oil shocks."
+    },
+    {
+      "id": "x-2",
+      "postedAt": "2026-03-30T19:15:38+00:00",
+      "impact": "블랙록의 비둘기적 견해는 통화 완화 기대를 높여 주식 등 위험자산을 지지합니다.",
+      "sentiment": "bullish",
+      "content": "블랙록의 릭 리더는 현 경제 여건에서 연준이 금리를 인하해야 하며 인하할 가능성이 높다고 말합니다.",
+      "rawContent": "BlackRock's Rick Rieder states the Fed should cut interest rates and believes they likely will, amid current economic conditions."
+    },
+    {
+      "id": "x-3",
+      "postedAt": "2026-03-30T10:14:33+00:00",
+      "impact": "최근 시장 하락은 펀더멘털이 아닌 기술적 하락이라며 실적이 뚜렷해지면 반등 가능성이 있다고 안심시킵니다.",
+      "sentiment": "bullish",
+      "content": "S&P 500은 고점 대비 9.2% 하락했고 주가수익비율(P/E)은 18% 하락했지만, 이는 펀더멘털 악화보다 가속화된 이익 성장으로 설명됩니다.",
+      "rawContent": "S&P 500 down 9.2% from highs with P/E ratio down 18%, but the gap explained by accelerating earnings growth rather than deteriorating fundamentals."
+    },
+    {
+      "id": "x-4",
+      "postedAt": "2026-03-31T14:18:39+00:00",
+      "impact": "완화된 고용 지표는 경기 침체 위험 없이 수요 둔화를 보여줘 연준 금리 인하 논리를 뒷받침하며 주식에 우호적입니다.",
+      "sentiment": "bullish",
+      "content": "민간 고용 증가율이 2월 3.3%로 2010년(실업률 9.7%) 이후 최저로 떨어졌으나 해고율은 낮아 ‘고용 보류’ 노동시장이 지속되고 있습니다.",
+      "rawContent": "Private-sector hiring rate fell to 3.3% in February, lowest since 2010 when unemployment was 9.7%, but layoff rates remain low, signaling a 'no-hire, no-fire' labor market."
+    },
+    {
+      "id": "x-5",
+      "postedAt": "2026-04-01T11:15:08+00:00",
+      "impact": "이는 Meta의 공격적인 AI 데이터센터 CAPEX와 전략적 확장에 대한 애널리스트의 강한 신뢰를 나타내며 주가와 섹터에 긍정적일 수 있습니다.",
+      "sentiment": "bullish",
+      "content": "애널리스트는 Meta의 7GW 전력 확충이 Hyperion 데이터센터 확장에 힘을 실어준다고 강조했습니다.",
+      "rawContent": "Analyst highlights Meta's 7GW power buildout supporting Hyperion data center growth."
+    },
+    {
+      "id": "x-6",
+      "postedAt": "2026-04-01T13:12:03+00:00",
+      "impact": "아마존의 장기 AI 인프라 전략은 NVIDIA GPU 의존도를 낮춰 반도체 및 빅테크의 CAPEX 역학에 영향을 미칠 것입니다.",
+      "sentiment": "bullish",
+      "content": "아마존의 데이터센터 구축은 수요 중심으로 진행되며, Trainium 칩 테스트를 위한 80억 달러 Anthropic 투자, 매니지드 서비스 마진, 유연한 GPU 계약, 마진 보호를 위한 Trainium 전환 계획을 설명합니다.",
+      "rawContent": "Explains Amazon's data center build around demand, $8B Anthropic investment to test Trainium chips, managed services margins, flexible GPU contracts, and plan to migrate to cheaper Trainium to protect margins."
+    },
+    {
+      "id": "x-7",
+      "postedAt": "2026-04-01T11:36:05+00:00",
+      "impact": "AI/데이터센터 지출의 폭발적 성장을 수치화했으며, 이는 NVDA/AMD/TSMC/ASML 같은 반도체와 빅테크 인프라에 핵심적입니다.",
+      "sentiment": "bullish",
+      "content": "Rystad Energy는 데이터센터가 2025년에 상류 석유·가스 CAPEX를 추월했고 2024년에는 태양광을 추월했다고 보고했습니다.",
+      "rawContent": "Rystad Energy reports data centers overtook upstream oil/gas capex in 2025 and solar in 2024."
+    },
+    {
+      "id": "x-8",
+      "postedAt": "2026-03-31T17:56:02+00:00",
+      "impact": "AI 인프라 확장에 기여하는 진전으로 데이터센터 네트워킹에 중요하며, 반도체와 AI 구축에 대해 낙관적 신호입니다.",
+      "sentiment": "bullish",
+      "content": "새 광학 기술로 AI 데이터센터에서 4x400G 광 링크의 대규모 배치가 가능해졌고, 이는 204.8Tbps 플랫폼의 기반입니다.",
+      "rawContent": "New optics enable mass deployment of 4x400G fiber links in AI data centers, foundation for 204.8-Tbps platforms."
+    },
+    {
+      "id": "x-9",
+      "postedAt": "2026-03-30T08:41:09+00:00",
+      "impact": "이는 거시적 압박으로 인한 단기 위험회피 심리를 시사해 BTC 가격을 압박할 수 있으나, AuM이 여전히 상당해 지속적 관심을 나타냅니다.",
+      "sentiment": "bearish",
+      "content": "디지털 자산 펀드는 이란 분쟁 우려와 FOMC 금리인상 기대 속에서 4억1400만 달러의 유출을 기록해 5주 연속 유입 흐름이 중단되었고, 운용자산(AuM)은 현재 1290억 달러입니다.",
+      "rawContent": "Digital asset funds recorded $414M outflows amid Iran conflict fears and FOMC rate hike expectations, ending a five-week inflow streak. Total assets under management now stand at $129B."
+    },
+    {
+      "id": "x-10",
+      "postedAt": "2026-03-30T19:24:40+00:00",
+      "impact": "이는 기관 채택과 비트코인에 대한 검증이 가속화되고 있음을 보여주며, 장기적으로 ETF 자금 유입과 주류 수요를 촉진할 가능성이 큽니다.",
+      "sentiment": "bullish",
+      "content": "Bloomberg의 JSeyff는 모건스탠리가 비트코인 ETF에 본격적으로 진출했다고 강조하며, 2017년의 '롱 비트코인, 숏 은행' 서사를 뒤집었다고 전했습니다. 은행들이 이제 적극적으로 BTC 노출을 제공하고 있습니다.",
+      "rawContent": "Bloomberg's JSeyff highlights Morgan Stanley's serious push into Bitcoin ETF, flipping the 2017 narrative of 'long Bitcoin, short banks'. Banks now actively offering BTC exposure."
+    },
+    {
+      "id": "x-11",
+      "postedAt": "2026-03-30T09:14:04+00:00",
+      "impact": "기업 수요의 바로미터로서 이번 중단은 거시 불확실성 속에서 심리를 약화시킬 수 있지만, 이전의 누적 매수는 강한 신념을 보여줍니다.",
+      "sentiment": "bearish",
+      "content": "마이클 세일러의 마이크로스트래티지는 지난주 연속 BTC 매수를 중단해, 작년 12월 말 이후 13주 동안 총 90,831 BTC를 매입한 기록을 마감했습니다.",
+      "rawContent": "Michael Saylor's MicroStrategy halted its consecutive BTC purchases last week, ending a 13-week run where it acquired 90,831 BTC since late December."
+    },
+    {
+      "id": "x-12",
+      "postedAt": "2026-03-31T20:13:12+00:00",
+      "impact": "이는 BTC의 장기적 보안 우려를 제기하지만, 시장의 무시는 해결책에 대한 자신감 또는 단기적 무관성으로 보이며 기관의 회복력을 시험합니다.",
+      "sentiment": "neutral",
+      "content": "구글 연구는 비트코인 암호화 기술에 대한 양자 위협이 가속화되고 있음을 강조했지만, BTC 가격은 2.6% 상승했습니다. 이는 ETF 매수자가 LinkedIn을 통해 이를 인지하지 못했기 때문일 수 있습니다.",
+      "rawContent": "Google research highlights accelerated quantum threat to Bitcoin's cryptography, but BTC price rose 2.6% regardless, possibly due to ETF buyers unaware via LinkedIn."
+    }
+  ],
+  "featuredNews": [
+    {
+      "id": "news-1",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "macro",
+      "title": "미국 국채 수익률, 변동성 큰 장세에서 다시 하락 전환; 10년물 ...",
+      "interpretation": "금리 하락은 단기적으로 연준의 긴축 기대 완화 신호로 해석돼 주식·달러에 다소 우호적으로 작용할 수 있다.",
+      "summaryKo": "미국 국채 금리가 변동성 큰 장세 속에서 하락 전환했으며, 10년물은 1.4bp 내린 4.297% 수준에서 거래됐다. 장중 30년물·20년물 등도 하락 압력을 보였고 단기물은 종목별 등락이 엇갈렸다.",
+      "rawTitle": "US Treasury yields turn lower again in choppy trading; 10-year ...",
+      "source": "www.marketscreener.com",
+      "sourceTier": "standard",
+      "url": "https://www.marketscreener.com/news/us-treasury-yields-turn-lower-again-in-choppy-trading-10-year-yields-last-down-1-4-bps-at-4-297-ce7e51dfd08af624",
+      "urgency": "medium",
+      "tags": [
+        "거시경제"
+      ]
+    },
+    {
+      "id": "news-2",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "macro",
+      "title": "국채 수익률 소폭 변동 - Trading Economics",
+      "interpretation": "강한 고용·소비 지표는 연준의 긴축 잔존 시그널이나, 지정학적 완화 기대와 함께 금리 경로 불확실성이 커져 장단기 금리·달러의 방향성은 제한될 전망입니다.",
+      "summaryKo": "미 국채 10년물 수익률은 4.31%로 3월 약 37bp 상승 이후 4월 초에는 큰 변동 없이 보합권을 보였으며, ADP 민간고용은 3월에 6.2만 건을 기록했고 2월 소매판매는 0.6% 상승해 경제 회복 탄력성을 시사했습니다. 트레이더들은 연내 연준의 기준금리 동결을 대체로 예상하면서도 금리 인하 확률은 커진 상태입니다.",
+      "rawTitle": "Treasury Yields Little Changed - Trading Economics",
+      "source": "tradingeconomics.com",
+      "sourceTier": "standard",
+      "url": "https://tradingeconomics.com/united-states/government-bond-yield/news/538384",
+      "urgency": "medium",
+      "tags": [
+        "거시경제"
+      ]
+    },
+    {
+      "id": "news-3",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "macro",
+      "title": "국채 금리, 이자율, 수익률",
+      "interpretation": "국채 수익률 비교는 중앙은행 정책·금리 기대와 글로벌 달러·금융시장 변동성 방향성 판단의 기초 신호로 활용됩니다.",
+      "summaryKo": "기사에는 미국 10년물(4.33%), 캐나다(3.50%), 독일(2.99%), 영국(4.82%), 일본(2.30%) 등 주요국 10년물 금리 수준이 표로 정리되어 있으며 금리·달러·변동성 분석에 참고할 만한 자료로 소개되어 있습니다.",
+      "rawTitle": "Treasury Rates, Interest Rates, Yields",
+      "source": "www.barchart.com",
+      "sourceTier": "standard",
+      "url": "https://www.barchart.com/economy/interest-rates",
+      "urgency": "medium",
+      "tags": [
+        "거시경제"
+      ]
+    },
+    {
+      "id": "news-4",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "비트코인 ETF: 14억7천만 달러 역전과 가격 영향",
+      "interpretation": "ETF를 통한 기관 자금 유입은 가격 하방을 지지하는 수요 바닥을 강화하지만, 낮은 심리지표(공포·탐욕 28)와 큰 일간 유입·유출 변동성은 급반전 리스크를 남깁니다.",
+      "summaryKo": "미국 현물 비트코인 ETF가 2주간 순유입 14.7억 달러를 기록하며 5주 연속 유출을 되돌렸고, 이 자금이 집중돼 비트코인 가격을 약 6만 달러에서 7.1만 달러 이상으로 급등시켰습니다. iShares Bitcoin Trust(IBIT)가 단일일 3.066억 달러를 흡수하며 이번 주 순유입의 78%를 차지했고, 출시 이후 누적 ETF 순유입은 530억 달러를 넘어 시장의 유동성 구조와 수요 바닥에 영향을 미치고 있습니다.",
+      "rawTitle": "Bitcoin ETFs: The $1.47B Reversal and Its Price Impact",
+      "source": "www.ainvest.com",
+      "sourceTier": "standard",
+      "url": "https://www.ainvest.com/news/bitcoin-etfs-1-47b-reversal-price-impact-2604",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-5",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "비트코인 ETF: 13억 달러 유입으로 18억 달러 유출을 상쇄했지만 고래는 ...",
+      "interpretation": "기관 매수로 ETF 자금 흐름이 회복됐지만 고래들의 거래 증가와 최근 주간 유출이 가격 상단을 제한하며 향후 단기 변동성과 자금 유출·유입의 균형이 중요해졌다.",
+      "summaryKo": "3월 비트코인 현물 ETF로 약 13억 달러 순유입이 발생해 2월의 18억 달러 순유출을 일부 상쇄했으나, 말주간에 2.96억 달러 유출과 고래 매도 비중(거래소 고래 비율 0.79) 확대가 나타나며 매수 모멘텀이 약화됐다. 기관 자금은 주로 IBIT로 유입되어 가격을 지지하는 요인이었으나, $72,500 저항과 $67,000·$60,000대 지지선 테스트 상황에서 매도 압력과 충돌하고 있다.",
+      "rawTitle": "Bitcoin ETFs: $1.3B Inflows Reverse $1.8B Outflows, But Whale ...",
+      "source": "www.ainvest.com",
+      "sourceTier": "standard",
+      "url": "https://www.ainvest.com/news/bitcoin-etfs-1-3b-inflows-reverse-1-8b-outflows-whale-selling-looms-2604",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    }
+  ],
+  "allNews": [
+    {
+      "id": "news-1",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "macro",
+      "title": "미국 국채 수익률, 변동성 큰 장세에서 다시 하락 전환; 10년물 ...",
+      "interpretation": "금리 하락은 단기적으로 연준의 긴축 기대 완화 신호로 해석돼 주식·달러에 다소 우호적으로 작용할 수 있다.",
+      "summaryKo": "미국 국채 금리가 변동성 큰 장세 속에서 하락 전환했으며, 10년물은 1.4bp 내린 4.297% 수준에서 거래됐다. 장중 30년물·20년물 등도 하락 압력을 보였고 단기물은 종목별 등락이 엇갈렸다.",
+      "rawTitle": "US Treasury yields turn lower again in choppy trading; 10-year ...",
+      "source": "www.marketscreener.com",
+      "sourceTier": "standard",
+      "url": "https://www.marketscreener.com/news/us-treasury-yields-turn-lower-again-in-choppy-trading-10-year-yields-last-down-1-4-bps-at-4-297-ce7e51dfd08af624",
+      "urgency": "medium",
+      "tags": [
+        "거시경제"
+      ]
+    },
+    {
+      "id": "news-2",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "macro",
+      "title": "국채 수익률 소폭 변동 - Trading Economics",
+      "interpretation": "강한 고용·소비 지표는 연준의 긴축 잔존 시그널이나, 지정학적 완화 기대와 함께 금리 경로 불확실성이 커져 장단기 금리·달러의 방향성은 제한될 전망입니다.",
+      "summaryKo": "미 국채 10년물 수익률은 4.31%로 3월 약 37bp 상승 이후 4월 초에는 큰 변동 없이 보합권을 보였으며, ADP 민간고용은 3월에 6.2만 건을 기록했고 2월 소매판매는 0.6% 상승해 경제 회복 탄력성을 시사했습니다. 트레이더들은 연내 연준의 기준금리 동결을 대체로 예상하면서도 금리 인하 확률은 커진 상태입니다.",
+      "rawTitle": "Treasury Yields Little Changed - Trading Economics",
+      "source": "tradingeconomics.com",
+      "sourceTier": "standard",
+      "url": "https://tradingeconomics.com/united-states/government-bond-yield/news/538384",
+      "urgency": "medium",
+      "tags": [
+        "거시경제"
+      ]
+    },
+    {
+      "id": "news-3",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "macro",
+      "title": "국채 금리, 이자율, 수익률",
+      "interpretation": "국채 수익률 비교는 중앙은행 정책·금리 기대와 글로벌 달러·금융시장 변동성 방향성 판단의 기초 신호로 활용됩니다.",
+      "summaryKo": "기사에는 미국 10년물(4.33%), 캐나다(3.50%), 독일(2.99%), 영국(4.82%), 일본(2.30%) 등 주요국 10년물 금리 수준이 표로 정리되어 있으며 금리·달러·변동성 분석에 참고할 만한 자료로 소개되어 있습니다.",
+      "rawTitle": "Treasury Rates, Interest Rates, Yields",
+      "source": "www.barchart.com",
+      "sourceTier": "standard",
+      "url": "https://www.barchart.com/economy/interest-rates",
+      "urgency": "medium",
+      "tags": [
+        "거시경제"
+      ]
+    },
+    {
+      "id": "news-4",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "비트코인 ETF: 14억7천만 달러 역전과 가격 영향",
+      "interpretation": "ETF를 통한 기관 자금 유입은 가격 하방을 지지하는 수요 바닥을 강화하지만, 낮은 심리지표(공포·탐욕 28)와 큰 일간 유입·유출 변동성은 급반전 리스크를 남깁니다.",
+      "summaryKo": "미국 현물 비트코인 ETF가 2주간 순유입 14.7억 달러를 기록하며 5주 연속 유출을 되돌렸고, 이 자금이 집중돼 비트코인 가격을 약 6만 달러에서 7.1만 달러 이상으로 급등시켰습니다. iShares Bitcoin Trust(IBIT)가 단일일 3.066억 달러를 흡수하며 이번 주 순유입의 78%를 차지했고, 출시 이후 누적 ETF 순유입은 530억 달러를 넘어 시장의 유동성 구조와 수요 바닥에 영향을 미치고 있습니다.",
+      "rawTitle": "Bitcoin ETFs: The $1.47B Reversal and Its Price Impact",
+      "source": "www.ainvest.com",
+      "sourceTier": "standard",
+      "url": "https://www.ainvest.com/news/bitcoin-etfs-1-47b-reversal-price-impact-2604",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-5",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "비트코인 ETF: 13억 달러 유입으로 18억 달러 유출을 상쇄했지만 고래는 ...",
+      "interpretation": "기관 매수로 ETF 자금 흐름이 회복됐지만 고래들의 거래 증가와 최근 주간 유출이 가격 상단을 제한하며 향후 단기 변동성과 자금 유출·유입의 균형이 중요해졌다.",
+      "summaryKo": "3월 비트코인 현물 ETF로 약 13억 달러 순유입이 발생해 2월의 18억 달러 순유출을 일부 상쇄했으나, 말주간에 2.96억 달러 유출과 고래 매도 비중(거래소 고래 비율 0.79) 확대가 나타나며 매수 모멘텀이 약화됐다. 기관 자금은 주로 IBIT로 유입되어 가격을 지지하는 요인이었으나, $72,500 저항과 $67,000·$60,000대 지지선 테스트 상황에서 매도 압력과 충돌하고 있다.",
+      "rawTitle": "Bitcoin ETFs: $1.3B Inflows Reverse $1.8B Outflows, But Whale ...",
+      "source": "www.ainvest.com",
+      "sourceTier": "standard",
+      "url": "https://www.ainvest.com/news/bitcoin-etfs-1-3b-inflows-reverse-1-8b-outflows-whale-selling-looms-2604",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-6",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "비트코인 가격, ETF 수요가 매도 압력을 흡수하면서 매도 압력 증가 직면 | MEXC News",
+      "interpretation": "기관·ETF 수요가 약세 시 매도 일부를 흡수해 하방 완충 역할을 하지만, 현재로서는 추세 전환을 뒷받침하기엔 부족해 추가 하방 위험이 존재한다.",
+      "summaryKo": "비트코인이 여섯 달 연속 하락 가능성 속에서 매도 압력이 커지는 가운데, 단기 보유자들이 약세에서 코인을 거래소로 유입시키는 반면 기관·스팟 ETF가 약 63,000 BTC와 3월 순유입 약 12억 달러로 일부 물량을 흡수하고 있다. 가격은 $60,000대 지지 위에 머무르나 월간 종가가 $67,300 아래면 연속 손실이 확인될 수 있다.",
+      "rawTitle": "Bitcoin Price Faces Rising Sell Pressure as ETF Demand Absorbs Distribution | MEXC News",
+      "source": "www.mexc.com",
+      "sourceTier": "standard",
+      "url": "https://www.mexc.com/news/995250",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-7",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "비트코인 가격, ETF 유입 안정화로 $68,500까지 반등",
+      "interpretation": "스팟 ETF의 3월 순유입은 기관 수요 회복 신호로 작용해 하방을 완충하지만, $67k 지지·$75k 저항이 깨지면 가격 방향성이 재확인될 위험이 있다.",
+      "summaryKo": "비트코인이 4월 1일 약 $68,500까지 반등하며 1분기 약 23% 하락 후 회복을 시도하고 있고, 3월에 미(美) 스팟 비트코인 ETF가 순유입을 보이며 단기 매도 압력을 일부 흡수했다는 내용입니다.",
+      "rawTitle": "Bitcoin Price Rebounds to $68500 as ETF Inflows Stabilize ...",
+      "source": "www.ad-hoc-news.de",
+      "sourceTier": "standard",
+      "url": "https://www.ad-hoc-news.de/boerse/news/ueberblick/bitcoin-price-rebounds-to-68-500-as-etf-inflows-stabilize-amid-q1-losses/69048939",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-8",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "오늘의 암호화폐 뉴스: 비트코인 ETF, 월간 첫 유입 기록",
+      "interpretation": "월간 ETF 유입은 기관의 인내심과 자본 유입 복귀를 시사해 BTC 가격 안정 또는 추가 회복에 우호적일 수 있으며, 프리세일 언급은 여전히 높은 투기적 관심을 반영합니다.",
+      "summaryKo": "비트코인 현물 ETF가 10월 이후 처음으로 월간 순유입을 기록했으며 기사는 BTC가 약 $68,100에 거래되는 가운데 ETF 자산은 10월 정점 대비 단 7% 감소했다고 전합니다. 같은 보도에서 Pepeto 프리세일이 800만 달러를 돌파했고 바이낸스 상장 등 프로젝트 호재를 강조합니다.",
+      "rawTitle": "Crypto News Today: Bitcoin ETFs Post First Monthly Inflows ...",
+      "source": "www.openpr.com",
+      "sourceTier": "standard",
+      "url": "https://www.openpr.com/news/4451266/crypto-news-today-bitcoin-etfs-post-first-monthly-inflows-since",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-9",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "비트코인 ETF, 6,900만 달러 유입으로 반등—이더는 약세 종료",
+      "interpretation": "대형 비트코인·일부 이더 ETF로의 선택적 자금 유입은 신중한 기관·투자자 재진입을 시사하며, 소형 자산은 여전히 약세를 보입니다.",
+      "summaryKo": "비트코인 ETF가 순유입 $69.44M을 기록하며 반등했고(ARKB $33.03M, FBTC $28.89M, IBIT $7.52M), 이더는 8일 연속 순유출 후 $4.96M 순유입으로 회복 조짐을 보였으나(FETH $10.56M, ETHB $4.15M, ETHA -$9.76M) 솔라나(BSOL -$6.17M)와 XRP(-$2.31M)는 계속 자금 이탈을 겪었습니다.",
+      "rawTitle": "Bitcoin ETFs Rebound With $69 Million Inflow as Ether Ends Losing ...",
+      "source": "news.bitcoin.com",
+      "sourceTier": "standard",
+      "url": "https://news.bitcoin.com/bitcoin-etfs-rebound-with-69-million-inflow-as-ether-ends-losing-streak",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-10",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bigtech",
+      "title": "AI 반도체주: Nvidia, Broadcom, AMD, Taiwan Semi, Micron, Super ...",
+      "interpretation": "AI 인프라 수요와 빅테크의 설비·제품 연계가 반도체 생태계로 자금 유입을 촉진해 해당 섹터 밸류에이션과 장비·공급망 투자 기대를 높일 가능성이 큽니다.",
+      "summaryKo": "CES를 앞두고 Nvidia, Broadcom, AMD, TSMC, Micron 등 반도체·AI 관련주가 프리마켓에서 급등했으며, 기사에서는 AI 투자 기대와 Foxconn 등 실적 호조, 그리고 Nvidia의 Marvell에 대한 20억 달러 전략적 투자·협업(예: NVLink Fusion 연계)이 관련 상승 요인으로 제시됩니다.",
+      "rawTitle": "AI Chip Stocks Nvidia, Broadcom, AMD, Taiwan Semi, Micron, Super ...",
+      "source": "intellectia.ai",
+      "sourceTier": "standard",
+      "url": "https://intellectia.ai/news/etf/whats-driving-adagenes-premarket-surge",
+      "urgency": "medium",
+      "tags": [
+        "빅테크"
+      ]
+    },
+    {
+      "id": "news-11",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bigtech",
+      "title": "Nvidia·Microsoft·Alphabet: AI 대기업들, 시장 속에서도 성장 지속",
+      "interpretation": "빅테크의 AI 수요는 데이터센터·클라우드·반도체 관련 설비투자와 공급망 수요를 지지하지만, 투자심리(버블 우려)는 밸류에이션 변동성을 유발할 수 있습니다.",
+      "summaryKo": "기사에서는 Nvidia의 AI 칩 시장 지배력, Microsoft의 클라우드 매출 40% 성장, Alphabet의 분기 매출 1천억달러 돌파와 검색 점유율 90% 등을 들어 빅테크가 AI 수요로 성장을 지속하고 있다고 설명합니다. 투자자 우려에도 AI 시장의 장기적 성장 기대가 제시됩니다.",
+      "rawTitle": "Nvidia, Microsoft, Alphabet: AI Giants Continue Growth Amid Market ...",
+      "source": "intellectia.ai",
+      "sourceTier": "standard",
+      "url": "https://intellectia.ai/news/stock/nvidia-microsoft-alphabet-ai-giants-continue-growth-amid-market-concerns",
+      "urgency": "medium",
+      "tags": [
+        "빅테크"
+      ]
+    },
+    {
+      "id": "news-12",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "us-stocks",
+      "title": "오늘의 증시: 다우존스 (^DJI), S&P 500 (^GSPC), 나스닥 (^IXIC) 선물 상승 — Alcoa (AA) +10%, 유가 $101, 트럼프 이란 합의 시사",
+      "interpretation": "유가 급등과 지정학 리스크로 경기·물가 우려가 커져 금리인하 기대가 약화되면 기술주 중심의 지수 회복이 제한될 가능성이 큽니다.",
+      "summaryKo": "미국 증시가 5주 연속 하락 이후 반등을 시도하는 가운데 다우 선물은 350포인트가량 급등했고, 알루미늄 종목 알코아(AA)는 +10%를 기록했으며 유가는 배럴당 약 $101까지 상승했습니다. 지수는 아직 조정국면에 있고 지정학적 충격이 시장 재평가를 촉발했다고 보도했습니다.",
+      "rawTitle": "Stock Market Today: Dow Jones (^DJI), S&P 500 (^GSPC) & Nasdaq (^IXIC) Futures Rise — Alcoa (AA) +10%, Oil $101 as Trump Signals Iran Deal",
+      "source": "www.tradingnews.com",
+      "sourceTier": "standard",
+      "url": "https://www.tradingnews.com/news/stock-market-today-dow-dji-futures-surge-350-points",
+      "urgency": "medium",
+      "tags": [
+        "미국증시"
+      ]
+    }
+  ],
+  "xSignals": [
+    {
+      "id": "x-1",
+      "postedAt": "2026-03-30T13:13:52+00:00",
+      "impact": "매파적 금리 우려에 반박하며 연준이 에너지로 인한 물가보다 성장 우선으로 정책을 펼쳐 주식과 채권이 안정될 수 있다고 제시합니다.",
+      "sentiment": "bullish",
+      "content": "골드만은 유가가 115달러를 넘자 투자자들이 연준의 추가 금리 인상을 과대평가하고 있다고 보고하며, 1990년처럼 성장 둔화 속에서도 유가 충격이 있을 때 연준이 금리를 인하한 전례를 언급합니다.",
+      "rawContent": "Goldman argues investors are overestimating Fed rate hikes due to surging oil prices above $115, citing historical precedents like 1990 where Fed cut rates amid weakening growth despite oil shocks."
+    },
+    {
+      "id": "x-2",
+      "postedAt": "2026-03-30T19:15:38+00:00",
+      "impact": "블랙록의 비둘기적 견해는 통화 완화 기대를 높여 주식 등 위험자산을 지지합니다.",
+      "sentiment": "bullish",
+      "content": "블랙록의 릭 리더는 현 경제 여건에서 연준이 금리를 인하해야 하며 인하할 가능성이 높다고 말합니다.",
+      "rawContent": "BlackRock's Rick Rieder states the Fed should cut interest rates and believes they likely will, amid current economic conditions."
+    },
+    {
+      "id": "x-3",
+      "postedAt": "2026-03-30T10:14:33+00:00",
+      "impact": "최근 시장 하락은 펀더멘털이 아닌 기술적 하락이라며 실적이 뚜렷해지면 반등 가능성이 있다고 안심시킵니다.",
+      "sentiment": "bullish",
+      "content": "S&P 500은 고점 대비 9.2% 하락했고 주가수익비율(P/E)은 18% 하락했지만, 이는 펀더멘털 악화보다 가속화된 이익 성장으로 설명됩니다.",
+      "rawContent": "S&P 500 down 9.2% from highs with P/E ratio down 18%, but the gap explained by accelerating earnings growth rather than deteriorating fundamentals."
+    },
+    {
+      "id": "x-4",
+      "postedAt": "2026-03-31T14:18:39+00:00",
+      "impact": "완화된 고용 지표는 경기 침체 위험 없이 수요 둔화를 보여줘 연준 금리 인하 논리를 뒷받침하며 주식에 우호적입니다.",
+      "sentiment": "bullish",
+      "content": "민간 고용 증가율이 2월 3.3%로 2010년(실업률 9.7%) 이후 최저로 떨어졌으나 해고율은 낮아 ‘고용 보류’ 노동시장이 지속되고 있습니다.",
+      "rawContent": "Private-sector hiring rate fell to 3.3% in February, lowest since 2010 when unemployment was 9.7%, but layoff rates remain low, signaling a 'no-hire, no-fire' labor market."
+    },
+    {
+      "id": "x-5",
+      "postedAt": "2026-04-01T11:15:08+00:00",
+      "impact": "이는 Meta의 공격적인 AI 데이터센터 CAPEX와 전략적 확장에 대한 애널리스트의 강한 신뢰를 나타내며 주가와 섹터에 긍정적일 수 있습니다.",
+      "sentiment": "bullish",
+      "content": "애널리스트는 Meta의 7GW 전력 확충이 Hyperion 데이터센터 확장에 힘을 실어준다고 강조했습니다.",
+      "rawContent": "Analyst highlights Meta's 7GW power buildout supporting Hyperion data center growth."
+    },
+    {
+      "id": "x-6",
+      "postedAt": "2026-04-01T13:12:03+00:00",
+      "impact": "아마존의 장기 AI 인프라 전략은 NVIDIA GPU 의존도를 낮춰 반도체 및 빅테크의 CAPEX 역학에 영향을 미칠 것입니다.",
+      "sentiment": "bullish",
+      "content": "아마존의 데이터센터 구축은 수요 중심으로 진행되며, Trainium 칩 테스트를 위한 80억 달러 Anthropic 투자, 매니지드 서비스 마진, 유연한 GPU 계약, 마진 보호를 위한 Trainium 전환 계획을 설명합니다.",
+      "rawContent": "Explains Amazon's data center build around demand, $8B Anthropic investment to test Trainium chips, managed services margins, flexible GPU contracts, and plan to migrate to cheaper Trainium to protect margins."
+    }
+  ],
+  "news": [
+    {
+      "id": "news-1",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "macro",
+      "title": "미국 국채 수익률, 변동성 큰 장세에서 다시 하락 전환; 10년물 ...",
+      "interpretation": "금리 하락은 단기적으로 연준의 긴축 기대 완화 신호로 해석돼 주식·달러에 다소 우호적으로 작용할 수 있다.",
+      "summaryKo": "미국 국채 금리가 변동성 큰 장세 속에서 하락 전환했으며, 10년물은 1.4bp 내린 4.297% 수준에서 거래됐다. 장중 30년물·20년물 등도 하락 압력을 보였고 단기물은 종목별 등락이 엇갈렸다.",
+      "rawTitle": "US Treasury yields turn lower again in choppy trading; 10-year ...",
+      "source": "www.marketscreener.com",
+      "sourceTier": "standard",
+      "url": "https://www.marketscreener.com/news/us-treasury-yields-turn-lower-again-in-choppy-trading-10-year-yields-last-down-1-4-bps-at-4-297-ce7e51dfd08af624",
+      "urgency": "medium",
+      "tags": [
+        "거시경제"
+      ]
+    },
+    {
+      "id": "news-2",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "macro",
+      "title": "국채 수익률 소폭 변동 - Trading Economics",
+      "interpretation": "강한 고용·소비 지표는 연준의 긴축 잔존 시그널이나, 지정학적 완화 기대와 함께 금리 경로 불확실성이 커져 장단기 금리·달러의 방향성은 제한될 전망입니다.",
+      "summaryKo": "미 국채 10년물 수익률은 4.31%로 3월 약 37bp 상승 이후 4월 초에는 큰 변동 없이 보합권을 보였으며, ADP 민간고용은 3월에 6.2만 건을 기록했고 2월 소매판매는 0.6% 상승해 경제 회복 탄력성을 시사했습니다. 트레이더들은 연내 연준의 기준금리 동결을 대체로 예상하면서도 금리 인하 확률은 커진 상태입니다.",
+      "rawTitle": "Treasury Yields Little Changed - Trading Economics",
+      "source": "tradingeconomics.com",
+      "sourceTier": "standard",
+      "url": "https://tradingeconomics.com/united-states/government-bond-yield/news/538384",
+      "urgency": "medium",
+      "tags": [
+        "거시경제"
+      ]
+    },
+    {
+      "id": "news-3",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "macro",
+      "title": "국채 금리, 이자율, 수익률",
+      "interpretation": "국채 수익률 비교는 중앙은행 정책·금리 기대와 글로벌 달러·금융시장 변동성 방향성 판단의 기초 신호로 활용됩니다.",
+      "summaryKo": "기사에는 미국 10년물(4.33%), 캐나다(3.50%), 독일(2.99%), 영국(4.82%), 일본(2.30%) 등 주요국 10년물 금리 수준이 표로 정리되어 있으며 금리·달러·변동성 분석에 참고할 만한 자료로 소개되어 있습니다.",
+      "rawTitle": "Treasury Rates, Interest Rates, Yields",
+      "source": "www.barchart.com",
+      "sourceTier": "standard",
+      "url": "https://www.barchart.com/economy/interest-rates",
+      "urgency": "medium",
+      "tags": [
+        "거시경제"
+      ]
+    },
+    {
+      "id": "news-4",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "비트코인 ETF: 14억7천만 달러 역전과 가격 영향",
+      "interpretation": "ETF를 통한 기관 자금 유입은 가격 하방을 지지하는 수요 바닥을 강화하지만, 낮은 심리지표(공포·탐욕 28)와 큰 일간 유입·유출 변동성은 급반전 리스크를 남깁니다.",
+      "summaryKo": "미국 현물 비트코인 ETF가 2주간 순유입 14.7억 달러를 기록하며 5주 연속 유출을 되돌렸고, 이 자금이 집중돼 비트코인 가격을 약 6만 달러에서 7.1만 달러 이상으로 급등시켰습니다. iShares Bitcoin Trust(IBIT)가 단일일 3.066억 달러를 흡수하며 이번 주 순유입의 78%를 차지했고, 출시 이후 누적 ETF 순유입은 530억 달러를 넘어 시장의 유동성 구조와 수요 바닥에 영향을 미치고 있습니다.",
+      "rawTitle": "Bitcoin ETFs: The $1.47B Reversal and Its Price Impact",
+      "source": "www.ainvest.com",
+      "sourceTier": "standard",
+      "url": "https://www.ainvest.com/news/bitcoin-etfs-1-47b-reversal-price-impact-2604",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    },
+    {
+      "id": "news-5",
+      "publishedAt": "2026-04-01T12:00:00+00:00",
+      "category": "bitcoin",
+      "title": "비트코인 ETF: 13억 달러 유입으로 18억 달러 유출을 상쇄했지만 고래는 ...",
+      "interpretation": "기관 매수로 ETF 자금 흐름이 회복됐지만 고래들의 거래 증가와 최근 주간 유출이 가격 상단을 제한하며 향후 단기 변동성과 자금 유출·유입의 균형이 중요해졌다.",
+      "summaryKo": "3월 비트코인 현물 ETF로 약 13억 달러 순유입이 발생해 2월의 18억 달러 순유출을 일부 상쇄했으나, 말주간에 2.96억 달러 유출과 고래 매도 비중(거래소 고래 비율 0.79) 확대가 나타나며 매수 모멘텀이 약화됐다. 기관 자금은 주로 IBIT로 유입되어 가격을 지지하는 요인이었으나, $72,500 저항과 $67,000·$60,000대 지지선 테스트 상황에서 매도 압력과 충돌하고 있다.",
+      "rawTitle": "Bitcoin ETFs: $1.3B Inflows Reverse $1.8B Outflows, But Whale ...",
+      "source": "www.ainvest.com",
+      "sourceTier": "standard",
+      "url": "https://www.ainvest.com/news/bitcoin-etfs-1-3b-inflows-reverse-1-8b-outflows-whale-selling-looms-2604",
+      "urgency": "medium",
+      "tags": [
+        "비트코인"
+      ]
+    }
+  ]
+}

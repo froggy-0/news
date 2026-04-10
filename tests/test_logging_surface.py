@@ -9,6 +9,13 @@ EXPECTED_LOGGER_CALL_FILES: set[str] = {
     "src/morning_brief/data/finbert_sentiment.py",
 }
 EXPECTED_GET_LOGGER_FILES = {
+    "src/morning_brief/analysis/sentiment_join/join.py",
+    "src/morning_brief/analysis/sentiment_join/pipeline.py",
+    "src/morning_brief/analysis/sentiment_join/sources/btc_prices.py",
+    "src/morning_brief/analysis/sentiment_join/sources/fng.py",
+    "src/morning_brief/analysis/sentiment_join/sources/r2_sentiment.py",
+    "src/morning_brief/analysis/sentiment_join/sources/usdkrw_prices.py",
+    "src/morning_brief/analysis/sentiment_join/validate.py",
     "src/morning_brief/brief_review.py",
     "src/morning_brief/briefing.py",
     "src/morning_brief/data/market.py",
