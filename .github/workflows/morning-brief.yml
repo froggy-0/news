@@ -229,6 +229,69 @@ jobs:
             run.log
           if-no-files-found: warn
 
+  run-sentiment-join:
+    name: Build Sentiment Time Join Parquet
+    needs: run-brief
+    if: ${{ needs.run-brief.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
+        with:
+          python-version: "3.11"
+
+      - name: Restore pip cache
+        id: cache-pip
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
+        with:
+          path: ~/.cache/pip
+          key: pip-sentiment-join-${{ hashFiles('requirements.txt', 'requirements-analysis.txt') }}
+          restore-keys: |
+            pip-sentiment-join-
+
+      - name: Install Python dependencies
+        run: |
+          pip install --disable-pip-version-check -r requirements.txt
+          pip install --disable-pip-version-check -r requirements-analysis.txt
+
+      - name: Save pip cache
+        if: always()
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
+        with:
+          path: ~/.cache/pip
+          key: pip-sentiment-join-${{ hashFiles('requirements.txt', 'requirements-analysis.txt') }}
+
+      - name: Run sentiment time join
+        shell: bash
+        run: make sentiment-join
+        env:
+          R2_PUBLIC_BUCKET: ${{ vars.R2_PUBLIC_BUCKET || '' }}
+          R2_S3_ENDPOINT: ${{ vars.R2_S3_ENDPOINT || '' }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID || '' }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY || '' }}
+          KIS_APP_KEY: ${{ secrets.KIS_APP_KEY || '' }}
+          KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET || '' }}
+          SENTIMENT_JOIN_LOOKBACK_DAYS: ${{ vars.SENTIMENT_JOIN_LOOKBACK_DAYS || '30' }}
+          SENTIMENT_JOIN_RETAIN_DAYS: ${{ vars.SENTIMENT_JOIN_RETAIN_DAYS || '90' }}
+          LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+
+      - name: Upload sentiment join artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sentiment-join-artifacts
+          path: data/sentiment_join/master_*.parquet
+          if-no-files-found: warn
+
   deploy-frontend:
     name: Deploy Frontend After Successful Sovereign Briefing Run
     needs: run-brief
