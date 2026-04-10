@@ -12,6 +12,8 @@ from morning_brief.data.finbert_sentiment import (
     FinBertScorer,
     _check_deps,
     _select_items_for_scoring,
+    build_public_news_sentiment_text,
+    build_public_signal_sentiment_text,
     enrich_news_packet,
     enrich_x_signals,
 )
@@ -53,6 +55,52 @@ def test_combine_fields_total_512_cap() -> None:
     f3 = " ".join(f"c{i}" for i in range(220))
     result = FinBertScorer.combine_fields(f1, f2, f3)
     assert len(result.split()) <= 512
+
+
+def test_build_public_news_sentiment_text_prefers_raw_fields() -> None:
+    text = build_public_news_sentiment_text(
+        {
+            "title": "번역 제목",
+            "rawTitle": "Raw English Title",
+            "summaryKo": "번역 요약",
+            "rawSummary": "Raw English Summary",
+            "interpretation": "번역 해설",
+            "rawInterpretation": "Raw English Interpretation",
+        }
+    )
+
+    assert "Raw English Title" in text
+    assert "Raw English Summary" in text
+    assert "Raw English Interpretation" in text
+    assert "번역 제목" not in text
+
+
+def test_build_public_news_sentiment_text_falls_back_to_display_fields() -> None:
+    text = build_public_news_sentiment_text(
+        {
+            "title": "한글 제목",
+            "summaryKo": "한글 요약",
+            "interpretation": "한글 해설",
+        }
+    )
+
+    assert "한글 제목" in text
+    assert "한글 요약" in text
+    assert "한글 해설" in text
+
+
+def test_build_public_signal_sentiment_text_prefers_raw_content() -> None:
+    text = build_public_signal_sentiment_text(
+        {
+            "rawContent": "Raw English signal content",
+            "content": "번역된 시그널 내용",
+            "impact": "번역된 영향",
+        }
+    )
+
+    assert "Raw English signal content" in text
+    assert "번역된 영향" in text
+    assert "번역된 시그널 내용" not in text
 
 
 # ── 의존성 미설치 시 동작 테스트 ──

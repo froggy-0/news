@@ -933,6 +933,16 @@ def test_build_public_brief_topic_summary_raw_summary_null_for_korean() -> None:
     assert topic["rawSummary"] is None
 
 
+def test_build_public_brief_topic_summaries_do_not_gain_sentiment_fields() -> None:
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+    payload = build_public_brief(packet=_packet(), briefing=_briefing(), run_at=run_at)
+
+    topic = payload["topicSummaries"][0]
+    assert "sentimentScore" not in topic
+    assert "sentimentConfidence" not in topic
+    assert "sentimentLabel" not in topic
+
+
 # ── Phase B: sentiment 출력 / 집계 테스트 ──────────────────────
 
 
@@ -960,13 +970,196 @@ def test_build_public_brief_xsignal_sentiment_fields_present() -> None:
 
 
 def test_build_public_brief_meta_sentiment_status() -> None:
-    """meta.sentimentStatus 필드가 존재한다."""
+    """meta.sentimentStatus 및 signalSentimentStatus 필드가 존재한다."""
     run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
     payload = build_public_brief(packet=_packet(), briefing=_briefing(), run_at=run_at)
     assert payload["meta"]["sentimentStatus"] == "skipped"
+    assert payload["meta"]["signalSentimentStatus"] == "skipped"
     assert "newsSentiment" in payload["meta"]
     assert "signalSentiment" in payload["meta"]
     assert "sentimentByCategory" in payload["meta"]
+
+
+def test_build_public_brief_uses_public_context_sentiment_status_and_count() -> None:
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+    public_context = {
+        "sentiment_status": "ok",
+        "all_news": [
+            {
+                "title": "첫 번째 공개 뉴스",
+                "url": "https://example.com/news-1",
+                "source": "Reuters",
+                "published_at": "2026-03-21T07:50:00+09:00",
+                "topic": "macro",
+                "source_tier": 1,
+                "summary": "첫 번째 공개 뉴스 요약",
+                "why_it_matters": "첫 번째 공개 뉴스 해석",
+                "sentiment_score": 0.31,
+                "sentiment_confidence": 0.87,
+            },
+            {
+                "title": "두 번째 공개 뉴스",
+                "url": "https://example.com/news-2",
+                "source": "Bloomberg",
+                "published_at": "2026-03-21T07:40:00+09:00",
+                "topic": "macro",
+                "source_tier": 1,
+                "summary": "두 번째 공개 뉴스 요약",
+                "why_it_matters": "두 번째 공개 뉴스 해석",
+                "sentiment_score": -0.28,
+                "sentiment_confidence": 0.91,
+            },
+        ],
+        "all_x_signals": [],
+    }
+
+    payload = build_public_brief(
+        packet=_packet(),
+        briefing=_briefing(),
+        run_at=run_at,
+        public_context=public_context,
+    )
+
+    assert payload["meta"]["sentimentStatus"] == "ok"
+    assert payload["meta"]["signalSentimentStatus"] == "skipped"
+    assert payload["meta"]["newsSentiment"]["count"] == 2
+    assert payload["allNews"][0]["sentimentScore"] == 0.31
+    assert payload["allNews"][1]["sentimentScore"] == -0.28
+
+
+def test_build_public_brief_signal_sentiment_status_independent() -> None:
+    """sentimentStatus(뉴스)와 signalSentimentStatus(시그널)는 독립적으로 반영된다."""
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+    public_context = {
+        "sentiment_status": "ok",
+        "signal_sentiment_status": "failed",
+        "all_news": [],
+        "all_x_signals": [],
+    }
+    payload = build_public_brief(
+        packet=_packet(),
+        briefing=_briefing(),
+        run_at=run_at,
+        public_context=public_context,
+    )
+    # 뉴스 상태는 ok 유지 — 다운스트림 r2_sentiment 계약 보호
+    assert payload["meta"]["sentimentStatus"] == "ok"
+    # 시그널 실패는 별도 필드로 명시
+    assert payload["meta"]["signalSentimentStatus"] == "failed"
+
+
+def test_build_public_brief_persists_public_x_signal_sentiment() -> None:
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+    public_context = {
+        "all_news": [],
+        "all_x_signals": [
+            {
+                "headline": "첫 번째 공개 시그널",
+                "summary": "첫 번째 공개 시그널 요약",
+                "why_it_matters": "첫 번째 공개 시그널 영향",
+                "sentiment": "bullish",
+                "sentiment_score": 0.44,
+                "sentiment_confidence": 0.92,
+                "posted_at": "2026-03-21T07:35:00+09:00",
+            },
+            {
+                "headline": "두 번째 공개 시그널",
+                "summary": "두 번째 공개 시그널 요약",
+                "why_it_matters": "두 번째 공개 시그널 영향",
+                "sentiment": "neutral",
+                "sentiment_score": -0.12,
+                "sentiment_confidence": 0.81,
+                "posted_at": "2026-03-21T07:25:00+09:00",
+            },
+        ],
+        "featured_x_signals": [
+            {
+                "headline": "첫 번째 공개 시그널",
+                "summary": "첫 번째 공개 시그널 요약",
+                "why_it_matters": "첫 번째 공개 시그널 영향",
+                "sentiment": "bullish",
+                "sentiment_score": 0.44,
+                "sentiment_confidence": 0.92,
+                "posted_at": "2026-03-21T07:35:00+09:00",
+            }
+        ],
+    }
+
+    payload = build_public_brief(
+        packet=_packet(),
+        briefing=_briefing(),
+        run_at=run_at,
+        public_context=public_context,
+    )
+
+    assert payload["meta"]["signalSentiment"]["count"] == 2
+    assert payload["allXSignals"][0]["sentimentScore"] == 0.44
+    assert payload["allXSignals"][0]["sentimentConfidence"] == 0.92
+    assert payload["featuredXSignals"][0]["sentimentScore"] == 0.44
+    assert payload["xSignals"][0]["sentimentScore"] == 0.44
+
+
+def test_build_public_brief_camelcase_sentiment_mirrors_snake_case_values() -> None:
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+    public_context = {
+        "all_news": [
+            {
+                "title": "공개 뉴스",
+                "url": "https://example.com/news-1",
+                "source": "Reuters",
+                "published_at": "2026-03-21T07:50:00+09:00",
+                "topic": "macro",
+                "source_tier": 1,
+                "summary": "공개 뉴스 요약",
+                "why_it_matters": "공개 뉴스 해석",
+                "sentiment_score": 0.31,
+                "sentiment_confidence": 0.87,
+            }
+        ],
+        "all_x_signals": [
+            {
+                "headline": "공개 시그널",
+                "summary": "공개 시그널 요약",
+                "why_it_matters": "공개 시그널 영향",
+                "sentiment": "bullish",
+                "sentiment_score": 0.44,
+                "sentiment_confidence": 0.92,
+                "posted_at": "2026-03-21T07:35:00+09:00",
+            }
+        ],
+        "featured_x_signals": [
+            {
+                "headline": "공개 시그널",
+                "summary": "공개 시그널 요약",
+                "why_it_matters": "공개 시그널 영향",
+                "sentiment": "bullish",
+                "sentiment_score": 0.44,
+                "sentiment_confidence": 0.92,
+                "posted_at": "2026-03-21T07:35:00+09:00",
+            }
+        ],
+    }
+
+    payload = build_public_brief(
+        packet=_packet(),
+        briefing=_briefing(),
+        run_at=run_at,
+        public_context=public_context,
+    )
+
+    news = payload["allNews"][0]
+    signal = payload["allXSignals"][0]
+    featured_signal = payload["featuredXSignals"][0]
+
+    assert news["sentiment_score"] == news["sentimentScore"] == 0.31
+    assert news["sentiment_confidence"] == news["sentimentConfidence"] == 0.87
+    assert news["sentimentLabel"] == "bullish"
+    assert signal["sentiment_score"] == signal["sentimentScore"] == 0.44
+    assert signal["sentiment_confidence"] == signal["sentimentConfidence"] == 0.92
+    assert signal["sentimentLabel"] == "bullish"
+    assert featured_signal["sentiment_score"] == featured_signal["sentimentScore"] == 0.44
+    assert featured_signal["sentiment_confidence"] == featured_signal["sentimentConfidence"] == 0.92
+    assert featured_signal["sentimentLabel"] == "bullish"
 
 
 def test_compute_sentiment_aggregate_normal() -> None:
