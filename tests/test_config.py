@@ -57,6 +57,20 @@ def test_kis_settings_default_to_empty(monkeypatch):
     assert settings.kis_app_secret == ""
 
 
+def test_kis_token_cache_path_default(monkeypatch):
+    monkeypatch.delenv("KIS_TOKEN_CACHE_PATH", raising=False)
+    settings = load_settings()
+    assert settings.kis_token_cache_path.name == "kis_token.json"
+    assert settings.kis_token_cache_path.is_absolute()
+
+
+def test_kis_token_cache_path_custom(monkeypatch, tmp_path):
+    custom = tmp_path / "custom" / "token.json"
+    monkeypatch.setenv("KIS_TOKEN_CACHE_PATH", str(custom))
+    settings = load_settings()
+    assert settings.kis_token_cache_path == custom
+
+
 def test_perplexity_settings_loaded(monkeypatch):
     monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
     monkeypatch.setenv("GROK_API_KEY", "grok-test-key")

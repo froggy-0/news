@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import UTC, datetime, timedelta
+import os
+import tempfile
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -27,7 +31,8 @@ _DOMESTIC_INDEX_TR_ID = "FHPUP02100000"
 _KOSPI_ISCD = "0001"
 _KOSDAQ_ISCD = "1001"
 _TIMEOUT_SECONDS = 15
-_TOKEN: str | None = None
+_TOKEN_EXPIRY_MARGIN = timedelta(minutes=5)
+_KST = timezone(timedelta(hours=9))
 
 _EXCD_MAP: dict[str, str] = {
     "SPY": "AMS",
@@ -49,6 +54,18 @@ _EXCD_MAP: dict[str, str] = {
     "BITB": "AMS",
     "GBTC": "AMS",
 }
+
+
+@dataclass(frozen=True)
+class _TokenRecord:
+    """KIS access token과 만료 시각을 함께 보관합니다."""
+
+    token: str
+    expires_at: datetime  # UTC, timezone-aware
+
+
+# 프로세스 내 인-메모리 캐시 (프로세스 재시작 시 초기화됨)
+_TOKEN_RECORD: _TokenRecord | None = None
 
 
 class _KisRateLimitError(HttpFetchError):
@@ -87,7 +104,102 @@ def _is_kis_rate_limit_payload(payload: dict[str, Any]) -> bool:
     return False
 
 
-def _get_token(app_key: str, app_secret: str) -> str:
+# ---------------------------------------------------------------------------
+# 토큰 캐시 헬퍼
+# ---------------------------------------------------------------------------
+
+
+def _parse_kis_expiry(raw: str) -> datetime | None:
+    """KIS access_token_token_expired 필드를 UTC datetime으로 변환합니다.
+
+    KIS는 "YYYY-MM-DD HH:MM:SS" 형식으로 KST(UTC+9) 시각을 반환합니다.
+    파싱에 실패하면 None을 반환합니다.
+    """
+    text = raw.strip()
+    if not text:
+        return None
+    try:
+        naive = datetime.strptime(text, "%Y-%m-%d %H:%M:%S")
+        return naive.replace(tzinfo=_KST).astimezone(UTC)
+    except ValueError:
+        return None
+
+
+def _is_valid(record: _TokenRecord) -> bool:
+    """토큰 만료까지 _TOKEN_EXPIRY_MARGIN 이상 남아 있으면 True를 반환합니다."""
+    return record.expires_at - _TOKEN_EXPIRY_MARGIN > datetime.now(UTC)
+
+
+def _token_cache_path() -> Path:
+    return load_settings().kis_token_cache_path
+
+
+def _load_cached_token(path: Path) -> _TokenRecord | None:
+    """디스크에서 캐시된 토큰을 읽어 유효하면 반환합니다.
+
+    파일 없음·JSON 파싱 실패·만료 등 모든 오류 상황에서 None을 반환하며
+    예외를 외부로 전파하지 않습니다.
+    """
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        token = str(data.get("access_token", "")).strip()
+        expires_at_str = str(data.get("expires_at", "")).strip()
+        if not token or not expires_at_str:
+            return None
+        expires_at = datetime.fromisoformat(expires_at_str)
+        record = _TokenRecord(token=token, expires_at=expires_at)
+        if not _is_valid(record):
+            return None
+        return record
+    except Exception:
+        return None
+
+
+def _save_token(path: Path, record: _TokenRecord) -> None:
+    """토큰을 원자적으로 디스크에 저장합니다.
+
+    임시 파일에 먼저 쓴 뒤 rename()으로 교체해 partial write를 방지합니다.
+    저장에 실패해도 WARNING 로그만 남기고 예외를 전파하지 않습니다.
+    """
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps(
+            {"access_token": record.token, "expires_at": record.expires_at.isoformat()},
+            indent=2,
+        )
+        fd, tmp_str = tempfile.mkstemp(dir=path.parent, prefix=".kis_token_", suffix=".tmp")
+        try:
+            os.write(fd, payload.encode())
+        finally:
+            os.close(fd)
+        tmp_path = Path(tmp_str)
+        tmp_path.chmod(0o600)
+        tmp_path.replace(path)
+        path.chmod(0o600)
+    except Exception:
+        log_structured(
+            logger,
+            event="kis.token_cache_write_failed",
+            message="KIS 토큰을 파일에 저장하지 못했어요 (캐시 없이 계속 진행).",
+            level=logging.WARNING,
+            path=str(path),
+        )
+
+
+def _invalidate_token_file(path: Path) -> None:
+    """캐시 파일을 삭제합니다. 파일이 없거나 삭제에 실패해도 무시합니다."""
+    try:
+        path.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# 토큰 발급 및 조회
+# ---------------------------------------------------------------------------
+
+
+def _get_token(app_key: str, app_secret: str) -> _TokenRecord:
     try:
         response = requests.post(
             KIS_BASE_URL + _TOKEN_PATH,
@@ -129,20 +241,44 @@ def _get_token(app_key: str, app_secret: str) -> str:
     token = str(payload.get("access_token", "")).strip()
     if not token:
         raise HttpFetchError("KIS token 응답에 access_token이 없어요.", provider="kis")
-    return token
+
+    raw_expiry = str(payload.get("access_token_token_expired", "")).strip()
+    expires_at = _parse_kis_expiry(raw_expiry) or (
+        datetime.now(UTC) + timedelta(hours=23, minutes=30)
+    )
+    return _TokenRecord(token=token, expires_at=expires_at)
 
 
 def _ensure_token() -> str:
-    global _TOKEN
-    if _TOKEN is not None:
-        return _TOKEN
+    """유효한 KIS access token을 반환합니다.
 
+    조회 우선순위:
+      1. 인-메모리 캐시 (_TOKEN_RECORD)
+      2. 파일 캐시 (kis_token_cache_path)
+      3. KIS API 신규 발급 → 파일 저장
+    """
+    global _TOKEN_RECORD
+
+    # Tier 1: 인-메모리 캐시
+    if _TOKEN_RECORD is not None and _is_valid(_TOKEN_RECORD):
+        return _TOKEN_RECORD.token
+
+    # Tier 2: 파일 캐시
+    cache_path = _token_cache_path()
+    record = _load_cached_token(cache_path)
+    if record is not None:
+        _TOKEN_RECORD = record
+        return record.token
+
+    # Tier 3: API 신규 발급
     app_key, app_secret = _credentials()
     if not app_key or not app_secret:
         raise HttpFetchError("KIS 인증 정보가 없어 token을 발급할 수 없어요.", provider="kis")
 
-    _TOKEN = _get_token(app_key, app_secret)
-    return _TOKEN
+    record = _get_token(app_key, app_secret)
+    _save_token(cache_path, record)
+    _TOKEN_RECORD = record
+    return record.token
 
 
 def _build_headers(token: str, *, tr_id: str) -> dict[str, str]:
@@ -232,7 +368,7 @@ def _authorized_kis_get(
     tr_id: str,
     target: str,
 ) -> dict[str, Any]:
-    global _TOKEN
+    global _TOKEN_RECORD
 
     def _request() -> dict[str, Any]:
         token = _ensure_token()
@@ -249,7 +385,9 @@ def _authorized_kis_get(
     except HttpFetchError as exc:
         if exc.status_code != 401:
             raise
-        _TOKEN = None
+        # 토큰 만료 — 인-메모리 및 파일 캐시 모두 무효화 후 재시도
+        _TOKEN_RECORD = None
+        _invalidate_token_file(_token_cache_path())
         return _request()
 
 
