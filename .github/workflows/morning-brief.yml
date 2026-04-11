@@ -71,6 +71,15 @@ jobs:
           restore-keys: |
             market-snapshot-
 
+      - name: Restore KIS token cache
+        id: cache-kis-token
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
+        with:
+          path: .cache/kis_token
+          key: kis-token-${{ steps.cache-meta.outputs.day }}
+          restore-keys: |
+            kis-token-
+
       - name: Resolve cache restore status
         id: cache-status
         shell: bash
@@ -134,6 +143,7 @@ jobs:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           KIS_APP_KEY: ${{ secrets.KIS_APP_KEY || '' }}
           KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET || '' }}
+          KIS_TOKEN_CACHE_PATH: .cache/kis_token/token.json
           PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
           GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
           GROK_MODEL: ${{ vars.GROK_MODEL || 'grok-4.20-beta-latest-non-reasoning' }}
@@ -195,6 +205,13 @@ jobs:
             echo "- Pages deploy target: \`${deploy_target}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Save KIS token cache
+        if: always()
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
+        with:
+          path: .cache/kis_token
+          key: kis-token-${{ steps.cache-meta.outputs.day }}
+
       - name: Save BTC ETF cache
         if: always()
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
@@ -249,6 +266,12 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Compute cache keys
+        id: cache-meta
+        shell: bash
+        run: |
+          echo "day=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
       - name: Restore pip cache
         id: cache-pip
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
@@ -270,6 +293,14 @@ jobs:
           path: ~/.cache/pip
           key: pip-sentiment-join-${{ hashFiles('requirements.txt', 'requirements-analysis.txt') }}
 
+      - name: Restore KIS token cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
+        with:
+          path: .cache/kis_token
+          key: kis-token-${{ steps.cache-meta.outputs.day }}
+          restore-keys: |
+            kis-token-
+
       - name: Run sentiment time join
         shell: bash
         run: make sentiment-join PYTHON=python
@@ -281,9 +312,17 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY || '' }}
           KIS_APP_KEY: ${{ secrets.KIS_APP_KEY || '' }}
           KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET || '' }}
+          KIS_TOKEN_CACHE_PATH: .cache/kis_token/token.json
           SENTIMENT_JOIN_LOOKBACK_DAYS: ${{ vars.SENTIMENT_JOIN_LOOKBACK_DAYS || '30' }}
           SENTIMENT_JOIN_RETAIN_DAYS: ${{ vars.SENTIMENT_JOIN_RETAIN_DAYS || '90' }}
           LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+
+      - name: Save KIS token cache
+        if: always()
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
+        with:
+          path: .cache/kis_token
+          key: kis-token-${{ steps.cache-meta.outputs.day }}
 
       - name: Upload sentiment join artifacts
         if: always()

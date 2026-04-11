@@ -39,6 +39,7 @@ class Settings:
     fred_api_key: str
     kis_app_key: str
     kis_app_secret: str
+    kis_token_cache_path: Path
     perplexity_api_key: str
     perplexity_use_sonar: bool
     perplexity_sonar_model: str
@@ -171,6 +172,11 @@ def load_settings() -> Settings:
         fred_api_key=os.getenv("FRED_API_KEY", "").strip(),
         kis_app_key=os.getenv("KIS_APP_KEY", "").strip(),
         kis_app_secret=os.getenv("KIS_APP_SECRET", "").strip(),
+        kis_token_cache_path=Path(
+            os.getenv("KIS_TOKEN_CACHE_PATH", "~/.cache/morning_brief/kis_token.json")
+        )
+        .expanduser()
+        .resolve(),
         perplexity_api_key=os.getenv("PERPLEXITY_API_KEY", "").strip(),
         perplexity_use_sonar=_env_bool("PERPLEXITY_USE_SONAR_SUMMARY", True),
         perplexity_sonar_model=os.getenv("PERPLEXITY_SONAR_MODEL", "sonar").strip(),
