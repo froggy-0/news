@@ -93,6 +93,13 @@ PROVIDER_POLICIES = {
         base_backoff_seconds=1.2,
         max_attempts=3,
     ),
+    "bybit": ProviderPolicy(
+        name="bybit",
+        min_interval_seconds=0.1,
+        retryable_statuses=frozenset({429, 500, 502, 503, 504}),
+        base_backoff_seconds=1.2,
+        max_attempts=3,
+    ),
 }
 
 _provider_last_request_at: dict[str, float] = {}

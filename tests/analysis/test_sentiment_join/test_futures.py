@@ -30,9 +30,16 @@ def test_extract_daily_oi_uses_sum_open_interest_value() -> None:
 def test_fetch_futures_data_returns_nan_grid_when_all_requests_fail(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Binance fapi 전부 실패
     monkeypatch.setattr(futures, "_fetch_funding_rate_history", lambda start_ms: [])
-    monkeypatch.setattr(futures, "_fetch_oi_history", lambda start_ms: [])
-    monkeypatch.setattr(futures, "_fetch_long_short_ratio", lambda start_ms: [])
+    monkeypatch.setattr(futures, "_fetch_oi_history", lambda limit_days: [])
+    monkeypatch.setattr(futures, "_fetch_long_short_ratio", lambda limit_days: [])
+    # Lambda ARN 미설정 → Lambda 경로 skip
+    monkeypatch.delenv("FUTURES_LAMBDA_ARN", raising=False)
+    # Bybit도 전부 실패
+    monkeypatch.setattr(futures, "_fetch_bybit_funding_rows", lambda *a, **kw: [])
+    monkeypatch.setattr(futures, "_fetch_bybit_oi_rows", lambda *a, **kw: [])
+    monkeypatch.setattr(futures, "_fetch_bybit_lsr_rows", lambda *a, **kw: [])
 
     df = futures.fetch_futures_data(lookback_days=2)
 

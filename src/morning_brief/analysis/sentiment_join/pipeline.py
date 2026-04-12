@@ -154,7 +154,7 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             usdkrw_close_df = _empty_close_frame(btc_start_date, end_date)
 
         # Req 11: 선물 지표 수집 (실패 시 빈 DataFrame — merge_sources에서 NaN 컬럼으로 처리)
-        futures_df = fetch_futures_data(settings.lookback_days)
+        futures_df = fetch_futures_data(settings.lookback_days, settings.futures_lambda_arn)
         _log_source_complete(
             "futures",
             futures_df,
