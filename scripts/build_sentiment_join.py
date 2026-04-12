@@ -12,6 +12,8 @@ if str(SRC_PATH) not in sys.path:
 if __name__ == "__main__":
     from morning_brief.analysis.sentiment_join.config import load_sentiment_join_settings
     from morning_brief.analysis.sentiment_join.pipeline import run_sentiment_join
+    from morning_brief.logging_utils import setup_logging
 
     settings = load_sentiment_join_settings()
+    setup_logging(output_dir=settings.output_dir)
     sys.exit(run_sentiment_join(settings))
