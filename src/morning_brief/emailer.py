@@ -1636,6 +1636,7 @@ def _build_email_context_v2(
             else event_calendar
         ),
         "data_quality_status": data_quality_status,
+        "data_quality_line": f"데이터 품질 상태: {data_quality_status}",
         "footer_notes": footer_notes if data_quality_status != "ok" else [],
         "unsubscribe_url": unsubscribe_url or "",
         "github_url": PROJECT_GITHUB_URL,

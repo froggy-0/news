@@ -265,6 +265,11 @@ def build_stats_metadata_payload(
     granger_results: list[dict[str, Any]],
     vif_diagnostics: list[dict[str, Any]] | None,
     pca_summary: dict[str, Any] | None,
+    rows_before_outlier_filter: int | None = None,
+    rows_after_outlier_filter: int | None = None,
+    outlier_filtered_count: int | None = None,
+    outlier_filtered_ratio: float | None = None,
+    hybrid_signal_label: str | None = None,
 ) -> bytes:
     payload = {
         "run_id": run_id,
@@ -273,6 +278,11 @@ def build_stats_metadata_payload(
         "granger_results": granger_results,
         "vif_diagnostics": vif_diagnostics or [],
         "pca_summary": pca_summary or {},
+        "rows_before_outlier_filter": rows_before_outlier_filter,
+        "rows_after_outlier_filter": rows_after_outlier_filter,
+        "outlier_filtered_count": outlier_filtered_count,
+        "outlier_filtered_ratio": outlier_filtered_ratio,
+        "hybrid_signal_label": hybrid_signal_label,
     }
     return json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
 

@@ -16,6 +16,7 @@ def _sample_df(rows: int = 35) -> pd.DataFrame:
             "btc_log_return": [0.01] * rows,
             "btc_long_short_ratio": [0.9] * rows,
             "btc_long_short_ratio_lag1": [0.9] * rows,
+            "etf_net_inflow_usd_lag1": [1000000.0] * rows,
         }
     )
 
@@ -61,6 +62,9 @@ def test_run_statistical_tests_invokes_expected_pairs(monkeypatch: pytest.Monkey
         ("btc_long_short_ratio_lag1", "btc_log_return", 1),
         ("btc_long_short_ratio_lag1", "btc_log_return", 2),
         ("btc_long_short_ratio_lag1", "btc_log_return", 3),
+        ("etf_net_inflow_usd_lag1", "btc_log_return", 1),
+        ("etf_net_inflow_usd_lag1", "btc_log_return", 2),
+        ("etf_net_inflow_usd_lag1", "btc_log_return", 3),
     ]
 
 

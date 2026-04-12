@@ -87,19 +87,19 @@ def test_fetch_btc_close_binance_falls_back_on_failure(
     )
 
     fallback_df = pd.DataFrame({"date": ["2026-04-10"], "close": [70000.0]})
-    fallback_df.attrs["fallback_used"] = False  # CoinGecko 성공
+    fallback_df.attrs["fallback_used"] = True
 
-    monkeypatch.setattr(btc_prices, "fetch_btc_close", lambda *args, **kwargs: fallback_df)
+    monkeypatch.setattr(btc_prices, "fetch_btc_close_yfinance", lambda *args, **kwargs: fallback_df)
 
     df = binance.fetch_btc_close_binance("2026-04-10", "2026-04-10")
 
     assert df.attrs["fallback_used"] is True
-    assert df.attrs["btc_source"] == "coingecko"
+    assert df.attrs["btc_source"] == "yfinance"
     assert "btc_quote_volume" in df.columns
     assert df["btc_quote_volume"].isna().all()
 
 
-def test_fetch_btc_close_binance_fallback_yfinance_when_coingecko_fails(
+def test_fetch_btc_close_binance_fallback_yfinance(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -109,9 +109,9 @@ def test_fetch_btc_close_binance_fallback_yfinance_when_coingecko_fails(
     )
 
     fallback_df = pd.DataFrame({"date": ["2026-04-10"], "close": [70000.0]})
-    fallback_df.attrs["fallback_used"] = True  # yfinance 사용됨
+    fallback_df.attrs["fallback_used"] = True
 
-    monkeypatch.setattr(btc_prices, "fetch_btc_close", lambda *args, **kwargs: fallback_df)
+    monkeypatch.setattr(btc_prices, "fetch_btc_close_yfinance", lambda *args, **kwargs: fallback_df)
 
     df = binance.fetch_btc_close_binance("2026-04-10", "2026-04-10")
 

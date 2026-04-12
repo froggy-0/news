@@ -67,6 +67,7 @@ def test_render_brief_prompts_contains_contract_and_packet(monkeypatch):
     assert '"topic":"macro"' in user_prompt
     assert '"why_it_matters":"금리 흐름을 읽는 데 도움이 되는 기사예요."' in user_prompt
     assert '"official_signals"' in user_prompt
+    assert '"sentiment_intelligence"' in user_prompt
     assert '"source_tier"' not in user_prompt
     assert '"preferred_source"' not in user_prompt
     assert "Sonar 토픽 요약과 X 시장 시그널은 news_focus_json 안에 포함" not in user_prompt
@@ -103,16 +104,23 @@ def test_build_news_focus_keeps_only_minimum_selected_context():
         "topic_summaries": [{"topic": "macro"}],
         "x_market_signals": [{"headline": "signal"}],
         "sonar_context": {"key_narrative": "narrative"},
+        "sentiment_intelligence": {
+            "hybrid_signal_label": "risk_on",
+            "hybrid_index_delta": 0.42,
+            "granger_summary": {"significant": [{"predictor": "news_sentiment_mean", "lag": 1}]},
+            "etf_flow_summary": {"direction": "inflow"},
+        },
     }
 
     payload = _build_news_focus(packet)
 
-    assert set(payload.keys()) == {"top_items", "official_signals"}
+    assert set(payload.keys()) == {"top_items", "official_signals", "sentiment_intelligence"}
     assert payload["top_items"][0]["title"] == "Example"
     assert "source_tier" not in payload["top_items"][0]
     assert "preferred_source" not in payload["top_items"][0]
     assert len(payload["official_signals"]) == 1
     assert payload["official_signals"][0]["title"] == "Official update"
+    assert payload["sentiment_intelligence"]["hybrid_signal_label"] == "risk_on"
 
 
 def test_prompt_cache_key_is_stable_and_sanitized(monkeypatch):

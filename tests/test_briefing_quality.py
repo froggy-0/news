@@ -743,7 +743,8 @@ def test_generate_briefing_rewrites_when_validator_returns_failed_review_without
 
     briefing = generate_briefing(packet=packet, settings=settings)
 
-    assert briefing.strip() == rewritten_text.strip()
+    assert rewritten_text.strip() in briefing
+    assert briefing.strip().endswith("데이터 품질 상태: ok")
     assert len(calls) == 4
 
 
@@ -779,7 +780,8 @@ def test_generate_briefing_keeps_draft_when_validator_json_is_invalid(monkeypatc
 
     briefing = generate_briefing(packet=packet, settings=settings)
 
-    assert briefing.strip() == draft_text.strip()
+    assert draft_text.strip() in briefing
+    assert briefing.strip().endswith("데이터 품질 상태: ok")
     assert len(calls) == 2
 
 

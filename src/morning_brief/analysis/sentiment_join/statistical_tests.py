@@ -16,12 +16,14 @@ GRANGER_PAIRS = [
     ("funding_rate_lag1", "btc_log_return"),
     ("fng_value", "btc_log_return"),
     ("btc_long_short_ratio_lag1", "btc_log_return"),
+    ("etf_net_inflow_usd_lag1", "btc_log_return"),
 ]
 ADF_TARGETS = [
     "btc_log_return",
     "funding_rate",
     "oi_change_pct_lag1",
     "btc_long_short_ratio",
+    "etf_net_inflow_usd_lag1",
 ]
 
 

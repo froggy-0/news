@@ -33,6 +33,10 @@ MASTER_SCHEMA = pa.DataFrameSchema(
         "oi_change_pct_lag1": pa.Column(float, nullable=True),
         "btc_long_short_ratio": pa.Column(float, pa.Check.ge(0), nullable=True),
         "btc_long_short_ratio_lag1": pa.Column(float, nullable=True),
+        "etf_total_btc": pa.Column(float, pa.Check.ge(0), nullable=True),
+        "etf_total_aum_usd": pa.Column(float, pa.Check.ge(0), nullable=True),
+        "etf_net_inflow_usd": pa.Column(float, nullable=True),
+        "etf_net_inflow_usd_lag1": pa.Column(float, nullable=True),
         # Req 13: PCA 하이브리드 지수 (데이터 부족 시 NaN 허용)
         "hybrid_index": pa.Column(float, nullable=True),
     },

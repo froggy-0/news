@@ -93,9 +93,31 @@ def _build_news_focus(packet: dict) -> dict:
         if item["official_source"] or item["provider"] == providers.GROK_OFFICIAL_X:
             official_signals.append(item)
 
+    sentiment_intelligence = packet.get("sentiment_intelligence", {})
+    sentiment_summary = {}
+    if isinstance(sentiment_intelligence, dict):
+        granger_summary = sentiment_intelligence.get("granger_summary", {})
+        etf_flow_summary = sentiment_intelligence.get("etf_flow_summary", {})
+        significant_signals = []
+        if isinstance(granger_summary, dict):
+            raw_signals = granger_summary.get("significant", [])
+            if isinstance(raw_signals, list):
+                significant_signals = raw_signals[:3]
+        if isinstance(etf_flow_summary, dict):
+            etf_flow_direction = etf_flow_summary.get("direction")
+        else:
+            etf_flow_direction = None
+        sentiment_summary = {
+            "hybrid_signal_label": sentiment_intelligence.get("hybrid_signal_label"),
+            "hybrid_index_delta": sentiment_intelligence.get("hybrid_index_delta"),
+            "significant_granger_signals": significant_signals,
+            "etf_flow_direction": etf_flow_direction,
+        }
+
     return {
         "top_items": top_items,
         "official_signals": official_signals,
+        "sentiment_intelligence": sentiment_summary,
     }
 
 

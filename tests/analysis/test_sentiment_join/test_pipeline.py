@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -88,6 +89,17 @@ def _btc_close_df(
     return df
 
 
+def _etf_df(main_dates: list[str]) -> pd.DataFrame:
+    totals = [1000.0 + idx * 10.0 for idx in range(len(main_dates))]
+    return pd.DataFrame(
+        {
+            "date": main_dates,
+            "etf_total_btc": totals,
+            "etf_total_aum_usd": [value * 85000 for value in totals],
+        }
+    )
+
+
 def test_run_sentiment_join_success_creates_parquet(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -107,6 +119,9 @@ def test_run_sentiment_join_success_creates_parquet(
         pipeline,
         "fetch_usdkrw_close",
         lambda *args, **kwargs: _close_df(btc_dates, with_gap=True, base=1300.0),
+    )
+    monkeypatch.setattr(
+        pipeline, "fetch_etf_flow_features", lambda *args, **kwargs: _etf_df(main_dates)
     )
 
     exit_code = pipeline.run_sentiment_join(settings)
@@ -144,6 +159,9 @@ def test_run_sentiment_join_allows_single_source_failure(
     monkeypatch.setattr(
         pipeline, "fetch_usdkrw_close", lambda *args, **kwargs: _close_df(btc_dates, base=1300.0)
     )
+    monkeypatch.setattr(
+        pipeline, "fetch_etf_flow_features", lambda *args, **kwargs: _etf_df(main_dates)
+    )
 
     exit_code = pipeline.run_sentiment_join(settings)
     file_path = next(tmp_path.glob("master_*.parquet"))
@@ -180,6 +198,7 @@ def test_run_sentiment_join_returns_one_when_all_sources_fail(
     )
     monkeypatch.setattr(pipeline, "fetch_btc_close_binance", lambda *args, **kwargs: pd.DataFrame())
     monkeypatch.setattr(pipeline, "fetch_usdkrw_close", lambda *args, **kwargs: pd.DataFrame())
+    monkeypatch.setattr(pipeline, "fetch_etf_flow_features", lambda *args, **kwargs: pd.DataFrame())
 
     exit_code = pipeline.run_sentiment_join(settings)
 
@@ -203,6 +222,9 @@ def test_run_sentiment_join_returns_one_on_validation_failure(
     )
     monkeypatch.setattr(
         pipeline, "fetch_usdkrw_close", lambda *args, **kwargs: _close_df(btc_dates, base=1300.0)
+    )
+    monkeypatch.setattr(
+        pipeline, "fetch_etf_flow_features", lambda *args, **kwargs: _etf_df(main_dates)
     )
     monkeypatch.setattr(
         pipeline,
@@ -236,6 +258,9 @@ def test_run_sentiment_join_records_ffill_days_in_metadata(
         pipeline,
         "fetch_usdkrw_close",
         lambda *args, **kwargs: _close_df(btc_dates, with_gap=True, base=1300.0),
+    )
+    monkeypatch.setattr(
+        pipeline, "fetch_etf_flow_features", lambda *args, **kwargs: _etf_df(main_dates)
     )
 
     assert pipeline.run_sentiment_join(settings) == 0
@@ -273,6 +298,9 @@ def test_run_sentiment_join_btc_quote_volume_passes_through(
     monkeypatch.setattr(
         pipeline, "fetch_usdkrw_close", lambda *args, **kwargs: _close_df(btc_dates, base=1300.0)
     )
+    monkeypatch.setattr(
+        pipeline, "fetch_etf_flow_features", lambda *args, **kwargs: _etf_df(main_dates)
+    )
 
     assert pipeline.run_sentiment_join(settings) == 0
 
@@ -300,6 +328,9 @@ def test_run_sentiment_join_btc_source_recorded_in_metadata(
     )
     monkeypatch.setattr(
         pipeline, "fetch_usdkrw_close", lambda *args, **kwargs: _close_df(btc_dates, base=1300.0)
+    )
+    monkeypatch.setattr(
+        pipeline, "fetch_etf_flow_features", lambda *args, **kwargs: _etf_df(main_dates)
     )
 
     assert pipeline.run_sentiment_join(settings) == 0
@@ -330,6 +361,9 @@ def test_run_sentiment_join_adf_dict_structure_compatible(
     monkeypatch.setattr(
         pipeline, "fetch_usdkrw_close", lambda *args, **kwargs: _close_df(btc_dates, base=1300.0)
     )
+    monkeypatch.setattr(
+        pipeline, "fetch_etf_flow_features", lambda *args, **kwargs: _etf_df(main_dates)
+    )
     # 다중 ADF 구조 mock
     monkeypatch.setattr(
         pipeline,
@@ -349,3 +383,41 @@ def test_run_sentiment_join_adf_dict_structure_compatible(
 
     stats = json.loads(meta[b"sentiment_join_stats"].decode())
     assert "btc_log_return" in stats["adf"]
+
+
+def test_run_sentiment_join_records_etf_columns_and_outlier_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _settings(tmp_path)
+    _, _, _, main_dates, btc_dates = _core_dates(settings)
+
+    monkeypatch.setattr(
+        pipeline, "fetch_r2_sentiment", lambda *args, **kwargs: _sentiment_df(main_dates)
+    )
+    monkeypatch.setattr(pipeline, "fetch_fng", lambda *args, **kwargs: _fng_df(main_dates))
+    monkeypatch.setattr(
+        pipeline,
+        "fetch_btc_close_binance",
+        lambda *args, **kwargs: _btc_close_df(btc_dates, base=100.0),
+    )
+    monkeypatch.setattr(
+        pipeline, "fetch_usdkrw_close", lambda *args, **kwargs: _close_df(btc_dates, base=1300.0)
+    )
+    monkeypatch.setattr(
+        pipeline, "fetch_etf_flow_features", lambda *args, **kwargs: _etf_df(main_dates)
+    )
+
+    assert pipeline.run_sentiment_join(settings) == 0
+
+    file_path = next(tmp_path.glob("master_*.parquet"))
+    saved = pd.read_parquet(file_path)
+    stats = json.loads(pq.read_metadata(file_path).metadata[b"sentiment_join_stats"].decode())
+
+    assert "etf_total_btc" in saved.columns
+    assert "etf_total_aum_usd" in saved.columns
+    assert "etf_net_inflow_usd" in saved.columns
+    assert "etf_net_inflow_usd_lag1" in saved.columns
+    assert "rows_before_outlier_filter" in stats
+    assert "rows_after_outlier_filter" in stats
+    assert "hybrid_signal_label" in stats

@@ -9,6 +9,9 @@
 - `news_focus_json`의 `x_market_signals`가 있으면, `sentiment`(bullish/bearish/neutral)를 Section 0 판단 근거의 보조 시그널로 참고해요.
 - `x_market_signals`의 `source_handle`이 @DeItaone, @FirstSquawk 등 속보 계정이면 시장 반응 속도가 빠른 뉴스로 우선 반영해요.
 - `news_focus_json`의 `sonar_context`가 있으면, `key_narrative`를 Section 0 핵심 요약의 보조 근거로 참고하고, `analyses`의 `cross_sector_link`를 Section 4-3 섹터 매핑에 활용해요.
+- `news_focus_json.sentiment_intelligence`가 있으면, 하이브리드 지수 방향과 ETF 자금 흐름을 뉴스 해석의 정량 근거로 함께 참고해요.
+- `news_focus_json.sentiment_intelligence.significant_granger_signals`가 비어 있지 않을 때만 “선행 시그널” 표현을 사용할 수 있어요.
+- 하이브리드 지수와 뉴스 톤이 충돌하면 둘 중 하나를 단정하지 말고 괴리를 설명해요.
 </mission>
 
 <output_contract>
@@ -121,6 +124,7 @@
 - 데이터가 누락되거나 불확실하면 단정하지 말고 "이번 집계에서 확인되지 않았어요" 형태로 명확히 표시해요.
 - 숫자를 쓸 때는 단위와 기준 시점을 함께 적어요. 예: `전일 종가 대비 +1.20%`, `전일 대비 +4bp`.
 - 금리, 달러, 주가, 비트코인 흐름이 서로 어긋나면 그 괴리를 한 문장으로 반드시 설명해요.
+- 본문 하단에는 `데이터 품질 상태: ok/degraded/critical` 한 줄을 반드시 포함해요.
 </quality_rules>
 
 <internal_checklist>
