@@ -57,13 +57,13 @@ npm run deploy:production   # Cloudflare production 배포
 
 ## Architecture
 
-### Backend Pipeline (7단계)
+### Backend Pipeline (8단계)
 
 `main.py` → `src/morning_brief/pipeline.py`의 `run_pipeline()` 진입점.
 
 | 단계 | 모듈 | 역할 |
 |------|------|------|
-| 1. Market Data | `data/market.py` | FRED(거시), Stooq(지수), yfinance(주식), CoinGecko(BTC), ETF 공식 사이트 |
+| 1. Market Data | `data/market.py` | FRED(거시), KIS(지수·환율), yfinance(주식 fallback), CoinGecko(BTC), ETF 공식 사이트 |
 | 2. Keywords | `data/market.py` | VIX 스파이크·금리·지수·BTC 변동 감지 → 검색 토픽 생성 |
 | 3. News | `data/news.py` | Grok X 신호 → Perplexity Sonar → Grok 키워드 검색 → fallback(Gemini/RSS) |
 | 3.5. Sentiment | `data/finbert_sentiment.py` | ProsusAI/finbert로 뉴스·X시그널 영문 원본에 감성 점수(-1~1) 부여. `FINBERT_ENABLED=false`로 비활성화 가능. 선택적 의존성(`requirements-ml.txt`) |
@@ -111,7 +111,7 @@ Next.js 15 App Router + SSG(`output: 'export'`), Cloudflare Pages 배포.
 
 ### Data Sources
 
-- **시장**: FRED, Stooq, yfinance, CoinGecko, BlackRock/Bitwise 공식 ETF 페이지
+- **시장**: FRED, KIS, yfinance, CoinGecko, BlackRock/Bitwise 공식 ETF 페이지
 - **뉴스**: Perplexity (Sonar/Search), Grok (X API + 웹 검색), Gemini Grounding, RSS/NewsAPI
 - **LLM**: OpenAI GPT-4 (브리핑 생성·검증)
 - **NLP**: ProsusAI/finbert (뉴스·시그널 감성 점수, 선택적 — `requirements-ml.txt`)
