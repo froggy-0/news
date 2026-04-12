@@ -37,6 +37,15 @@ def _empty_etf_frame(start_date: str, end_date: str) -> pd.DataFrame:
     )
 
 
+def _coerce_float(value: object) -> float | None:
+    if not isinstance(value, (int, float, str, bytes)):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _query_gold_history(start_date: str, end_date: str) -> list[dict[str, Any]]:
     supabase_url = os.getenv("SUPABASE_URL", "").strip()
     service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
@@ -92,10 +101,9 @@ def _rows_to_totals(rows: list[dict[str, Any]]) -> dict[str, dict[str, float]]:
             continue
         if source_type == "aggregator" or quality_status == "critical":
             continue
-        try:
-            total_btc = float(row.get("total_btc"))
-            aum_usd = float(row.get("aum_usd"))
-        except (TypeError, ValueError):
+        total_btc = _coerce_float(row.get("total_btc"))
+        aum_usd = _coerce_float(row.get("aum_usd"))
+        if total_btc is None or aum_usd is None:
             continue
         slot = by_date.setdefault(as_of_date, {"etf_total_btc": 0.0, "etf_total_aum_usd": 0.0})
         slot["etf_total_btc"] += total_btc
