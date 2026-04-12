@@ -26,6 +26,7 @@ def _settings(tmp_path: Path) -> SentimentJoinSettings:
         kis_app_key="",
         kis_app_secret="",
         binance_api_key="",
+        futures_lambda_arn="",
     )
 
 
