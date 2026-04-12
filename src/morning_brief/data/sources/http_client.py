@@ -218,6 +218,37 @@ def get_json_with_retry(
     return payload
 
 
+def get_list_with_retry(
+    url: str,
+    *,
+    params: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+    provider: str | None = None,
+    timeout: int = DEFAULT_TIMEOUT,
+    retries: int = DEFAULT_RETRIES,
+    backoff_seconds: float = DEFAULT_BACKOFF,
+) -> list[Any]:
+    response = _request_with_retry(
+        url,
+        params=params,
+        headers=headers,
+        provider=provider,
+        timeout=timeout,
+        retries=retries,
+        backoff_seconds=backoff_seconds,
+    )
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise HttpFetchError(f"JSON 응답 형식을 확인하지 못했어요: {url}") from exc
+
+    if not isinstance(payload, list):
+        raise HttpFetchError(f"JSON 응답이 배열 형식이 아닙니다: {url}")
+
+    return payload
+
+
 def get_text_with_retry(
     url: str,
     *,

@@ -20,6 +20,7 @@ def _valid_df() -> pd.DataFrame:
             "fng_value": pd.array([55], dtype="Int64"),
             "btc_log_return": [0.01],
             "btc_return": [0.01],
+            "btc_quote_volume": [float("nan")],
             "usdkrw_log_return": [0.001],
             "usdkrw_return": [0.001],
             "is_outlier": [False],
@@ -28,6 +29,8 @@ def _valid_df() -> pd.DataFrame:
             "open_interest_usd": [float("nan")],
             "funding_rate_lag1": [float("nan")],
             "oi_change_pct_lag1": [float("nan")],
+            "btc_long_short_ratio": [float("nan")],
+            "btc_long_short_ratio_lag1": [float("nan")],
             # Req 13: 하이브리드 지수 (NaN 허용)
             "hybrid_index": [float("nan")],
         }
@@ -86,3 +89,30 @@ def test_validate_master_rejects_extra_columns() -> None:
     df["close"] = [100.0]
     with pytest.raises(SchemaError):
         validate_master(df)
+
+
+def test_validate_master_accepts_new_nullable_columns() -> None:
+    df = _valid_df()
+    # btc_quote_volume, btc_long_short_ratio, btc_long_short_ratio_lag1 모두 NaN 허용
+    validate_master(df)
+
+
+def test_validate_master_rejects_negative_quote_volume() -> None:
+    df = _valid_df()
+    df["btc_quote_volume"] = [-1.0]
+    with pytest.raises(SchemaError):
+        validate_master(df)
+
+
+def test_validate_master_rejects_negative_long_short_ratio() -> None:
+    df = _valid_df()
+    df["btc_long_short_ratio"] = [-0.1]
+    with pytest.raises(SchemaError):
+        validate_master(df)
+
+
+def test_validate_master_strict_requires_all_new_columns() -> None:
+    for missing_col in ("btc_quote_volume", "btc_long_short_ratio", "btc_long_short_ratio_lag1"):
+        df = _valid_df().drop(columns=[missing_col])
+        with pytest.raises(SchemaError):
+            validate_master(df)

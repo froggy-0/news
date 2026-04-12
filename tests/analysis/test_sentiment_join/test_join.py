@@ -44,6 +44,19 @@ def _btc_df(days: int) -> pd.DataFrame:
             "date": dates,
             "btc_log_return": [0.01] * days,
             "btc_return": returns,
+            "btc_quote_volume": [1e9] * days,
+        }
+    )
+
+
+def _futures_df(days: int) -> pd.DataFrame:
+    dates = _date_range(days)
+    return pd.DataFrame(
+        {
+            "date": dates,
+            "funding_rate": [0.001] * days,
+            "open_interest_usd": [1000.0 + idx for idx in range(days)],
+            "btc_long_short_ratio": [0.9] * days,
         }
     )
 
@@ -83,12 +96,15 @@ def test_merge_sources_inner_join_and_drop_missing_sentiment(
         "fng_value",
         "btc_log_return",
         "btc_return",
+        "btc_quote_volume",
         "usdkrw_log_return",
         "usdkrw_return",
         "funding_rate",
         "open_interest_usd",
+        "btc_long_short_ratio",
         "funding_rate_lag1",
         "oi_change_pct_lag1",
+        "btc_long_short_ratio_lag1",
         "is_outlier",
     ]
     assert merged["news_sentiment_mean"].notna().all()
@@ -133,19 +149,39 @@ def test_merge_sources_sources_used_excludes_all_nan_btc() -> None:
 
 
 def test_merge_sources_adds_lagged_futures_columns() -> None:
-    futures_df = pd.DataFrame(
-        {
-            "date": _date_range(35),
-            "funding_rate": [0.001] * 35,
-            "open_interest_usd": [1000.0 + idx for idx in range(35)],
-        }
+    merged = merge_sources(
+        _sentiment_df(35), _fng_df(35), _btc_df(35), _usdkrw_df(35), _futures_df(35)
     )
-
-    merged = merge_sources(_sentiment_df(35), _fng_df(35), _btc_df(35), _usdkrw_df(35), futures_df)
 
     assert pd.isna(merged.loc[0, "funding_rate_lag1"])
     assert merged.loc[1, "funding_rate_lag1"] == pytest.approx(0.001)
     assert pd.isna(merged.loc[0, "oi_change_pct_lag1"])
+
+
+def test_merge_sources_adds_btc_long_short_ratio_lag1() -> None:
+    merged = merge_sources(
+        _sentiment_df(35), _fng_df(35), _btc_df(35), _usdkrw_df(35), _futures_df(35)
+    )
+
+    assert "btc_long_short_ratio_lag1" in merged.columns
+    assert pd.isna(merged.loc[0, "btc_long_short_ratio_lag1"])
+    assert merged.loc[1, "btc_long_short_ratio_lag1"] == pytest.approx(0.9)
+
+
+def test_merge_sources_outlier_detection_includes_long_short_ratio() -> None:
+    futures_df = _futures_df(40)
+    # 마지막 행에 극단적인 Long/Short Ratio 삽입
+    futures_df.loc[39, "btc_long_short_ratio"] = 999.0
+
+    merged = merge_sources(_sentiment_df(40), _fng_df(40), _btc_df(40), _usdkrw_df(40), futures_df)
+
+    assert bool(merged.iloc[-1]["is_outlier"]) is True
+
+
+def test_merge_sources_btc_quote_volume_preserved() -> None:
+    merged = merge_sources(_sentiment_df(35), _fng_df(35), _btc_df(35), _usdkrw_df(35))
+
+    assert "btc_quote_volume" in merged.columns
 
 
 @settings(max_examples=100)

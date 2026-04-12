@@ -174,3 +174,55 @@ def test_get_text_with_retry_skips_provider_with_open_circuit(monkeypatch):
         http_client.get_text_with_retry("https://example.com/data", provider="perplexity")
 
     assert "quota exhausted" in str(exc_info.value)
+
+
+# --- get_list_with_retry ---
+
+
+def test_get_list_with_retry_returns_list_on_success(monkeypatch):
+    def fake_get(*args, **kwargs):
+        return SimpleNamespace(
+            status_code=200,
+            headers={},
+            json=lambda: [{"a": 1}, {"b": 2}],
+        )
+
+    monkeypatch.setattr(http_client, "is_host_resolvable", lambda *_: True)
+    monkeypatch.setattr(http_client.requests, "get", fake_get)
+    provider_runtime.reset_provider_runtime_state()
+
+    result = http_client.get_list_with_retry("https://example.com/list")
+
+    assert result == [{"a": 1}, {"b": 2}]
+
+
+def test_get_list_with_retry_raises_when_response_is_dict(monkeypatch):
+    def fake_get(*args, **kwargs):
+        return SimpleNamespace(
+            status_code=200,
+            headers={},
+            json=lambda: {"key": "value"},
+        )
+
+    monkeypatch.setattr(http_client, "is_host_resolvable", lambda *_: True)
+    monkeypatch.setattr(http_client.requests, "get", fake_get)
+    provider_runtime.reset_provider_runtime_state()
+
+    with pytest.raises(http_client.HttpFetchError) as exc_info:
+        http_client.get_list_with_retry("https://example.com/notlist")
+
+    assert "배열 형식이 아닙니다" in str(exc_info.value)
+
+
+def test_get_list_with_retry_raises_on_invalid_json(monkeypatch):
+    def fake_get(*args, **kwargs):
+        ns = SimpleNamespace(status_code=200, headers={})
+        ns.json = lambda: (_ for _ in ()).throw(ValueError("bad json"))
+        return ns
+
+    monkeypatch.setattr(http_client, "is_host_resolvable", lambda *_: True)
+    monkeypatch.setattr(http_client.requests, "get", fake_get)
+    provider_runtime.reset_provider_runtime_state()
+
+    with pytest.raises(http_client.HttpFetchError):
+        http_client.get_list_with_retry("https://example.com/badjson")

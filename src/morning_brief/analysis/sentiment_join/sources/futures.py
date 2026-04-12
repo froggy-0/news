@@ -5,13 +5,14 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
-from morning_brief.data.sources.http_client import get_json_with_retry
+from morning_brief.data.sources.http_client import get_list_with_retry
 from morning_brief.logging_utils import log_structured
 
 logger = logging.getLogger(__name__)
 
 BINANCE_FUNDING_URL = "https://fapi.binance.com/fapi/v1/fundingRate"
 BINANCE_OI_URL = "https://fapi.binance.com/futures/data/openInterestHist"
+BINANCE_LSR_URL = "https://fapi.binance.com/futures/data/globalLongShortAccountRatio"
 BINANCE_SYMBOL = "BTCUSDT"
 BINANCE_OI_PERIOD = "1d"
 BINANCE_MAX_LIMIT = 1000
@@ -23,7 +24,7 @@ def _ms_timestamp(dt: datetime) -> int:
 
 def _fetch_funding_rate_history(start_ms: int) -> list[dict]:
     try:
-        return get_json_with_retry(
+        return get_list_with_retry(
             BINANCE_FUNDING_URL,
             params={
                 "symbol": BINANCE_SYMBOL,
@@ -47,7 +48,7 @@ def _fetch_funding_rate_history(start_ms: int) -> list[dict]:
 
 def _fetch_oi_history(start_ms: int) -> list[dict]:
     try:
-        return get_json_with_retry(
+        return get_list_with_retry(
             BINANCE_OI_URL,
             params={
                 "symbol": BINANCE_SYMBOL,
@@ -65,6 +66,31 @@ def _fetch_oi_history(start_ms: int) -> list[dict]:
             message="Binance 미결제약정 이력 수집에 실패했습니다.",
             level=logging.WARNING,
             source="binance_oi",
+            reason=str(exc),
+        )
+        return []
+
+
+def _fetch_long_short_ratio(start_ms: int) -> list[dict]:
+    try:
+        return get_list_with_retry(
+            BINANCE_LSR_URL,
+            params={
+                "symbol": BINANCE_SYMBOL,
+                "period": "1d",
+                "startTime": str(start_ms),
+                "limit": "500",
+            },
+            provider="binance_futures",
+            timeout=20,
+        )
+    except Exception as exc:
+        log_structured(
+            logger,
+            event="source.failed",
+            message="Binance Long/Short Ratio 수집에 실패했습니다.",
+            level=logging.WARNING,
+            source="binance_lsr",
             reason=str(exc),
         )
         return []
@@ -106,20 +132,43 @@ def _extract_daily_oi(rows: list[dict]) -> dict[str, float]:
     return daily
 
 
+def _extract_daily_long_short_ratio(rows: list[dict]) -> dict[str, float]:
+    """일별 글로벌 Long/Short 계좌 비율을 추출합니다.
+
+    longShortRatio 필드는 str 타입으로 반환되므로 float 변환이 필수입니다.
+    값이 1.0을 초과할 수 있습니다(롱 비중이 숏보다 크면 > 1).
+    """
+    daily: dict[str, float] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        ts_ms = row.get("timestamp")
+        lsr_raw = row.get("longShortRatio")
+        if ts_ms is None or lsr_raw is None:
+            continue
+        try:
+            day = datetime.fromtimestamp(int(ts_ms) / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
+            daily[day] = float(lsr_raw)
+        except (TypeError, ValueError):
+            continue
+    return daily
+
+
 def _empty_futures_frame(dates: list[str]) -> pd.DataFrame:
     return pd.DataFrame(
         {
             "date": dates,
             "funding_rate": [float("nan")] * len(dates),
             "open_interest_usd": [float("nan")] * len(dates),
+            "btc_long_short_ratio": [float("nan")] * len(dates),
         }
     )
 
 
 def fetch_futures_data(lookback_days: int) -> pd.DataFrame:
-    """Req 11: Binance 공식 API에서 펀딩비·미결제약정 이력을 수집합니다.
+    """Req 11: Binance 공식 API에서 펀딩비·미결제약정·Long/Short Ratio 이력을 수집합니다.
 
-    Returns DataFrame with columns: date, funding_rate, open_interest_usd.
+    Returns DataFrame with columns: date, funding_rate, open_interest_usd, btc_long_short_ratio.
     On failure, returns a frame of NaN values so the pipeline can continue.
     """
     today = datetime.now(timezone.utc).date()
@@ -130,6 +179,20 @@ def fetch_futures_data(lookback_days: int) -> pd.DataFrame:
     start_ms = _ms_timestamp(datetime(start.year, start.month, start.day, tzinfo=timezone.utc))
     funding_rows = _fetch_funding_rate_history(start_ms)
     oi_rows = _fetch_oi_history(start_ms)
+
+    # LSR 수집은 funding/OI와 독립적으로 실패해도 진행
+    try:
+        lsr_rows = _fetch_long_short_ratio(start_ms)
+    except Exception as exc:
+        log_structured(
+            logger,
+            event="source.failed",
+            message="Binance LSR 수집에 실패했습니다.",
+            level=logging.WARNING,
+            source="binance_lsr",
+            reason=str(exc),
+        )
+        lsr_rows = []
 
     if not funding_rows and not oi_rows:
         log_structured(
@@ -145,9 +208,11 @@ def fetch_futures_data(lookback_days: int) -> pd.DataFrame:
 
     daily_funding = _aggregate_daily_funding(funding_rows)
     daily_oi = _extract_daily_oi(oi_rows)
+    daily_lsr = _extract_daily_long_short_ratio(lsr_rows)
 
     grid["funding_rate"] = [daily_funding.get(d, float("nan")) for d in dates]
     grid["open_interest_usd"] = [daily_oi.get(d, float("nan")) for d in dates]
+    grid["btc_long_short_ratio"] = [daily_lsr.get(d, float("nan")) for d in dates]
     grid.attrs["fallback_used"] = False
 
     log_structured(
@@ -157,6 +222,7 @@ def fetch_futures_data(lookback_days: int) -> pd.DataFrame:
         source="binance_futures",
         funding_days=sum(1 for v in grid["funding_rate"] if pd.notna(v)),
         oi_days=sum(1 for v in grid["open_interest_usd"] if pd.notna(v)),
+        lsr_days=sum(1 for v in grid["btc_long_short_ratio"] if pd.notna(v)),
     )
     return grid
 

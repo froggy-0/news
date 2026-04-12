@@ -70,6 +70,7 @@ def test_load_sentiment_join_settings_uses_defaults(
         "R2_PUBLIC_BUCKET",
         "KIS_APP_KEY",
         "KIS_APP_SECRET",
+        "SENTIMENT_JOIN_BINANCE_KEY",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -82,3 +83,24 @@ def test_load_sentiment_join_settings_uses_defaults(
     assert settings.r2_public_bucket == ""
     assert settings.kis_app_key == ""
     assert settings.kis_app_secret == ""
+    assert settings.binance_api_key == ""
+
+
+def test_load_sentiment_join_settings_binance_key_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("SENTIMENT_JOIN_BINANCE_KEY", raising=False)
+
+    settings = load_sentiment_join_settings()
+
+    assert settings.binance_api_key == ""
+
+
+def test_load_sentiment_join_settings_binance_key_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SENTIMENT_JOIN_BINANCE_KEY", "test-key-123")
+
+    settings = load_sentiment_join_settings()
+
+    assert settings.binance_api_key == "test-key-123"

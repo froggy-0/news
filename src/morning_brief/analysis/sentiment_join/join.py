@@ -85,6 +85,10 @@ def _add_futures_lag_columns(df: pd.DataFrame) -> pd.DataFrame:
         result["oi_change_pct_lag1"] = result["open_interest_usd"].pct_change().shift(1)
     else:
         result["oi_change_pct_lag1"] = float("nan")
+    if "btc_long_short_ratio" in result.columns:
+        result["btc_long_short_ratio_lag1"] = result["btc_long_short_ratio"].shift(1)
+    else:
+        result["btc_long_short_ratio_lag1"] = float("nan")
     return result
 
 
@@ -118,11 +122,18 @@ def merge_sources(
     else:
         merged["funding_rate"] = float("nan")
         merged["open_interest_usd"] = float("nan")
+        merged["btc_long_short_ratio"] = float("nan")
 
     merged = _add_futures_lag_columns(merged)
     merged = detect_outliers_rolling_iqr(
         merged,
-        cols=["btc_return", "usdkrw_return"],
+        cols=[
+            "btc_return",
+            "usdkrw_return",
+            "funding_rate",
+            "open_interest_usd",
+            "btc_long_short_ratio",
+        ],
     )
 
     if len(merged) < 30:
