@@ -140,6 +140,7 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
         btc_source = btc_close_df.attrs.get("btc_source", "unknown")
         if btc_close_df.empty:
             btc_close_df = _empty_close_frame(btc_start_date, end_date)
+            btc_close_df["btc_quote_volume"] = float("nan")
 
         usdkrw_close_df = fetch_usdkrw_close(
             btc_start_date,

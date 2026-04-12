@@ -97,10 +97,15 @@ def _download_with_yfinance(ticker: str, start_date: str, end_date: str) -> pd.D
     )
 
     index = pd.to_datetime(history.index, utc=True)
+    # yfinance 0.2.x에서 multi_level_index=True(기본값)이면
+    # history["Close"]가 Series 대신 DataFrame을 반환합니다.
+    close_col = history["Close"]
+    if isinstance(close_col, pd.DataFrame):
+        close_col = close_col.iloc[:, 0]
     frame = pd.DataFrame(
         {
             "date": index.strftime("%Y-%m-%d"),
-            "close": history["Close"].astype(float).to_list(),
+            "close": close_col.astype(float).tolist(),
         }
     )
     return (
