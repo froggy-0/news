@@ -221,6 +221,7 @@ def test_run_sentiment_join_records_ffill_days_in_metadata(
     file_path = next(tmp_path.glob("master_*.parquet"))
     metadata = pq.read_metadata(file_path).metadata
     assert int(metadata[b"ffill_days"]) >= 2
+    assert b"sentiment_join_stats" in metadata
 
 
 def test_pipeline_does_not_import_main_pipeline() -> None:

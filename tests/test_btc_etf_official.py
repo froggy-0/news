@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 from morning_brief.data.sources import btc_etf_official as official
@@ -42,45 +43,71 @@ TOTAL BITCOIN IN TRUST 193,530.1058
 BITCOIN PER SHARE 0.00101403
 """
 
+FBTC_SAMPLE = """
+Data as of 03/12/2026
+Shares Outstanding 165,000,000
+Net Assets $12,345,678,901
+Bitcoin per share 0.00055123
+Daily Volume 1,234,567
+"""
+
 
 def test_parse_ibit_snapshot_derives_total_btc_from_basket_amount():
     snapshot = official.parse_ibit_snapshot(IBIT_SAMPLE)
 
     assert snapshot.ticker == "IBIT"
-    assert snapshot.as_of == "Mar 11, 2026"
+    assert snapshot.as_of_date == date(2026, 3, 11)
     assert snapshot.shares_outstanding == 1_340_640_000
     assert snapshot.daily_volume == 51_079_056
     assert snapshot.bitcoin_per_share == round(22.47 / 40_000, 10)
     assert snapshot.total_btc == round(snapshot.shares_outstanding * snapshot.bitcoin_per_share, 8)
+    assert snapshot.source_type == "official_html"
+    assert snapshot.quality_status == "degraded"
 
 
 def test_parse_bitb_snapshot_reads_direct_holdings_fields():
     snapshot = official.parse_bitb_snapshot(BITB_SAMPLE)
 
     assert snapshot.ticker == "BITB"
-    assert snapshot.as_of == "03/10/2026"
+    assert snapshot.as_of_date == date(2026, 3, 10)
     assert snapshot.total_btc == 37_604.17
     assert snapshot.bitcoin_per_share == 0.00033605
+    assert snapshot.source_type == "official_html"
+    assert snapshot.quality_status == "degraded"
 
 
 def test_parse_bitb_snapshot_prefers_structured_page_payload_when_available():
     snapshot = official.parse_bitb_snapshot(BITB_CURRENT_SAMPLE)
 
     assert snapshot.ticker == "BITB"
-    assert snapshot.as_of == "03/13/2026"
+    assert snapshot.as_of_date == date(2026, 3, 13)
     assert snapshot.total_btc == 38920.51992677
     assert snapshot.shares_outstanding == 71_500_000
     assert snapshot.daily_volume == 3_209_174
     assert snapshot.bitcoin_per_share == round(38920.51992677 / 71_500_000, 10)
+    assert snapshot.source_type == "official_json"
+    assert snapshot.quality_status == "ok"
 
 
 def test_parse_gbtc_snapshot_reads_direct_holdings_fields():
     snapshot = official.parse_gbtc_snapshot(GBTC_SAMPLE)
 
     assert snapshot.ticker == "GBTC"
-    assert snapshot.as_of == "03/10/2026"
+    assert snapshot.as_of_date == date(2026, 3, 10)
     assert snapshot.total_btc == 193_530.1058
     assert snapshot.bitcoin_per_share == 0.00101403
+    assert snapshot.source_type == "official_html"
+    assert snapshot.quality_status == "degraded"
+
+
+def test_parse_fbtc_snapshot_estimates_total_btc_when_label_missing():
+    snapshot = official.parse_fbtc_snapshot(FBTC_SAMPLE)
+
+    assert snapshot.ticker == "FBTC"
+    assert snapshot.as_of_date == date(2026, 3, 12)
+    assert snapshot.total_btc == round(165_000_000 * 0.00055123, 8)
+    assert snapshot.extra_fields["estimated_total_btc"] == snapshot.total_btc
+    assert snapshot.quality_status == "degraded"
 
 
 def test_official_btc_etf_cache_roundtrip(tmp_path: Path):
@@ -90,7 +117,7 @@ def test_official_btc_etf_cache_roundtrip(tmp_path: Path):
             ticker="BITB",
             issuer="Bitwise",
             source_url=official.BITB_URL,
-            as_of="03/10/2026",
+            as_of_date=date(2026, 3, 10),
             shares_outstanding=111_900_000,
             daily_volume=9_639_037,
             aum_usd=4_188_030_760.0,
@@ -303,10 +330,10 @@ def test_fetch_official_btc_etf_snapshots_uses_direct_fetch_not_perplexity(monke
         official.BITB_URL: BITB_CURRENT_SAMPLE,
     }
 
-    def fake_get_text(url: str, **kwargs):
-        return page_payloads[url]
+    def fake_get_bytes(url: str, **kwargs):
+        return page_payloads[url].encode("utf-8")
 
-    monkeypatch.setattr(official, "get_text_with_retry", fake_get_text)
+    monkeypatch.setattr(official, "get_bytes_with_retry", fake_get_bytes)
 
     # _request_reference_snapshots가 호출되면 실패하도록 설정
     def should_not_be_called(*args, **kwargs):
@@ -327,17 +354,44 @@ def test_fetch_official_btc_etf_snapshots_falls_back_to_direct_official_pages(mo
         official.BITB_URL: BITB_CURRENT_SAMPLE,
     }
 
-    def fake_get_text(url: str, **kwargs):
-        return page_payloads[url]
+    def fake_get_bytes(url: str, **kwargs):
+        if url not in page_payloads:
+            raise KeyError(f"No mock data for {url}")
+        return page_payloads[url].encode("utf-8")
 
-    monkeypatch.setattr(official, "get_text_with_retry", fake_get_text)
+    monkeypatch.setattr(official, "get_bytes_with_retry", fake_get_bytes)
 
     snapshots = official.fetch_official_btc_etf_snapshots(api_key="pplx-test-key")
 
-    # GBTC는 Grayscale 429 차단으로 direct scraping 대상에서 제외됨
+    # GBTC/BTC는 mock에 없어 실패하므로 BITB+IBIT만 반환됨
     assert [snapshot.ticker for snapshot in snapshots] == ["BITB", "IBIT"]
     assert snapshots[0].source_url == official.BITB_URL
     assert snapshots[1].source_url == official.IBIT_URL
+
+
+def test_ordered_structured_candidates_follow_ticker_priority_matrix():
+    page_text = """
+    <a href="/download/ibit.json">json</a>
+    <a href="/download/ibit.csv">csv</a>
+    """
+
+    assert official._ordered_structured_candidates(
+        "IBIT", page_text, page_url=official.IBIT_URL
+    ) == [
+        ("official_csv", "https://www.ishares.com/download/ibit.csv"),
+        ("official_json", "https://www.ishares.com/download/ibit.json"),
+    ]
+
+
+def test_structured_download_links_rejects_non_whitelisted_domains():
+    page_text = '<a href="https://example.com/evil.csv">csv</a>'
+
+    try:
+        official._structured_download_links(page_text, base_url=official.IBIT_URL)
+    except ValueError as exc:
+        assert "공식 도메인" in str(exc)
+    else:
+        raise AssertionError("ValueError was expected")
 
 
 def test_request_reference_snapshots_uses_json_schema_response_format(monkeypatch):

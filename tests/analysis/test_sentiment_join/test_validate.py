@@ -23,6 +23,13 @@ def _valid_df() -> pd.DataFrame:
             "usdkrw_log_return": [0.001],
             "usdkrw_return": [0.001],
             "is_outlier": [False],
+            # Req 11: 선물 시장 지표 (NaN 허용)
+            "funding_rate": [float("nan")],
+            "open_interest_usd": [float("nan")],
+            "funding_rate_lag1": [float("nan")],
+            "oi_change_pct_lag1": [float("nan")],
+            # Req 13: 하이브리드 지수 (NaN 허용)
+            "hybrid_index": [float("nan")],
         }
     )
 

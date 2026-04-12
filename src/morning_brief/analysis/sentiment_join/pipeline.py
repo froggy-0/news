@@ -8,11 +8,14 @@ import numpy as np
 import pandas as pd
 
 from morning_brief.analysis.sentiment_join.config import SentimentJoinSettings
+from morning_brief.analysis.sentiment_join.hybrid_index import compute_hybrid_index
 from morning_brief.analysis.sentiment_join.join import merge_sources
 from morning_brief.analysis.sentiment_join.sources.btc_prices import fetch_btc_close
 from morning_brief.analysis.sentiment_join.sources.fng import fetch_fng
+from morning_brief.analysis.sentiment_join.sources.futures import fetch_futures_data
 from morning_brief.analysis.sentiment_join.sources.r2_sentiment import fetch_r2_sentiment
 from morning_brief.analysis.sentiment_join.sources.usdkrw_prices import fetch_usdkrw_close
+from morning_brief.analysis.sentiment_join.statistical_tests import run_statistical_tests
 from morning_brief.analysis.sentiment_join.storage import (
     cleanup_old_files,
     save_parquet,
@@ -25,6 +28,7 @@ from morning_brief.analysis.sentiment_join.transform import (
     trim_to_date_range,
 )
 from morning_brief.analysis.sentiment_join.validate import validate_master
+from morning_brief.data.etf_storage import build_stats_metadata_payload
 from morning_brief.logging_utils import log_structured
 
 logger = logging.getLogger(__name__)
@@ -125,6 +129,14 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
         if usdkrw_close_df.empty:
             usdkrw_close_df = _empty_close_frame(btc_start_date, end_date)
 
+        # Req 11: 선물 지표 수집 (실패 시 빈 DataFrame — merge_sources에서 NaN 컬럼으로 처리)
+        futures_df = fetch_futures_data(settings.lookback_days)
+        _log_source_complete(
+            "futures",
+            futures_df,
+            fallback_used=bool(futures_df.attrs.get("fallback_used", False)),
+        )
+
         sentiment_df = normalize_dates(sentiment_df)
         fng_df = normalize_dates(fng_df)
         btc_close_df = normalize_dates(btc_close_df)
@@ -147,7 +159,11 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
         if usdkrw_returns_df.empty:
             usdkrw_returns_df = _empty_return_frame("usdkrw", start_date, end_date)
 
-        master_df = merge_sources(sentiment_df, fng_df, btc_returns_df, usdkrw_returns_df)
+        futures_df = normalize_dates(futures_df) if not futures_df.empty else futures_df
+
+        master_df = merge_sources(
+            sentiment_df, fng_df, btc_returns_df, usdkrw_returns_df, futures_df
+        )
 
         if master_df.empty:
             log_structured(
@@ -176,13 +192,62 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             )
             return 1
 
-        validate_master(master_df)
+        # Req 12: ADF·Granger 통계 검정 (로그만 남기고 파이프라인을 중단하지 않음)
+        statistical_results: dict[str, object] = {}
+        try:
+            statistical_results = run_statistical_tests(master_df)
+        except Exception as exc:
+            log_structured(
+                logger,
+                event="stats.error",
+                message="통계 검정 실행 중 오류가 발생했습니다.",
+                level=logging.WARNING,
+                reason=str(exc),
+            )
+
+        # Req 13: PCA 하이브리드 지수 생성
+        try:
+            master_df = compute_hybrid_index(master_df)
+        except Exception as exc:
+            log_structured(
+                logger,
+                event="stats.error",
+                message="하이브리드 지수 생성 중 오류가 발생했습니다.",
+                level=logging.WARNING,
+                reason=str(exc),
+            )
+            master_df["hybrid_index"] = float("nan")
+
         run_date = today.strftime("%Y%m%d")
+        hybrid_diagnostics = master_df.attrs.get("hybrid_index_diagnostics", {})
+        stats_metadata = build_stats_metadata_payload(
+            run_id=f"sentiment-join-{run_date}",
+            generated_at_utc=datetime.now(timezone.utc).isoformat(),
+            adf=statistical_results.get("adf") if isinstance(statistical_results, dict) else None,
+            granger_results=(
+                statistical_results.get("granger", [])
+                if isinstance(statistical_results, dict)
+                else []
+            ),
+            vif_diagnostics=(
+                hybrid_diagnostics.get("vif_diagnostics", [])
+                if isinstance(hybrid_diagnostics, dict)
+                else []
+            ),
+            pca_summary=(
+                hybrid_diagnostics.get("pca_summary")
+                if isinstance(hybrid_diagnostics, dict)
+                else None
+            ),
+        )
+
+        validate_master(master_df)
         path = save_parquet(
             master_df,
             settings.output_dir,
             run_date,
             ffill_days=total_ffill_days,
+            stats_metadata=stats_metadata,
         )
         cleanup_old_files(settings.output_dir, settings.retain_days)
         upload_to_r2(

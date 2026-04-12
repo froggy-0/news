@@ -47,11 +47,16 @@
 1. 시장 데이터를 먼저 모읍니다.
 금리, 달러, 지수, 기술주, 비트코인, ETF 관련 데이터를 수집하고 이상값이나 결측값을 점검합니다.
 
+- 미국 현물 BTC ETF 보유량은 공식 issuer source를 우선 사용하고, Bronze/Silver/Gold 계층으로 raw payload, 정규화 필드, daily primary snapshot을 분리 저장합니다.
+- 공식 structured source가 없으면 HTML fallback으로 내리고, aggregator 데이터는 reference-only로만 분리 기록합니다.
+
 2. 뉴스와 시그널을 모읍니다.
 Perplexity 검색 결과를 중심으로 뉴스를 수집하고, 공식 X 시그널도 함께 확인합니다.
 
 2.5. 뉴스와 시그널에 감성 점수를 매깁니다.
 ProsusAI/finbert 모델로 영문 원본 텍스트에 -1.0~1.0 범위의 연속 감성 점수를 부여합니다. 이 점수는 시계열 통계 분석의 입력으로 활용됩니다. `FINBERT_ENABLED=false`로 비활성화할 수 있으며, `transformers`/`torch`가 미설치된 환경에서도 파이프라인은 정상 동작합니다.
+
+- sentiment join 산출물은 Binance 선물 지표 Lag-1 컬럼, ADF/Granger 검정 요약, VIF/PCA 기반 `hybrid_index`를 포함하고 Parquet schema metadata의 `sentiment_join_stats`에 진단 요약을 함께 저장합니다.
 
 3. 맥락을 보강합니다.
 Perplexity Sonar 요약을 통해 개별 기사보다 큰 흐름을 함께 보고, 필요할 때는 web search 기반 보강 경로로 부족한 부분을 메웁니다.

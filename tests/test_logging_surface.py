@@ -9,12 +9,15 @@ EXPECTED_LOGGER_CALL_FILES: set[str] = {
     "src/morning_brief/data/finbert_sentiment.py",
 }
 EXPECTED_GET_LOGGER_FILES = {
+    "src/morning_brief/analysis/sentiment_join/hybrid_index.py",
     "src/morning_brief/analysis/sentiment_join/join.py",
     "src/morning_brief/analysis/sentiment_join/pipeline.py",
     "src/morning_brief/analysis/sentiment_join/sources/btc_prices.py",
     "src/morning_brief/analysis/sentiment_join/sources/fng.py",
+    "src/morning_brief/analysis/sentiment_join/sources/futures.py",
     "src/morning_brief/analysis/sentiment_join/sources/r2_sentiment.py",
     "src/morning_brief/analysis/sentiment_join/sources/usdkrw_prices.py",
+    "src/morning_brief/analysis/sentiment_join/statistical_tests.py",
     "src/morning_brief/analysis/sentiment_join/storage.py",
     "src/morning_brief/analysis/sentiment_join/validate.py",
     "src/morning_brief/brief_review.py",
@@ -67,6 +70,7 @@ EXPECTED_OBSERVER_CALL_FILES = {
 
 OUT_OF_SCOPE_PRINT_FILES = {
     "main.py",
+    "src/morning_brief/analysis/sentiment_join/inspect.py",
 }
 
 

@@ -74,11 +74,26 @@ def detect_outliers_rolling_iqr(
     return flagged
 
 
+def _add_futures_lag_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Req 11.3: 선물 지표에 Lag-1 처리를 적용해 미래 오염을 방지합니다."""
+    result = df.copy()
+    if "funding_rate" in result.columns:
+        result["funding_rate_lag1"] = result["funding_rate"].shift(1)
+    else:
+        result["funding_rate_lag1"] = float("nan")
+    if "open_interest_usd" in result.columns:
+        result["oi_change_pct_lag1"] = result["open_interest_usd"].pct_change().shift(1)
+    else:
+        result["oi_change_pct_lag1"] = float("nan")
+    return result
+
+
 def merge_sources(
     sentiment_df: pd.DataFrame,
     fng_df: pd.DataFrame,
     btc_df: pd.DataFrame,
     usdkrw_df: pd.DataFrame,
+    futures_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     dropped_no_sentiment = int(sentiment_df["news_sentiment_mean"].isna().sum())
     filtered_sentiment = sentiment_df.dropna(subset=["news_sentiment_mean"]).reset_index(drop=True)
@@ -95,6 +110,16 @@ def merge_sources(
     merged = filtered_sentiment.merge(fng_df, on="date", how="inner")
     merged = merged.merge(btc_df, on="date", how="inner")
     merged = merged.merge(usdkrw_df, on="date", how="inner")
+
+    # Req 11: 선물 지표 조인 (실패해도 NaN 컬럼으로 계속 진행)
+    if futures_df is not None and not futures_df.empty:
+        futures_cols = [c for c in futures_df.columns if c != "date"]
+        merged = merged.merge(futures_df[["date"] + futures_cols], on="date", how="left")
+    else:
+        merged["funding_rate"] = float("nan")
+        merged["open_interest_usd"] = float("nan")
+
+    merged = _add_futures_lag_columns(merged)
     merged = detect_outliers_rolling_iqr(
         merged,
         cols=["btc_return", "usdkrw_return"],
@@ -128,6 +153,7 @@ def merge_sources(
         sources_used=sources_used,
         outlier_count=int(merged["is_outlier"].sum()) if "is_outlier" in merged else 0,
         dropped_no_sentiment=dropped_no_sentiment,
+        has_futures=bool("funding_rate" in merged.columns and merged["funding_rate"].notna().any()),
     )
 
     return merged.reset_index(drop=True)
@@ -136,4 +162,5 @@ def merge_sources(
 __all__ = [
     "detect_outliers_rolling_iqr",
     "merge_sources",
+    "_add_futures_lag_columns",
 ]

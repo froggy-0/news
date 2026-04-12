@@ -22,12 +22,15 @@ def save_parquet(
     run_date: str,
     *,
     ffill_days: int = 0,
+    stats_metadata: bytes | None = None,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     path = output_dir / f"master_{run_date}.parquet"
     table = pa.Table.from_pandas(df, preserve_index=False)
     metadata = dict(table.schema.metadata or {})
     metadata[b"ffill_days"] = str(ffill_days).encode()
+    if stats_metadata is not None:
+        metadata[b"sentiment_join_stats"] = stats_metadata
     table = table.replace_schema_metadata(metadata)
     pq.write_table(table, path, compression="snappy")
     return path

@@ -22,8 +22,10 @@
 | 빅테크 10종 | KIS `/uapi/overseas-price/v1/quotations/price` | yfinance | ✅ |
 | BTC ETF 가격 5종 | KIS `/uapi/overseas-price/v1/quotations/price` | yfinance | ✅ |
 | `btc` 현물 가격 | CoinGecko `api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true` | yfinance `BTC-USD` | ✅ |
-| BTC ETF 보유량 (IBIT) | `ishares.com/us/products/333011/…` HTML 파싱 | — | ✅ |
-| BTC ETF 보유량 (BITB) | `bitbetf.com` `__NEXT_DATA__` JSON 파싱 | — | ✅ |
+| BTC ETF 보유량 (IBIT) | `ishares.com` structured file 우선, HTML fallback | aggregator reference-only | ✅ |
+| BTC ETF 보유량 (BITB) | `bitbetf.com` 공식 다운로드 / `__NEXT_DATA__` / HTML fallback | aggregator reference-only | ✅ |
+| BTC ETF 보유량 (GBTC/BTC) | `etfs.grayscale.com` XLSX 우선, HTML fallback | aggregator reference-only | ✅ |
+| BTC ETF 보유량 (FBTC) | `digital.fidelity.com` 공식 페이지 파싱 | aggregator reference-only | ✅ |
 | Fear & Greed | `api.alternative.me/fng/?limit=1` | — | ✅ |
 
 **FRED 호출**: 최근 15개 관측값 중 유효한 최신 2개로 변화량(bp) 계산
@@ -57,8 +59,8 @@
 - `us3m / ^IRX` — 단기금리 항목 제거됨 (CANONICAL_LABELS에서 삭제)
 - `DX-Y.NYB` — 상장폐지, 0% 성공 → 하위 호환 캐시 키만 유지
 - `DX=F` (yfinance ICE Dollar Futures) — FRED DTWEXAFEGS로 교체, 현재는 FRED 실패 시 폴백으로만 사용
-- GBTC direct fetch — Grayscale 429 차단 → 제거
-- Perplexity structured BTC ETF — 빈 배열만 반환 → direct fetch primary 승격
+- BTC ETF aggregator snapshot — primary 합산 제외, reference-only 저장
+- Perplexity structured BTC ETF — primary 미사용, reference-only 보조 경로로만 유지
 
 ---
 

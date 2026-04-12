@@ -39,6 +39,18 @@ def test_save_parquet_creates_snappy_file(tmp_path: Path) -> None:
     assert metadata.metadata[b"ffill_days"] == b"3"
 
 
+def test_save_parquet_writes_sentiment_join_stats_metadata(tmp_path: Path) -> None:
+    path = save_parquet(
+        _sample_df(),
+        tmp_path,
+        "20260410",
+        stats_metadata=b'{"run_id":"sentiment-join-20260410"}',
+    )
+
+    metadata = pq.read_metadata(path)
+    assert metadata.metadata[b"sentiment_join_stats"] == b'{"run_id":"sentiment-join-20260410"}'
+
+
 def test_save_parquet_overwrites_same_date(tmp_path: Path) -> None:
     first = _sample_df()
     second = _sample_df()

@@ -85,6 +85,10 @@ def test_merge_sources_inner_join_and_drop_missing_sentiment(
         "btc_return",
         "usdkrw_log_return",
         "usdkrw_return",
+        "funding_rate",
+        "open_interest_usd",
+        "funding_rate_lag1",
+        "oi_change_pct_lag1",
         "is_outlier",
     ]
     assert merged["news_sentiment_mean"].notna().all()
@@ -126,6 +130,22 @@ def test_merge_sources_sources_used_excludes_all_nan_btc() -> None:
     merged = merge_sources(_sentiment_df(35), _fng_df(35), btc_df, _usdkrw_df(35))
 
     assert "is_outlier" in merged.columns
+
+
+def test_merge_sources_adds_lagged_futures_columns() -> None:
+    futures_df = pd.DataFrame(
+        {
+            "date": _date_range(35),
+            "funding_rate": [0.001] * 35,
+            "open_interest_usd": [1000.0 + idx for idx in range(35)],
+        }
+    )
+
+    merged = merge_sources(_sentiment_df(35), _fng_df(35), _btc_df(35), _usdkrw_df(35), futures_df)
+
+    assert pd.isna(merged.loc[0, "funding_rate_lag1"])
+    assert merged.loc[1, "funding_rate_lag1"] == pytest.approx(0.001)
+    assert pd.isna(merged.loc[0, "oi_change_pct_lag1"])
 
 
 @settings(max_examples=100)

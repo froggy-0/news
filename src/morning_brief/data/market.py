@@ -1139,11 +1139,16 @@ def _validate_market_points(points: list[MarketPoint]) -> tuple[list[MarketPoint
 def _summarize_official_btc_etf_snapshots(
     snapshots: list[BitcoinEtfIssuerSnapshot],
 ) -> tuple[float | None, float | None]:
-    if not snapshots:
+    primary_snapshots = [
+        snapshot
+        for snapshot in snapshots
+        if snapshot.quality_status != "critical" and snapshot.source_type != "aggregator"
+    ]
+    if not primary_snapshots:
         return None, None
 
-    total_btc = sum(snapshot.total_btc for snapshot in snapshots)
-    total_aum_usd = sum(snapshot.aum_usd for snapshot in snapshots)
+    total_btc = sum(snapshot.total_btc for snapshot in primary_snapshots)
+    total_aum_usd = sum(snapshot.aum_usd for snapshot in primary_snapshots)
     return round(total_btc, 8), round(total_aum_usd, 2)
 
 
@@ -1168,7 +1173,7 @@ def _fetch_official_btc_etf_data(
     except Exception as exc:
         _warn_once(
             "btc_etf_official_fallback",
-            "Perplexity 기준 BTC ETF 참조 데이터를 가져오지 못했어요: %s",
+            "BTC ETF 공식 수집 경로를 완료하지 못했어요: %s",
             exc,
         )
         snapshots = []
@@ -1195,9 +1200,10 @@ def _fetch_official_btc_etf_data(
             )
         return [], None, None
 
-    save_official_btc_etf_cache(cache_file, snapshots)
+    primary_snapshots = [snapshot for snapshot in snapshots if snapshot.source_type != "aggregator"]
+    save_official_btc_etf_cache(cache_file, primary_snapshots)
     return (
-        snapshots,
+        primary_snapshots,
         *_summarize_official_btc_etf_snapshots(snapshots=snapshots),
     )
 
@@ -1326,7 +1332,12 @@ def build_market_packet(
             "fear_greed_value": btc_snapshot.fear_greed_value,
             "fear_greed_label": btc_snapshot.fear_greed_label,
             "official_etf_snapshots": [
-                snapshot.__dict__ for snapshot in btc_snapshot.official_etf_snapshots
+                {
+                    **snap.__dict__,
+                    "as_of_date": snap.as_of_date.isoformat() if snap.as_of_date else None,
+                    "collected_at": snap.collected_at.isoformat() if snap.collected_at else None,
+                }
+                for snap in btc_snapshot.official_etf_snapshots
             ],
             "official_etf_total_btc": btc_snapshot.official_etf_total_btc,
             "official_etf_total_aum_usd": btc_snapshot.official_etf_total_aum_usd,
