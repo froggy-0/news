@@ -16,7 +16,7 @@ HYBRID_FEATURE_CANDIDATES = [
     "fng_value",
     "funding_rate_lag1",
     "btc_long_short_ratio_lag1",
-    "etf_net_inflow_usd",  # 미래 추가 예정
+    "etf_net_inflow_usd_lag1",
 ]
 VIF_THRESHOLD = 10.0
 MIN_PCA_FEATURES = 2

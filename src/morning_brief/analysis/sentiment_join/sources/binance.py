@@ -98,8 +98,8 @@ def fetch_btc_close_binance(
     """BTC 현물 종가를 Binance Spot klines API에서 수집합니다.
 
     성공 시: attrs["btc_source"] = "binance", attrs["fallback_used"] = False
-    실패 시: btc_prices.fetch_btc_close() 체인으로 폴백 (CoinGecko → yfinance)
-             attrs["btc_source"] = "coingecko" 또는 "yfinance"
+    실패 시: yfinance로 즉시 폴백
+             attrs["btc_source"] = "yfinance"
              attrs["fallback_used"] = True
              btc_quote_volume 컬럼은 NaN으로 채움
     """
@@ -119,10 +119,9 @@ def fetch_btc_close_binance(
             reason=str(exc),
         )
 
-    fallback_df = btc_prices.fetch_btc_close(start_date, end_date)
-    btc_source = "yfinance" if fallback_df.attrs.get("fallback_used", False) else "coingecko"
+    fallback_df = btc_prices.fetch_btc_close_yfinance(start_date, end_date)
     fallback_df["btc_quote_volume"] = float("nan")
-    fallback_df.attrs["btc_source"] = btc_source
+    fallback_df.attrs["btc_source"] = "yfinance"
     fallback_df.attrs["fallback_used"] = True
     return fallback_df
 

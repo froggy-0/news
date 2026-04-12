@@ -31,6 +31,10 @@ def _valid_df() -> pd.DataFrame:
             "oi_change_pct_lag1": [float("nan")],
             "btc_long_short_ratio": [float("nan")],
             "btc_long_short_ratio_lag1": [float("nan")],
+            "etf_total_btc": [float("nan")],
+            "etf_total_aum_usd": [float("nan")],
+            "etf_net_inflow_usd": [float("nan")],
+            "etf_net_inflow_usd_lag1": [float("nan")],
             # Req 13: 하이브리드 지수 (NaN 허용)
             "hybrid_index": [float("nan")],
         }
@@ -112,7 +116,15 @@ def test_validate_master_rejects_negative_long_short_ratio() -> None:
 
 
 def test_validate_master_strict_requires_all_new_columns() -> None:
-    for missing_col in ("btc_quote_volume", "btc_long_short_ratio", "btc_long_short_ratio_lag1"):
+    for missing_col in (
+        "btc_quote_volume",
+        "btc_long_short_ratio",
+        "btc_long_short_ratio_lag1",
+        "etf_total_btc",
+        "etf_total_aum_usd",
+        "etf_net_inflow_usd",
+        "etf_net_inflow_usd_lag1",
+    ):
         df = _valid_df().drop(columns=[missing_col])
         with pytest.raises(SchemaError):
             validate_master(df)

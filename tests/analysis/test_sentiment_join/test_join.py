@@ -72,6 +72,19 @@ def _usdkrw_df(days: int) -> pd.DataFrame:
     )
 
 
+def _etf_df(days: int) -> pd.DataFrame:
+    dates = _date_range(days)
+    totals = [1000.0 + idx * 10.0 for idx in range(days)]
+    return pd.DataFrame(
+        {
+            "date": dates,
+            "etf_total_btc": totals,
+            "etf_total_aum_usd": [value * 85000 for value in totals],
+            "etf_net_inflow_usd": [float("nan")] + [850000.0] * (days - 1),
+        }
+    )
+
+
 def test_merge_sources_inner_join_and_drop_missing_sentiment(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -102,9 +115,13 @@ def test_merge_sources_inner_join_and_drop_missing_sentiment(
         "funding_rate",
         "open_interest_usd",
         "btc_long_short_ratio",
+        "etf_total_btc",
+        "etf_total_aum_usd",
+        "etf_net_inflow_usd",
         "funding_rate_lag1",
         "oi_change_pct_lag1",
         "btc_long_short_ratio_lag1",
+        "etf_net_inflow_usd_lag1",
         "is_outlier",
     ]
     assert merged["news_sentiment_mean"].notna().all()
@@ -166,6 +183,21 @@ def test_merge_sources_adds_btc_long_short_ratio_lag1() -> None:
     assert "btc_long_short_ratio_lag1" in merged.columns
     assert pd.isna(merged.loc[0, "btc_long_short_ratio_lag1"])
     assert merged.loc[1, "btc_long_short_ratio_lag1"] == pytest.approx(0.9)
+
+
+def test_merge_sources_adds_etf_flow_lag1() -> None:
+    merged = merge_sources(
+        _sentiment_df(35),
+        _fng_df(35),
+        _btc_df(35),
+        _usdkrw_df(35),
+        _futures_df(35),
+        _etf_df(35),
+    )
+
+    assert "etf_net_inflow_usd_lag1" in merged.columns
+    assert pd.isna(merged.loc[0, "etf_net_inflow_usd_lag1"])
+    assert merged.loc[2, "etf_net_inflow_usd_lag1"] == pytest.approx(850000.0)
 
 
 def test_merge_sources_outlier_detection_includes_long_short_ratio() -> None:

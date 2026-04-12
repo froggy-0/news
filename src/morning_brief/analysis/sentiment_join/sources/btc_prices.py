@@ -145,4 +145,23 @@ def fetch_btc_close(start_date: str, end_date: str) -> pd.DataFrame:
         return frame
 
 
-__all__ = ["fetch_btc_close"]
+def fetch_btc_close_yfinance(start_date: str, end_date: str) -> pd.DataFrame:
+    try:
+        frame = _download_with_yfinance("BTC-USD", start_date, end_date)
+        frame.attrs["fallback_used"] = True
+        return frame
+    except Exception as exc:
+        log_structured(
+            logger,
+            event="source.failed",
+            message="BTC 가격 yfinance 수집이 실패했습니다.",
+            level=logging.WARNING,
+            source="btc",
+            reason=str(exc),
+        )
+        frame = _empty_close_frame()
+        frame.attrs["fallback_used"] = True
+        return frame
+
+
+__all__ = ["fetch_btc_close", "fetch_btc_close_yfinance"]

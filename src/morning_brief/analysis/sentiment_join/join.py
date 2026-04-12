@@ -89,6 +89,10 @@ def _add_futures_lag_columns(df: pd.DataFrame) -> pd.DataFrame:
         result["btc_long_short_ratio_lag1"] = result["btc_long_short_ratio"].shift(1)
     else:
         result["btc_long_short_ratio_lag1"] = float("nan")
+    if "etf_net_inflow_usd" in result.columns:
+        result["etf_net_inflow_usd_lag1"] = result["etf_net_inflow_usd"].shift(1)
+    else:
+        result["etf_net_inflow_usd_lag1"] = float("nan")
     return result
 
 
@@ -98,6 +102,7 @@ def merge_sources(
     btc_df: pd.DataFrame,
     usdkrw_df: pd.DataFrame,
     futures_df: pd.DataFrame | None = None,
+    etf_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     dropped_no_sentiment = int(sentiment_df["news_sentiment_mean"].isna().sum())
     filtered_sentiment = sentiment_df.dropna(subset=["news_sentiment_mean"]).reset_index(drop=True)
@@ -123,6 +128,13 @@ def merge_sources(
         merged["funding_rate"] = float("nan")
         merged["open_interest_usd"] = float("nan")
         merged["btc_long_short_ratio"] = float("nan")
+    if etf_df is not None and not etf_df.empty:
+        etf_cols = [c for c in etf_df.columns if c != "date"]
+        merged = merged.merge(etf_df[["date"] + etf_cols], on="date", how="left")
+    else:
+        merged["etf_total_btc"] = float("nan")
+        merged["etf_total_aum_usd"] = float("nan")
+        merged["etf_net_inflow_usd"] = float("nan")
 
     merged = _add_futures_lag_columns(merged)
     merged = detect_outliers_rolling_iqr(

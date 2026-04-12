@@ -159,6 +159,7 @@ EXPECTED_KEYS = {
     "x_reactions",
     "event_calendar",
     "data_quality_status",
+    "data_quality_line",
     "footer_notes",
     "unsubscribe_url",
     "github_url",
@@ -190,6 +191,7 @@ def test_build_email_context_v2_ok_status_empty_footer_notes() -> None:
     packet = _make_packet(status="ok", footer_notes=["이 노트는 무시돼야 함"])
     ctx = _build_email_context_v2("제목", SAMPLE_BODY, packet)
     assert ctx["footer_notes"] == []
+    assert ctx["data_quality_line"] == "데이터 품질 상태: ok"
 
 
 def test_build_email_context_v2_degraded_status_includes_footer_notes() -> None:
@@ -199,6 +201,7 @@ def test_build_email_context_v2_degraded_status_includes_footer_notes() -> None:
     ctx = _build_email_context_v2("제목", SAMPLE_BODY, packet)
     assert ctx["footer_notes"] == notes
     assert ctx["data_quality_status"] == "degraded"
+    assert ctx["data_quality_line"] == "데이터 품질 상태: degraded"
 
 
 def test_build_email_context_v2_critical_status_subject_prefix() -> None:

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from morning_brief.analysis.sentiment_join.intelligence import load_sentiment_intelligence
 from morning_brief.briefing import generate_briefing
 from morning_brief.config import Settings
 from morning_brief.data.data_quality import (
@@ -39,6 +42,11 @@ from morning_brief.research_backfill import (
 logger = logging.getLogger(__name__)
 
 _assess_data_quality = assess_data_quality
+
+
+def _load_sentiment_intelligence_packet() -> dict | None:
+    output_dir = Path(os.getenv("SENTIMENT_JOIN_OUTPUT_DIR", "data/sentiment_join")).resolve()
+    return load_sentiment_intelligence(output_dir)
 
 
 def _needs_public_news_backfill(public_context: dict) -> bool:
@@ -187,6 +195,20 @@ def run_pipeline(settings: Settings) -> str:
             **market_packet,
             "news": news_packet,
         }
+        try:
+            sentiment_intelligence = _load_sentiment_intelligence_packet()
+        except Exception as exc:
+            sentiment_intelligence = None
+            log_structured(
+                logger,
+                event="source.failed",
+                message="sentiment intelligence를 읽지 못했지만 브리핑은 계속 생성합니다.",
+                level=logging.WARNING,
+                source="sentiment_join",
+                reason=str(exc),
+            )
+        if sentiment_intelligence is not None:
+            packet["sentiment_intelligence"] = sentiment_intelligence
         # 신규 데이터 소스를 packet에 추가 (브리핑 프롬프트에서 활용)
         if topic_summaries:
             from morning_brief.data.sources.perplexity_sonar import topic_summaries_to_dict

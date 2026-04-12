@@ -213,18 +213,19 @@ def _append_web_reference_lines(
 
 def _append_footer_note_block(text: str, packet: dict) -> str:
     notes = packet.get("data_footer_notes", [])
+    quality = packet.get("data_quality", {})
+    status = "ok"
+    if isinstance(quality, dict):
+        status = str(quality.get("status", "ok")).strip().lower() or "ok"
+    lines = [f"데이터 품질 상태: {status}"]
     if not isinstance(notes, list) or not notes:
-        return text
+        return f"{text.rstrip()}\n\n" + "\n".join(lines)
 
-    lines = ["데이터 처리 메모"]
+    lines.extend(["데이터 처리 메모"])
     for note in notes:
         note_text = str(note).strip()
         if note_text:
             lines.append(f"- {note_text}")
-
-    if len(lines) == 1:
-        return text
-
     return f"{text.rstrip()}\n\n" + "\n".join(lines)
 
 

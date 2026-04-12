@@ -23,6 +23,7 @@
 
 <div style="padding-top:20px;">{{ eyebrow("수집 기준", "muted") }}</div>
 <div class="text-body" style="padding-top:8px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textBody }};font-size:14px;line-height:1.82;">뉴욕 마감 이후 공개 시장 데이터와 검증된 뉴스, 공식 X 시그널을 바탕으로 요약했습니다.</div>
+<div class="text-body" style="padding-top:8px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textBody }};font-size:14px;line-height:1.82;">{{ data_quality_line }}</div>
 
 {% if data_quality_status != "ok" and footer_notes %}
 <div style="padding-top:20px;">{{ eyebrow("데이터 처리 메모", "muted") }}</div>
