@@ -46,15 +46,14 @@ def _fetch_funding_rate_history(start_ms: int) -> list[dict]:
         return []
 
 
-def _fetch_oi_history(start_ms: int) -> list[dict]:
+def _fetch_oi_history(limit_days: int) -> list[dict]:
     try:
         return get_list_with_retry(
             BINANCE_OI_URL,
             params={
                 "symbol": BINANCE_SYMBOL,
                 "period": BINANCE_OI_PERIOD,
-                "startTime": str(start_ms),
-                "limit": str(BINANCE_MAX_LIMIT),
+                "limit": str(min(max(limit_days, 1), BINANCE_MAX_LIMIT)),
             },
             provider="binance_futures",
             timeout=20,
@@ -71,15 +70,14 @@ def _fetch_oi_history(start_ms: int) -> list[dict]:
         return []
 
 
-def _fetch_long_short_ratio(start_ms: int) -> list[dict]:
+def _fetch_long_short_ratio(limit_days: int) -> list[dict]:
     try:
         return get_list_with_retry(
             BINANCE_LSR_URL,
             params={
                 "symbol": BINANCE_SYMBOL,
                 "period": "1d",
-                "startTime": str(start_ms),
-                "limit": "500",
+                "limit": str(min(max(limit_days, 1), 500)),
             },
             provider="binance_futures",
             timeout=20,
@@ -178,11 +176,11 @@ def fetch_futures_data(lookback_days: int) -> pd.DataFrame:
 
     start_ms = _ms_timestamp(datetime(start.year, start.month, start.day, tzinfo=timezone.utc))
     funding_rows = _fetch_funding_rate_history(start_ms)
-    oi_rows = _fetch_oi_history(start_ms)
+    oi_rows = _fetch_oi_history(lookback_days + 2)
 
     # LSR 수집은 funding/OI와 독립적으로 실패해도 진행
     try:
-        lsr_rows = _fetch_long_short_ratio(start_ms)
+        lsr_rows = _fetch_long_short_ratio(lookback_days + 2)
     except Exception as exc:
         log_structured(
             logger,

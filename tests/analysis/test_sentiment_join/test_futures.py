@@ -83,3 +83,23 @@ def test_fetch_futures_data_lsr_failure_does_not_block_funding_oi(
     assert df["funding_rate"].notna().any()
     assert df["open_interest_usd"].notna().any()
     assert "btc_long_short_ratio" in df.columns
+
+
+def test_oi_and_lsr_requests_use_limit_without_start_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, dict[str, str]]] = []
+
+    def fake_get_list_with_retry(url: str, *, params: dict[str, str], **kwargs):
+        calls.append((url, params))
+        return []
+
+    monkeypatch.setattr(futures, "get_list_with_retry", fake_get_list_with_retry)
+
+    futures._fetch_oi_history(32)
+    futures._fetch_long_short_ratio(32)
+
+    assert calls[0][0] == futures.BINANCE_OI_URL
+    assert calls[0][1] == {"symbol": "BTCUSDT", "period": "1d", "limit": "32"}
+    assert calls[1][0] == futures.BINANCE_LSR_URL
+    assert calls[1][1] == {"symbol": "BTCUSDT", "period": "1d", "limit": "32"}
