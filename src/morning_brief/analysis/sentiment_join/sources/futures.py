@@ -509,11 +509,12 @@ def _invoke_futures_lambda(
 def fetch_futures_data(lookback_days: int, futures_lambda_arn: str = "") -> pd.DataFrame:
     """Req 11: Binance fapi에서 펀딩비·미결제약정·Long/Short Ratio 이력을 수집합니다.
 
-    Binance fapi가 지역 제한(HTTP 451)으로 실패하면 Bybit 공개 API로 자동 폴백합니다.
-    두 소스 모두 실패하면 NaN 프레임을 반환해 파이프라인이 계속 진행됩니다.
+    Lambda ARN이 설정된 경우 Binance fapi 직접 호출을 건너뛰고 Lambda 프록시를 우선 사용합니다.
+    (GitHub Actions 등 US IP 환경에서는 fapi.binance.com이 451로 차단되므로 불필요한 대기 방지)
+    Lambda도 없거나 실패하면 Bybit 공개 API로 폴백합니다.
 
     Returns DataFrame with columns: date, funding_rate, open_interest_usd, btc_long_short_ratio.
-    attrs["futures_source"]: "binance" | "bybit" | "none"
+    attrs["futures_source"]: "binance" | "lambda" | "bybit" | "none"
     """
     today = datetime.now(timezone.utc).date()
     start = today - timedelta(days=lookback_days + 1)
@@ -527,40 +528,46 @@ def fetch_futures_data(lookback_days: int, futures_lambda_arn: str = "") -> pd.D
         - 1
     )
 
-    # --- 1차: Binance fapi ---
-    funding_rows = _fetch_funding_rate_history(start_ms)
-    oi_rows = _fetch_oi_history(lookback_days + 2)
+    lambda_arn = futures_lambda_arn.strip() or os.getenv("FUTURES_LAMBDA_ARN", "").strip()
 
+    # --- 1차: Lambda ARN 없을 때만 Binance fapi 직접 시도 ---
+    # ARN이 있으면 어차피 US IP에서 451로 막히므로 바로 Lambda로 이동
+    funding_rows: list[dict] = []
+    oi_rows: list[dict] = []
     lsr_rows: list[dict] = []
-    try:
-        lsr_rows = _fetch_long_short_ratio(lookback_days + 2)
-    except Exception as exc:
-        log_structured(
-            logger,
-            event="source.failed",
-            message="Binance LSR 수집에 실패했습니다.",
-            level=logging.WARNING,
-            source="binance_lsr",
-            reason=str(exc),
-        )
+
+    if not lambda_arn:
+        funding_rows = _fetch_funding_rate_history(start_ms)
+        oi_rows = _fetch_oi_history(lookback_days + 2)
+        try:
+            lsr_rows = _fetch_long_short_ratio(lookback_days + 2)
+        except Exception as exc:
+            log_structured(
+                logger,
+                event="source.failed",
+                message="Binance LSR 수집에 실패했습니다.",
+                level=logging.WARNING,
+                source="binance_lsr",
+                reason=str(exc),
+            )
 
     if not funding_rows and not oi_rows:
-        log_structured(
-            logger,
-            event="source.failed",
-            message="Binance 선물 데이터를 가져오지 못해 NaN으로 채웁니다.",
-            level=logging.WARNING,
-            source="binance_futures",
-            reason="all_requests_failed",
-        )
+        if not lambda_arn:
+            log_structured(
+                logger,
+                event="source.failed",
+                message="Binance 선물 데이터를 가져오지 못해 NaN으로 채웁니다.",
+                level=logging.WARNING,
+                source="binance_futures",
+                reason="all_requests_failed",
+            )
 
         # --- 2차: Lambda 프록시 (ap-northeast-2 → Seoul IP → fapi.binance.com) ---
-        lambda_arn = futures_lambda_arn.strip() or os.getenv("FUTURES_LAMBDA_ARN", "").strip()
         if lambda_arn:
             log_structured(
                 logger,
                 event="futures.lambda_fallback",
-                message="Lambda 프록시로 Binance 선물 데이터를 재시도합니다.",
+                message="Lambda 프록시로 Binance 선물 데이터를 수집합니다.",
                 level=logging.WARNING,
             )
             lambda_result = _invoke_futures_lambda(lambda_arn, lookback_days, dates)
