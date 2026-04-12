@@ -79,6 +79,20 @@ PROVIDER_POLICIES = {
         min_interval_seconds=0.35,
         base_backoff_seconds=1.0,
     ),
+    "binance_spot": ProviderPolicy(
+        name="binance_spot",
+        min_interval_seconds=0.1,
+        retryable_statuses=frozenset({429, 500, 502, 503, 504}),
+        base_backoff_seconds=1.2,
+        max_attempts=3,
+    ),
+    "binance_futures": ProviderPolicy(
+        name="binance_futures",
+        min_interval_seconds=0.1,
+        retryable_statuses=frozenset({429, 500, 502, 503, 504}),
+        base_backoff_seconds=1.2,
+        max_attempts=3,
+    ),
 }
 
 _provider_last_request_at: dict[str, float] = {}

@@ -15,6 +15,13 @@ GRANGER_PAIRS = [
     ("news_sentiment_mean", "btc_log_return"),
     ("funding_rate_lag1", "btc_log_return"),
     ("fng_value", "btc_log_return"),
+    ("btc_long_short_ratio_lag1", "btc_log_return"),
+]
+ADF_TARGETS = [
+    "btc_log_return",
+    "funding_rate",
+    "oi_change_pct_lag1",
+    "btc_long_short_ratio",
 ]
 
 
@@ -112,16 +119,22 @@ def run_statistical_tests(df: pd.DataFrame) -> dict[str, Any]:
     if "btc_log_return" not in df.columns or df["btc_log_return"].dropna().empty:
         return results
 
-    try:
-        results["adf"] = _run_adf(df["btc_log_return"])
-    except Exception as exc:
-        log_structured(
-            logger,
-            event="stats.adf_error",
-            message="ADF 검정 실행 중 오류가 발생했습니다.",
-            level=logging.WARNING,
-            reason=str(exc),
-        )
+    adf_results: dict[str, Any] = {}
+    for col in ADF_TARGETS:
+        if col not in df.columns or df[col].dropna().shape[0] < MIN_ROWS_FOR_TESTS:
+            continue
+        try:
+            adf_results[col] = _run_adf(df[col])
+        except Exception as exc:
+            log_structured(
+                logger,
+                event="stats.adf_error",
+                message="ADF 검정 실행 중 오류가 발생했습니다.",
+                level=logging.WARNING,
+                column=col,
+                reason=str(exc),
+            )
+    results["adf"] = adf_results
 
     granger_results: list[dict[str, Any]] = []
     for predictor, target in GRANGER_PAIRS:
@@ -134,4 +147,4 @@ def run_statistical_tests(df: pd.DataFrame) -> dict[str, Any]:
     return results
 
 
-__all__ = ["run_statistical_tests"]
+__all__ = ["ADF_TARGETS", "GRANGER_PAIRS", "run_statistical_tests"]

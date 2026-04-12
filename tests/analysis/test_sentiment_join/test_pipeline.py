@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
+import pyarrow.parquet as pq
 import pytest
 from pandera.errors import SchemaError
 
@@ -23,6 +24,7 @@ def _settings(tmp_path: Path) -> SentimentJoinSettings:
         retain_days=30,
         kis_app_key="",
         kis_app_secret="",
+        binance_api_key="",
     )
 
 
@@ -60,12 +62,30 @@ def _fng_df(main_dates: list[str], *, fill_value: object = 55) -> pd.DataFrame:
 
 
 def _close_df(btc_dates: list[str], *, with_gap: bool = False, base: float = 100.0) -> pd.DataFrame:
+    """usdkrw 등 일반 close DataFrame (btc_quote_volume 없음)."""
     closes = [base + idx for idx in range(len(btc_dates))]
     if with_gap and len(closes) > 3:
         closes[2] = None
         closes[3] = None
         closes[4] = base + 4
     return pd.DataFrame({"date": btc_dates, "close": closes})
+
+
+def _btc_close_df(
+    btc_dates: list[str], *, with_gap: bool = False, base: float = 100.0
+) -> pd.DataFrame:
+    """Binance klines 응답을 시뮬레이션하는 BTC close DataFrame."""
+    closes = [base + idx for idx in range(len(btc_dates))]
+    if with_gap and len(closes) > 3:
+        closes[2] = None
+        closes[3] = None
+        closes[4] = base + 4
+    df = pd.DataFrame(
+        {"date": btc_dates, "close": closes, "btc_quote_volume": [1e9] * len(btc_dates)}
+    )
+    df.attrs["btc_source"] = "binance"
+    df.attrs["fallback_used"] = False
+    return df
 
 
 def test_run_sentiment_join_success_creates_parquet(
@@ -80,8 +100,8 @@ def test_run_sentiment_join_success_creates_parquet(
     monkeypatch.setattr(pipeline, "fetch_fng", lambda *args, **kwargs: _fng_df(main_dates))
     monkeypatch.setattr(
         pipeline,
-        "fetch_btc_close",
-        lambda *args, **kwargs: _close_df(btc_dates, with_gap=True, base=100.0),
+        "fetch_btc_close_binance",
+        lambda *args, **kwargs: _btc_close_df(btc_dates, with_gap=True, base=100.0),
     )
     monkeypatch.setattr(
         pipeline,
@@ -118,7 +138,9 @@ def test_run_sentiment_join_allows_single_source_failure(
             }
         ),
     )
-    monkeypatch.setattr(pipeline, "fetch_btc_close", lambda *args, **kwargs: _close_df(btc_dates))
+    monkeypatch.setattr(
+        pipeline, "fetch_btc_close_binance", lambda *args, **kwargs: _btc_close_df(btc_dates)
+    )
     monkeypatch.setattr(
         pipeline, "fetch_usdkrw_close", lambda *args, **kwargs: _close_df(btc_dates, base=1300.0)
     )
@@ -156,7 +178,7 @@ def test_run_sentiment_join_returns_one_when_all_sources_fail(
             {"date": main_dates, "fng_value": pd.array([pd.NA] * len(main_dates), dtype="Int64")}
         ),
     )
-    monkeypatch.setattr(pipeline, "fetch_btc_close", lambda *args, **kwargs: pd.DataFrame())
+    monkeypatch.setattr(pipeline, "fetch_btc_close_binance", lambda *args, **kwargs: pd.DataFrame())
     monkeypatch.setattr(pipeline, "fetch_usdkrw_close", lambda *args, **kwargs: pd.DataFrame())
 
     exit_code = pipeline.run_sentiment_join(settings)
@@ -176,7 +198,9 @@ def test_run_sentiment_join_returns_one_on_validation_failure(
         pipeline, "fetch_r2_sentiment", lambda *args, **kwargs: _sentiment_df(main_dates)
     )
     monkeypatch.setattr(pipeline, "fetch_fng", lambda *args, **kwargs: _fng_df(main_dates))
-    monkeypatch.setattr(pipeline, "fetch_btc_close", lambda *args, **kwargs: _close_df(btc_dates))
+    monkeypatch.setattr(
+        pipeline, "fetch_btc_close_binance", lambda *args, **kwargs: _btc_close_df(btc_dates)
+    )
     monkeypatch.setattr(
         pipeline, "fetch_usdkrw_close", lambda *args, **kwargs: _close_df(btc_dates, base=1300.0)
     )
@@ -196,8 +220,6 @@ def test_run_sentiment_join_records_ffill_days_in_metadata(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import pyarrow.parquet as pq
-
     settings = _settings(tmp_path)
     _, _, _, main_dates, btc_dates = _core_dates(settings)
 
@@ -207,8 +229,8 @@ def test_run_sentiment_join_records_ffill_days_in_metadata(
     monkeypatch.setattr(pipeline, "fetch_fng", lambda *args, **kwargs: _fng_df(main_dates))
     monkeypatch.setattr(
         pipeline,
-        "fetch_btc_close",
-        lambda *args, **kwargs: _close_df(btc_dates, with_gap=True, base=100.0),
+        "fetch_btc_close_binance",
+        lambda *args, **kwargs: _btc_close_df(btc_dates, with_gap=True, base=100.0),
     )
     monkeypatch.setattr(
         pipeline,
@@ -229,3 +251,101 @@ def test_pipeline_does_not_import_main_pipeline() -> None:
     source = inspect.getsource(mod)
     assert "from morning_brief.pipeline" not in source
     assert "from morning_brief.config import Settings" not in source
+
+
+def test_run_sentiment_join_btc_quote_volume_passes_through(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """btc_quote_volume이 pipeline 전체를 통과해 Parquet에 저장되는지 확인."""
+    settings = _settings(tmp_path)
+    _, _, _, main_dates, btc_dates = _core_dates(settings)
+
+    monkeypatch.setattr(
+        pipeline, "fetch_r2_sentiment", lambda *args, **kwargs: _sentiment_df(main_dates)
+    )
+    monkeypatch.setattr(pipeline, "fetch_fng", lambda *args, **kwargs: _fng_df(main_dates))
+    monkeypatch.setattr(
+        pipeline,
+        "fetch_btc_close_binance",
+        lambda *args, **kwargs: _btc_close_df(btc_dates, base=100.0),
+    )
+    monkeypatch.setattr(
+        pipeline, "fetch_usdkrw_close", lambda *args, **kwargs: _close_df(btc_dates, base=1300.0)
+    )
+
+    assert pipeline.run_sentiment_join(settings) == 0
+
+    file_path = next(tmp_path.glob("master_*.parquet"))
+    saved = pd.read_parquet(file_path)
+    assert "btc_quote_volume" in saved.columns
+
+
+def test_run_sentiment_join_btc_source_recorded_in_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """btc_source가 Parquet 메타데이터에 기록되는지 확인."""
+    settings = _settings(tmp_path)
+    _, _, _, main_dates, btc_dates = _core_dates(settings)
+
+    monkeypatch.setattr(
+        pipeline, "fetch_r2_sentiment", lambda *args, **kwargs: _sentiment_df(main_dates)
+    )
+    monkeypatch.setattr(pipeline, "fetch_fng", lambda *args, **kwargs: _fng_df(main_dates))
+    monkeypatch.setattr(
+        pipeline,
+        "fetch_btc_close_binance",
+        lambda *args, **kwargs: _btc_close_df(btc_dates, base=100.0),
+    )
+    monkeypatch.setattr(
+        pipeline, "fetch_usdkrw_close", lambda *args, **kwargs: _close_df(btc_dates, base=1300.0)
+    )
+
+    assert pipeline.run_sentiment_join(settings) == 0
+
+    file_path = next(tmp_path.glob("master_*.parquet"))
+    meta = pq.read_metadata(file_path).metadata
+    assert b"btc_source" in meta
+    assert meta[b"btc_source"].decode() == "binance"
+
+
+def test_run_sentiment_join_adf_dict_structure_compatible(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADF 결과가 dict[str, dict] 구조일 때 pipeline이 정상 직렬화하는지 확인."""
+    settings = _settings(tmp_path)
+    _, _, _, main_dates, btc_dates = _core_dates(settings)
+
+    monkeypatch.setattr(
+        pipeline, "fetch_r2_sentiment", lambda *args, **kwargs: _sentiment_df(main_dates)
+    )
+    monkeypatch.setattr(pipeline, "fetch_fng", lambda *args, **kwargs: _fng_df(main_dates))
+    monkeypatch.setattr(
+        pipeline,
+        "fetch_btc_close_binance",
+        lambda *args, **kwargs: _btc_close_df(btc_dates, base=100.0),
+    )
+    monkeypatch.setattr(
+        pipeline, "fetch_usdkrw_close", lambda *args, **kwargs: _close_df(btc_dates, base=1300.0)
+    )
+    # 다중 ADF 구조 mock
+    monkeypatch.setattr(
+        pipeline,
+        "run_statistical_tests",
+        lambda df: {
+            "adf": {"btc_log_return": {"statistic": -3.2, "pvalue": 0.02, "stationary": True}},
+            "granger": [],
+        },
+    )
+
+    assert pipeline.run_sentiment_join(settings) == 0
+
+    file_path = next(tmp_path.glob("master_*.parquet"))
+    meta = pq.read_metadata(file_path).metadata
+    assert b"sentiment_join_stats" in meta
+    import json
+
+    stats = json.loads(meta[b"sentiment_join_stats"].decode())
+    assert "btc_log_return" in stats["adf"]

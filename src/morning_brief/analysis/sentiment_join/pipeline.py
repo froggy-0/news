@@ -10,7 +10,7 @@ import pandas as pd
 from morning_brief.analysis.sentiment_join.config import SentimentJoinSettings
 from morning_brief.analysis.sentiment_join.hybrid_index import compute_hybrid_index
 from morning_brief.analysis.sentiment_join.join import merge_sources
-from morning_brief.analysis.sentiment_join.sources.btc_prices import fetch_btc_close
+from morning_brief.analysis.sentiment_join.sources.binance import fetch_btc_close_binance
 from morning_brief.analysis.sentiment_join.sources.fng import fetch_fng
 from morning_brief.analysis.sentiment_join.sources.futures import fetch_futures_data
 from morning_brief.analysis.sentiment_join.sources.r2_sentiment import fetch_r2_sentiment
@@ -112,9 +112,12 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             fallback_used=bool(fng_df.attrs.get("fallback_used", False)),
         )
 
-        btc_close_df = fetch_btc_close(btc_start_date, end_date)
+        btc_close_df = fetch_btc_close_binance(
+            btc_start_date, end_date, api_key=settings.binance_api_key
+        )
         btc_fallback_used = bool(btc_close_df.attrs.get("fallback_used", False))
         _log_source_complete("btc", btc_close_df, fallback_used=btc_fallback_used)
+        btc_source = btc_close_df.attrs.get("btc_source", "unknown")
         if btc_close_df.empty:
             btc_close_df = _empty_close_frame(btc_start_date, end_date)
 
@@ -248,6 +251,7 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             run_date,
             ffill_days=total_ffill_days,
             stats_metadata=stats_metadata,
+            btc_source=btc_source,
         )
         cleanup_old_files(settings.output_dir, settings.retain_days)
         upload_to_r2(

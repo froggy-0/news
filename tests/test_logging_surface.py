@@ -12,6 +12,7 @@ EXPECTED_GET_LOGGER_FILES = {
     "src/morning_brief/analysis/sentiment_join/hybrid_index.py",
     "src/morning_brief/analysis/sentiment_join/join.py",
     "src/morning_brief/analysis/sentiment_join/pipeline.py",
+    "src/morning_brief/analysis/sentiment_join/sources/binance.py",
     "src/morning_brief/analysis/sentiment_join/sources/btc_prices.py",
     "src/morning_brief/analysis/sentiment_join/sources/fng.py",
     "src/morning_brief/analysis/sentiment_join/sources/futures.py",

@@ -13,6 +13,7 @@ def _frame(rows: int = 40) -> pd.DataFrame:
             "news_sentiment_mean": np.sin(idx / 5),
             "fng_value": 50 + np.cos(idx / 4) * 20,
             "funding_rate_lag1": np.sin(idx / 7) * 0.01 + (idx / rows) * 0.001,
+            "btc_long_short_ratio_lag1": 0.9 + np.cos(idx / 6) * 0.1,
         }
     )
 

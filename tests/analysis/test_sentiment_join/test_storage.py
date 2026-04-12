@@ -144,6 +144,20 @@ def test_upload_to_r2_calls_put_object(tmp_path: Path) -> None:
         assert call_kwargs["ContentType"] == "application/octet-stream"
 
 
+def test_save_parquet_records_btc_source_in_metadata(tmp_path: Path) -> None:
+    path = save_parquet(_sample_df(), tmp_path, "20260410", btc_source="binance")
+
+    metadata = pq.read_metadata(path)
+    assert metadata.metadata[b"btc_source"].decode() == "binance"
+
+
+def test_save_parquet_defaults_btc_source_to_unknown(tmp_path: Path) -> None:
+    path = save_parquet(_sample_df(), tmp_path, "20260410")
+
+    metadata = pq.read_metadata(path)
+    assert metadata.metadata[b"btc_source"].decode() == "unknown"
+
+
 def test_upload_to_r2_swallows_exception(tmp_path: Path) -> None:
     from unittest.mock import MagicMock, patch
 

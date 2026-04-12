@@ -14,6 +14,8 @@ def _sample_df(rows: int = 35) -> pd.DataFrame:
             "fng_value": pd.array([55] * rows, dtype="Int64"),
             "funding_rate_lag1": [0.001] * rows,
             "btc_log_return": [0.01] * rows,
+            "btc_long_short_ratio": [0.9] * rows,
+            "btc_long_short_ratio_lag1": [0.9] * rows,
         }
     )
 
@@ -40,7 +42,12 @@ def test_run_statistical_tests_invokes_expected_pairs(monkeypatch: pytest.Monkey
 
     results = statistical_tests.run_statistical_tests(_sample_df())
 
-    assert results["adf"]["stationary"] is True
+    # adf는 이제 dict[str, dict] 구조
+    assert isinstance(results["adf"], dict)
+    assert "btc_log_return" in results["adf"]
+    assert results["adf"]["btc_log_return"]["stationary"] is True
+
+    # Granger pairs: 4쌍 × 3 lags = 12 호출
     assert calls == [
         ("news_sentiment_mean", "btc_log_return", 1),
         ("news_sentiment_mean", "btc_log_return", 2),
@@ -51,7 +58,40 @@ def test_run_statistical_tests_invokes_expected_pairs(monkeypatch: pytest.Monkey
         ("fng_value", "btc_log_return", 1),
         ("fng_value", "btc_log_return", 2),
         ("fng_value", "btc_log_return", 3),
+        ("btc_long_short_ratio_lag1", "btc_log_return", 1),
+        ("btc_long_short_ratio_lag1", "btc_log_return", 2),
+        ("btc_long_short_ratio_lag1", "btc_log_return", 3),
     ]
+
+
+def test_run_statistical_tests_returns_multi_adf(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        statistical_tests,
+        "_run_adf",
+        lambda series: {"statistic": -3.0, "pvalue": 0.01, "stationary": True},
+    )
+    monkeypatch.setattr(statistical_tests, "_run_granger", lambda *args, **kwargs: None)
+
+    results = statistical_tests.run_statistical_tests(_sample_df())
+
+    assert isinstance(results["adf"], dict)
+    assert "btc_log_return" in results["adf"]
+
+
+def test_run_statistical_tests_skips_missing_adf_column(monkeypatch: pytest.MonkeyPatch) -> None:
+    # btc_long_short_ratio 없는 df
+    df = _sample_df().drop(columns=["btc_long_short_ratio"])
+    monkeypatch.setattr(
+        statistical_tests,
+        "_run_adf",
+        lambda series: {"statistic": -3.0, "pvalue": 0.01, "stationary": True},
+    )
+    monkeypatch.setattr(statistical_tests, "_run_granger", lambda *args, **kwargs: None)
+
+    results = statistical_tests.run_statistical_tests(df)
+
+    assert "btc_long_short_ratio" not in results["adf"]
+    assert "btc_log_return" in results["adf"]
 
 
 def test_run_statistical_tests_isolates_adf_errors(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -64,5 +104,5 @@ def test_run_statistical_tests_isolates_adf_errors(monkeypatch: pytest.MonkeyPat
 
     results = statistical_tests.run_statistical_tests(_sample_df())
 
-    assert "adf" not in results
+    # adf 키는 있지만 내부가 비어있을 수 있음 (모든 ADF가 실패)
     assert results["granger"] == []

@@ -22,6 +22,7 @@ MASTER_SCHEMA = pa.DataFrameSchema(
         "fng_value": pa.Column("Int64", pa.Check.between(0, 100), nullable=True),
         "btc_log_return": pa.Column(float, nullable=True),
         "btc_return": pa.Column(float, nullable=True),
+        "btc_quote_volume": pa.Column(float, pa.Check.ge(0), nullable=True),
         "usdkrw_log_return": pa.Column(float, nullable=True),
         "usdkrw_return": pa.Column(float, nullable=True),
         "is_outlier": pa.Column(bool, nullable=False),
@@ -30,6 +31,8 @@ MASTER_SCHEMA = pa.DataFrameSchema(
         "open_interest_usd": pa.Column(float, nullable=True),
         "funding_rate_lag1": pa.Column(float, nullable=True),
         "oi_change_pct_lag1": pa.Column(float, nullable=True),
+        "btc_long_short_ratio": pa.Column(float, pa.Check.ge(0), nullable=True),
+        "btc_long_short_ratio_lag1": pa.Column(float, nullable=True),
         # Req 13: PCA 하이브리드 지수 (데이터 부족 시 NaN 허용)
         "hybrid_index": pa.Column(float, nullable=True),
     },

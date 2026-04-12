@@ -32,9 +32,54 @@ def test_fetch_futures_data_returns_nan_grid_when_all_requests_fail(
 ) -> None:
     monkeypatch.setattr(futures, "_fetch_funding_rate_history", lambda start_ms: [])
     monkeypatch.setattr(futures, "_fetch_oi_history", lambda start_ms: [])
+    monkeypatch.setattr(futures, "_fetch_long_short_ratio", lambda start_ms: [])
 
     df = futures.fetch_futures_data(lookback_days=2)
 
-    assert list(df.columns) == ["date", "funding_rate", "open_interest_usd"]
+    assert list(df.columns) == ["date", "funding_rate", "open_interest_usd", "btc_long_short_ratio"]
     assert df["funding_rate"].isna().all()
     assert df["open_interest_usd"].isna().all()
+    assert df["btc_long_short_ratio"].isna().all()
+
+
+def test_extract_daily_long_short_ratio_parses_str_fields() -> None:
+    rows = [
+        {"timestamp": _ms(2026, 4, 10), "longShortRatio": "0.8829"},
+        {"timestamp": _ms(2026, 4, 11), "longShortRatio": "1.0305"},
+    ]
+
+    result = futures._extract_daily_long_short_ratio(rows)
+
+    assert result["2026-04-10"] == pytest.approx(0.8829)
+    assert result["2026-04-11"] == pytest.approx(1.0305)
+
+
+def test_extract_daily_long_short_ratio_value_above_one_is_valid() -> None:
+    rows = [{"timestamp": _ms(2026, 4, 10), "longShortRatio": "2.5"}]
+
+    result = futures._extract_daily_long_short_ratio(rows)
+
+    assert result["2026-04-10"] == pytest.approx(2.5)
+
+
+def test_fetch_futures_data_lsr_failure_does_not_block_funding_oi(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    funding_rows = [
+        {"fundingTime": _ms(2026, 4, 10, 0), "fundingRate": "0.001"},
+    ]
+    oi_rows = [{"timestamp": _ms(2026, 4, 10), "sumOpenInterestValue": "1000.0"}]
+
+    monkeypatch.setattr(futures, "_fetch_funding_rate_history", lambda start_ms: funding_rows)
+    monkeypatch.setattr(futures, "_fetch_oi_history", lambda start_ms: oi_rows)
+    monkeypatch.setattr(
+        futures,
+        "_fetch_long_short_ratio",
+        lambda start_ms: (_ for _ in ()).throw(RuntimeError("LSR network error")),
+    )
+
+    df = futures.fetch_futures_data(lookback_days=2)
+
+    assert df["funding_rate"].notna().any()
+    assert df["open_interest_usd"].notna().any()
+    assert "btc_long_short_ratio" in df.columns

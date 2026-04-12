@@ -15,6 +15,7 @@ HYBRID_FEATURE_CANDIDATES = [
     "news_sentiment_mean",
     "fng_value",
     "funding_rate_lag1",
+    "btc_long_short_ratio_lag1",
     "etf_net_inflow_usd",  # 미래 추가 예정
 ]
 VIF_THRESHOLD = 10.0

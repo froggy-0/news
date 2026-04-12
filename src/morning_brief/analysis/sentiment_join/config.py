@@ -17,6 +17,7 @@ class SentimentJoinSettings:
     retain_days: int
     kis_app_key: str
     kis_app_secret: str
+    binance_api_key: str
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -74,6 +75,7 @@ def load_sentiment_join_settings() -> SentimentJoinSettings:
         retain_days=retain_days,
         kis_app_key=os.getenv("KIS_APP_KEY", "").strip(),
         kis_app_secret=os.getenv("KIS_APP_SECRET", "").strip(),
+        binance_api_key=os.getenv("SENTIMENT_JOIN_BINANCE_KEY", "").strip(),
     )
 
 
