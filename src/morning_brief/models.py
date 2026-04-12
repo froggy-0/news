@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
+from typing import Any
 
 
 @dataclass
@@ -36,16 +37,42 @@ class NewsItem:
 
 
 @dataclass
+class SilverNormalizedFieldRecord:
+    run_id: str
+    ticker: str
+    issuer: str
+    field_name: str
+    field_value: str | float | int | None
+    value_type: str
+    unit: str | None
+    as_of_date: date
+    collected_at: datetime
+    source_url: str
+    source_type: str
+    source_format: str
+    parse_method: str
+    source_file_url: str | None = None
+    quality_status: str = "ok"
+    raw_label: str | None = None
+    raw_text: str | None = None
+    schema_version: str = "v1"
+
+
+@dataclass
 class BitcoinEtfIssuerSnapshot:
     ticker: str
     issuer: str
     source_url: str
-    as_of: str
+    as_of_date: date
     shares_outstanding: int
     daily_volume: int
     aum_usd: float
     total_btc: float
     bitcoin_per_share: float
+    source_type: str = "official_html"  # official_json / official_csv / official_html
+    quality_status: str = "ok"  # ok / degraded / critical
+    collected_at: datetime | None = None
+    extra_fields: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

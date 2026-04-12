@@ -238,3 +238,25 @@ def get_text_with_retry(
         backoff_seconds=backoff_seconds,
     )
     return response.text
+
+
+def get_bytes_with_retry(
+    url: str,
+    *,
+    params: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+    provider: str | None = None,
+    timeout: int = DEFAULT_TIMEOUT,
+    retries: int = DEFAULT_RETRIES,
+    backoff_seconds: float = DEFAULT_BACKOFF,
+) -> bytes:
+    response = _request_with_retry(
+        url,
+        params=params,
+        headers=headers,
+        provider=provider,
+        timeout=timeout,
+        retries=retries,
+        backoff_seconds=backoff_seconds,
+    )
+    return response.content

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 from morning_brief.data.market import fetch_bitcoin_snapshot
@@ -16,17 +17,21 @@ def _snapshot(
     total_btc: float,
     aum_usd: float,
     shares_outstanding: int,
+    source_type: str = "official_html",
+    quality_status: str = "ok",
 ) -> BitcoinEtfIssuerSnapshot:
     return BitcoinEtfIssuerSnapshot(
         ticker=ticker,
         issuer=ticker,
         source_url=f"https://example.com/{ticker.lower()}",
-        as_of="03/10/2026",
+        as_of_date=date(2026, 3, 10),
         shares_outstanding=shares_outstanding,
         daily_volume=1_000_000,
         aum_usd=aum_usd,
         total_btc=total_btc,
         bitcoin_per_share=round(total_btc / shares_outstanding, 10),
+        source_type=source_type,
+        quality_status=quality_status,
     )
 
 
@@ -173,6 +178,57 @@ def test_fetch_bitcoin_snapshot_keeps_pipeline_alive_when_perplexity_etf_parsing
     assert snapshot.official_etf_total_aum_usd is None
 
 
+def test_fetch_bitcoin_snapshot_excludes_reference_only_and_critical_from_totals(
+    monkeypatch, tmp_path: Path
+):
+    monkeypatch.setattr(
+        "morning_brief.data.market._fetch_btc_spot_point",
+        lambda: MarketPoint(label="BTC-USD", ticker="BTC-USD", price=80_000.0, change_pct=1.2),
+    )
+    monkeypatch.setattr("morning_brief.data.market._fetch_fear_greed", lambda: (60, "Greed"))
+    monkeypatch.setattr(
+        "morning_brief.data.market._safe_kis_point_and_volume",
+        lambda label, ticker: (
+            MarketPoint(label=label, ticker=ticker, price=50.0, change_pct=1.0),
+            10,
+        ),
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.market.fetch_official_btc_etf_snapshots",
+        lambda **_: [
+            _snapshot(
+                ticker="BITB",
+                total_btc=37_700.0,
+                aum_usd=4_300_000_000.0,
+                shares_outstanding=112_000_000,
+            ),
+            _snapshot(
+                ticker="FBTC",
+                total_btc=150_000.0,
+                aum_usd=10_000_000_000.0,
+                shares_outstanding=120_000_000,
+                source_type="aggregator",
+                quality_status="degraded",
+            ),
+            _snapshot(
+                ticker="GBTC",
+                total_btc=193_400.0,
+                aum_usd=16_000_000_000.0,
+                shares_outstanding=190_800_000,
+                quality_status="critical",
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.market.save_official_btc_etf_cache", lambda *_, **__: None
+    )
+
+    snapshot = fetch_bitcoin_snapshot(cache_dir=tmp_path)
+
+    assert snapshot.official_etf_total_btc == 37_700.0
+    assert snapshot.official_etf_total_aum_usd == 4_300_000_000.0
+
+
 def test_fetch_bitcoin_snapshot_records_empty_official_etf_state(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(
         "morning_brief.data.market._fetch_btc_spot_point",
@@ -230,7 +286,7 @@ def test_fetch_bitcoin_snapshot_does_not_use_stale_official_etf_cache_when_refer
                 ticker="IBIT",
                 issuer="iShares",
                 source_url="https://www.ishares.com/us/products/333011/ishares-bitcoin-trust-etf",
-                as_of="03/14/2026",
+                as_of_date=date(2026, 3, 14),
                 shares_outstanding=10,
                 daily_volume=2,
                 aum_usd=100.0,

@@ -25,6 +25,13 @@ MASTER_SCHEMA = pa.DataFrameSchema(
         "usdkrw_log_return": pa.Column(float, nullable=True),
         "usdkrw_return": pa.Column(float, nullable=True),
         "is_outlier": pa.Column(bool, nullable=False),
+        # Req 11: 선물 시장 지표 (수집 실패 시 NaN 허용)
+        "funding_rate": pa.Column(float, nullable=True),
+        "open_interest_usd": pa.Column(float, nullable=True),
+        "funding_rate_lag1": pa.Column(float, nullable=True),
+        "oi_change_pct_lag1": pa.Column(float, nullable=True),
+        # Req 13: PCA 하이브리드 지수 (데이터 부족 시 NaN 허용)
+        "hybrid_index": pa.Column(float, nullable=True),
     },
     strict=True,
 )
