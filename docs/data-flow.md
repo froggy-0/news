@@ -405,3 +405,74 @@ packet = {
 | Sonar 맥락 분석 | 실행 시 | 교차 분석 + 내러티브 | 스토리라인 생성 |
 | 뉴스 기사 | 실행 시 | 출처·토픽·근거 URL 포함 | 딥다이브 링크 |
 | 시장 키워드 | 실행 시 | 이상 움직임 기반 자동 생성 | 검색 쿼리, 알림 트리거 |
+
+---
+
+## 9. Sentiment Join 분석 파이프라인
+
+브리핑 파이프라인과 독립된 분석용 배치입니다. GitHub Actions `Build Sentiment Time Join Parquet` job 또는 `make sentiment-join`으로 실행합니다.
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  진입점: scripts/build_sentiment_join.py                         │
+│  GitHub Actions: run-sentiment-join job (run-brief 성공 후 실행) │
+├──────────────────────────────────────────────────────────────────┤
+│  데이터 수집                                                      │
+│    ├─ BTC 가격·거래량                                             │
+│    │    Binance data-api.binance.vision (Spot klines)            │
+│    │    → KIS → yfinance BTC-USD                                 │
+│    ├─ USD/KRW 종가                                               │
+│    │    KIS inquire-daily-chartprice → yfinance KRW=X           │
+│    ├─ Fear & Greed Index (api.alternative.me/fng/)               │
+│    ├─ BTC 선물 지표 3종                                           │
+│    │    funding_rate / open_interest_usd / btc_long_short_ratio  │
+│    │    1차: Lambda(ap-northeast-2) → fapi.binance.com           │
+│    │    2차: Bybit 공개 API (geo-restriction 없음)                │
+│    │    3차: NaN (파이프라인 계속 진행)                            │
+│    ├─ R2 감성 점수 (브리핑 파이프라인 산출물 parquet 파일)         │
+│    └─ BTC ETF flows (Grayscale/공식 발행사 페이지)                │
+├──────────────────────────────────────────────────────────────────┤
+│  데이터 변환                                                      │
+│    ├─ 날짜 정규화 (UTC → YYYY-MM-DD)                              │
+│    ├─ forward-fill (가격 공백일 보정, 최대 3일)                    │
+│    └─ 수익률 계산 (btc_log_return, btc_return, usdkrw_*)          │
+├──────────────────────────────────────────────────────────────────┤
+│  Join 전략                                                        │
+│    R2 sentiment 보유 날짜 기준 inner join                         │
+│    → R2에 sentiment 없는 날짜는 분석 대상 제외                    │
+│    → lag-1 컬럼 계산 (funding_rate_lag1, oi_change_pct_lag1 등)  │
+│       (2행 이상 필요, 부족 시 NaN)                                │
+├──────────────────────────────────────────────────────────────────┤
+│  통계 분석                                                        │
+│    ├─ 이상값 필터 (Z-score 기반, is_outlier 플래그)               │
+│    ├─ ADF 정상성 검정 (30행 이상 권장)                             │
+│    ├─ Granger 인과 검정                                           │
+│    └─ VIF + PCA → hybrid_index (feature 수 이상 행 필요)          │
+│       부족 시 NaN, pca_summary.status = "insufficient_rows"      │
+├──────────────────────────────────────────────────────────────────┤
+│  출력 및 업로드                                                    │
+│    ├─ Parquet 저장: data/sentiment_join/master_{YYYYMMDD}.parquet│
+│    ├─ R2 업로드 (R2_PUBLIC_BUCKET 설정 시)                        │
+│    └─ 로컬 파일 보관: SENTIMENT_JOIN_RETAIN_DAYS일 (기본 30)      │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### 9.1 주요 환경변수
+
+| 환경변수 | 기본값 | 설명 |
+|---|---|---|
+| `SENTIMENT_JOIN_LOOKBACK_DAYS` | `180` | 수집 기간 (1~730일) |
+| `FUTURES_LAMBDA_ARN` | `""` | Lambda 프록시 ARN. 설정 시 Binance 직접 호출 건너뜀 |
+| `SENTIMENT_JOIN_OUTPUT_DIR` | `data/sentiment_join` | 로컬 출력 경로 |
+| `SENTIMENT_JOIN_RETAIN_DAYS` | `30` | 로컬 보관 기간 |
+| `SENTIMENT_JOIN_R2_MAX_CONCURRENCY` | `10` | R2 업로드 동시성 |
+
+### 9.2 행 수와 NaN 컬럼 관계
+
+| 상황 | 영향 받는 컬럼 |
+|---|---|
+| 행 1개 | `*_lag1` 전체 NaN, `hybrid_index` NaN |
+| 행 < 30 | ADF/Granger 검정 스킵, `hybrid_index` NaN 가능 |
+| ETF 429 차단 | `etf_total_btc`, `etf_total_aum_usd`, `etf_net_inflow_usd` NaN |
+
+행 수는 R2에 누적된 브리핑 실행 횟수에 비례합니다. 매일 파이프라인이 실행될수록 데이터가 쌓입니다.
