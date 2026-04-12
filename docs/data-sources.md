@@ -121,6 +121,101 @@ critical  →  뉴스 3건 미만 또는 가격 누락률 ≥ 80% → 이메일 
 
 ## 4. 재시도·공급자 정책 (`provider_runtime.py`)
 
-- 재시도 대상: `429 / 5xx / timeout` 만. `404` 등 영구 실패는 즉시 포기.
+- 재시도 대상: `429 / 5xx / timeout` 만. `404`, `451` 등 영구/지역 실패는 재시도 없이 즉시 포기.
 - 기본값: 최대 3회, 1.2초 기저 지수 백오프. `Retry-After` 헤더 우선.
 - circuit breaker: `open_circuit()` 호출 시 해당 실행 내 이후 요청 전량 스킵.
+
+| provider key | retryable statuses | max_attempts | 비고 |
+|---|---|---|---|
+| `binance_futures` | 429, 500-504 | 3 | 451(지역 차단)은 재시도 안 함 → Lambda 폴백으로 전환 |
+| `bybit` | 429, 500-504 | 3 | 공개 API, 인증 불필요 |
+
+---
+
+## 5. Sentiment Join 분석 파이프라인 데이터 소스
+
+`scripts/build_sentiment_join.py` (`make sentiment-join`)에서 사용하는 소스 목록입니다.
+브리핑 파이프라인과 독립 실행되며, 출력은 `data/sentiment_join/master_{YYYYMMDD}.parquet`입니다.
+
+| 데이터 | 1차 소스 | 폴백 | 상태 |
+|---|---|---|---|
+| BTC 가격·거래량 | Binance `data-api.binance.vision/api/v3/klines` (공식 미러, geo-restriction 없음) | KIS → yfinance `BTC-USD` | ✅ |
+| USD/KRW 종가 | KIS `inquire-daily-chartprice` (`FX@KRW`) | yfinance `KRW=X` | ✅ |
+| Fear & Greed | `api.alternative.me/fng/` | — | ✅ |
+| BTC 펀딩비 (`funding_rate`) | Lambda(ap-northeast-2) → `fapi.binance.com/fapi/v1/fundingRate` | Bybit `api.bybit.com/v5/market/funding/history` | ✅ |
+| BTC 미결제약정 (`open_interest_usd`) | Lambda(ap-northeast-2) → `fapi.binance.com/futures/data/openInterestHist` | Bybit `api.bybit.com/v5/market/open-interest` | ✅ |
+| BTC Long/Short Ratio | Lambda(ap-northeast-2) → `fapi.binance.com/futures/data/globalLongShortAccountRatio` | Bybit `api.bybit.com/v5/market/account-ratio` | ✅ |
+| R2 감성 점수 | R2 버킷 (브리핑 파이프라인 산출물 parquet) | — | ✅ |
+| BTC ETF flows | Grayscale/공식 발행사 페이지 (`etfs.grayscale.com` 등) | — | ⚠️ 429 차단 빈번 |
+
+### 5.1 선물 데이터 fallback 체인
+
+GitHub Actions(US IP)에서 `fapi.binance.com`이 HTTP 451(지역 제한)로 차단됩니다.
+`FUTURES_LAMBDA_ARN` 환경변수로 ap-northeast-2 Lambda를 프록시로 사용합니다.
+
+```
+FUTURES_LAMBDA_ARN 설정 시 (GitHub Actions 권장):
+  1차: Lambda(ap-northeast-2) 호출 → Seoul IP → fapi.binance.com ✓
+       ↓ 실패 시
+  2차: Bybit 공개 API (geo-restriction 없음, 인증 불필요)
+       ↓ 실패 시
+  NaN 프레임 반환 — 파이프라인은 계속 진행
+
+FUTURES_LAMBDA_ARN 미설정 시 (로컬 환경 등):
+  1차: fapi.binance.com 직접 시도
+       ↓ 실패 시 (로컬 IP가 허용된 경우라면 성공)
+  2차: Bybit → NaN
+```
+
+### 5.2 Lambda 인프라
+
+| 항목 | 값 |
+|---|---|
+| 함수명 | `binance-futures-fetcher` |
+| 리전 | `ap-northeast-2` (Seoul) |
+| ECR 이미지 | `254849613915.dkr.ecr.ap-northeast-2.amazonaws.com/news:binance-futures-fetcher` |
+| 아키텍처 | ARM64 (Graviton2) |
+| 런타임 | Python 3.11, stdlib만 사용 (외부 의존성 없음) |
+| Lambda 실행 역할 | `kr-pr-lambda-binance-futures-v1` |
+| 호출 권한 (GHA) | `kr-pr-ses-news-v1a` — `lambda:InvokeFunction` |
+| CloudWatch 로그 그룹 | `/aws/lambda/binance-futures-fetcher` |
+| 배포 방법 | 수동: `bash lambda/binance_futures/deploy.sh` |
+
+CloudWatch 정상 로그 예시:
+```
+[INFO] source=fapi.binance.com symbol=BTCUSDT range=2026-04-08~2026-04-12
+       funding_days=5(latest=-0.000118) oi_days=5(latest=7207692419) lsr_days=5(latest=0.7425)
+```
+
+### 5.3 Parquet 출력 스키마
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| `date` | str | YYYY-MM-DD |
+| `news_sentiment_mean` / `_std` | float | FinBERT 뉴스 감성 평균/표준편차 |
+| `n_articles` | int | 감성 점수 부여 기사 수 |
+| `signal_sentiment_mean` / `_std` | float | X 시그널 감성 평균/표준편차 |
+| `n_signals` | int | 시그널 수 |
+| `fng_value` | int | Fear & Greed (0~100) |
+| `btc_quote_volume` | float | BTC 거래대금 (USD) |
+| `btc_log_return` / `btc_return` | float | BTC 일간 수익률 |
+| `usdkrw_log_return` / `usdkrw_return` | float | USD/KRW 일간 수익률 |
+| `funding_rate` | float | BTC 일별 합산 펀딩비 |
+| `open_interest_usd` | float | BTC 미결제약정 (USD) |
+| `btc_long_short_ratio` | float | BTC Long/Short 비율 |
+| `etf_total_btc` / `_aum_usd` / `_net_inflow_usd` | float | BTC ETF 집계 |
+| `*_lag1` | float | 전일 지연값 (2행 이상 필요) |
+| `is_outlier` | bool | Z-score 이상값 여부 |
+| `hybrid_index` | float | VIF+PCA 기반 복합 지표 (최소 행 수 필요) |
+
+**Parquet 메타데이터:**
+- `btc_source`: 가격 수집 소스 (`binance` / `kis` / `yfinance`)
+- `ffill_days`: forward-fill 적용 일수
+- `sentiment_join_stats`: ADF/Granger/PCA/VIF 진단 요약 JSON
+- `hybrid_index_diagnostics`: PCA 요약
+
+**행 수 제약:**
+- lag 컬럼: 2행 이상 필요 (부족 시 NaN)
+- ADF/Granger 검정: 30행 이상 권장
+- hybrid_index (PCA): feature 수 이상 행 필요
+- 행 수는 R2에 누적된 브리핑 실행 횟수에 비례

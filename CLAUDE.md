@@ -30,6 +30,10 @@ python main.py schedule           # 매일 08:00 KST 스케줄 실행
 # 분석 배치 직접 실행
 ./scripts/build_sentiment_join.py
 SENTIMENT_JOIN_LOOKBACK_DAYS=90 make sentiment-join
+FUTURES_LAMBDA_ARN=arn:aws:lambda:ap-northeast-2:...:function:binance-futures-fetcher make sentiment-join
+
+# Lambda 수동 배포 (선물 데이터 프록시)
+bash lambda/binance_futures/deploy.sh
 ```
 
 ### Frontend
@@ -53,13 +57,13 @@ npm run deploy:production   # Cloudflare production 배포
 
 ## Architecture
 
-### Backend Pipeline (7단계)
+### Backend Pipeline (8단계)
 
 `main.py` → `src/morning_brief/pipeline.py`의 `run_pipeline()` 진입점.
 
 | 단계 | 모듈 | 역할 |
 |------|------|------|
-| 1. Market Data | `data/market.py` | FRED(거시), Stooq(지수), yfinance(주식), CoinGecko(BTC), ETF 공식 사이트 |
+| 1. Market Data | `data/market.py` | FRED(거시), KIS(지수·환율), yfinance(주식 fallback), CoinGecko(BTC), ETF 공식 사이트 |
 | 2. Keywords | `data/market.py` | VIX 스파이크·금리·지수·BTC 변동 감지 → 검색 토픽 생성 |
 | 3. News | `data/news.py` | Grok X 신호 → Perplexity Sonar → Grok 키워드 검색 → fallback(Gemini/RSS) |
 | 3.5. Sentiment | `data/finbert_sentiment.py` | ProsusAI/finbert로 뉴스·X시그널 영문 원본에 감성 점수(-1~1) 부여. `FINBERT_ENABLED=false`로 비활성화 가능. 선택적 의존성(`requirements-ml.txt`) |
@@ -90,6 +94,9 @@ npm run deploy:production   # Cloudflare production 배포
   - `SENTIMENT_JOIN_OUTPUT_DIR`
   - `SENTIMENT_JOIN_R2_MAX_CONCURRENCY`
   - `SENTIMENT_JOIN_RETAIN_DAYS`
+  - `FUTURES_LAMBDA_ARN` — ap-northeast-2 Lambda ARN (설정 시 Binance fapi 직접 호출 건너뜀)
+- 선물 데이터 fallback 체인: Lambda(ap-northeast-2) → Bybit 공개 API → NaN 프레임
+- Lambda 인프라: `lambda/binance_futures/` (ARM64, Python 3.11, stdlib만 사용, 수동 배포)
 - 분석 의존성: `requirements-analysis.txt` (`pandera`, `pyarrow`, `pandas`, `numpy`)
 
 ### Frontend
@@ -104,7 +111,7 @@ Next.js 15 App Router + SSG(`output: 'export'`), Cloudflare Pages 배포.
 
 ### Data Sources
 
-- **시장**: FRED, Stooq, yfinance, CoinGecko, BlackRock/Bitwise 공식 ETF 페이지
+- **시장**: FRED, KIS, yfinance, CoinGecko, BlackRock/Bitwise 공식 ETF 페이지
 - **뉴스**: Perplexity (Sonar/Search), Grok (X API + 웹 검색), Gemini Grounding, RSS/NewsAPI
 - **LLM**: OpenAI GPT-4 (브리핑 생성·검증)
 - **NLP**: ProsusAI/finbert (뉴스·시그널 감성 점수, 선택적 — `requirements-ml.txt`)
@@ -125,5 +132,6 @@ Next.js 15 App Router + SSG(`output: 'export'`), Cloudflare Pages 배포.
 - Python 3.11 호환성 유지 (CI 기준)
 - `.env*`, `credentials.json`, `token.json`은 읽거나 수정하지 않습니다.
 - 경고 로그는 운영 신호여야 합니다 — 잡음 로그를 추가하지 않습니다.
-- `404`는 재시도하지 않고, `429/5xx/timeout` 중심으로만 재시도합니다.
+- `404`는 재시도하지 않고, `429/5xx/timeout` 중심으로만 재시도합니다. `451`(지역 제한)도 재시도하지 않습니다.
+- `FUTURES_LAMBDA_ARN` 설정 시 Binance fapi 직접 호출을 건너뜁니다 — GitHub Actions(US IP)에서 451 차단 우회 목적입니다.
 - 집계 로직은 부분 성공을 허용해 한 소스 실패가 전체를 망가뜨리지 않도록 설계합니다.
