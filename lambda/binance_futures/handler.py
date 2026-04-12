@@ -30,8 +30,8 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+logging.getLogger().setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
 
 SYMBOL = "BTCUSDT"
 FUNDING_URL = "https://fapi.binance.com/fapi/v1/fundingRate"
@@ -64,11 +64,9 @@ def _fetch_funding(start_ms: int) -> list[dict]:
     params = {"symbol": SYMBOL, "startTime": str(start_ms), "limit": "1000"}
     try:
         rows = _get(FUNDING_URL, params)
-        result = rows if isinstance(rows, list) else []
-        logger.info("funding rows=%d", len(result))
-        return result
+        return rows if isinstance(rows, list) else []
     except urllib.error.HTTPError as exc:
-        logger.error("funding HTTP %s %s", exc.code, exc.reason)
+        logger.error("funding HTTP %s: %s", exc.code, exc.reason)
         return []
     except Exception as exc:
         logger.error("funding error: %s", exc)
@@ -79,11 +77,9 @@ def _fetch_oi(limit: int) -> list[dict]:
     params = {"symbol": SYMBOL, "period": "1d", "limit": str(min(limit, 500))}
     try:
         rows = _get(OI_URL, params)
-        result = rows if isinstance(rows, list) else []
-        logger.info("oi rows=%d", len(result))
-        return result
+        return rows if isinstance(rows, list) else []
     except urllib.error.HTTPError as exc:
-        logger.error("oi HTTP %s %s", exc.code, exc.reason)
+        logger.error("oi HTTP %s: %s", exc.code, exc.reason)
         return []
     except Exception as exc:
         logger.error("oi error: %s", exc)
@@ -94,11 +90,9 @@ def _fetch_lsr(limit: int) -> list[dict]:
     params = {"symbol": SYMBOL, "period": "1d", "limit": str(min(limit, 500))}
     try:
         rows = _get(LSR_URL, params)
-        result = rows if isinstance(rows, list) else []
-        logger.info("lsr rows=%d", len(result))
-        return result
+        return rows if isinstance(rows, list) else []
     except urllib.error.HTTPError as exc:
-        logger.error("lsr HTTP %s %s", exc.code, exc.reason)
+        logger.error("lsr HTTP %s: %s", exc.code, exc.reason)
         return []
     except Exception as exc:
         logger.error("lsr error: %s", exc)
@@ -160,7 +154,6 @@ def _parse_lsr(rows: list[dict]) -> dict[str, float]:
 
 def lambda_handler(event: dict, context: object) -> dict:
     lookback_days: int = int(event.get("lookback_days", 30))
-    logger.info("start lookback_days=%d", lookback_days)
 
     today = datetime.now(timezone.utc).date()
     start = today - timedelta(days=lookback_days + 1)
@@ -172,7 +165,7 @@ def lambda_handler(event: dict, context: object) -> dict:
     lsr_rows = _fetch_lsr(limit)
 
     if not funding_rows and not oi_rows and not lsr_rows:
-        logger.error("all Binance fapi requests failed")
+        logger.error("source=fapi.binance.com all_endpoints_failed")
         return {"error": "all Binance fapi requests failed"}
 
     result = {
@@ -180,11 +173,24 @@ def lambda_handler(event: dict, context: object) -> dict:
         "open_interest_usd": _parse_oi(oi_rows),
         "btc_long_short_ratio": _parse_lsr(lsr_rows),
     }
+
+    fr = result["funding_rate"]
+    oi = result["open_interest_usd"]
+    lsr = result["btc_long_short_ratio"]
+    date_from = min(fr or oi or lsr)
+    date_to = max(fr or oi or lsr)
     logger.info(
-        "done funding_days=%d oi_days=%d lsr_days=%d",
-        len(result["funding_rate"]),
-        len(result["open_interest_usd"]),
-        len(result["btc_long_short_ratio"]),
+        "source=fapi.binance.com symbol=%s range=%s~%s "
+        "funding_days=%d(latest=%.6f) oi_days=%d(latest=%.0f) lsr_days=%d(latest=%.4f)",
+        SYMBOL,
+        date_from,
+        date_to,
+        len(fr),
+        list(fr.values())[-1] if fr else float("nan"),
+        len(oi),
+        list(oi.values())[-1] if oi else float("nan"),
+        len(lsr),
+        list(lsr.values())[-1] if lsr else float("nan"),
     )
     return result
 
