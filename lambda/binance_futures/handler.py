@@ -4,6 +4,7 @@ GitHub Actions(US IP)에서 fapi.binance.com이 HTTP 451로 차단되므로
 ap-northeast-2(Seoul) Lambda를 프록시로 사용합니다.
 
 외부 의존성 없음 — urllib 표준 라이브러리만 사용.
+Binance fapi 공개 엔드포인트(인증 불필요): fundingRate, openInterestHist, globalLongShortAccountRatio
 
 입력:
     event["lookback_days"]: int  수집할 기간(일), 기본값 30
@@ -22,11 +23,15 @@ ap-northeast-2(Seoul) Lambda를 프록시로 사용합니다.
 from __future__ import annotations
 
 import json
+import logging
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from typing import Any
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
 
 SYMBOL = "BTCUSDT"
 FUNDING_URL = "https://fapi.binance.com/fapi/v1/fundingRate"
@@ -56,26 +61,47 @@ def _day(ts_ms: int) -> str:
 
 
 def _fetch_funding(start_ms: int) -> list[dict]:
+    params = {"symbol": SYMBOL, "startTime": str(start_ms), "limit": "1000"}
     try:
-        rows = _get(FUNDING_URL, {"symbol": SYMBOL, "startTime": str(start_ms), "limit": "1000"})
-        return rows if isinstance(rows, list) else []
-    except Exception:
+        rows = _get(FUNDING_URL, params)
+        result = rows if isinstance(rows, list) else []
+        logger.info("funding rows=%d", len(result))
+        return result
+    except urllib.error.HTTPError as exc:
+        logger.error("funding HTTP %s %s", exc.code, exc.reason)
+        return []
+    except Exception as exc:
+        logger.error("funding error: %s", exc)
         return []
 
 
 def _fetch_oi(limit: int) -> list[dict]:
+    params = {"symbol": SYMBOL, "period": "1d", "limit": str(min(limit, 500))}
     try:
-        rows = _get(OI_URL, {"symbol": SYMBOL, "period": "1d", "limit": str(min(limit, 500))})
-        return rows if isinstance(rows, list) else []
-    except Exception:
+        rows = _get(OI_URL, params)
+        result = rows if isinstance(rows, list) else []
+        logger.info("oi rows=%d", len(result))
+        return result
+    except urllib.error.HTTPError as exc:
+        logger.error("oi HTTP %s %s", exc.code, exc.reason)
+        return []
+    except Exception as exc:
+        logger.error("oi error: %s", exc)
         return []
 
 
 def _fetch_lsr(limit: int) -> list[dict]:
+    params = {"symbol": SYMBOL, "period": "1d", "limit": str(min(limit, 500))}
     try:
-        rows = _get(LSR_URL, {"symbol": SYMBOL, "period": "1d", "limit": str(min(limit, 500))})
-        return rows if isinstance(rows, list) else []
-    except Exception:
+        rows = _get(LSR_URL, params)
+        result = rows if isinstance(rows, list) else []
+        logger.info("lsr rows=%d", len(result))
+        return result
+    except urllib.error.HTTPError as exc:
+        logger.error("lsr HTTP %s %s", exc.code, exc.reason)
+        return []
+    except Exception as exc:
+        logger.error("lsr error: %s", exc)
         return []
 
 
@@ -134,6 +160,7 @@ def _parse_lsr(rows: list[dict]) -> dict[str, float]:
 
 def lambda_handler(event: dict, context: object) -> dict:
     lookback_days: int = int(event.get("lookback_days", 30))
+    logger.info("start lookback_days=%d", lookback_days)
 
     today = datetime.now(timezone.utc).date()
     start = today - timedelta(days=lookback_days + 1)
@@ -145,13 +172,21 @@ def lambda_handler(event: dict, context: object) -> dict:
     lsr_rows = _fetch_lsr(limit)
 
     if not funding_rows and not oi_rows and not lsr_rows:
+        logger.error("all Binance fapi requests failed")
         return {"error": "all Binance fapi requests failed"}
 
-    return {
+    result = {
         "funding_rate": _parse_funding(funding_rows),
         "open_interest_usd": _parse_oi(oi_rows),
         "btc_long_short_ratio": _parse_lsr(lsr_rows),
     }
+    logger.info(
+        "done funding_days=%d oi_days=%d lsr_days=%d",
+        len(result["funding_rate"]),
+        len(result["open_interest_usd"]),
+        len(result["btc_long_short_ratio"]),
+    )
+    return result
 
 
 # 로컬 직접 실행 (smoke test)
