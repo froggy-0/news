@@ -12,7 +12,10 @@ from morning_brief.logging_utils import log_structured
 
 logger = logging.getLogger(__name__)
 
-BINANCE_KLINES_URL = "https://api.binance.com/api/v3/klines"
+# data-api.binance.vision은 지역 제한(HTTP 451) 없이 공개 시세 데이터를 제공하는
+# Binance 공식 미러 엔드포인트입니다. api.binance.com 실패 시 자동으로 시도합니다.
+BINANCE_KLINES_URL = "https://data-api.binance.vision/api/v3/klines"
+BINANCE_KLINES_URL_FALLBACK = "https://api.binance.com/api/v3/klines"
 BINANCE_SYMBOL = "BTCUSDT"
 BINANCE_INTERVAL = "1d"
 
@@ -75,19 +78,39 @@ def _fetch_klines(
         raise ValueError(f"lookback이 klines 단일 요청 한도를 초과합니다: limit={limit} > 1000")
 
     start_ms = int(start_dt.timestamp() * 1000)
+    # docs: "startTime과 endTime을 모두 지정하면 startTime 동작을 유지하면서
+    # endTime 한계를 준수합니다." — 종료 날짜를 명시적으로 고정해 경계 누락 방지.
+    # end_dt 하루 끝(23:59:59.999)까지 포함하도록 다음날 자정 - 1ms 사용.
+    end_ms = int(end_dt.timestamp() * 1000) + 86_400_000 - 1
+    params = {
+        "symbol": BINANCE_SYMBOL,
+        "interval": BINANCE_INTERVAL,
+        "startTime": start_ms,
+        "endTime": end_ms,
+        "limit": limit,
+    }
 
-    return get_list_with_retry(
-        BINANCE_KLINES_URL,
-        params={
-            "symbol": BINANCE_SYMBOL,
-            "interval": BINANCE_INTERVAL,
-            "startTime": str(start_ms),
-            "limit": str(limit),
-        },
-        headers=_binance_headers(api_key),
-        provider="binance_spot",
-        timeout=20,
-    )
+    # data-api.binance.vision을 먼저 시도합니다 (지역 제한 없음).
+    # 실패 시 api.binance.com으로 재시도합니다.
+    for url in (BINANCE_KLINES_URL, BINANCE_KLINES_URL_FALLBACK):
+        try:
+            return get_list_with_retry(
+                url,
+                params=params,
+                headers=_binance_headers(api_key),
+                provider="binance_spot",
+                timeout=20,
+            )
+        except Exception:
+            if url == BINANCE_KLINES_URL_FALLBACK:
+                raise
+            log_structured(
+                logger,
+                event="binance.mirror_fallback",
+                message="data-api.binance.vision 실패, api.binance.com으로 재시도합니다.",
+                level=logging.WARNING,
+            )
+    raise RuntimeError("unreachable")
 
 
 def fetch_btc_close_binance(
