@@ -65,33 +65,8 @@ def _klines_to_frame(rows: list[list[Any]]) -> pd.DataFrame:
     return df
 
 
-def _fetch_klines(
-    start_date: str,
-    end_date: str,
-    api_key: str,
-) -> list[list[Any]]:
-    start_dt = datetime.fromisoformat(start_date).replace(tzinfo=timezone.utc)
-    end_dt = datetime.fromisoformat(end_date).replace(tzinfo=timezone.utc)
-    limit = (end_dt - start_dt).days + 2
-
-    if limit > 1000:
-        raise ValueError(f"lookback이 klines 단일 요청 한도를 초과합니다: limit={limit} > 1000")
-
-    start_ms = int(start_dt.timestamp() * 1000)
-    # docs: "startTime과 endTime을 모두 지정하면 startTime 동작을 유지하면서
-    # endTime 한계를 준수합니다." — 종료 날짜를 명시적으로 고정해 경계 누락 방지.
-    # end_dt 하루 끝(23:59:59.999)까지 포함하도록 다음날 자정 - 1ms 사용.
-    end_ms = int(end_dt.timestamp() * 1000) + 86_400_000 - 1
-    params = {
-        "symbol": BINANCE_SYMBOL,
-        "interval": BINANCE_INTERVAL,
-        "startTime": start_ms,
-        "endTime": end_ms,
-        "limit": limit,
-    }
-
-    # data-api.binance.vision을 먼저 시도합니다 (지역 제한 없음).
-    # 실패 시 api.binance.com으로 재시도합니다.
+def _call_klines(params: dict, api_key: str) -> list[list[Any]]:
+    """단발 klines 호출. 두 엔드포인트 순서로 시도."""
     for url in (BINANCE_KLINES_URL, BINANCE_KLINES_URL_FALLBACK):
         try:
             return get_list_with_retry(
@@ -111,6 +86,55 @@ def _fetch_klines(
                 level=logging.WARNING,
             )
     raise RuntimeError("unreachable")
+
+
+def _fetch_klines(
+    start_date: str,
+    end_date: str,
+    api_key: str,
+) -> list[list[Any]]:
+    import time
+
+    start_dt = datetime.fromisoformat(start_date).replace(tzinfo=timezone.utc)
+    end_dt = datetime.fromisoformat(end_date).replace(tzinfo=timezone.utc)
+    total_days = (end_dt - start_dt).days + 2
+
+    end_ms = int(end_dt.timestamp() * 1000) + 86_400_000 - 1
+
+    if total_days <= 1000:
+        # 기존 단발 호출 경로 (460일 포함) — 동작 변경 없음
+        start_ms = int(start_dt.timestamp() * 1000)
+        params = {
+            "symbol": BINANCE_SYMBOL,
+            "interval": BINANCE_INTERVAL,
+            "startTime": start_ms,
+            "endTime": end_ms,
+            "limit": total_days,
+        }
+        return _call_klines(params, api_key)
+
+    # 1000일 초과: startTime 커서 기반 while 루프 페이지네이션
+    all_rows: list[list[Any]] = []
+    cursor_ms = int(start_dt.timestamp() * 1000)
+
+    while cursor_ms < end_ms:
+        params = {
+            "symbol": BINANCE_SYMBOL,
+            "interval": BINANCE_INTERVAL,
+            "startTime": cursor_ms,
+            "limit": 1000,
+        }
+        batch = _call_klines(params, api_key)
+        if not batch:
+            break
+        all_rows.extend(batch)
+        last_open_time_ms = int(batch[-1][0])
+        if last_open_time_ms >= end_ms:
+            break
+        cursor_ms = last_open_time_ms + 86_400_000  # 다음 날 자정
+        time.sleep(0.05)
+
+    return all_rows
 
 
 def fetch_btc_close_binance(

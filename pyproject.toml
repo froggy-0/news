@@ -2,6 +2,7 @@
 addopts = "-q -m 'not live_kis'"
 testpaths = ["tests"]
 norecursedirs = [".git", ".venv", ".cache", "outputs"]
+pythonpath = ["src", "scripts"]
 markers = [
     "live_kis: exercises real Korea Investment Open API contracts",
 ]

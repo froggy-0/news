@@ -118,10 +118,99 @@ def test_fetch_btc_close_binance_fallback_yfinance(
     assert df.attrs["btc_source"] == "yfinance"
 
 
-def test_fetch_klines_raises_if_limit_exceeds_1000(
+def test_fetch_klines_single_call_for_460_days(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(binance, "get_list_with_retry", lambda *args, **kwargs: [])
+    """total_days=460 → 단발 호출 경로, _call_klines 1회 호출."""
+    call_count = 0
 
-    with pytest.raises(ValueError, match="단일 요청 한도를 초과"):
-        binance._fetch_klines("2020-01-01", "2023-01-01", api_key="")
+    def mock_call_klines(params, api_key):
+        nonlocal call_count
+        call_count += 1
+        return [SAMPLE_ROW]
+
+    monkeypatch.setattr(binance, "_call_klines", mock_call_klines)
+
+    # 460일 범위: 2024-12-09 ~ 2026-04-13
+    binance._fetch_klines("2024-12-09", "2026-04-13", api_key="")
+
+    assert call_count == 1, "460일은 단발 호출이어야 함"
+
+
+def test_fetch_klines_single_call_for_730_days(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """total_days=730 → 단발 호출 경로 (≤1000)."""
+    call_count = 0
+
+    def mock_call_klines(params, api_key):
+        nonlocal call_count
+        call_count += 1
+        return [SAMPLE_ROW]
+
+    monkeypatch.setattr(binance, "_call_klines", mock_call_klines)
+
+    binance._fetch_klines("2024-01-01", "2026-01-01", api_key="")
+
+    assert call_count == 1
+
+
+def test_fetch_klines_single_call_boundary_1000_days(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """total_days=1000 → 단발 호출 경로 (경계값)."""
+    call_count = 0
+
+    def mock_call_klines(params, api_key):
+        nonlocal call_count
+        call_count += 1
+        return [SAMPLE_ROW]
+
+    monkeypatch.setattr(binance, "_call_klines", mock_call_klines)
+
+    # 998일 범위 + 2 = 1000
+    from datetime import date, timedelta
+
+    start = date(2023, 1, 1)
+    end = start + timedelta(days=998)
+    binance._fetch_klines(str(start), str(end), api_key="")
+
+    assert call_count == 1
+
+
+def test_fetch_klines_pagination_for_over_1000_days(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """total_days=1001 → 페이지네이션 루프, _call_klines 2회 이상 호출."""
+    import time as time_module
+
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(time_module, "sleep", lambda s: sleep_calls.append(s))
+
+    # 1회차: 1000개 반환 (open_time이 end_ms보다 작아서 루프 계속)
+    # 2회차: 빈 리스트 → 루프 종료
+    batch1 = [list(SAMPLE_ROW) for _ in range(3)]
+    # open_time(ms)를 작게 설정해서 end_ms를 초과하지 않도록 함
+    batch1[0][0] = 1_000_000_000_000
+    batch1[1][0] = 1_000_086_400_000
+    batch1[2][0] = 1_000_172_800_000  # 마지막 행의 open_time
+
+    call_count = 0
+    responses = [batch1, []]
+
+    def mock_call_klines(params, api_key):
+        nonlocal call_count
+        r = responses[min(call_count, len(responses) - 1)]
+        call_count += 1
+        return r
+
+    monkeypatch.setattr(binance, "_call_klines", mock_call_klines)
+
+    from datetime import date, timedelta
+
+    start = date(2020, 1, 1)
+    end = start + timedelta(days=1001)
+    binance._fetch_klines(str(start), str(end), api_key="")
+
+    assert call_count >= 2, "1001일 초과 시 페이지네이션 루프 진입"
+    assert len(sleep_calls) >= 1, "페이지 간 time.sleep 호출 확인"
