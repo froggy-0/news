@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
+from botocore.exceptions import ClientError
+
 from backfill.scorer import DailyAggregate
 from backfill.uploader import (
     _is_pipeline_file,
@@ -12,7 +14,6 @@ from backfill.uploader import (
     upload_all,
     upload_brief,
 )
-from botocore.exceptions import ClientError
 
 
 def _agg(
