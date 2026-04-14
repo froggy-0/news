@@ -194,7 +194,14 @@ async function writeStaticAssets() {
   if (!index.dates[0]) {
     throw new Error("index.json must include at least one date");
   }
-  const briefs = await Promise.all(index.dates.map((date) => readBrief(date)));
+  const briefResults = await Promise.allSettled(index.dates.map((date) => readBrief(date)));
+  const briefs = briefResults
+    .filter((result) => result.status === "fulfilled")
+    .map((result) => result.value);
+  if (!briefs.length) {
+    const failed = briefResults.find((result) => result.status === "rejected");
+    throw failed?.reason ?? new Error("No renderable briefs were available for RSS generation");
+  }
   const rssItems = briefs.map((brief) => renderRssItem(brief)).join("");
   const rss = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
