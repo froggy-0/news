@@ -5,8 +5,11 @@ from datetime import datetime
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
+from botocore.exceptions import ClientError
+
 import morning_brief.public_site as public_site
 from morning_brief.config import load_settings
+from morning_brief.observability import PipelineObserver
 from morning_brief.public_site import build_public_brief, build_public_index, publish_public_brief
 from morning_brief.unified_output import (
     MetaLayer,
@@ -683,6 +686,102 @@ def test_publish_public_brief_writes_local_public_bundle(monkeypatch, tmp_path) 
 
     index_payload = json.loads(index_path.read_text(encoding="utf-8"))
     assert index_payload["dates"] == ["2026-03-21"]
+
+
+def test_publish_public_brief_r2_signature_failure_falls_back_to_local(
+    monkeypatch, tmp_path
+) -> None:
+    class FakeR2Client:
+        def put_json(self, key: str, payload: dict) -> None:
+            raise ClientError(
+                {
+                    "Error": {
+                        "Code": "SignatureDoesNotMatch",
+                        "Message": "The request signature we calculated does not match",
+                    }
+                },
+                "PutObject",
+            )
+
+        def list_dates(self) -> list[str]:
+            raise AssertionError("list_dates should not be called after upload failure")
+
+    monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
+    monkeypatch.setenv("R2_PUBLIC_BUCKET", "test-bucket")
+    monkeypatch.setenv("R2_S3_ENDPOINT", "https://example.r2.cloudflarestorage.com")
+    monkeypatch.setenv("R2_ACCESS_KEY_ID", "test-key")
+    monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "test-secret")
+    monkeypatch.setattr(public_site, "_public_r2_client", lambda settings: FakeR2Client())
+    settings = load_settings()
+    observer = PipelineObserver(output_dir=tmp_path / "observability")
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+
+    artifacts = publish_public_brief(
+        packet=_packet(),
+        briefing=_briefing(),
+        run_at=run_at,
+        settings=settings,
+        observer=observer,
+    )
+
+    brief_path = settings.output_dir / "public" / artifacts.brief_relative_path
+    index_path = settings.output_dir / "public" / "index.json"
+
+    assert brief_path.exists()
+    assert index_path.exists()
+    index_payload = json.loads(index_path.read_text(encoding="utf-8"))
+    assert index_payload["dates"] == ["2026-03-21"]
+
+    failure_event = next(
+        event for event in observer.events if event["event"] == "public_brief_upload_failed"
+    )
+    assert failure_event["reason"].startswith("R2 PutObject 서명이 맞지 않습니다.")
+    assert failure_event["error_code"] == "SignatureDoesNotMatch"
+    assert failure_event["endpoint_host"] == "example.r2.cloudflarestorage.com"
+
+    published_event = next(
+        event for event in observer.events if event["event"] == "public_brief_published"
+    )
+    assert published_event["uploaded"] is False
+
+
+def test_publish_public_brief_invalid_r2_endpoint_falls_back_to_local(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
+    monkeypatch.setenv("R2_PUBLIC_BUCKET", "test-bucket")
+    monkeypatch.setenv("R2_S3_ENDPOINT", "https://example.r2.cloudflarestorage.com/test-bucket")
+    monkeypatch.setenv("R2_ACCESS_KEY_ID", "test-key")
+    monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "test-secret")
+    settings = load_settings()
+    observer = PipelineObserver(output_dir=tmp_path / "observability")
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+
+    artifacts = publish_public_brief(
+        packet=_packet(),
+        briefing=_briefing(),
+        run_at=run_at,
+        settings=settings,
+        observer=observer,
+    )
+
+    index_path = settings.output_dir / "public" / "index.json"
+    assert (settings.output_dir / "public" / artifacts.brief_relative_path).exists()
+    assert index_path.exists()
+
+    failure_event = next(
+        event for event in observer.events if event["event"] == "public_brief_upload_failed"
+    )
+    assert (
+        failure_event["reason"]
+        == "R2_S3_ENDPOINT must use the account-level S3 endpoint only, without bucket/path/query."
+    )
+    assert failure_event["stage"] == "client_init"
+
+    published_event = next(
+        event for event in observer.events if event["event"] == "public_brief_published"
+    )
+    assert published_event["uploaded"] is False
 
 
 def test_build_public_brief_uses_source_text_instead_of_generic_copy() -> None:
