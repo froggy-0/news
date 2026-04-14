@@ -1,6 +1,22 @@
 export interface BriefIndex {
   dates: string[];
   updatedAt: string;
+  latest?: BriefIndexRun | null;
+  entriesByDate?: BriefIndexEntry[];
+}
+
+export interface BriefIndexRun {
+  date: string;
+  time: string;
+  path: string;
+  generatedAt: string;
+  quality?: "ok" | "degraded" | "critical";
+  headline?: string;
+}
+
+export interface BriefIndexEntry {
+  date: string;
+  runs: BriefIndexRun[];
 }
 
 export interface BriefData {
