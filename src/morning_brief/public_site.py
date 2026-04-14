@@ -18,6 +18,7 @@ from openai import OpenAI
 from morning_brief.brief_formatting import extract_sections
 from morning_brief.config import Settings
 from morning_brief.data.market_policy import is_rate_canonical_key
+from morning_brief.data.storage.analytics_contract import build_analytics_sentiment_payload
 from morning_brief.logging_utils import log_structured
 from morning_brief.observability import PipelineObserver
 from morning_brief.openai_utils import usage_snapshot
@@ -104,7 +105,17 @@ def publish_public_brief(
 
     client = _public_r2_client(settings)
     if client is not None:
+        # legacy briefs/ 유지 (migration 기간)
         client.put_json(brief_relative_path, brief_payload)
+
+        # ── dual-write: curated + analytics ──
+        _dual_write_storage_layers(
+            client=client,
+            date_key=date_key,
+            brief_payload=brief_payload,
+            observer=observer,
+        )
+
         dates = client.list_dates()
     else:
         dates = _list_local_dates(public_dir / "briefs")
@@ -1733,6 +1744,38 @@ def _list_local_dates(brief_dir: Path) -> list[str]:
         return []
     dates = [path.stem for path in brief_dir.glob("*.json") if path.is_file() and path.stem.strip()]
     return sorted(set(dates), reverse=True)
+
+
+def _dual_write_storage_layers(
+    *,
+    client: _PublicR2Client,
+    date_key: str,
+    brief_payload: dict[str, Any],
+    observer: PipelineObserver | None,
+) -> None:
+    """curated + analytics dual-write. analytics 실패 시 publish 실패로 승격."""
+    from morning_brief.data.storage.news_data_paths import build_publish_paths
+
+    paths = build_publish_paths(symbol="btc", run_date=date_key)
+
+    # 1) curated 저장
+    client.put_json(paths.curated_key, brief_payload)
+
+    # 2) analytics payload 파생 + 저장
+    analytics_payload = build_analytics_sentiment_payload(
+        symbol="btc",
+        run_date=date_key,
+        full_payload=brief_payload,
+    )
+    client.put_json(paths.analytics_key, dict(analytics_payload))
+
+    if observer is not None:
+        observer.log_event(
+            "storage_dual_write_complete",
+            date=date_key,
+            curated_key=paths.curated_key,
+            analytics_key=paths.analytics_key,
+        )
 
 
 class _PublicR2Client:

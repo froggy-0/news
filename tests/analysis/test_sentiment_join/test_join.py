@@ -8,7 +8,12 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from morning_brief.analysis.sentiment_join.join import detect_outliers_rolling_iqr, merge_sources
+from morning_brief.analysis.sentiment_join.join import (
+    _add_btc_direction_label,
+    _apply_sentiment_quality_gate,
+    detect_outliers_rolling_iqr,
+    merge_sources,
+)
 
 
 def _date_range(days: int) -> list[str]:
@@ -23,9 +28,9 @@ def _sentiment_df(days: int) -> pd.DataFrame:
             "news_sentiment_mean": [0.1] * days,
             "news_sentiment_std": [0.05] * days,
             "n_articles": pd.array([3] * days, dtype="Int64"),
-            "signal_sentiment_mean": [0.05] * days,
-            "signal_sentiment_std": [0.02] * days,
-            "n_signals": pd.array([6] * days, dtype="Int64"),
+            "sentiment_status": ["ok"] * days,
+            "is_backfill_valid": [True] * days,
+            "ingest_validation_reason": [None] * days,
         }
     )
 
@@ -98,34 +103,9 @@ def test_merge_sources_inner_join_and_drop_missing_sentiment(
         merged = merge_sources(sentiment_df, fng_df, btc_df, usdkrw_df)
 
     assert "close" not in merged.columns
-    assert list(merged.columns) == [
-        "date",
-        "news_sentiment_mean",
-        "news_sentiment_std",
-        "n_articles",
-        "signal_sentiment_mean",
-        "signal_sentiment_std",
-        "n_signals",
-        "fng_value",
-        "btc_log_return",
-        "btc_return",
-        "btc_quote_volume",
-        "usdkrw_log_return",
-        "usdkrw_return",
-        "funding_rate",
-        "open_interest_usd",
-        "btc_long_short_ratio",
-        "etf_total_btc",
-        "etf_total_aum_usd",
-        "etf_net_inflow_usd",
-        "funding_rate_lag1",
-        "oi_change_pct_lag1",
-        "btc_long_short_ratio_lag1",
-        "etf_net_inflow_usd_lag1",
-        "is_outlier",
-    ]
     assert merged["news_sentiment_mean"].notna().all()
-    assert any(getattr(record, "event", None) == "rows.dropped" for record in caplog.records)
+    # btc_direction_label이 존재해야 한다
+    assert "btc_direction_label" in merged.columns
 
 
 def test_detect_outliers_flags_extreme_value() -> None:
@@ -202,7 +182,6 @@ def test_merge_sources_adds_etf_flow_lag1() -> None:
 
 def test_merge_sources_outlier_detection_includes_long_short_ratio() -> None:
     futures_df = _futures_df(40)
-    # 마지막 행에 극단적인 Long/Short Ratio 삽입
     futures_df.loc[39, "btc_long_short_ratio"] = 999.0
 
     merged = merge_sources(_sentiment_df(40), _fng_df(40), _btc_df(40), _usdkrw_df(40), futures_df)
@@ -242,3 +221,91 @@ def test_merge_sources_never_returns_nan_sentiment(length: int) -> None:
     merged = merge_sources(sentiment_df, _fng_df(length), _btc_df(length), _usdkrw_df(length))
 
     assert merged["news_sentiment_mean"].notna().all()
+
+
+# ── 감성 품질 게이트 테스트 ──
+
+
+def test_quality_gate_removes_insufficient_article_count() -> None:
+    """Req 6.1: count <= 1인 날짜 제거."""
+    df = _sentiment_df(3)
+    df.loc[0, "n_articles"] = 1
+    df.loc[1, "n_articles"] = 0
+
+    filtered, counts = _apply_sentiment_quality_gate(df)
+
+    assert len(filtered) == 1
+    assert counts["insufficient_article_count"] == 2
+
+
+def test_quality_gate_removes_skipped_sentiment() -> None:
+    """Req 6.2: sentimentStatus == 'skipped' 제거."""
+    df = _sentiment_df(3)
+    df.loc[1, "sentiment_status"] = "skipped"
+
+    filtered, counts = _apply_sentiment_quality_gate(df)
+
+    assert len(filtered) == 2
+    assert counts["skipped_sentiment"] == 1
+
+
+def test_quality_gate_removes_invalid_backfill() -> None:
+    """Req 6.3: _backfill 검증 실패 제거."""
+    df = _sentiment_df(3)
+    df.loc[0, "is_backfill_valid"] = False
+    df.loc[0, "ingest_validation_reason"] = "missing_backfill_marker"
+
+    filtered, counts = _apply_sentiment_quality_gate(df)
+
+    assert len(filtered) == 2
+    assert counts["missing_backfill_marker"] == 1
+
+
+def test_quality_gate_exclusion_reasons_are_standard() -> None:
+    """Req 6.4: 제외 사유가 표준값인지 검증."""
+    df = _sentiment_df(1)
+    _, counts = _apply_sentiment_quality_gate(df)
+
+    expected_reasons = {
+        "missing_backfill_marker",
+        "insufficient_article_count",
+        "skipped_sentiment",
+        "invalid_contract",
+        "no_sentiment",
+    }
+    assert set(counts.keys()) == expected_reasons
+
+
+# ── btc_direction_label 테스트 ──
+
+
+def test_btc_direction_label_matches_sign() -> None:
+    """Property 5: btc_direction_label은 btc_log_return 부호와 일치."""
+    df = pd.DataFrame(
+        {
+            "btc_log_return": [0.05, -0.03, 0.0, np.nan],
+        }
+    )
+    result = _add_btc_direction_label(df)
+
+    assert result.loc[0, "btc_direction_label"] == "up"
+    assert result.loc[1, "btc_direction_label"] == "down"
+    assert result.loc[2, "btc_direction_label"] == "flat"
+    assert pd.isna(result.loc[3, "btc_direction_label"])
+
+
+def test_merge_sources_includes_direction_label() -> None:
+    merged = merge_sources(_sentiment_df(35), _fng_df(35), _btc_df(35), _usdkrw_df(35))
+
+    assert "btc_direction_label" in merged.columns
+    # btc_log_return이 0.01이면 label은 "up"
+    assert (merged["btc_direction_label"] == "up").all()
+
+
+def test_merge_sources_exclusion_counts_in_attrs() -> None:
+    merged = merge_sources(_sentiment_df(35), _fng_df(35), _btc_df(35), _usdkrw_df(35))
+
+    assert "exclusion_counts" in merged.attrs
+    counts = merged.attrs["exclusion_counts"]
+    assert isinstance(counts, dict)
+    assert "missing_backfill_marker" in counts

@@ -45,7 +45,7 @@ jobs:
         run: python -m ruff check .
 
       - name: Run Python tests
-        run: python -m pytest -q
+        run: python -m pytest -q --tb=short
 
       - name: Run Python type checks
         run: python -m mypy

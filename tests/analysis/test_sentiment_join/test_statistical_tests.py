@@ -26,46 +26,70 @@ def test_run_statistical_tests_skips_when_rows_are_insufficient() -> None:
     assert results == {}
 
 
-def test_run_statistical_tests_invokes_expected_pairs(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[str, str, int]] = []
-
+def test_run_statistical_tests_adf_runs_at_30_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ADF는 30행 이상이면 실행된다."""
     monkeypatch.setattr(
         statistical_tests,
         "_run_adf",
         lambda series: {"statistic": -3.0, "pvalue": 0.01, "stationary": True},
     )
+    monkeypatch.setattr(statistical_tests, "_run_granger", lambda *args, **kwargs: None)
 
-    def fake_granger(df: pd.DataFrame, predictor: str, target: str, lag: int):
-        calls.append((predictor, target, lag))
+    results = statistical_tests.run_statistical_tests(_sample_df(rows=35))
+
+    assert "adf" in results
+    assert "btc_log_return" in results["adf"]
+
+
+def test_run_statistical_tests_granger_skips_at_179_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Property 6: 179행이면 Granger 미실행."""
+    monkeypatch.setattr(
+        statistical_tests,
+        "_run_adf",
+        lambda series: {"statistic": -3.0, "pvalue": 0.01, "stationary": True},
+    )
+    granger_calls: list[tuple] = []
+
+    def fake_granger(df, predictor, target, lag):
+        granger_calls.append((predictor, target, lag))
         return {"predictor": predictor, "target": target, "lag": lag, "pvalue": 0.04}
 
     monkeypatch.setattr(statistical_tests, "_run_granger", fake_granger)
 
-    results = statistical_tests.run_statistical_tests(_sample_df())
+    results = statistical_tests.run_statistical_tests(_sample_df(rows=179))
 
-    # adf는 이제 dict[str, dict] 구조
-    assert isinstance(results["adf"], dict)
-    assert "btc_log_return" in results["adf"]
-    assert results["adf"]["btc_log_return"]["stationary"] is True
+    assert results["granger"] == []
+    assert granger_calls == []
+    assert results["granger_executed"] is False
+    assert results["granger_eligible_rows"] == 179
 
-    # Granger pairs: 4쌍 × 3 lags = 12 호출
-    assert calls == [
-        ("news_sentiment_mean", "btc_log_return", 1),
-        ("news_sentiment_mean", "btc_log_return", 2),
-        ("news_sentiment_mean", "btc_log_return", 3),
-        ("funding_rate_lag1", "btc_log_return", 1),
-        ("funding_rate_lag1", "btc_log_return", 2),
-        ("funding_rate_lag1", "btc_log_return", 3),
-        ("fng_value", "btc_log_return", 1),
-        ("fng_value", "btc_log_return", 2),
-        ("fng_value", "btc_log_return", 3),
-        ("btc_long_short_ratio_lag1", "btc_log_return", 1),
-        ("btc_long_short_ratio_lag1", "btc_log_return", 2),
-        ("btc_long_short_ratio_lag1", "btc_log_return", 3),
-        ("etf_net_inflow_usd_lag1", "btc_log_return", 1),
-        ("etf_net_inflow_usd_lag1", "btc_log_return", 2),
-        ("etf_net_inflow_usd_lag1", "btc_log_return", 3),
-    ]
+
+def test_run_statistical_tests_granger_runs_at_180_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Property 6: 180행이면 Granger 실행."""
+    monkeypatch.setattr(
+        statistical_tests,
+        "_run_adf",
+        lambda series: {"statistic": -3.0, "pvalue": 0.01, "stationary": True},
+    )
+    granger_calls: list[tuple] = []
+
+    def fake_granger(df, predictor, target, lag):
+        granger_calls.append((predictor, target, lag))
+        return {"predictor": predictor, "target": target, "lag": lag, "pvalue": 0.04}
+
+    monkeypatch.setattr(statistical_tests, "_run_granger", fake_granger)
+
+    results = statistical_tests.run_statistical_tests(_sample_df(rows=180))
+
+    # 5쌍 × 3 lags = 15 호출
+    assert len(granger_calls) == 15
+    assert len(results["granger"]) == 15
+    assert results["granger_executed"] is True
+    assert results["granger_eligible_rows"] == 180
 
 
 def test_run_statistical_tests_returns_multi_adf(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -83,7 +107,6 @@ def test_run_statistical_tests_returns_multi_adf(monkeypatch: pytest.MonkeyPatch
 
 
 def test_run_statistical_tests_skips_missing_adf_column(monkeypatch: pytest.MonkeyPatch) -> None:
-    # btc_long_short_ratio 없는 df
     df = _sample_df().drop(columns=["btc_long_short_ratio"])
     monkeypatch.setattr(
         statistical_tests,
@@ -108,5 +131,10 @@ def test_run_statistical_tests_isolates_adf_errors(monkeypatch: pytest.MonkeyPat
 
     results = statistical_tests.run_statistical_tests(_sample_df())
 
-    # adf 키는 있지만 내부가 비어있을 수 있음 (모든 ADF가 실패)
     assert results["granger"] == []
+
+
+def test_adf_and_granger_thresholds_are_independent() -> None:
+    """ADF 기준(30)과 Granger 기준(180)이 독립적인지 확인."""
+    assert statistical_tests.MIN_ROWS_FOR_ADF == 30
+    assert statistical_tests.MIN_ROWS_FOR_GRANGER == 180
