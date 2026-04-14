@@ -164,26 +164,91 @@ function normalizeRemotePath(pathValue: string): string {
   return pathValue.replace(/^\/+/, "");
 }
 
-function resolveRemoteBriefPath(index: BriefIndex, date: string): string {
-  if (index.latest?.date === date && index.latest.path) {
-    return normalizeRemotePath(index.latest.path);
+function isRenderableBriefPayload(value: unknown): value is BriefData {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const root = value as Record<string, unknown>;
+  const meta = root.meta;
+  const aiJudgment = root.aiJudgment;
+
+  return (
+    !!meta &&
+    typeof meta === "object" &&
+    !Array.isArray(meta) &&
+    typeof (meta as Record<string, unknown>).date === "string" &&
+    !!aiJudgment &&
+    typeof aiJudgment === "object" &&
+    !Array.isArray(aiJudgment) &&
+    typeof (aiJudgment as Record<string, unknown>).headline === "string" &&
+    typeof (aiJudgment as Record<string, unknown>).body === "string"
+  );
+}
+
+function resolveRemoteBriefCandidates(index: BriefIndex, date: string): string[] {
+  const candidates: string[] = [];
+  const pushCandidate = (pathValue: string | null | undefined) => {
+    if (!pathValue) {
+      return;
+    }
+    const normalized = normalizeRemotePath(pathValue);
+    if (!candidates.includes(normalized)) {
+      candidates.push(normalized);
+    }
+  };
+
+  if (index.latest?.date === date) {
+    pushCandidate(index.latest.path);
   }
 
   const datedEntry = index.entriesByDate?.find((entry) => entry.date === date);
-  const datedRun = datedEntry?.runs[0];
-  if (datedRun?.path) {
-    return normalizeRemotePath(datedRun.path);
+  for (const run of datedEntry?.runs ?? []) {
+    pushCandidate(run.path);
   }
 
-  return `briefs/${date}.json`;
+  pushCandidate(`curated/btc/${date}.json`);
+  pushCandidate(`briefs/${date}.json`);
+
+  return candidates;
 }
 
-async function fetchRemoteBrief(baseUrl: string, remotePath: string): Promise<BriefData> {
-  return parseBriefData(await fetchJson<unknown>(`${baseUrl}/${normalizeRemotePath(remotePath)}`));
+async function fetchRemoteBrief(baseUrl: string, remotePaths: string[]): Promise<BriefData> {
+  let lastError: Error | null = null;
+
+  for (const remotePath of remotePaths) {
+    try {
+      const payload = await fetchJson<unknown>(`${baseUrl}/${normalizeRemotePath(remotePath)}`);
+      if (!isRenderableBriefPayload(payload)) {
+        lastError = new Error(`Payload at ${remotePath} is not a renderable brief`);
+        continue;
+      }
+      return parseBriefData(payload);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+
+  throw lastError ?? new Error("Unable to load remote brief payload");
 }
 
-async function fetchRemoteArchiveSummary(baseUrl: string, remotePath: string, date: string): Promise<ArchiveBriefSummary> {
-  return parseArchiveSummary(await fetchJson<unknown>(`${baseUrl}/${normalizeRemotePath(remotePath)}`), date);
+async function fetchRemoteArchiveSummary(baseUrl: string, remotePaths: string[], date: string): Promise<ArchiveBriefSummary> {
+  let lastError: Error | null = null;
+
+  for (const remotePath of remotePaths) {
+    try {
+      const payload = await fetchJson<unknown>(`${baseUrl}/${normalizeRemotePath(remotePath)}`);
+      if (!isRenderableBriefPayload(payload)) {
+        lastError = new Error(`Payload at ${remotePath} is not a renderable brief`);
+        continue;
+      }
+      return parseArchiveSummary(payload, date);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+
+  throw lastError ?? new Error("Unable to load remote brief payload");
 }
 
 export async function loadIndex(): Promise<BriefIndex> {
@@ -209,7 +274,7 @@ export async function loadBriefByDate(date: string): Promise<BriefData> {
 
   const baseUrl = requirePublicBaseUrl();
   const index = await loadIndex();
-  return fetchRemoteBrief(baseUrl, resolveRemoteBriefPath(index, date));
+  return fetchRemoteBrief(baseUrl, resolveRemoteBriefCandidates(index, date));
 }
 
 export async function loadLatest(): Promise<BriefData> {
@@ -223,7 +288,7 @@ export async function loadLatest(): Promise<BriefData> {
     return loadBriefByDate(latestDate);
   }
 
-  return fetchRemoteBrief(requirePublicBaseUrl(), resolveRemoteBriefPath(index, latestDate));
+  return fetchRemoteBrief(requirePublicBaseUrl(), resolveRemoteBriefCandidates(index, latestDate));
 }
 
 export async function loadArchiveSummaryByDate(date: string): Promise<ArchiveBriefSummary> {
@@ -237,7 +302,7 @@ export async function loadArchiveSummaryByDate(date: string): Promise<ArchiveBri
 
   const baseUrl = requirePublicBaseUrl();
   const index = await loadIndex();
-  return fetchRemoteArchiveSummary(baseUrl, resolveRemoteBriefPath(index, date), date);
+  return fetchRemoteArchiveSummary(baseUrl, resolveRemoteBriefCandidates(index, date), date);
 }
 
 export const fetchIndex = cache(async (): Promise<BriefIndex> => {

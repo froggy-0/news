@@ -1,6 +1,6 @@
 """R2 업로더: 최소 브리프 JSON 생성 및 병렬 업로드.
 
-fetch_r2_sentiment()가 읽는 5개 필드만 포함한 경량 JSON을 briefs/{date}.json에 업로드.
+fetch_r2_sentiment()가 읽는 5개 필드만 포함한 경량 JSON을 analytics/btc/{date}.json에 업로드.
 파이프라인 원본 파일(_backfill 없음)은 --force에서도 보호.
 """
 
@@ -17,6 +17,7 @@ from typing import Literal
 from botocore.exceptions import ClientError
 
 from backfill.scorer import DailyAggregate
+from morning_brief.data.storage.news_data_paths import build_publish_paths
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,7 @@ def upload_brief(
     force: bool = False,
 ) -> Literal["uploaded", "skipped_exists", "skipped_protected", "failed"]:
     """단일 날짜 JSON을 R2에 업로드."""
-    key = f"briefs/{date}.json"
+    key = build_publish_paths(symbol="btc", run_date=date).analytics_key
 
     try:
         # 파일 존재 여부 확인

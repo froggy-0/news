@@ -106,6 +106,20 @@ def test_upload_brief_new_file_returns_uploaded() -> None:
 
     assert result == "uploaded"
     client.put_object.assert_called_once()
+    assert client.put_object.call_args[1]["Key"] == "analytics/btc/2024-01-01.json"
+
+
+def test_upload_brief_uses_analytics_path_helper() -> None:
+    client = _s3_client_mock(exists=False)
+    fake_paths = type("P", (), {"analytics_key": "analytics/btc/2024-01-01.json"})
+
+    with patch("backfill.uploader.build_publish_paths", return_value=fake_paths) as build_paths:
+        result = upload_brief("2024-01-01", _agg(), client, "bucket")
+
+    assert result == "uploaded"
+    build_paths.assert_called_once_with(symbol="btc", run_date="2024-01-01")
+    client.put_object.assert_called_once()
+    assert client.put_object.call_args[1]["Key"] == "analytics/btc/2024-01-01.json"
 
 
 # ──────────────────────────────────────────────

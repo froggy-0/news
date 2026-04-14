@@ -99,28 +99,83 @@ async function readBrief(date) {
     );
   }
   const index = await readIndex();
-  const remotePath = resolveRemoteBriefPath(index, date);
-  return readRemoteJson(`${requireAbsoluteHttpUrl(dataBaseUrl, "NEXT_PUBLIC_R2_BASE_URL")}/${remotePath}`);
+  return readRemoteBrief(index, date);
 }
 
 function normalizeRemotePath(pathValue) {
   return pathValue.replace(/^\/+/, "");
 }
 
-function resolveRemoteBriefPath(index, date) {
+function isRenderableBriefPayload(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const meta = value.meta;
+  const aiJudgment = value.aiJudgment;
+
+  return (
+    meta &&
+    typeof meta === "object" &&
+    !Array.isArray(meta) &&
+    typeof meta.date === "string" &&
+    aiJudgment &&
+    typeof aiJudgment === "object" &&
+    !Array.isArray(aiJudgment) &&
+    typeof aiJudgment.headline === "string" &&
+    typeof aiJudgment.body === "string"
+  );
+}
+
+function resolveRemoteBriefCandidates(index, date) {
+  const candidates = [];
+  const pushCandidate = (pathValue) => {
+    if (!pathValue || typeof pathValue !== "string") {
+      return;
+    }
+    const normalized = normalizeRemotePath(pathValue);
+    if (!candidates.includes(normalized)) {
+      candidates.push(normalized);
+    }
+  };
+
   if (index?.latest?.date === date && typeof index.latest.path === "string" && index.latest.path.length > 0) {
-    return normalizeRemotePath(index.latest.path);
+    pushCandidate(index.latest.path);
   }
 
   const datedEntry = Array.isArray(index?.entriesByDate)
     ? index.entriesByDate.find((entry) => entry && entry.date === date)
     : null;
-  const datedRun = Array.isArray(datedEntry?.runs) ? datedEntry.runs[0] : null;
-  if (datedRun && typeof datedRun.path === "string" && datedRun.path.length > 0) {
-    return normalizeRemotePath(datedRun.path);
+  const datedRuns = Array.isArray(datedEntry?.runs) ? datedEntry.runs : [];
+  for (const run of datedRuns) {
+    pushCandidate(run?.path);
   }
 
-  return `briefs/${date}.json`;
+  pushCandidate(`curated/btc/${date}.json`);
+  pushCandidate(`briefs/${date}.json`);
+
+  return candidates;
+}
+
+async function readRemoteBrief(index, date) {
+  const baseUrl = requireAbsoluteHttpUrl(dataBaseUrl, "NEXT_PUBLIC_R2_BASE_URL");
+  const candidates = resolveRemoteBriefCandidates(index, date);
+  let lastError = null;
+
+  for (const remotePath of candidates) {
+    try {
+      const payload = await readRemoteJson(`${baseUrl}/${remotePath}`);
+      if (!isRenderableBriefPayload(payload)) {
+        lastError = new Error(`Payload at ${remotePath} is not a renderable brief`);
+        continue;
+      }
+      return payload;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+
+  throw lastError ?? new Error(`Unable to load remote brief for ${date}`);
 }
 
 function renderRssItem(brief) {

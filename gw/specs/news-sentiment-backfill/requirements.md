@@ -2,7 +2,7 @@
 
 ## Introduction
 
-현재 `sentiment-time-join` 파이프라인은 R2에 저장된 일별 감성 점수(`briefs/{date}.json`)를 소스로 사용하는데, 파이프라인 최초 가동 이전 기간에는 R2에 파일이 존재하지 않아 Granger 인과성 검정에 필요한 최소 180일 이상의 유효 행을 확보할 수 없다. 이 기능은 **CoinDesk Data API**(1차)와 **Alpaca Markets News API**(보완)로 과거 460일치 BTC 관련 뉴스 헤드라인·본문을 수집하고, **FinBERT를 로컬에서 실행**하여 일별 감성 집계값(mean/std/count)을 계산한 뒤, `fetch_r2_sentiment()`가 읽는 최소 스키마 JSON을 R2에 업로드하는 **일회성 로컬 백필 스크립트**(`scripts/backfill_news_sentiment.py`)를 제공한다. Perplexity, Grok, GPT-4 등 유료 API를 일절 사용하지 않으며 추가 비용은 $0이다. 운영 파이프라인 코드는 단 한 줄도 수정하지 않는다.
+현재 `sentiment-time-join` 파이프라인은 R2에 저장된 일별 감성 점수(`analytics/btc/{date}.json`)를 소스로 사용하는데, 파이프라인 최초 가동 이전 기간에는 R2에 파일이 존재하지 않아 Granger 인과성 검정에 필요한 최소 180일 이상의 유효 행을 확보할 수 없다. 이 기능은 **CoinDesk Data API**(1차)와 **Alpaca Markets News API**(보완)로 과거 460일치 BTC 관련 뉴스 헤드라인·본문을 수집하고, **FinBERT를 로컬에서 실행**하여 일별 감성 집계값(mean/std/count)을 계산한 뒤, `fetch_r2_sentiment()`가 읽는 최소 스키마 JSON을 R2에 업로드하는 **일회성 로컬 백필 스크립트**(`scripts/backfill_news_sentiment.py`)를 제공한다. Perplexity, Grok, GPT-4 등 유료 API를 일절 사용하지 않으며 추가 비용은 $0이다. 운영 파이프라인 코드는 단 한 줄도 수정하지 않는다.
 
 ---
 
@@ -11,7 +11,7 @@
 - **백필(Backfill)**: 과거 날짜에 대해 소급하여 데이터를 생성·업로드하는 작업
 - **최소 브리프 JSON**: `fetch_r2_sentiment()`가 읽는 `meta.sentimentStatus`, `meta.newsSentiment` 필드만 포함한 경량 JSON — 브리핑 본문·마켓데이터 없음
 - **to_ts 커서**: CoinDesk API의 역방향 페이지네이션 포인터 — 현재 배치의 `min(PUBLISHED_ON) - 1`을 다음 호출의 `to_ts`로 사용 (to_ts inclusive 확인됨)
-- **날짜 기준**: 모든 날짜는 **UTC** 기준 `YYYY-MM-DD`로 통일한다. `PUBLISHED_ON`(Unix timestamp) 변환 및 R2 파일명(`briefs/{date}.json`) 모두 UTC 기준
+- **날짜 기준**: 모든 날짜는 **UTC** 기준 `YYYY-MM-DD`로 통일한다. `PUBLISHED_ON`(Unix timestamp) 변환 및 R2 파일명(`analytics/btc/{date}.json`) 모두 UTC 기준
 - **워밍업 구간**: 롤링 IQR 계산을 위해 수집하되 통계 분석에서 제외되는 초기 30일
 - **유효 행**: inner join 후 `news_sentiment_mean`이 non-null인 날짜 — `sentimentStatus`가 `"ok"` 또는 `"degraded"`인 경우(count ≥ 2)에 해당
 - **dry-run**: 업로드 없이 날짜별 기사 수와 예상 유효 행 수만 출력하는 검증 모드
@@ -126,7 +126,7 @@ so that `fetch_r2_sentiment()`가 기존 파이프라인과 동일한 품질 판
 
 **User Story:**
 As a 데이터 엔지니어,
-I want 날짜별 최소 브리프 JSON을 생성하여 R2의 `briefs/{date}.json`에 업로드하기를,
+I want 날짜별 최소 브리프 JSON을 생성하여 R2의 `analytics/btc/{date}.json`에 업로드하기를,
 so that 기존 `fetch_r2_sentiment()`가 코드 수정 없이 백필 데이터를 읽을 수 있다.
 
 #### Acceptance Criteria
