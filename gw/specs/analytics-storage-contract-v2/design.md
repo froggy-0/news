@@ -74,6 +74,7 @@ graph TD
 - 현재 분석이 실제로 쓰는 값은 `meta.newsSentiment`와 `meta.sentimentStatus`다: `src/morning_brief/public_site.py:251`
 - 집계를 별도 경로에서 재계산하면 전시와 분석이 어긋날 수 있다
 - single source of truth를 유지할 수 있다
+- curated의 `newsSentiment`에는 `mean`, `median`, `std`, `bullishRatio`, `bearishRatio`, `count` 6개 필드가 포함되지만, analytics에서는 통계 검정에 사용하는 `mean`, `std`, `count`만 추출한다. `median`, `bullishRatio`, `bearishRatio`는 전시 전용이므로 의도적으로 제외한다
 
 **설계 결정 3: 1차 구현은 `btc`로 고정한다**
 
@@ -84,29 +85,38 @@ graph TD
 
 ## Rollout Plan
 
-### Phase 1: Dual Write
+### Phase 1: Dual Write ✅ 완료
 
 - `curated/btc/{YYYY-MM-DD}.json`와 `analytics/btc/{YYYY-MM-DD}.json` 저장 추가
 - legacy `briefs/{YYYY-MM-DD}.json` 유지
 - 분석 reader는 아직 legacy 유지 가능
 
-### Phase 2: Reader Cutover
+### Phase 2: Reader Cutover ✅ 완료
 
 - `fetch_r2_sentiment()`를 `analytics/btc/{YYYY-MM-DD}.json`로 전환
 - `_backfill` 및 계약 검증 게이트 활성화
 - join 단계에서 `count <= 1`, `sentimentStatus == "skipped"` 제거
+- raw capture hook 추가 (시장/뉴스 경계 payload)
 
 ### Phase 3: Contract Enforcement
 
 - analytics-only 분석 입력 운영화
 - legacy `briefs/` 읽기 코드 제거
 - `briefs/`는 curated alias 또는 deprecated 경로로만 유지
+- **전환 조건**: R2에 `analytics/btc/` 데이터가 lookback_days 이상 적재 확인 후 진행
 
 **설계 결정 4: dual-write와 reader cutover를 같은 릴리스로 묶지 않는다**
 
 왜:
 - 저장과 읽기 전환을 분리하면 문제 발생 시 원인 범위를 줄일 수 있다
 - 운영 중 R2 데이터 적재 상태를 먼저 확인한 뒤 reader를 안전하게 전환할 수 있다
+
+**설계 결정 5: R2 write config와 read config는 별도 경로를 유지한다**
+
+왜:
+- 브리핑 파이프라인의 writer는 `Settings.r2_public_bucket`(boto3 bucket명) + `r2_s3_endpoint`를 사용한다: `src/morning_brief/config.py:71-74`
+- 감성 조인 파이프라인의 reader는 `SentimentJoinSettings.r2_base_url`(HTTP public URL)을 사용한다: `src/morning_brief/analysis/sentiment_join/config.py`
+- 두 config는 같은 R2 버킷을 가리키지만 접근 프로토콜이 다르다 (S3 API vs HTTP). 이 분리를 유지하되 구현 시 혼동하지 않도록 주석으로 명시한다
 
 ## Components and Interfaces
 
@@ -311,11 +321,16 @@ reader output columns:
 
 - reader가 curated 구조를 전혀 알지 못하게 해 계약 결합을 끊는다
 - validation reason을 join 단계의 exclusion reason과 분리해 로깅 해석을 쉽게 만든다
+- 현재 reader가 출력하는 `signal_sentiment_mean`, `signal_sentiment_std`, `n_signals` 컬럼은 analytics 계약에서 의도적으로 제외한다. 이유: (1) signal sentiment는 현재 Granger/통계 검정 대상이 아니고, (2) X 시그널 수집 경로가 빈번히 변해 계약 안정성에 적합하지 않다. 향후 signal sentiment 분석이 필요해지면 `schemaVersion: "v2"`에서 확장한다
 
 ### 7. `join.py`
 
 현재:
-- `news_sentiment_mean`이 NaN인 날짜만 제거
+- `news_sentiment_mean`이 NaN인 날짜를 `dropna(subset=["news_sentiment_mean"])`로 제거
+- `fng_df`, `btc_df`, `usdkrw_df`와 inner join하여 3개 소스 중 하나라도 없는 날짜 제거
+- `futures_df`, `etf_df`는 left join으로 결합 (없으면 NaN)
+- `_add_futures_lag_columns()`로 lag 컬럼 생성
+- `detect_outliers_rolling_iqr()`로 `is_outlier` 컬럼 추가 (실제 drop은 `analysis/sentiment_join/pipeline.py`에서 수행)
 
 변경:
 

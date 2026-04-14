@@ -207,6 +207,15 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             sentiment_df, fng_df, btc_returns_df, usdkrw_returns_df, futures_df, etf_df
         )
 
+        exclusion_counts = master_df.attrs.get("exclusion_counts", {})
+        if exclusion_counts:
+            log_structured(
+                logger,
+                event="quality_gate.summary",
+                message="감성 품질 게이트 제외 사유 집계입니다.",
+                exclusion_counts=exclusion_counts,
+            )
+
         if master_df.empty:
             log_structured(
                 logger,
@@ -253,6 +262,18 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
         statistical_results: dict[str, object] = {}
         try:
             statistical_results = run_statistical_tests(analysis_df)
+            log_structured(
+                logger,
+                event="stats.granger_eligibility",
+                message="Granger 검정 자격을 평가했습니다.",
+                granger_eligible_rows=statistical_results.get("granger_eligible_rows"),
+                granger_executed=statistical_results.get("granger_executed"),
+                reason=(
+                    None
+                    if statistical_results.get("granger_executed")
+                    else "insufficient_rows_for_granger"
+                ),
+            )
         except Exception as exc:
             log_structured(
                 logger,
@@ -308,6 +329,17 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             outlier_filtered_count=outlier_filtered_count,
             outlier_filtered_ratio=outlier_filtered_ratio,
             hybrid_signal_label=hybrid_signal_label,
+            granger_eligible_rows=(
+                statistical_results.get("granger_eligible_rows")
+                if isinstance(statistical_results, dict)
+                else None
+            ),
+            granger_executed=(
+                statistical_results.get("granger_executed")
+                if isinstance(statistical_results, dict)
+                else False
+            ),
+            exclusion_counts=exclusion_counts if exclusion_counts else None,
         )
 
         validate_master(master_df)

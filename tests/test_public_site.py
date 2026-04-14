@@ -1267,3 +1267,141 @@ def test_compute_sentiment_by_category_filters_small() -> None:
     assert "macro" in result
     assert result["macro"]["count"] == 3
     assert "bigtech" not in result
+
+
+# ── Phase C: dual-write 테스트 ──────────────────────────────
+
+
+def test_publish_public_brief_dual_writes_curated_and_analytics(monkeypatch, tmp_path) -> None:
+    """curated + analytics dual-write가 같은 날짜 기준으로 생성되는지 검증한다."""
+    written_keys: list[str] = []
+
+    class FakeR2Client:
+        def put_json(self, key: str, payload: dict) -> None:
+            written_keys.append(key)
+
+        def list_dates(self) -> list[str]:
+            return ["2026-03-21"]
+
+    monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
+    monkeypatch.setenv("R2_PUBLIC_BUCKET", "test-bucket")
+    monkeypatch.setenv("R2_S3_ENDPOINT", "https://test.endpoint")
+    monkeypatch.setenv("R2_ACCESS_KEY_ID", "test-key")
+    monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "test-secret")
+    monkeypatch.setattr(public_site, "_public_r2_client", lambda settings: FakeR2Client())
+    settings = load_settings()
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+
+    publish_public_brief(
+        packet=_packet(),
+        briefing=_briefing(),
+        run_at=run_at,
+        settings=settings,
+    )
+
+    assert "briefs/2026-03-21.json" in written_keys
+    assert "curated/btc/2026-03-21.json" in written_keys
+    assert "analytics/btc/2026-03-21.json" in written_keys
+
+
+def test_publish_public_brief_analytics_payload_matches_contract(monkeypatch, tmp_path) -> None:
+    """analytics payload가 계약 필드만 포함하는지 검증한다."""
+    from morning_brief.data.storage.analytics_contract import validate_analytics_sentiment_payload
+
+    captured_payloads: dict[str, dict] = {}
+
+    class FakeR2Client:
+        def put_json(self, key: str, payload: dict) -> None:
+            captured_payloads[key] = payload
+
+        def list_dates(self) -> list[str]:
+            return ["2026-03-21"]
+
+    monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
+    monkeypatch.setenv("R2_PUBLIC_BUCKET", "test-bucket")
+    monkeypatch.setenv("R2_S3_ENDPOINT", "https://test.endpoint")
+    monkeypatch.setenv("R2_ACCESS_KEY_ID", "test-key")
+    monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "test-secret")
+    monkeypatch.setattr(public_site, "_public_r2_client", lambda settings: FakeR2Client())
+    settings = load_settings()
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+
+    publish_public_brief(
+        packet=_packet(),
+        briefing=_briefing(),
+        run_at=run_at,
+        settings=settings,
+    )
+
+    analytics = captured_payloads["analytics/btc/2026-03-21.json"]
+    validation = validate_analytics_sentiment_payload(analytics)
+    assert validation["valid"] is True
+    assert analytics["_backfill"] is True
+    assert analytics["symbol"] == "btc"
+    assert analytics["date"] == "2026-03-21"
+    assert set(analytics["newsSentiment"].keys()) == {"mean", "std", "count"}
+
+
+def test_publish_public_brief_curated_preserves_full_payload(monkeypatch, tmp_path) -> None:
+    """curated payload는 기존 전시 JSON 스키마를 유지한다."""
+    captured_payloads: dict[str, dict] = {}
+
+    class FakeR2Client:
+        def put_json(self, key: str, payload: dict) -> None:
+            captured_payloads[key] = payload
+
+        def list_dates(self) -> list[str]:
+            return ["2026-03-21"]
+
+    monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
+    monkeypatch.setenv("R2_PUBLIC_BUCKET", "test-bucket")
+    monkeypatch.setenv("R2_S3_ENDPOINT", "https://test.endpoint")
+    monkeypatch.setenv("R2_ACCESS_KEY_ID", "test-key")
+    monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "test-secret")
+    monkeypatch.setattr(public_site, "_public_r2_client", lambda settings: FakeR2Client())
+    settings = load_settings()
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+
+    publish_public_brief(
+        packet=_packet(),
+        briefing=_briefing(),
+        run_at=run_at,
+        settings=settings,
+    )
+
+    curated = captured_payloads["curated/btc/2026-03-21.json"]
+    legacy = captured_payloads["briefs/2026-03-21.json"]
+    assert curated == legacy
+    assert "meta" in curated
+    assert "aiJudgment" in curated
+    assert "marketSnapshot" in curated
+
+
+def test_publish_public_brief_legacy_briefs_still_written(monkeypatch, tmp_path) -> None:
+    """migration 기간 동안 legacy briefs/{date}.json 저장이 유지된다."""
+    written_keys: list[str] = []
+
+    class FakeR2Client:
+        def put_json(self, key: str, payload: dict) -> None:
+            written_keys.append(key)
+
+        def list_dates(self) -> list[str]:
+            return ["2026-03-21"]
+
+    monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
+    monkeypatch.setenv("R2_PUBLIC_BUCKET", "test-bucket")
+    monkeypatch.setenv("R2_S3_ENDPOINT", "https://test.endpoint")
+    monkeypatch.setenv("R2_ACCESS_KEY_ID", "test-key")
+    monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "test-secret")
+    monkeypatch.setattr(public_site, "_public_r2_client", lambda settings: FakeR2Client())
+    settings = load_settings()
+    run_at = datetime(2026, 3, 21, 8, 1, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+
+    publish_public_brief(
+        packet=_packet(),
+        briefing=_briefing(),
+        run_at=run_at,
+        settings=settings,
+    )
+
+    assert "briefs/2026-03-21.json" in written_keys

@@ -47,9 +47,9 @@ def _sentiment_df(main_dates: list[str]) -> pd.DataFrame:
             "news_sentiment_mean": [0.1] * len(main_dates),
             "news_sentiment_std": [0.05] * len(main_dates),
             "n_articles": pd.array([3] * len(main_dates), dtype="Int64"),
-            "signal_sentiment_mean": [0.05] * len(main_dates),
-            "signal_sentiment_std": [0.02] * len(main_dates),
-            "n_signals": pd.array([6] * len(main_dates), dtype="Int64"),
+            "sentiment_status": ["ok"] * len(main_dates),
+            "is_backfill_valid": [True] * len(main_dates),
+            "ingest_validation_reason": [None] * len(main_dates),
         }
     )
 
@@ -422,3 +422,7 @@ def test_run_sentiment_join_records_etf_columns_and_outlier_metadata(
     assert "rows_before_outlier_filter" in stats
     assert "rows_after_outlier_filter" in stats
     assert "hybrid_signal_label" in stats
+    assert "granger_eligible_rows" in stats
+    assert "granger_executed" in stats
+    assert "exclusion_counts" in stats
+    assert isinstance(stats["exclusion_counts"], dict)

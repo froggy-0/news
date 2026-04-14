@@ -270,6 +270,9 @@ def build_stats_metadata_payload(
     outlier_filtered_count: int | None = None,
     outlier_filtered_ratio: float | None = None,
     hybrid_signal_label: str | None = None,
+    granger_eligible_rows: int | None = None,
+    granger_executed: bool = False,
+    exclusion_counts: dict[str, int] | None = None,
 ) -> bytes:
     payload = {
         "run_id": run_id,
@@ -283,6 +286,9 @@ def build_stats_metadata_payload(
         "outlier_filtered_count": outlier_filtered_count,
         "outlier_filtered_ratio": outlier_filtered_ratio,
         "hybrid_signal_label": hybrid_signal_label,
+        "granger_eligible_rows": granger_eligible_rows,
+        "granger_executed": granger_executed,
+        "exclusion_counts": exclusion_counts or {},
     }
     return json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
 

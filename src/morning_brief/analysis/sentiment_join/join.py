@@ -96,6 +96,89 @@ def _add_futures_lag_columns(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def _apply_sentiment_quality_gate(
+    sentiment_df: pd.DataFrame,
+) -> tuple[pd.DataFrame, dict[str, int]]:
+    """Req 6: 감성 품질 게이트. 저품질 관측치를 조인 전에 제거한다."""
+    exclusion_counts: dict[str, int] = {
+        "missing_backfill_marker": 0,
+        "insufficient_article_count": 0,
+        "skipped_sentiment": 0,
+        "invalid_contract": 0,
+        "no_sentiment": 0,
+    }
+    total_before = len(sentiment_df)
+    keep_mask = pd.Series(True, index=sentiment_df.index)
+
+    # _backfill 검증 (is_backfill_valid 컬럼이 있는 경우)
+    if "is_backfill_valid" in sentiment_df.columns:
+        invalid_backfill = ~sentiment_df["is_backfill_valid"].fillna(False).astype(bool)
+        # ingest_validation_reason으로 구분
+        if "ingest_validation_reason" in sentiment_df.columns:
+            for idx in sentiment_df.index[invalid_backfill]:
+                reason = sentiment_df.loc[idx, "ingest_validation_reason"]
+                if reason and "missing_backfill_marker" in str(reason):
+                    exclusion_counts["missing_backfill_marker"] += 1
+                else:
+                    exclusion_counts["invalid_contract"] += 1
+        else:
+            exclusion_counts["missing_backfill_marker"] += int(invalid_backfill.sum())
+        keep_mask &= ~invalid_backfill
+
+    # sentimentStatus == "skipped" 제거
+    if "sentiment_status" in sentiment_df.columns:
+        skipped = sentiment_df["sentiment_status"].str.lower() == "skipped"
+        exclusion_counts["skipped_sentiment"] += int(skipped.sum())
+        keep_mask &= ~skipped
+
+    # count <= 1 제거
+    if "n_articles" in sentiment_df.columns:
+        low_count = sentiment_df["n_articles"].fillna(0).astype(int) <= 1
+        exclusion_counts["insufficient_article_count"] += int((low_count & keep_mask).sum())
+        keep_mask &= ~low_count
+
+    # NaN sentiment 제거
+    nan_sentiment = sentiment_df["news_sentiment_mean"].isna()
+    exclusion_counts["no_sentiment"] += int((nan_sentiment & keep_mask).sum())
+    keep_mask &= ~nan_sentiment
+
+    filtered = sentiment_df.loc[keep_mask].reset_index(drop=True)
+    total_after = len(filtered)
+
+    if total_before > total_after:
+        log_structured(
+            logger,
+            event="quality_gate.applied",
+            message="감성 품질 게이트를 적용했습니다.",
+            level=logging.WARNING if total_after == 0 else logging.INFO,
+            rows_before=total_before,
+            rows_after=total_after,
+            exclusion_counts=exclusion_counts,
+        )
+
+    return filtered, exclusion_counts
+
+
+def _add_btc_direction_label(df: pd.DataFrame) -> pd.DataFrame:
+    """Req 8: btc_log_return 부호 기준으로 up/down/flat 라벨을 부여한다."""
+    result = df.copy()
+    if "btc_log_return" not in result.columns:
+        result["btc_direction_label"] = None
+        return result
+
+    def _label(val: float) -> str | None:
+        if pd.isna(val):
+            return None
+        if val > 0:
+            return "up"
+        if val < 0:
+            return "down"
+        return "flat"
+
+    result["btc_direction_label"] = result["btc_log_return"].apply(_label)
+    return result
+
+
 def merge_sources(
     sentiment_df: pd.DataFrame,
     fng_df: pd.DataFrame,
@@ -104,17 +187,7 @@ def merge_sources(
     futures_df: pd.DataFrame | None = None,
     etf_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    dropped_no_sentiment = int(sentiment_df["news_sentiment_mean"].isna().sum())
-    filtered_sentiment = sentiment_df.dropna(subset=["news_sentiment_mean"]).reset_index(drop=True)
-    if dropped_no_sentiment:
-        log_structured(
-            logger,
-            event="rows.dropped",
-            message="감성 점수가 없는 날짜를 분석 대상에서 제외합니다.",
-            level=logging.WARNING,
-            reason="no_sentiment",
-            count=dropped_no_sentiment,
-        )
+    filtered_sentiment, exclusion_counts = _apply_sentiment_quality_gate(sentiment_df)
 
     merged = filtered_sentiment.merge(fng_df, on="date", how="inner")
     merged = merged.merge(btc_df, on="date", how="inner")
@@ -137,6 +210,7 @@ def merge_sources(
         merged["etf_net_inflow_usd"] = float("nan")
 
     merged = _add_futures_lag_columns(merged)
+    merged = _add_btc_direction_label(merged)
     merged = detect_outliers_rolling_iqr(
         merged,
         cols=[
@@ -175,15 +249,19 @@ def merge_sources(
         date_range_end=merged["date"].max() if not merged.empty else None,
         sources_used=sources_used,
         outlier_count=int(merged["is_outlier"].sum()) if "is_outlier" in merged else 0,
-        dropped_no_sentiment=dropped_no_sentiment,
+        exclusion_counts=exclusion_counts,
         has_futures=bool("funding_rate" in merged.columns and merged["funding_rate"].notna().any()),
     )
 
-    return merged.reset_index(drop=True)
+    result = merged.reset_index(drop=True)
+    result.attrs["exclusion_counts"] = exclusion_counts
+    return result
 
 
 __all__ = [
     "detect_outliers_rolling_iqr",
     "merge_sources",
     "_add_futures_lag_columns",
+    "_add_btc_direction_label",
+    "_apply_sentiment_quality_gate",
 ]

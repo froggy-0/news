@@ -34,6 +34,7 @@ from morning_brief.llm_provider_policy import provider_role_snapshot
 from morning_brief.logging_utils import log_structured
 from morning_brief.observability import PipelineObserver
 from morning_brief.public_site import publish_public_brief
+from morning_brief.raw_capture import try_raw_capture
 from morning_brief.research_backfill import (
     _needs_web_search_backfill,
     backfill_news_with_web_search,
@@ -132,6 +133,16 @@ def run_pipeline(settings: Settings) -> str:
             message="시장 지표와 뉴스 묶음을 준비했어요.",
             phase="news",
             news_count=len(news_packet),
+        )
+
+        # raw capture: 시장/뉴스 수집 경계 payload 저장
+        run_date = datetime.now(ZoneInfo(settings.timezone)).strftime("%Y-%m-%d")
+        try_raw_capture(
+            settings=settings,
+            run_date=run_date,
+            market_packet=market_packet,
+            news_packet=news_packet,
+            public_context=public_context,
         )
 
         # ── FinBERT sentiment enrichment ──

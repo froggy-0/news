@@ -14,9 +14,9 @@ def _valid_df() -> pd.DataFrame:
             "news_sentiment_mean": [0.1],
             "news_sentiment_std": [0.05],
             "n_articles": pd.array([3], dtype="Int64"),
-            "signal_sentiment_mean": [0.05],
-            "signal_sentiment_std": [0.02],
-            "n_signals": pd.array([6], dtype="Int64"),
+            "sentiment_status": ["ok"],
+            "is_backfill_valid": [True],
+            "ingest_validation_reason": [None],
             "fng_value": pd.array([55], dtype="Int64"),
             "btc_log_return": [0.01],
             "btc_return": [0.01],
@@ -35,6 +35,8 @@ def _valid_df() -> pd.DataFrame:
             "etf_total_aum_usd": [float("nan")],
             "etf_net_inflow_usd": [float("nan")],
             "etf_net_inflow_usd_lag1": [float("nan")],
+            # Req 8: BTC 방향 라벨
+            "btc_direction_label": ["up"],
             # Req 13: 하이브리드 지수 (NaN 허용)
             "hybrid_index": [float("nan")],
         }

@@ -9,7 +9,8 @@ from morning_brief.logging_utils import log_structured
 
 logger = logging.getLogger(__name__)
 
-MIN_ROWS_FOR_TESTS = 30
+MIN_ROWS_FOR_ADF = 30
+MIN_ROWS_FOR_GRANGER = 180
 GRANGER_LAGS = [1, 2, 3]
 GRANGER_PAIRS = [
     ("news_sentiment_mean", "btc_log_return"),
@@ -60,7 +61,7 @@ def _run_granger(
     work[predictor] = pd.to_numeric(work[predictor], errors="coerce")
     work = work.dropna()
 
-    if len(work) < MIN_ROWS_FOR_TESTS:
+    if len(work) < MIN_ROWS_FOR_GRANGER:
         return None
 
     try:
@@ -107,23 +108,24 @@ def run_statistical_tests(df: pd.DataFrame) -> dict[str, Any]:
     """
     results: dict[str, Any] = {}
 
-    if len(df) < MIN_ROWS_FOR_TESTS:
+    if len(df) < MIN_ROWS_FOR_ADF:
         log_structured(
             logger,
             event="stats.insufficient_rows",
-            message="데이터 행 수가 통계 검정 최소 요건보다 적어 검정을 건너뜁니다.",
+            message="데이터 행 수가 ADF 검정 최소 요건보다 적어 검정을 건너뜁니다.",
             level=logging.WARNING,
             rows=len(df),
-            min_required=MIN_ROWS_FOR_TESTS,
+            min_required=MIN_ROWS_FOR_ADF,
         )
         return results
 
     if "btc_log_return" not in df.columns or df["btc_log_return"].dropna().empty:
         return results
 
+    # ── ADF 검정 (MIN_ROWS_FOR_ADF 기준) ──
     adf_results: dict[str, Any] = {}
     for col in ADF_TARGETS:
-        if col not in df.columns or df[col].dropna().shape[0] < MIN_ROWS_FOR_TESTS:
+        if col not in df.columns or df[col].dropna().shape[0] < MIN_ROWS_FOR_ADF:
             continue
         try:
             adf_results[col] = _run_adf(df[col])
@@ -138,15 +140,35 @@ def run_statistical_tests(df: pd.DataFrame) -> dict[str, Any]:
             )
     results["adf"] = adf_results
 
+    # ── Granger 검정 (MIN_ROWS_FOR_GRANGER 기준) ──
     granger_results: list[dict[str, Any]] = []
-    for predictor, target in GRANGER_PAIRS:
-        for lag in GRANGER_LAGS:
-            entry = _run_granger(df, predictor, target, lag)
-            if entry is not None:
-                granger_results.append(entry)
+    if len(df) >= MIN_ROWS_FOR_GRANGER:
+        for predictor, target in GRANGER_PAIRS:
+            for lag in GRANGER_LAGS:
+                entry = _run_granger(df, predictor, target, lag)
+                if entry is not None:
+                    granger_results.append(entry)
+    else:
+        log_structured(
+            logger,
+            event="stats.granger_skipped",
+            message="유효 행 수가 Granger 검정 최소 요건(180행)보다 적어 건너뜁니다.",
+            level=logging.INFO,
+            rows=len(df),
+            min_required=MIN_ROWS_FOR_GRANGER,
+            reason="insufficient_rows_for_granger",
+        )
     results["granger"] = granger_results
+    results["granger_eligible_rows"] = len(df)
+    results["granger_executed"] = len(df) >= MIN_ROWS_FOR_GRANGER
 
     return results
 
 
-__all__ = ["ADF_TARGETS", "GRANGER_PAIRS", "run_statistical_tests"]
+__all__ = [
+    "ADF_TARGETS",
+    "GRANGER_PAIRS",
+    "MIN_ROWS_FOR_ADF",
+    "MIN_ROWS_FOR_GRANGER",
+    "run_statistical_tests",
+]

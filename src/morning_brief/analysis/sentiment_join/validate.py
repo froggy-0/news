@@ -16,9 +16,9 @@ MASTER_SCHEMA = pa.DataFrameSchema(
         "news_sentiment_mean": pa.Column(float, pa.Check.between(-1.0, 1.0), nullable=False),
         "news_sentiment_std": pa.Column(float, pa.Check.ge(0), nullable=True),
         "n_articles": pa.Column("Int64", pa.Check.ge(0), nullable=True),
-        "signal_sentiment_mean": pa.Column(float, pa.Check.between(-1.0, 1.0), nullable=True),
-        "signal_sentiment_std": pa.Column(float, pa.Check.ge(0), nullable=True),
-        "n_signals": pa.Column("Int64", pa.Check.ge(0), nullable=True),
+        "sentiment_status": pa.Column(str, nullable=True),
+        "is_backfill_valid": pa.Column(bool, nullable=True),
+        "ingest_validation_reason": pa.Column(nullable=True),
         "fng_value": pa.Column("Int64", pa.Check.between(0, 100), nullable=True),
         "btc_log_return": pa.Column(float, nullable=True),
         "btc_return": pa.Column(float, nullable=True),
@@ -37,6 +37,8 @@ MASTER_SCHEMA = pa.DataFrameSchema(
         "etf_total_aum_usd": pa.Column(float, pa.Check.ge(0), nullable=True),
         "etf_net_inflow_usd": pa.Column(float, nullable=True),
         "etf_net_inflow_usd_lag1": pa.Column(float, nullable=True),
+        # Req 8: BTC 방향 라벨
+        "btc_direction_label": pa.Column(nullable=True),
         # Req 13: PCA 하이브리드 지수 (데이터 부족 시 NaN 허용)
         "hybrid_index": pa.Column(float, nullable=True),
     },
@@ -46,7 +48,7 @@ MASTER_SCHEMA = pa.DataFrameSchema(
 
 def validate_master(df: pd.DataFrame) -> None:
     try:
-        for column in ("n_articles", "fng_value", "n_signals"):
+        for column in ("n_articles", "fng_value"):
             if str(df[column].dtype) != "Int64":
                 raise SchemaError(
                     schema=MASTER_SCHEMA,

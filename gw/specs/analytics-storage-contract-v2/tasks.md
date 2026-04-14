@@ -7,13 +7,17 @@
 ## Tasks
 
 - [ ] 1. 저장 경로/계약 모듈 추가
-  - [ ] 1.1 `src/morning_brief/data/storage/news_data_paths.py`를 추가해 `curated/btc/{date}.json`, `analytics/btc/{date}.json`, raw capture key 생성 규칙을 구현한다
+  - [ ] 1.1 `src/morning_brief/data/storage/__init__.py`와 `src/morning_brief/data/storage/news_data_paths.py`를 추가해 `curated/btc/{date}.json`, `analytics/btc/{date}.json`, raw capture key 생성 규칙을 구현한다
+    - `src/morning_brief/data/storage/` 디렉토리는 신규 생성한다
     - publish path와 raw append-only path 정책을 분리한다
     - _Requirements: 1.2, 1.4, 4.1, 4.5_
   - [ ] 1.2 `src/morning_brief/data/storage/analytics_contract.py`를 추가해 analytics payload 빌드/검증 로직을 구현한다
     - `schemaVersion`, `producer`, `generatedAt`, `date`, `symbol`, `sentimentStatus`, `newsSentiment`, `_backfill`만 허용한다
-    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 5.3, 5.4_
+    - curated의 `newsSentiment` 중 `median`, `bullishRatio`, `bearishRatio`는 전시 전용이므로 analytics에서 의도적으로 제외한다
+    - curated의 `signalSentiment`, `signalSentimentStatus`는 analytics 계약에 포함하지 않는다
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 5.3, 5.4_
   - [ ] 1.3 `tests/data/test_news_data_paths.py`와 `tests/data/test_analytics_contract.py`를 추가해 path 정책과 analytics 계약 검증을 테스트한다
+    - `tests/data/` 디렉토리는 신규 생성한다 (`__init__.py` 포함)
     - Property 1: 동일 날짜 재실행에서도 publish path는 동일하고 raw path는 run_id에 따라 달라야 한다
     - Property 2: analytics payload는 허용 필드 외 키를 포함하지 않아야 한다
     - **Validates: Requirements 1.2, 3.2, 4.1, 4.5**
@@ -35,8 +39,11 @@
     - _Requirements: 1.2, 2.1, 3.2, 4.6_
 
 - [ ] 4. 분석 reader를 analytics 계약으로 전환
+  - **선행 조건**: task 2 (dual-write) 완료 후 R2에 `analytics/btc/` 데이터가 적재된 상태에서 진행한다 (Rollout Phase 2)
   - [ ] 4.1 `src/morning_brief/analysis/sentiment_join/sources/r2_sentiment.py`를 수정해 `analytics/btc/{date}.json`만 읽도록 바꾼다
     - legacy `briefs/` 의존을 제거한다
+    - 현재 reader가 출력하는 `signal_sentiment_mean`, `signal_sentiment_std`, `n_signals` 컬럼은 analytics 계약에 포함하지 않으므로 reader output에서도 제거한다
+    - reader는 `SentimentJoinSettings.r2_base_url`(HTTP URL)을 사용하며, writer의 `Settings.r2_public_bucket`(boto3 bucket명)과 혼동하지 않는다
     - _Requirements: 5.1, 5.6, 5.7, 9.1_
   - [ ] 4.2 analytics payload 검증 결과를 reader output에 반영한다
     - `sentiment_status`, `is_backfill_valid`, `ingest_validation_reason`를 함께 반환한다

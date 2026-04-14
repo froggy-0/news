@@ -9,22 +9,53 @@ from morning_brief.analysis.sentiment_join.sources import r2_sentiment
 from morning_brief.data.sources.http_client import HttpFetchError
 
 
+def _analytics_payload(
+    *,
+    mean: float | None = 0.25,
+    std: float | None = 0.1,
+    count: int = 3,
+    status: str = "ok",
+    backfill: bool = True,
+    schema_version: str = "v1",
+) -> dict:
+    return {
+        "schemaVersion": schema_version,
+        "producer": "test",
+        "generatedAt": "2026-04-10T00:00:00Z",
+        "date": "2026-04-10",
+        "symbol": "btc",
+        "sentimentStatus": status,
+        "newsSentiment": {"mean": mean, "std": std, "count": count},
+        "_backfill": backfill,
+    }
+
+
+def test_fetch_r2_sentiment_reads_analytics_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Req 5.1: analytics/btc/{date}.json 경로만 읽는지 검증."""
+    requested_urls: list[str] = []
+
+    def fake_get_json(url: str, *, provider: str, timeout: int):
+        requested_urls.append(url)
+        return _analytics_payload()
+
+    monkeypatch.setattr(r2_sentiment, "get_json_with_retry", fake_get_json)
+    r2_sentiment.fetch_r2_sentiment(["2026-04-10"], "https://bucket.example", 2)
+
+    assert len(requested_urls) == 1
+    assert "/analytics/btc/2026-04-10.json" in requested_urls[0]
+    assert "/briefs/" not in requested_urls[0]
+
+
 def test_fetch_r2_sentiment_maps_count_to_n_articles(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_get_json(url: str, *, provider: str, timeout: int):
-        assert provider == "r2"
-        assert timeout == 20
-        return {
-            "meta": {
-                "sentimentStatus": "ok",
-                "signalSentimentStatus": "ok",
-                "newsSentiment": {"mean": 0.25, "std": 0.1, "count": 3},
-                "signalSentiment": {"mean": 0.1, "std": 0.05, "count": 6},
-            }
-        }
-
-    monkeypatch.setattr(r2_sentiment, "get_json_with_retry", fake_get_json)
+    monkeypatch.setattr(
+        r2_sentiment,
+        "get_json_with_retry",
+        lambda *args, **kwargs: _analytics_payload(mean=0.25, std=0.1, count=3),
+    )
 
     df = r2_sentiment.fetch_r2_sentiment(["2026-04-10"], "https://bucket.example", 2)
 
@@ -32,10 +63,10 @@ def test_fetch_r2_sentiment_maps_count_to_n_articles(
     assert df.loc[0, "news_sentiment_std"] == 0.1
     assert df.loc[0, "n_articles"] == 3
     assert df["n_articles"].dtype == pd.Int64Dtype()
-    assert df.loc[0, "signal_sentiment_mean"] == 0.1
-    assert df.loc[0, "signal_sentiment_std"] == 0.05
-    assert df.loc[0, "n_signals"] == 6
-    assert df["n_signals"].dtype == pd.Int64Dtype()
+    assert bool(df.loc[0, "is_backfill_valid"]) is True
+    assert df.loc[0, "ingest_validation_reason"] is None or pd.isna(
+        df.loc[0, "ingest_validation_reason"]
+    )
 
 
 def test_fetch_r2_sentiment_sets_nan_for_skipped_status(
@@ -44,24 +75,70 @@ def test_fetch_r2_sentiment_sets_nan_for_skipped_status(
     monkeypatch.setattr(
         r2_sentiment,
         "get_json_with_retry",
-        lambda *args, **kwargs: {
-            "meta": {
-                "sentimentStatus": "skipped",
-                "signalSentimentStatus": "ok",
-                "newsSentiment": {"mean": 0.25, "std": 0.1, "count": 4},
-                "signalSentiment": {"mean": 0.1, "std": 0.05, "count": 6},
-            }
-        },
+        lambda *args, **kwargs: _analytics_payload(status="skipped"),
     )
 
     df = r2_sentiment.fetch_r2_sentiment(["2026-04-10"], "https://bucket.example", 2)
 
     assert pd.isna(df.loc[0, "news_sentiment_mean"])
-    assert pd.isna(df.loc[0, "news_sentiment_std"])
     assert pd.isna(df.loc[0, "n_articles"])
-    assert pd.isna(df.loc[0, "signal_sentiment_mean"])
-    assert pd.isna(df.loc[0, "signal_sentiment_std"])
-    assert pd.isna(df.loc[0, "n_signals"])
+    # backfill은 유효하지만 sentiment는 skipped
+    assert bool(df.loc[0, "is_backfill_valid"]) is True
+    assert df.loc[0, "sentiment_status"] == "skipped"
+
+
+def test_fetch_r2_sentiment_rejects_missing_backfill(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Req 5.2: _backfill: true가 없으면 해당 날짜 제외."""
+    monkeypatch.setattr(
+        r2_sentiment,
+        "get_json_with_retry",
+        lambda *args, **kwargs: _analytics_payload(backfill=False),
+    )
+
+    df = r2_sentiment.fetch_r2_sentiment(["2026-04-10"], "https://bucket.example", 2)
+
+    assert bool(df.loc[0, "is_backfill_valid"]) is False
+    assert df.loc[0, "ingest_validation_reason"] == "missing_backfill_marker"
+    assert pd.isna(df.loc[0, "news_sentiment_mean"])
+
+
+def test_fetch_r2_sentiment_rejects_unsupported_schema_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Req 5.3: 지원되지 않는 schemaVersion은 제외."""
+    monkeypatch.setattr(
+        r2_sentiment,
+        "get_json_with_retry",
+        lambda *args, **kwargs: _analytics_payload(schema_version="v99"),
+    )
+
+    df = r2_sentiment.fetch_r2_sentiment(["2026-04-10"], "https://bucket.example", 2)
+
+    assert bool(df.loc[0, "is_backfill_valid"]) is False
+    assert "unsupported_schema_version" in (df.loc[0, "ingest_validation_reason"] or "")
+    assert pd.isna(df.loc[0, "news_sentiment_mean"])
+
+
+def test_fetch_r2_sentiment_rejects_invalid_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Req 5.4: 구조가 계약과 다르면 무효 입력."""
+    monkeypatch.setattr(
+        r2_sentiment,
+        "get_json_with_retry",
+        lambda *args, **kwargs: {
+            "schemaVersion": "v1",
+            "_backfill": True,
+            # missing required fields
+        },
+    )
+
+    df = r2_sentiment.fetch_r2_sentiment(["2026-04-10"], "https://bucket.example", 2)
+
+    assert bool(df.loc[0, "is_backfill_valid"]) is False
+    assert "missing_field" in (df.loc[0, "ingest_validation_reason"] or "")
 
 
 def test_fetch_r2_sentiment_keeps_degraded_value(
@@ -70,23 +147,14 @@ def test_fetch_r2_sentiment_keeps_degraded_value(
     monkeypatch.setattr(
         r2_sentiment,
         "get_json_with_retry",
-        lambda *args, **kwargs: {
-            "meta": {
-                "sentimentStatus": "degraded",
-                "signalSentimentStatus": "ok",
-                "newsSentiment": {"mean": -0.4, "std": 0.3, "count": 2},
-                "signalSentiment": {"mean": 0.2, "std": 0.1, "count": 4},
-            }
-        },
+        lambda *args, **kwargs: _analytics_payload(mean=-0.4, std=0.3, count=2, status="degraded"),
     )
 
     df = r2_sentiment.fetch_r2_sentiment(["2026-04-10"], "https://bucket.example", 2)
 
     assert df.loc[0, "news_sentiment_mean"] == -0.4
-    assert df.loc[0, "news_sentiment_std"] == 0.3
     assert df.loc[0, "n_articles"] == 2
-    assert df.loc[0, "signal_sentiment_mean"] == 0.2
-    assert df.loc[0, "n_signals"] == 4
+    assert df.loc[0, "sentiment_status"] == "degraded"
 
 
 def test_fetch_r2_sentiment_sets_nan_when_mean_is_null(
@@ -95,45 +163,22 @@ def test_fetch_r2_sentiment_sets_nan_when_mean_is_null(
     monkeypatch.setattr(
         r2_sentiment,
         "get_json_with_retry",
-        lambda *args, **kwargs: {
-            "meta": {
-                "sentimentStatus": "ok",
-                "signalSentimentStatus": "ok",
-                "newsSentiment": {"mean": None, "std": 0.3, "count": 2},
-                "signalSentiment": {"mean": 0.1, "std": 0.05, "count": 4},
-            }
-        },
+        lambda *args, **kwargs: _analytics_payload(mean=None),
     )
 
     df = r2_sentiment.fetch_r2_sentiment(["2026-04-10"], "https://bucket.example", 2)
 
     assert pd.isna(df.loc[0, "news_sentiment_mean"])
-    assert pd.isna(df.loc[0, "news_sentiment_std"])
-    assert pd.isna(df.loc[0, "n_articles"])
-    # 뉴스 NaN이면 전체 행이 NaN (기존 동작 유지)
-    assert pd.isna(df.loc[0, "signal_sentiment_mean"])
-    assert pd.isna(df.loc[0, "n_signals"])
+    assert bool(df.loc[0, "is_backfill_valid"]) is True
 
 
 def test_fetch_r2_sentiment_handles_partial_404(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    payloads = {
-        "2026-04-10": {
-            "meta": {
-                "sentimentStatus": "ok",
-                "signalSentimentStatus": "ok",
-                "newsSentiment": {"mean": 0.2, "std": 0.1, "count": 2},
-                "signalSentiment": {"mean": 0.05, "std": 0.02, "count": 5},
-            }
-        }
-    }
-
     def fake_get_json(url: str, *, provider: str, timeout: int):
-        date = url.rsplit("/", 1)[-1].removesuffix(".json")
-        if date not in payloads:
+        if "2026-04-09" in url:
             raise HttpFetchError("missing", status_code=404, provider="r2")
-        return payloads[date]
+        return _analytics_payload(mean=0.2, std=0.1, count=2)
 
     monkeypatch.setattr(r2_sentiment, "get_json_with_retry", fake_get_json)
 
@@ -145,13 +190,8 @@ def test_fetch_r2_sentiment_handles_partial_404(
 
     missing_row = df.loc[df["date"] == "2026-04-09"].iloc[0]
     assert pd.isna(missing_row["news_sentiment_mean"])
-    assert pd.isna(missing_row["n_articles"])
-    assert pd.isna(missing_row["signal_sentiment_mean"])
-    assert pd.isna(missing_row["n_signals"])
     present_row = df.loc[df["date"] == "2026-04-10"].iloc[0]
     assert present_row["news_sentiment_mean"] == 0.2
-    assert present_row["signal_sentiment_mean"] == 0.05
-    assert present_row["n_signals"] == 5
 
 
 def test_fetch_r2_sentiment_logs_warning_on_total_failure(
@@ -171,56 +211,22 @@ def test_fetch_r2_sentiment_logs_warning_on_total_failure(
         )
 
     assert df["news_sentiment_mean"].isna().all()
-    assert df["signal_sentiment_mean"].isna().all()
     assert any(getattr(record, "event", None) == "source.failed" for record in caplog.records)
 
 
-def test_fetch_r2_sentiment_legacy_json_without_signal_status(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """signalSentimentStatus 필드가 없는 구버전 JSON은 signal 컬럼을 NaN으로 채운다."""
-    monkeypatch.setattr(
-        r2_sentiment,
-        "get_json_with_retry",
-        lambda *args, **kwargs: {
-            "meta": {
-                "sentimentStatus": "ok",
-                # signalSentimentStatus 없음 (구버전)
-                "newsSentiment": {"mean": 0.3, "std": 0.1, "count": 5},
-                "signalSentiment": {"mean": 0.1, "std": 0.05, "count": 8},
-            }
-        },
-    )
-
-    df = r2_sentiment.fetch_r2_sentiment(["2026-04-10"], "https://bucket.example", 2)
-
-    assert df.loc[0, "news_sentiment_mean"] == 0.3
-    assert df.loc[0, "n_articles"] == 5
-    # signalSentimentStatus 없으면 "skipped"로 처리 → signal NaN
-    assert pd.isna(df.loc[0, "signal_sentiment_mean"])
-    assert pd.isna(df.loc[0, "n_signals"])
-
-
-def test_fetch_r2_sentiment_signal_skipped_status(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """signalSentimentStatus가 skipped이면 signal 컬럼은 NaN이지만 뉴스는 정상."""
-    monkeypatch.setattr(
-        r2_sentiment,
-        "get_json_with_retry",
-        lambda *args, **kwargs: {
-            "meta": {
-                "sentimentStatus": "ok",
-                "signalSentimentStatus": "skipped",
-                "newsSentiment": {"mean": 0.15, "std": 0.08, "count": 7},
-                "signalSentiment": {"mean": None, "std": None, "count": 0},
-            }
-        },
-    )
-
-    df = r2_sentiment.fetch_r2_sentiment(["2026-04-10"], "https://bucket.example", 2)
-
-    assert df.loc[0, "news_sentiment_mean"] == 0.15
-    assert df.loc[0, "n_articles"] == 7
-    assert pd.isna(df.loc[0, "signal_sentiment_mean"])
-    assert pd.isna(df.loc[0, "n_signals"])
+def test_fetch_r2_sentiment_output_columns() -> None:
+    """signal 컬럼이 제거되고 새 계약 컬럼이 존재하는지 검증."""
+    frame = r2_sentiment._empty_sentiment_frame(["2026-04-10"])
+    expected = {
+        "date",
+        "news_sentiment_mean",
+        "news_sentiment_std",
+        "n_articles",
+        "sentiment_status",
+        "is_backfill_valid",
+        "ingest_validation_reason",
+    }
+    assert set(frame.columns) == expected
+    # signal 컬럼이 없어야 한다
+    assert "signal_sentiment_mean" not in frame.columns
+    assert "n_signals" not in frame.columns
