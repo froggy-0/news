@@ -103,20 +103,41 @@ def publish_public_brief(
 
     _write_json(public_dir / brief_relative_path, brief_payload)
 
-    client = _public_r2_client(settings)
-    if client is not None:
-        # legacy briefs/ 유지 (migration 기간)
-        client.put_json(brief_relative_path, brief_payload)
-
-        # ── dual-write: curated + analytics ──
-        _dual_write_storage_layers(
-            client=client,
-            date_key=date_key,
-            brief_payload=brief_payload,
+    uploaded = False
+    try:
+        client = _public_r2_client(settings)
+    except ValueError as exc:
+        client = None
+        _record_public_r2_failure(
+            settings=settings,
             observer=observer,
+            exc=exc,
+            stage="client_init",
         )
 
-        dates = client.list_dates()
+    if client is not None:
+        try:
+            # legacy briefs/ 유지 (migration 기간)
+            client.put_json(brief_relative_path, brief_payload)
+
+            # ── dual-write: curated + analytics ──
+            _dual_write_storage_layers(
+                client=client,
+                date_key=date_key,
+                brief_payload=brief_payload,
+                observer=observer,
+            )
+
+            dates = client.list_dates()
+            uploaded = True
+        except Exception as exc:
+            dates = _list_local_dates(public_dir / "briefs")
+            _record_public_r2_failure(
+                settings=settings,
+                observer=observer,
+                exc=exc,
+                stage="upload_bundle",
+            )
     else:
         dates = _list_local_dates(public_dir / "briefs")
         if observer is not None:
@@ -128,8 +149,17 @@ def publish_public_brief(
     index_payload = build_public_index(dates=dates, updated_at=run_local.isoformat())
     _write_json(public_dir / "index.json", index_payload)
 
-    if client is not None:
-        client.put_json("index.json", index_payload)
+    if client is not None and uploaded:
+        try:
+            client.put_json("index.json", index_payload)
+        except Exception as exc:
+            uploaded = False
+            _record_public_r2_failure(
+                settings=settings,
+                observer=observer,
+                exc=exc,
+                stage="upload_index",
+            )
 
     if observer is not None:
         observer.log_event(
@@ -137,7 +167,7 @@ def publish_public_brief(
             date=date_key,
             brief_path=brief_relative_path,
             public_dates=dates,
-            uploaded=client is not None,
+            uploaded=uploaded,
         )
 
     return _PublicBriefArtifacts(
@@ -1790,9 +1820,10 @@ class _PublicR2Client:
         import boto3
 
         self._bucket = bucket
+        self._endpoint = _normalize_r2_s3_endpoint(endpoint)
         self._client = boto3.client(
             "s3",
-            endpoint_url=endpoint,
+            endpoint_url=self._endpoint,
             aws_access_key_id=access_key_id,
             aws_secret_access_key=secret_access_key,
             region_name="auto",
@@ -1843,4 +1874,73 @@ def _public_r2_client(settings: Settings) -> _PublicR2Client | None:
         endpoint=settings.r2_s3_endpoint,
         access_key_id=settings.r2_access_key_id,
         secret_access_key=settings.r2_secret_access_key,
+    )
+
+
+def _normalize_r2_s3_endpoint(endpoint: str) -> str:
+    normalized = endpoint.strip().rstrip("/")
+    parsed = urlparse(normalized)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("R2_S3_ENDPOINT must be an absolute http(s) URL.")
+    if parsed.path not in {"", "/"} or parsed.params or parsed.query or parsed.fragment:
+        raise ValueError(
+            "R2_S3_ENDPOINT must use the account-level S3 endpoint only, without bucket/path/query."
+        )
+    return normalized
+
+
+def _public_r2_error_details(settings: Settings, exc: Exception) -> dict[str, str]:
+    endpoint = settings.r2_s3_endpoint.strip()
+    endpoint_host = urlparse(endpoint).netloc or "unknown"
+    error_code = ""
+    response = getattr(exc, "response", None)
+    if isinstance(response, dict):
+        error = response.get("Error")
+        if isinstance(error, dict):
+            raw_code = error.get("Code")
+            if raw_code is not None:
+                error_code = str(raw_code)
+    reason = str(exc)
+    if error_code == "SignatureDoesNotMatch":
+        reason = (
+            "R2 PutObject 서명이 맞지 않습니다. "
+            "R2_S3_ENDPOINT가 account-level S3 endpoint인지, "
+            "R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY가 같은 R2 계정 쌍인지 확인하세요."
+        )
+    details = {
+        "reason": reason,
+        "endpoint_host": endpoint_host,
+    }
+    if error_code:
+        details["error_code"] = error_code
+    return details
+
+
+def _record_public_r2_failure(
+    *,
+    settings: Settings,
+    observer: PipelineObserver | None,
+    exc: Exception,
+    stage: str,
+) -> None:
+    details = _public_r2_error_details(settings, exc)
+    payload: dict[str, object] = {
+        "stage": stage,
+        **details,
+    }
+    message = "R2 공개 업로드에 실패해 로컬 산출물만 남겼어요."
+    if observer is not None:
+        observer.log_event(
+            "public_brief_upload_failed",
+            level=logging.WARNING,
+            message=message,
+            **payload,
+        )
+        return
+    log_structured(
+        logger,
+        event="public_brief_upload_failed",
+        message=message,
+        level=logging.WARNING,
+        **payload,
     )
