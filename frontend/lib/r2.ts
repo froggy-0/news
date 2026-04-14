@@ -6,6 +6,8 @@ import type { BriefData, BriefIndex } from "@schema/brief.types";
 
 import { parseBriefData, parseBriefIndex } from "./brief-schema";
 
+const remoteBriefCache = new Map<string, Promise<BriefData>>();
+
 const fixtureDir = path.join(process.cwd(), "fixtures");
 const outputDir = path.resolve(process.cwd(), "..", "output");
 const requestVersion =
@@ -251,6 +253,58 @@ async function fetchRemoteArchiveSummary(baseUrl: string, remotePaths: string[],
   throw lastError ?? new Error("Unable to load remote brief payload");
 }
 
+function remoteBriefCacheKey(baseUrl: string, remotePaths: string[]): string {
+  return `${baseUrl}|${remotePaths.join(",")}`;
+}
+
+async function fetchRemoteBriefForDate(baseUrl: string, index: BriefIndex, date: string): Promise<BriefData> {
+  const remotePaths = resolveRemoteBriefCandidates(index, date);
+  const key = remoteBriefCacheKey(baseUrl, remotePaths);
+  const cached = remoteBriefCache.get(key);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = fetchRemoteBrief(baseUrl, remotePaths);
+  remoteBriefCache.set(key, promise);
+
+  try {
+    return await promise;
+  } catch (error) {
+    remoteBriefCache.delete(key);
+    throw error;
+  }
+}
+
+export async function loadRenderableIndex(): Promise<BriefIndex> {
+  const index = await loadIndex();
+
+  if (useFixtureData() || useOutputData()) {
+    return index;
+  }
+
+  const baseUrl = requirePublicBaseUrl();
+  const renderableDates = (
+    await Promise.all(
+      index.dates.map(async (date) => {
+        try {
+          await fetchRemoteBriefForDate(baseUrl, index, date);
+          return date;
+        } catch {
+          return null;
+        }
+      }),
+    )
+  ).filter((date): date is string => date !== null);
+
+  return {
+    ...index,
+    dates: renderableDates,
+    latest: index.latest && renderableDates.includes(index.latest.date) ? index.latest : null,
+    entriesByDate: (index.entriesByDate ?? []).filter((entry) => renderableDates.includes(entry.date)),
+  };
+}
+
 export async function loadIndex(): Promise<BriefIndex> {
   if (useFixtureData()) {
     return parseBriefIndex(await readFixture<unknown>("index.json"));
@@ -274,11 +328,11 @@ export async function loadBriefByDate(date: string): Promise<BriefData> {
 
   const baseUrl = requirePublicBaseUrl();
   const index = await loadIndex();
-  return fetchRemoteBrief(baseUrl, resolveRemoteBriefCandidates(index, date));
+  return fetchRemoteBriefForDate(baseUrl, index, date);
 }
 
 export async function loadLatest(): Promise<BriefData> {
-  const index = await loadIndex();
+  const index = await loadRenderableIndex();
   const latestDate = index.latest?.date ?? index.dates[0];
   if (!latestDate) {
     throw new Error("index.json must include at least one date");
@@ -288,7 +342,7 @@ export async function loadLatest(): Promise<BriefData> {
     return loadBriefByDate(latestDate);
   }
 
-  return fetchRemoteBrief(requirePublicBaseUrl(), resolveRemoteBriefCandidates(index, latestDate));
+  return fetchRemoteBriefForDate(requirePublicBaseUrl(), index, latestDate);
 }
 
 export async function loadArchiveSummaryByDate(date: string): Promise<ArchiveBriefSummary> {
@@ -301,12 +355,13 @@ export async function loadArchiveSummaryByDate(date: string): Promise<ArchiveBri
   }
 
   const baseUrl = requirePublicBaseUrl();
-  const index = await loadIndex();
-  return fetchRemoteArchiveSummary(baseUrl, resolveRemoteBriefCandidates(index, date), date);
+  const index = await loadRenderableIndex();
+  const brief = await fetchRemoteBriefForDate(baseUrl, index, date);
+  return parseArchiveSummary(brief, date);
 }
 
 export const fetchIndex = cache(async (): Promise<BriefIndex> => {
-  return loadIndex();
+  return loadRenderableIndex();
 });
 
 export const fetchLatest = cache(async (): Promise<BriefData> => {

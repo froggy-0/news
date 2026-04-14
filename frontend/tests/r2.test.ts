@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { loadBriefByDate, loadIndex, loadLatest } from "../lib/r2";
+import { loadBriefByDate, loadIndex, loadLatest, loadRenderableIndex } from "../lib/r2";
 import type { BriefData } from "@schema/brief.types";
 
 test.afterEach(() => {
@@ -148,6 +148,45 @@ test("loadLatest falls back to curated brief when index path points to analytics
       "/analytics/btc/2026-03-21.json",
       "/curated/btc/2026-03-21.json",
     ]);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("loadRenderableIndex filters out dates without renderable briefs", async () => {
+  process.env.NEXT_PUBLIC_R2_BASE_URL = "https://example.com";
+
+  const originalFetch = global.fetch;
+  global.fetch = (async (input) => {
+    const url = new URL(typeof input === "string" ? input : input.toString());
+
+    if (url.pathname === "/index.json") {
+      return new Response(
+        JSON.stringify({
+          dates: ["2026-03-21", "2026-03-20"],
+          updatedAt: "2026-03-21T12:30:00Z",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+    if (url.pathname === "/curated/btc/2026-03-21.json" || url.pathname === "/briefs/2026-03-21.json") {
+      return new Response(JSON.stringify(buildBriefPayload()), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (url.pathname === "/curated/btc/2026-03-20.json" || url.pathname === "/briefs/2026-03-20.json") {
+      return new Response(JSON.stringify({ meta: { date: "2026-03-20" } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(null, { status: 404 });
+  }) as typeof fetch;
+
+  try {
+    const index = await loadRenderableIndex();
+    assert.deepEqual(index.dates, ["2026-03-21"]);
   } finally {
     global.fetch = originalFetch;
   }
