@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -72,10 +72,19 @@ def test_extract_daily_long_short_ratio_value_above_one_is_valid() -> None:
 def test_fetch_futures_data_lsr_failure_does_not_block_funding_oi(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    target_day = datetime.now(timezone.utc).date() - timedelta(days=1)
     funding_rows = [
-        {"fundingTime": _ms(2026, 4, 10, 0), "fundingRate": "0.001"},
+        {
+            "fundingTime": _ms(target_day.year, target_day.month, target_day.day, 0),
+            "fundingRate": "0.001",
+        },
     ]
-    oi_rows = [{"timestamp": _ms(2026, 4, 10), "sumOpenInterestValue": "1000.0"}]
+    oi_rows = [
+        {
+            "timestamp": _ms(target_day.year, target_day.month, target_day.day),
+            "sumOpenInterestValue": "1000.0",
+        }
+    ]
 
     monkeypatch.setattr(futures, "_fetch_funding_rate_history", lambda start_ms: funding_rows)
     monkeypatch.setattr(futures, "_fetch_oi_history", lambda start_ms: oi_rows)
