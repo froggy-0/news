@@ -2,7 +2,9 @@ import type {
   AIJudgment,
   BitcoinSection,
   BriefData,
+  BriefIndexEntry,
   BriefIndex,
+  BriefIndexRun,
   BriefMeta,
   FearGreedIndex,
   MarketSnapshot,
@@ -53,6 +55,13 @@ function asQuality(value: unknown): BriefMeta["dataQuality"] {
     return value;
   }
   throw new Error("meta.dataQuality must be ok, degraded, or critical");
+}
+
+function asOptionalQuality(value: unknown): BriefMeta["dataQuality"] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  return asQuality(value);
 }
 
 function asTrend(value: unknown): TickerItem["trend"] {
@@ -343,9 +352,50 @@ export function parseBriefIndex(value: unknown): BriefIndex {
   if (!isRecord(value)) {
     throw new Error("index payload must be an object");
   }
+
+  const parseIndexRun = (run: unknown, name: string): BriefIndexRun => {
+    if (!isRecord(run)) {
+      throw new Error(`${name} must be an object`);
+    }
+
+    return {
+      date: asString(run.date, `${name}.date`),
+      time: asString(run.time, `${name}.time`),
+      path: asString(run.path, `${name}.path`),
+      generatedAt: asString(run.generatedAt, `${name}.generatedAt`),
+      quality: asOptionalQuality(run.quality),
+      headline:
+        typeof run.headline === "string" && run.headline.length > 0
+          ? run.headline
+          : undefined,
+    };
+  };
+
+  const parseIndexEntry = (entry: unknown, index: number): BriefIndexEntry => {
+    if (!isRecord(entry)) {
+      throw new Error(`index.entriesByDate[${index}] must be an object`);
+    }
+    if (!Array.isArray(entry.runs)) {
+      throw new Error(`index.entriesByDate[${index}].runs must be an array`);
+    }
+    return {
+      date: asString(entry.date, `index.entriesByDate[${index}].date`),
+      runs: entry.runs.map((run, runIndex) => parseIndexRun(run, `index.entriesByDate[${index}].runs[${runIndex}]`)),
+    };
+  };
+
   return {
     dates: asStringArray(value.dates, "index.dates"),
     updatedAt: asString(value.updatedAt, "index.updatedAt"),
+    latest: value.latest === undefined ? null : parseIndexRun(value.latest, "index.latest"),
+    entriesByDate:
+      value.entriesByDate === undefined
+        ? []
+        : Array.isArray(value.entriesByDate)
+          ? value.entriesByDate.map(parseIndexEntry)
+          : (() => {
+              throw new Error("index.entriesByDate must be an array");
+            })(),
   };
 }
 

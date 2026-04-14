@@ -13,6 +13,18 @@ const buildVersion =
   process.env.BRIEF_DATA_BUILD_ID ?? process.env.GITHUB_SHA ?? `local-${Date.now()}`;
 const outputBriefPattern = /^briefs_(\d{4}-\d{2}-\d{2})\.json$/;
 
+function requireAbsoluteHttpUrl(value, envName) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw new Error("invalid protocol");
+    }
+    return value.replace(/\/$/, "");
+  } catch {
+    throw new Error(`${envName} must be an absolute http(s) URL. Received: ${value}`);
+  }
+}
+
 async function readLocalJson(name) {
   const raw = await readFile(path.join(fixtureDir, name), "utf8");
   return JSON.parse(raw);
@@ -71,7 +83,7 @@ async function readIndex() {
       "NEXT_PUBLIC_R2_BASE_URL is required. Set BRIEF_DATA_SOURCE=fixture or output only for explicit local builds.",
     );
   }
-  return readRemoteJson(`${dataBaseUrl.replace(/\/$/, "")}/index.json`);
+  return readRemoteJson(`${requireAbsoluteHttpUrl(dataBaseUrl, "NEXT_PUBLIC_R2_BASE_URL")}/index.json`);
 }
 
 async function readBrief(date) {
@@ -86,7 +98,29 @@ async function readBrief(date) {
       "NEXT_PUBLIC_R2_BASE_URL is required. Set BRIEF_DATA_SOURCE=fixture or output only for explicit local builds.",
     );
   }
-  return readRemoteJson(`${dataBaseUrl.replace(/\/$/, "")}/briefs/${date}.json`);
+  const index = await readIndex();
+  const remotePath = resolveRemoteBriefPath(index, date);
+  return readRemoteJson(`${requireAbsoluteHttpUrl(dataBaseUrl, "NEXT_PUBLIC_R2_BASE_URL")}/${remotePath}`);
+}
+
+function normalizeRemotePath(pathValue) {
+  return pathValue.replace(/^\/+/, "");
+}
+
+function resolveRemoteBriefPath(index, date) {
+  if (index?.latest?.date === date && typeof index.latest.path === "string" && index.latest.path.length > 0) {
+    return normalizeRemotePath(index.latest.path);
+  }
+
+  const datedEntry = Array.isArray(index?.entriesByDate)
+    ? index.entriesByDate.find((entry) => entry && entry.date === date)
+    : null;
+  const datedRun = Array.isArray(datedEntry?.runs) ? datedEntry.runs[0] : null;
+  if (datedRun && typeof datedRun.path === "string" && datedRun.path.length > 0) {
+    return normalizeRemotePath(datedRun.path);
+  }
+
+  return `briefs/${date}.json`;
 }
 
 function renderRssItem(brief) {
