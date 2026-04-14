@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
-from pandera.errors import SchemaError
+from pandera.errors import SchemaError, SchemaErrorReason, SchemaErrors
 
-from morning_brief.analysis.sentiment_join.validate import validate_master
+from morning_brief.analysis.sentiment_join import validate as validate_module
+from morning_brief.analysis.sentiment_join.validate import MASTER_SCHEMA, validate_master
 
 
 def _valid_df() -> pd.DataFrame:
@@ -94,6 +95,31 @@ def test_validate_master_rejects_extra_columns() -> None:
     df = _valid_df()
     df["close"] = [100.0]
     with pytest.raises(SchemaError):
+        validate_master(df)
+
+
+def test_validate_master_normalizes_schema_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    df = _valid_df()
+
+    def raise_schema_errors(frame: pd.DataFrame) -> None:
+        raise SchemaErrors(
+            schema=MASTER_SCHEMA,
+            schema_errors=[
+                SchemaError(
+                    schema=MASTER_SCHEMA,
+                    data=frame,
+                    message="column 'close' not in DataFrameSchema",
+                    failure_cases="close",
+                    check="column_in_schema",
+                    reason_code=SchemaErrorReason.COLUMN_NOT_IN_SCHEMA,
+                )
+            ],
+            data=frame,
+        )
+
+    monkeypatch.setattr(validate_module.MASTER_SCHEMA, "validate", raise_schema_errors)
+
+    with pytest.raises(SchemaError, match="column 'close' not in DataFrameSchema"):
         validate_master(df)
 
 
