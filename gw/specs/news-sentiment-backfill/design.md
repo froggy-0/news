@@ -28,7 +28,7 @@ flowchart TD
 
     subgraph Upload["4. 업로드"]
         JS["JSON Builder\nbuild_minimal_brief_json()"]
-        R2["R2 Uploader\nbriefs/{date}.json\nboto3 S3 호환"]
+        R2["R2 Uploader\nanalytics/btc/{date}.json\nboto3 S3 호환"]
     end
 
     subgraph Compat["5. 호환 수정 (운영코드 1곳)"]
@@ -413,8 +413,8 @@ def score_and_aggregate(
 }
 ```
 
-**R2 경로:** `briefs/{YYYY-MM-DD}.json`
-- 실제 운영 파이프라인과 동일한 경로 (`public_site.py`가 업로드하는 경로)
+**R2 경로:** `analytics/btc/{YYYY-MM-DD}.json`
+- 분석 파이프라인과 직접 일치하는 경로
 
 #### 기존 파일 보호 로직
 
@@ -464,7 +464,7 @@ s3 = boto3.client(
 from botocore.exceptions import ClientError
 
 try:
-    s3.head_object(Bucket=bucket, Key=f"briefs/{date}.json")
+    s3.head_object(Bucket=bucket, Key=f"analytics/btc/{date}.json")
     # 존재 → --force 시에만 get_object로 _backfill 필드 확인
 except ClientError as e:
     if e.response["Error"]["Code"] in ("404", "NoSuchKey"):
@@ -475,7 +475,7 @@ except ClientError as e:
 # 업로드
 s3.put_object(
     Bucket=bucket,
-    Key=f"briefs/{date}.json",
+    Key=f"analytics/btc/{date}.json",
     Body=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
     ContentType="application/json",
 )
@@ -498,7 +498,7 @@ def upload_all(
 `--force` 없을 때는 `head_object`(메타데이터만 조회, 빠름)로 존재 여부만 확인하고 skip한다. `--force` 시에만 `get_object`로 본문을 읽어 `meta._backfill` 필드를 검사한다. 이렇게 분리하면 일반 실행(460회 `head_object`)의 네트워크 비용을 최소화한다.
 
 **Design Decision — 병렬 업로드 안전성:**
-`ThreadPoolExecutor(max_workers=BACKFILL_R2_MAX_CONCURRENCY)`로 날짜 단위 병렬 업로드 시, 동일 날짜를 두 스레드가 동시에 처리하는 경우가 없으므로(날짜는 고유 키) 경쟁 조건이 발생하지 않는다. 각 스레드가 서로 다른 R2 키(`briefs/{date}.json`)를 대상으로 독립적으로 동작한다.
+`ThreadPoolExecutor(max_workers=BACKFILL_R2_MAX_CONCURRENCY)`로 날짜 단위 병렬 업로드 시, 동일 날짜를 두 스레드가 동시에 처리하는 경우가 없으므로(날짜는 고유 키) 경쟁 조건이 발생하지 않는다. 각 스레드가 서로 다른 R2 키(`analytics/btc/{date}.json`)를 대상으로 독립적으로 동작한다.
 
 **백필 완료 후 필수 수동 실행:**
 스크립트 완료 요약에 다음 명령어를 출력한다:
@@ -655,7 +655,7 @@ class DailyAggregate:
 
 `std` 계산 시 주의: `numpy.std([x], ddof=1)`은 NaN을 반환하므로 `count < 2`이면 `std=None`으로 명시적 처리 필요. 단, `sentimentStatus="skipped"`(`count≤1`)인 날짜는 `fetch_r2_sentiment()`에서 NaN 처리되어 inner join에서 탈락하므로 `std` 값이 parquet에 기록되지 않는다.
 
-### 최소 브리프 JSON (`briefs/{date}.json`)
+### 최소 브리프 JSON (`analytics/btc/{date}.json`)
 
 `fetch_r2_sentiment()`가 읽는 필드 경로와 타입:
 
