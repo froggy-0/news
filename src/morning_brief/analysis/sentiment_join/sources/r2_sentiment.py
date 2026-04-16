@@ -25,6 +25,7 @@ def _empty_sentiment_frame(dates: list[str]) -> pd.DataFrame:
             "sentiment_status": [""] * len(dates),
             "is_backfill_valid": [False] * len(dates),
             "ingest_validation_reason": [None] * len(dates),
+            "text_schema_version": [None] * len(dates),
         }
     )
 
@@ -38,6 +39,7 @@ def _nan_sentiment_row(date: str, *, reason: str | None = None) -> dict[str, obj
         "sentiment_status": "",
         "is_backfill_valid": False,
         "ingest_validation_reason": reason,
+        "text_schema_version": None,
     }
 
 
@@ -61,6 +63,10 @@ def _parse_sentiment_payload(date: str, payload: dict[str, Any]) -> dict[str, ob
     if not isinstance(aggregate, dict):
         return _nan_sentiment_row(date, reason="invalid_contract")
 
+    # §2: 텍스트 스키마 버전 — 백필은 "title_summary", 실시간은 "title_summary_whyitmatters"
+    # 기존 R2 JSON(필드 없음)은 None으로 처리해 downstream에서 필터/덤미화 가능
+    text_schema_version: str | None = payload.get("textSchemaVersion") or None
+
     mean = aggregate.get("mean")
     if sentiment_status == "skipped" or mean is None:
         return {
@@ -71,6 +77,7 @@ def _parse_sentiment_payload(date: str, payload: dict[str, Any]) -> dict[str, ob
             "sentiment_status": sentiment_status,
             "is_backfill_valid": True,
             "ingest_validation_reason": None,
+            "text_schema_version": text_schema_version,
         }
 
     std = aggregate.get("std")
@@ -82,6 +89,7 @@ def _parse_sentiment_payload(date: str, payload: dict[str, Any]) -> dict[str, ob
         "sentiment_status": sentiment_status,
         "is_backfill_valid": True,
         "ingest_validation_reason": None,
+        "text_schema_version": text_schema_version,
     }
 
 

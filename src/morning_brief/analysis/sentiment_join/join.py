@@ -96,6 +96,31 @@ def _add_futures_lag_columns(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def _add_sentiment_lag_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """감성·공포지수에 Lag-1 처리를 적용해 look-ahead bias를 제거합니다.
+
+    lag1 = T-1 시점 값 (.shift(1)).
+    "어제의 감성/공포지수가 오늘 BTC 수익률을 예측하는가"를 올바르게
+    검정하려면 predictor가 target보다 시간적으로 앞서야 합니다.
+
+    - news_sentiment_mean_lag1: 순수 .shift(1) (원본과 동일한 스케일)
+    - fng_value_lag1: Int64 → float 변환 후 .shift(1)
+    """
+    result = df.copy()
+    if "news_sentiment_mean" in result.columns:
+        result["news_sentiment_mean_lag1"] = result["news_sentiment_mean"].shift(1)
+    else:
+        result["news_sentiment_mean_lag1"] = float("nan")
+    if "fng_value" in result.columns:
+        # Int64(nullable integer) → float64 명시적 변환 후 shift (MASTER_SCHEMA float 타입 충족)
+        result["fng_value_lag1"] = (
+            pd.to_numeric(result["fng_value"], errors="coerce").astype("float64").shift(1)
+        )
+    else:
+        result["fng_value_lag1"] = float("nan")
+    return result
+
+
 def _apply_sentiment_quality_gate(
     sentiment_df: pd.DataFrame,
 ) -> tuple[pd.DataFrame, dict[str, int]]:
@@ -210,7 +235,12 @@ def merge_sources(
         merged["etf_net_inflow_usd"] = float("nan")
 
     merged = _add_futures_lag_columns(merged)
+    merged = _add_sentiment_lag_columns(merged)
     merged = _add_btc_direction_label(merged)
+
+    # §2: text_schema_version — R2 페이로드에서 전달되지 않은 경우 None으로 채움
+    if "text_schema_version" not in merged.columns:
+        merged["text_schema_version"] = None
     merged = detect_outliers_rolling_iqr(
         merged,
         cols=[
@@ -262,6 +292,7 @@ __all__ = [
     "detect_outliers_rolling_iqr",
     "merge_sources",
     "_add_futures_lag_columns",
+    "_add_sentiment_lag_columns",
     "_add_btc_direction_label",
     "_apply_sentiment_quality_gate",
 ]

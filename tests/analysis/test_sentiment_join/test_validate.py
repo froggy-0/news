@@ -40,6 +40,11 @@ def _valid_df() -> pd.DataFrame:
             "btc_direction_label": ["up"],
             # Req 13: 하이브리드 지수 (NaN 허용)
             "hybrid_index": [float("nan")],
+            # §1: 감성·공포지수 Lag-1 (첫 행은 NaN 허용)
+            "news_sentiment_mean_lag1": [float("nan")],
+            "fng_value_lag1": [float("nan")],
+            # §2: 텍스트 스키마 버전 (없으면 None 허용)
+            "text_schema_version": [None],
         }
     )
 
@@ -152,7 +157,35 @@ def test_validate_master_strict_requires_all_new_columns() -> None:
         "etf_total_aum_usd",
         "etf_net_inflow_usd",
         "etf_net_inflow_usd_lag1",
+        # §1: 신규 lag1 컬럼
+        "news_sentiment_mean_lag1",
+        "fng_value_lag1",
+        # §2: 텍스트 스키마 버전
+        "text_schema_version",
     ):
         df = _valid_df().drop(columns=[missing_col])
         with pytest.raises(SchemaError):
             validate_master(df)
+
+
+def test_validate_master_accepts_valid_sentiment_lag1() -> None:
+    """§1: 유효 범위 내 lag1 값은 통과해야 한다."""
+    df = _valid_df()
+    df["news_sentiment_mean_lag1"] = [0.5]
+    df["fng_value_lag1"] = [60.0]
+    validate_master(df)
+
+
+def test_validate_master_rejects_sentiment_lag1_out_of_range() -> None:
+    """§1: lag1 값이 [-1, 1] 범위를 벗어나면 거부해야 한다."""
+    df = _valid_df()
+    df["news_sentiment_mean_lag1"] = [1.5]
+    with pytest.raises(SchemaError):
+        validate_master(df)
+
+
+def test_validate_master_accepts_text_schema_version_str() -> None:
+    """§2: text_schema_version이 문자열이면 통과해야 한다."""
+    df = _valid_df()
+    df["text_schema_version"] = ["title_summary"]
+    validate_master(df)
