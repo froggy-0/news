@@ -6,6 +6,7 @@
   2. 이상치 제거 비율
   3. FinBERT 감성 점수 기초 통계량 및 분포
 """
+
 from __future__ import annotations
 
 import json
@@ -32,9 +33,7 @@ def _load_stats_metadata(path: Path) -> dict:
 
 
 def main() -> None:
-    output_dir = Path(
-        sys.argv[1] if len(sys.argv) > 1 else "data/sentiment_join"
-    ).resolve()
+    output_dir = Path(sys.argv[1] if len(sys.argv) > 1 else "data/sentiment_join").resolve()
     path = _find_latest_parquet(output_dir)
     print(f"파일: {path.name}\n")
 
@@ -51,8 +50,7 @@ def main() -> None:
         print(gdf.to_string(index=False))
         # 뉴스 감성 ↔ F&G 직접 쌍이 없으면 간접 경로 안내
         fng_pairs = gdf[
-            gdf["predictor"].str.contains("sentiment")
-            | gdf["target"].str.contains("fng")
+            gdf["predictor"].str.contains("sentiment") | gdf["target"].str.contains("fng")
         ]
         if fng_pairs.empty:
             print(
@@ -96,7 +94,7 @@ def main() -> None:
         print(s.describe().to_string())
         # 분위수 추가
         for q in [0.05, 0.95]:
-            print(f"  {int(q*100)}%ile: {s.quantile(q):.6f}")
+            print(f"  {int(q * 100)}%ile: {s.quantile(q):.6f}")
     else:
         print("  news_sentiment_mean 컬럼 없음")
 
@@ -107,8 +105,10 @@ def main() -> None:
     adf = stats.get("adf", {})
     if adf:
         for col, res in adf.items():
-            print(f"  {col}: statistic={res['statistic']:.4f}, "
-                  f"pvalue={res['pvalue']:.6f}, stationary={res['stationary']}")
+            print(
+                f"  {col}: statistic={res['statistic']:.4f}, "
+                f"pvalue={res['pvalue']:.6f}, stationary={res['stationary']}"
+            )
     else:
         print("  ADF 검정 미실행")
 
