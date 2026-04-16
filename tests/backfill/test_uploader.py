@@ -57,17 +57,24 @@ def _s3_client_mock(*, exists: bool = False, existing_json: dict | None = None) 
 
 
 def test_build_minimal_brief_json_schema() -> None:
+    """flat format으로 생성되어 validate_analytics_sentiment_payload()를 통과해야 한다."""
     agg = _agg(mean=None, std=None, count=0, status="skipped")
     payload = build_minimal_brief_json("2024-01-01", agg)
-    meta = payload["meta"]
 
-    assert meta["date"] == "2024-01-01"
-    assert meta["sentimentStatus"] == "skipped"
-    assert meta["signalSentimentStatus"] == "skipped"
-    assert meta["signalSentiment"] is None
-    assert meta["_backfill"] is True
-    assert meta["_backfillSource"] == "coindesk+alpaca+finbert"
-    assert "newsSentiment" in meta
+    # flat format: meta 래퍼 없음
+    assert "meta" not in payload
+    assert payload["date"] == "2024-01-01"
+    assert payload["symbol"] == "btc"
+    assert payload["schemaVersion"] == "v1"
+    assert payload["sentimentStatus"] == "skipped"
+    assert payload["signalSentimentStatus"] == "skipped"
+    assert payload["signalSentiment"] is None
+    assert payload["_backfill"] is True
+    assert payload["_backfillSource"] == "coindesk+alpaca+finbert"
+    assert "newsSentiment" in payload
+    # §2: textSchemaVersion 포함
+    assert "textSchemaVersion" in payload
+    assert payload["textSchemaVersion"] == "title_summary"
 
 
 def test_build_minimal_brief_json_mean_none_serializes_null() -> None:
@@ -76,8 +83,9 @@ def test_build_minimal_brief_json_mean_none_serializes_null() -> None:
     dumped = json.dumps(payload)
     parsed = json.loads(dumped)
 
-    assert parsed["meta"]["newsSentiment"]["mean"] is None
-    assert parsed["meta"]["newsSentiment"]["std"] is None
+    # flat format으로 변경
+    assert parsed["newsSentiment"]["mean"] is None
+    assert parsed["newsSentiment"]["std"] is None
 
 
 # ──────────────────────────────────────────────
@@ -85,14 +93,27 @@ def test_build_minimal_brief_json_mean_none_serializes_null() -> None:
 # ──────────────────────────────────────────────
 
 
-def test_is_pipeline_file_true_when_no_backfill_field() -> None:
-    existing = {"meta": {"sentimentStatus": "ok"}}
-    assert _is_pipeline_file(existing) is True
+def test_is_pipeline_file_true_when_no_backfill_source() -> None:
+    """_backfillSource 없음 = 라이브 파이프라인 원본 → 보호."""
+    # flat format (라이브 파이프라인)
+    assert _is_pipeline_file({"_backfill": True, "sentimentStatus": "ok"}) is True
+    # legacy meta 형식 (구 파이프라인 원본)
+    assert _is_pipeline_file({"meta": {"sentimentStatus": "ok"}}) is True
 
 
-def test_is_pipeline_file_false_when_backfill_present() -> None:
-    existing = {"meta": {"sentimentStatus": "ok", "_backfill": True}}
-    assert _is_pipeline_file(existing) is False
+def test_is_pipeline_file_false_when_backfill_source_present() -> None:
+    """_backfillSource 있음 = 백필 파일 → 덮어쓰기 가능."""
+    # flat format (현행 백필)
+    existing_flat = {
+        "_backfill": True,
+        "_backfillSource": "coindesk+alpaca+finbert",
+        "sentimentStatus": "ok",
+    }
+    assert _is_pipeline_file(existing_flat) is False
+
+    # legacy meta 형식 (구 백필)
+    existing_meta = {"meta": {"_backfill": True, "_backfillSource": "coindesk+alpaca+finbert"}}
+    assert _is_pipeline_file(existing_meta) is False
 
 
 # ──────────────────────────────────────────────
@@ -141,7 +162,22 @@ def test_upload_brief_exists_no_force_returns_skipped_exists() -> None:
 
 
 def test_upload_brief_force_with_backfill_file_overwrites() -> None:
-    existing = {"meta": {"sentimentStatus": "ok", "_backfill": True}}
+    # flat format 백필 파일 (_backfillSource 포함)
+    existing = {
+        "_backfill": True,
+        "_backfillSource": "coindesk+alpaca+finbert",
+        "sentimentStatus": "ok",
+    }
+    client = _s3_client_mock(exists=True, existing_json=existing)
+    result = upload_brief("2024-01-01", _agg(), client, "bucket", force=True)
+
+    assert result == "uploaded"
+    client.put_object.assert_called_once()
+
+
+def test_upload_brief_force_with_legacy_meta_backfill_overwrites() -> None:
+    """레거시 meta 래퍼 백필 파일도 덮어쓰기 가능해야 한다."""
+    existing = {"meta": {"sentimentStatus": "ok", "_backfillSource": "coindesk+alpaca+finbert"}}
     client = _s3_client_mock(exists=True, existing_json=existing)
     result = upload_brief("2024-01-01", _agg(), client, "bucket", force=True)
 
@@ -150,12 +186,13 @@ def test_upload_brief_force_with_backfill_file_overwrites() -> None:
 
 
 # ──────────────────────────────────────────────
-# upload_brief: force=True + _backfill 없음 → skipped_protected
+# upload_brief: force=True + _backfillSource 없음 → skipped_protected
 # ──────────────────────────────────────────────
 
 
 def test_upload_brief_force_pipeline_file_protected() -> None:
-    existing = {"meta": {"sentimentStatus": "ok"}}  # _backfill 없음
+    # 라이브 파이프라인 파일: _backfillSource 없음
+    existing = {"_backfill": True, "sentimentStatus": "ok"}
     client = _s3_client_mock(exists=True, existing_json=existing)
     result = upload_brief("2024-01-01", _agg(), client, "bucket", force=True)
 

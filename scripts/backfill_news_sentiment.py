@@ -81,9 +81,9 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=int(os.getenv("BACKFILL_FINBERT_BATCH_SIZE", "32")),
+        default=int(os.getenv("BACKFILL_FINBERT_BATCH_SIZE", "16")),
         dest="batch_size",
-        help="FinBERT 배치 크기 (기본값: 32)",
+        help="FinBERT 배치 크기 (기본값: 16, 운영 파이프라인과 통일)",
     )
     parser.add_argument(
         "--skip-alpaca",
