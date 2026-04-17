@@ -87,12 +87,16 @@ def test_fetch_futures_data_lsr_failure_does_not_block_funding_oi(
     ]
 
     monkeypatch.setattr(futures, "_fetch_funding_rate_history", lambda start_ms: funding_rows)
-    monkeypatch.setattr(futures, "_fetch_oi_history", lambda start_ms: oi_rows)
+    monkeypatch.setattr(futures, "_fetch_oi_history", lambda limit_days: oi_rows)
     monkeypatch.setattr(
         futures,
         "_fetch_long_short_ratio",
-        lambda start_ms: (_ for _ in ()).throw(RuntimeError("LSR network error")),
+        lambda limit_days: (_ for _ in ()).throw(RuntimeError("LSR network error")),
     )
+    # GitHub Actions 환경에서 Bybit도 실패할 수 있으므로 mock
+    monkeypatch.setattr(futures, "_fetch_bybit_funding_rows", lambda *a, **kw: [])
+    monkeypatch.setattr(futures, "_fetch_bybit_oi_rows", lambda *a, **kw: [])
+    monkeypatch.setattr(futures, "_fetch_bybit_lsr_rows", lambda *a, **kw: [])
 
     df = futures.fetch_futures_data(lookback_days=2)
 

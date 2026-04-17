@@ -156,15 +156,15 @@ class TestKisFallbackPreservation:
         assert "US_INDEX_TARGETS" in source
 
     def test_btc_etf_tickers_present(self):
-        """BTC_ETF_TICKERS에 IBIT, FBTC, ARKB, BITB, GBTC가 포함되어야 한다.
+        """BTC_ETF_TICKERS에 IBIT, ARKB, BITB, GBTC가 포함되어야 한다.
 
         **Validates: Requirements 3.3**
         """
         assert "IBIT" in BTC_ETF_TICKERS
-        assert "FBTC" in BTC_ETF_TICKERS
         assert "ARKB" in BTC_ETF_TICKERS
         assert "BITB" in BTC_ETF_TICKERS
         assert "GBTC" in BTC_ETF_TICKERS
+        assert "FBTC" not in BTC_ETF_TICKERS
 
     def test_btc_etf_uses_safe_kis_point_and_volume(self):
         """fetch_newsletter_display_data()에서 BTC ETF 가격·거래량이

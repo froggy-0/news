@@ -39,9 +39,8 @@ FAILING_TICKERS: dict[str, str] = {
     "TSM": "TSMC",
     "ASML": "ASML",
     "AVGO": "Broadcom",
-    # BTC ETF (5)
+    # BTC ETF (4)
     "IBIT": "iShares BTC Trust",
-    "FBTC": "Fidelity BTC",
     "ARKB": "ARK BTC ETF",
     "BITB": "Bitwise BTC ETF",
     "GBTC": "Grayscale BTC Trust",

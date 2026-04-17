@@ -509,9 +509,10 @@ def _invoke_futures_lambda(
 def fetch_futures_data(lookback_days: int, futures_lambda_arn: str = "") -> pd.DataFrame:
     """Req 11: Binance fapi에서 펀딩비·미결제약정·Long/Short Ratio 이력을 수집합니다.
 
-    Lambda ARN이 설정된 경우 Binance fapi 직접 호출을 건너뛰고 Lambda 프록시를 우선 사용합니다.
-    (GitHub Actions 등 US IP 환경에서는 fapi.binance.com이 451로 차단되므로 불필요한 대기 방지)
-    Lambda도 없거나 실패하면 Bybit 공개 API로 폴백합니다.
+    환경별 전략:
+    - 로컬 개발: Binance fapi 직접 호출 (451 차단 없음, 정확한 과거 데이터)
+    - GitHub Actions (CI/CD): Lambda 프록시 사용 (US IP 451 차단 우회)
+    - Fallback: Bybit 공개 API
 
     Returns DataFrame with columns: date, funding_rate, open_interest_usd, btc_long_short_ratio.
     attrs["futures_source"]: "binance" | "lambda" | "bybit" | "none"
@@ -530,13 +531,27 @@ def fetch_futures_data(lookback_days: int, futures_lambda_arn: str = "") -> pd.D
 
     lambda_arn = futures_lambda_arn.strip() or os.getenv("FUTURES_LAMBDA_ARN", "").strip()
 
-    # --- 1차: Lambda ARN 없을 때만 Binance fapi 직접 시도 ---
-    # ARN이 있으면 어차피 US IP에서 451로 막히므로 바로 Lambda로 이동
+    # 환경 감지: GitHub Actions(CI/CD)인지 로컬인지
+    is_github_actions = os.getenv("GITHUB_ACTIONS", "").lower() == "true"
+
+    # 로컬: 항상 Binance fapi 직접 호출 (451 차단 없음, 정확한 과거 데이터)
+    # CI/CD: Lambda 프록시 사용 (US IP에서 451 차단 우회)
+    use_binance_direct = not is_github_actions
+
+    log_structured(
+        logger,
+        event="futures.strategy_selected",
+        message=f"선물 데이터 수집 전략 선택: {'로컬 Binance fapi 직접 호출' if use_binance_direct else 'Lambda 프록시'}",
+        environment="local" if use_binance_direct else "github_actions",
+        lookback_days=lookback_days,
+    )
+
+    # --- 1차: 로컬이거나 Lambda ARN 없으면 Binance fapi 직접 시도 ---
     funding_rows: list[dict] = []
     oi_rows: list[dict] = []
     lsr_rows: list[dict] = []
 
-    if not lambda_arn:
+    if use_binance_direct:
         funding_rows = _fetch_funding_rate_history(start_ms)
         oi_rows = _fetch_oi_history(lookback_days + 2)
         try:
@@ -552,18 +567,18 @@ def fetch_futures_data(lookback_days: int, futures_lambda_arn: str = "") -> pd.D
             )
 
     if not funding_rows and not oi_rows:
-        if not lambda_arn:
+        if not (use_binance_direct and not lambda_arn):
             log_structured(
                 logger,
                 event="source.failed",
-                message="Binance 선물 데이터를 가져오지 못해 NaN으로 채웁니다.",
+                message="Binance 선물 데이터를 가져오지 못했습니다.",
                 level=logging.WARNING,
                 source="binance_futures",
-                reason="all_requests_failed",
+                reason="binance_fapi_failed",
             )
 
-        # --- 2차: Lambda 프록시 (ap-northeast-2 → Seoul IP → fapi.binance.com) ---
-        if lambda_arn:
+        # --- 2차: Lambda 프록시 (GitHub Actions에서 451 차단 우회용) ---
+        if is_github_actions and lambda_arn:
             log_structured(
                 logger,
                 event="futures.lambda_fallback",

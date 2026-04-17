@@ -48,9 +48,8 @@ FAILING_TICKERS: list[tuple[str, str, str]] = [
     ("TSM", "NYS", "TSMC"),
     ("ASML", "NAS", "ASML"),
     ("AVGO", "NAS", "Broadcom"),
-    # BTC ETF (5)
+    # BTC ETF (4)
     ("IBIT", "NAS", "iShares BTC Trust"),
-    ("FBTC", "AMS", "Fidelity BTC"),
     ("ARKB", "AMS", "ARK BTC ETF"),
     ("BITB", "AMS", "Bitwise BTC ETF"),
     ("GBTC", "AMS", "Grayscale BTC Trust"),

@@ -53,23 +53,6 @@
       "notes": "규제 공고, 집행 조치"
     },
     {
-      "entity_id": "fidelity",
-      "entity_name": "Fidelity",
-      "ticker": "FBTC",
-      "category": "btc_etf_primary",
-      "primary_domain": "fidelity.com",
-      "newsroom_or_ir_url": "https://www.fidelity.com/etfs/fbtc",
-      "x_handle": "Fidelity",
-      "x_verified": true,
-      "verification_source_url": "https://www.fidelity.com/social-media/x",
-      "verification_method": "official_social_directory",
-      "verified_at": "2026-03-13",
-      "x_search_group": "btc_etf_primary",
-      "x_search_priority": 1,
-      "enabled": true,
-      "notes": "Fidelity 공식 X 안내 페이지로 검증"
-    },
-    {
       "entity_id": "blackrock_ishares",
       "entity_name": "BlackRock / iShares",
       "ticker": "IBIT",

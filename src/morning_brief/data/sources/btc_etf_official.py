@@ -47,7 +47,6 @@ IBIT_URL = "https://www.ishares.com/us/products/333011/ishares-bitcoin-trust-etf
 BITB_URL = "https://bitbetf.com/"
 GBTC_URL = "https://etfs.grayscale.com/gbtc"
 BTC_MINI_URL = "https://etfs.grayscale.com/btc"
-FBTC_URL = "https://digital.fidelity.com/prgw/digital/research/quote/dashboard/summary?symbol=FBTC"
 GBTC_XLSX_URL = (
     "https://reporting-prod-20231113144948145500000003.s3.us-east-1.amazonaws.com"
     "/product-performance/672e88c7-dac6-4fcd-9069-18eef01a2c73.xlsx"
@@ -65,7 +64,12 @@ BTC_ETF_ISSUER_DOMAIN_WHITELIST = (
     "ishares.com",
     "bitbetf.com",
     "etfs.grayscale.com",
-    "digital.fidelity.com",
+)
+BTC_ETF_ALLOWED_SOURCE_URLS = frozenset(
+    {
+        GBTC_XLSX_URL,
+        BTC_MINI_XLSX_URL,
+    }
 )
 BTC_ETF_REFERENCE_DOMAINS = BTC_ETF_ISSUER_DOMAIN_WHITELIST
 BTC_ETF_REFERENCE_PROMPT = """
@@ -146,16 +150,12 @@ DOWNLOAD_LINK_RE = re.compile(
     r"""(?P<attr>href|src)=["'](?P<url>[^"']+\.(?:csv|json|xlsx))["']""",
     flags=re.IGNORECASE,
 )
-FBTC_LABEL_DATE_STRIP_RE = re.compile(
-    r"\s*[Aa]s\s+of\s+[A-Z][a-z]{2}-\d{1,2}-\d{4}", flags=re.IGNORECASE
-)
 HTML_ONLY_SOURCE_TYPE = "official_html"
 STRUCTURED_SOURCE_PRIORITY = {
     "IBIT": ("official_csv", "official_json", "official_html"),
     "BITB": ("official_json", "official_csv", "official_html"),
-    "GBTC": ("official_csv", "official_html"),
-    "BTC": ("official_csv", "official_html"),
-    "FBTC": ("official_json", "official_csv", "official_html"),
+    "GBTC": ("official_csv",),
+    "BTC": ("official_csv",),
 }
 
 
@@ -233,6 +233,8 @@ def _discover_download_links(page_text: str, *, base_url: str) -> list[str]:
 
 
 def _allowed_source_url(url: str) -> bool:
+    if url.strip() in BTC_ETF_ALLOWED_SOURCE_URLS:
+        return True
     domain = normalize_domain(url)
     return any(domain_matches(domain, candidate) for candidate in BTC_ETF_ISSUER_DOMAIN_WHITELIST)
 
@@ -274,14 +276,24 @@ def _xlsx_column_index(cell_ref: str) -> int:
 
 
 def _read_xlsx_rows(payload: bytes) -> list[list[str]]:
+    workbook_rows = _read_xlsx_workbook_rows(payload)
+    if not workbook_rows:
+        return []
+    return next(iter(workbook_rows.values()))
+
+
+def _read_xlsx_workbook_rows(payload: bytes) -> dict[str, list[list[str]]]:
     try:
         import openpyxl
 
         workbook = openpyxl.load_workbook(io.BytesIO(payload), data_only=True, read_only=True)
-        sheet = workbook[workbook.sheetnames[0]]
-        openpyxl_rows: list[list[str]] = []
-        for row in sheet.iter_rows(values_only=True):
-            openpyxl_rows.append(["" if value is None else str(value).strip() for value in row])
+        openpyxl_rows: dict[str, list[list[str]]] = {}
+        for sheet_name in workbook.sheetnames:
+            sheet = workbook[sheet_name]
+            sheet_rows: list[list[str]] = []
+            for row in sheet.iter_rows(values_only=True):
+                sheet_rows.append(["" if value is None else str(value).strip() for value in row])
+            openpyxl_rows[sheet_name] = sheet_rows
         return openpyxl_rows
     except Exception:
         pass
@@ -298,36 +310,41 @@ def _read_xlsx_rows(payload: bytes) -> list[list[str]]:
         ]
 
     workbook_root = ET.fromstring(archive.read("xl/workbook.xml"))
-    sheet = workbook_root.find(
+    rels_root = ET.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+    rel_targets = {
+        rel.attrib.get("Id", ""): rel.attrib.get("Target", "")
+        for rel in rels_root
+        if rel.attrib.get("Id")
+    }
+    workbook_rows: dict[str, list[list[str]]] = {}
+    for sheet in workbook_root.findall(
         "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}sheets/"
         "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}sheet"
-    )
-    if sheet is None:
-        return []
-    rel_id = sheet.attrib.get(
-        "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
-    )
-    rels_root = ET.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
-    target = None
-    for rel in rels_root:
-        if rel.attrib.get("Id") == rel_id:
-            target = rel.attrib.get("Target")
-            break
-    if not target:
-        return []
-    sheet_root = ET.fromstring(archive.read(f"xl/{target}"))
-    rows: list[list[str]] = []
-    for row in sheet_root.findall(
-        ".//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}row"
     ):
-        values: list[str] = []
-        for cell in row.findall("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}c"):
-            index = _xlsx_column_index(cell.attrib.get("r", "A1"))
-            while len(values) <= index:
-                values.append("")
-            values[index] = _xlsx_cell_value(cell, shared_strings=shared_strings)
-        rows.append(values)
-    return rows
+        sheet_name = sheet.attrib.get("name", "").strip()
+        rel_id = sheet.attrib.get(
+            "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
+        )
+        if not sheet_name or not rel_id:
+            continue
+        target = rel_targets.get(rel_id, "").strip()
+        if not target:
+            continue
+        sheet_path = target if target.startswith("xl/") else f"xl/{target}"
+        sheet_root = ET.fromstring(archive.read(sheet_path))
+        rows: list[list[str]] = []
+        for row in sheet_root.findall(
+            ".//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}row"
+        ):
+            values: list[str] = []
+            for cell in row.findall("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}c"):
+                index = _xlsx_column_index(cell.attrib.get("r", "A1"))
+                while len(values) <= index:
+                    values.append("")
+                values[index] = _xlsx_cell_value(cell, shared_strings=shared_strings)
+            rows.append(values)
+        workbook_rows[sheet_name] = rows
+    return workbook_rows
 
 
 def _header_key(value: str) -> str:
@@ -338,7 +355,8 @@ def _select_xlsx_data_row(rows: list[list[str]]) -> tuple[list[str], dict[str, s
     header_index = -1
     headers: list[str] = []
     for idx, row in enumerate(rows):
-        if any("as of date" in cell.lower() for cell in row):
+        normalized_headers = {_header_key(cell) for cell in row if cell.strip()}
+        if "asofdate" in normalized_headers or "date" in normalized_headers:
             header_index = idx
             headers = row
             break
@@ -346,6 +364,9 @@ def _select_xlsx_data_row(rows: list[list[str]]) -> tuple[list[str], dict[str, s
         raise HttpFetchError("구조화 다운로드에서 헤더 행을 찾지 못했어요.")
 
     normalized_headers = [_header_key(header) for header in headers]
+    date_keys = [candidate for candidate in ("asofdate", "date") if candidate in normalized_headers]
+    if not date_keys:
+        raise HttpFetchError("구조화 다운로드에서 기준일 컬럼을 찾지 못했어요.")
     best_date: date | None = None
     best_row: dict[str, str] | None = None
     for row in rows[header_index + 1 :]:
@@ -354,7 +375,7 @@ def _select_xlsx_data_row(rows: list[list[str]]) -> tuple[list[str], dict[str, s
             for idx in range(min(len(normalized_headers), len(row)))
             if normalized_headers[idx]
         }
-        as_of_raw = record.get("asofdate", "")
+        as_of_raw = next((record.get(key, "") for key in date_keys if record.get(key, "")), "")
         if not as_of_raw:
             continue
         try:
@@ -440,6 +461,15 @@ def _parse_compact_number(raw: str) -> float:
     return float(normalized) * multiplier
 
 
+def _coerce_float(value: object) -> float | None:
+    if not isinstance(value, (int, float, str, bytes)):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _extract_value(text: str, label: str) -> float:
     match = re.search(rf"{re.escape(label)}\*?\s+(?P<value>{VALUE_RE})", text, flags=re.IGNORECASE)
     if not match:
@@ -455,6 +485,13 @@ def _extract_first_matching_value(text: str, labels: list[str]) -> float:
         except Exception as exc:
             last_error = exc
     raise HttpFetchError("공식 ETF 페이지에서 값을 찾지 못했어요.") from last_error
+
+
+def _extract_optional_matching_value(text: str, labels: list[str]) -> float | None:
+    try:
+        return _extract_first_matching_value(text, labels)
+    except Exception:
+        return None
 
 
 def _extract_dated_value(text: str, label: str) -> tuple[str, float]:
@@ -504,6 +541,30 @@ def _find_first_key(payload: object, key: str) -> object | None:
             if found is not None:
                 return found
     return None
+
+
+def _extract_bitb_structured_optional_values(text: str) -> dict[str, float | None]:
+    payload = _extract_next_data_payload(text)
+    nav_and_market_price = _find_first_key(payload, "navAndMarketPrice")
+    premium_discount = _find_first_key(payload, "premiumDiscount")
+    optional_values: dict[str, float | None] = {
+        "nav_per_share": None,
+        "market_price": None,
+        "premium_discount_pct": None,
+    }
+
+    if isinstance(nav_and_market_price, dict):
+        optional_values["nav_per_share"] = _coerce_float(nav_and_market_price.get("nav"))
+        optional_values["market_price"] = _coerce_float(nav_and_market_price.get("marketPrice"))
+
+    if isinstance(premium_discount, dict):
+        as_of_values = premium_discount.get("asOfValues")
+        if isinstance(as_of_values, list) and as_of_values:
+            latest = as_of_values[-1]
+            if isinstance(latest, dict):
+                optional_values["premium_discount_pct"] = _coerce_float(latest.get("value"))
+
+    return optional_values
 
 
 def _extract_bitb_structured_values(text: str) -> tuple[str, float, float, int, int]:
@@ -816,33 +877,31 @@ def _parse_grayscale_xlsx_snapshot(
     payload: bytes,
 ) -> BitcoinEtfIssuerSnapshot:
     _validate_issuer_url(xlsx_url)
-    headers, record = _select_xlsx_data_row(_read_xlsx_rows(payload))
-    as_of_str = _first_record_value(record, ["As of Date"])
+    workbook_rows = _read_xlsx_workbook_rows(payload)
+    daily_rows = workbook_rows.get("Daily Performance", _read_xlsx_rows(payload))
+    _, record = _select_xlsx_data_row(daily_rows)
+    as_of_str = _first_record_value(record, ["As of Date", "Date"])
     shares_outstanding = int(
         _parse_numeric(_first_record_value(record, ["Shares Outstanding"]), integer=True)
     )
-    total_btc = float(
-        _parse_numeric(
-            _first_record_value(
-                record, ["Total Bitcoin in Fund", "Bitcoin Holdings", "Total Bitcoin in Trust"]
-            )
-        )
-    )
-    bitcoin_per_share = float(_parse_numeric(_first_record_value(record, ["Bitcoin per Share"])))
     aum_usd = float(
         _parse_numeric(
             _first_record_value(
-                record, ["Non-GAAP AUM", "AUM (Non-GAAP)", "Assets Under Management"]
+                record,
+                ["Non-GAAP AUM", "AUM (Non-GAAP)", "Assets Under Management", "AUM"],
             )
         )
     )
-    daily_volume = int(
-        _parse_numeric(_first_record_value(record, ["Daily Volume (Shares)"]), integer=True)
+    daily_volume_raw = _record_value(record, ["Daily Volume (Shares)"])
+    daily_volume = (
+        int(_parse_numeric(daily_volume_raw, integer=True))
+        if daily_volume_raw not in (None, "")
+        else 0
     )
     extra_fields = {}
     for field_name, candidates in {
         "nav_per_share": ["NAV per Share"],
-        "market_price": ["Market Price"],
+        "market_price": ["Market Price", "Market Price Per Share"],
         "premium_discount_pct": ["Premium/Discount", "Premium Discount"],
         "gaap_aum": ["GAAP AUM"],
         "gaap_nav_per_share": ["GAAP NAV per Share"],
@@ -855,7 +914,32 @@ def _parse_grayscale_xlsx_snapshot(
             )
         except Exception:
             continue
-    return _snapshot_from_values(
+
+    holdings_rows = workbook_rows.get("Holdings")
+    if holdings_rows:
+        _, holdings_record = _select_xlsx_data_row(holdings_rows)
+        holdings_as_of_str = _first_record_value(holdings_record, ["As of Date", "Date"])
+        if holdings_as_of_str:
+            as_of_str = holdings_as_of_str
+        bitcoin_per_share = float(
+            _parse_numeric(
+                _first_record_value(holdings_record, ["Asset/Share", "Bitcoin per Share"])
+            )
+        )
+        total_btc = shares_outstanding * bitcoin_per_share
+    else:
+        total_btc = float(
+            _parse_numeric(
+                _first_record_value(
+                    record, ["Total Bitcoin in Fund", "Bitcoin Holdings", "Total Bitcoin in Trust"]
+                )
+            )
+        )
+        bitcoin_per_share = float(
+            _parse_numeric(_first_record_value(record, ["Bitcoin per Share"]))
+        )
+
+    snapshot = _snapshot_from_values(
         ticker=ticker,
         issuer=issuer,
         source_url=page_url,
@@ -868,6 +952,11 @@ def _parse_grayscale_xlsx_snapshot(
         source_type="official_csv",
         extra_fields=extra_fields,
     )
+    if daily_volume == 0 and holdings_rows:
+        from dataclasses import replace as _replace
+
+        snapshot = _replace(snapshot, quality_status="degraded")
+    return snapshot
 
 
 def parse_ibit_snapshot(text: str) -> BitcoinEtfIssuerSnapshot:
@@ -891,24 +980,14 @@ def parse_ibit_snapshot(text: str) -> BitcoinEtfIssuerSnapshot:
         source_type=HTML_ONLY_SOURCE_TYPE,
         extra_fields={
             "basket_bitcoin_amount": round(basket_bitcoin_amount, 8),
-            "closing_price": _extract_first_matching_value(
+            "closing_price": _extract_optional_matching_value(
                 normalized, ["Closing Price", "Market Price", "Closing Market Price"]
-            )
-            if any(
-                label.lower() in normalized.lower() for label in ["Closing Price", "Market Price"]
-            )
-            else None,
-            "premium_discount_pct": _extract_first_matching_value(
+            ),
+            "premium_discount_pct": _extract_optional_matching_value(
                 normalized, ["Premium/Discount", "Premium Discount"]
-            )
-            if "premium" in normalized.lower()
-            else None,
-            "nav_per_share": _extract_first_matching_value(normalized, ["NAV", "NAV per Share"])
-            if "nav" in normalized.lower()
-            else None,
-            "sponsor_fee": _extract_first_matching_value(normalized, ["Sponsor Fee"])
-            if "sponsor fee" in normalized.lower()
-            else None,
+            ),
+            "nav_per_share": _extract_optional_matching_value(normalized, ["NAV", "NAV per Share"]),
+            "sponsor_fee": _extract_optional_matching_value(normalized, ["Sponsor Fee"]),
         },
     )
 
@@ -916,12 +995,18 @@ def parse_ibit_snapshot(text: str) -> BitcoinEtfIssuerSnapshot:
 def parse_bitb_snapshot(text: str) -> BitcoinEtfIssuerSnapshot:
     normalized = _normalize_page_text(text)
     source_type: str
+    optional_values = {
+        "nav_per_share": None,
+        "market_price": None,
+        "premium_discount_pct": None,
+    }
     try:
         as_of_str, total_btc, aum_usd, shares_outstanding, daily_volume = (
             _extract_bitb_structured_values(text)
         )
         bitcoin_per_share = total_btc / shares_outstanding
         source_type = "official_json"
+        optional_values = _extract_bitb_structured_optional_values(text)
     except HttpFetchError:
         as_of_str = _extract_page_date(normalized)
         aum_usd = _extract_first_matching_value(normalized, ["Net Assets (AUM)", "Net Assets"])
@@ -946,17 +1031,17 @@ def parse_bitb_snapshot(text: str) -> BitcoinEtfIssuerSnapshot:
         bitcoin_per_share=bitcoin_per_share,
         source_type=source_type,
         extra_fields={
-            "nav_per_share": _extract_first_matching_value(normalized, ["NAV"])
-            if "nav" in normalized.lower()
-            else None,
-            "market_price": _extract_first_matching_value(normalized, ["Market Price"])
-            if "market price" in normalized.lower()
-            else None,
-            "premium_discount_pct": _extract_first_matching_value(
+            "nav_per_share": optional_values["nav_per_share"]
+            if source_type == "official_json"
+            else _extract_optional_matching_value(normalized, ["NAV"]),
+            "market_price": optional_values["market_price"]
+            if source_type == "official_json"
+            else _extract_optional_matching_value(normalized, ["Market Price"]),
+            "premium_discount_pct": optional_values["premium_discount_pct"]
+            if source_type == "official_json"
+            else _extract_optional_matching_value(
                 normalized, ["Premium/Discount", "Premium Discount"]
-            )
-            if "premium" in normalized.lower()
-            else None,
+            ),
             "bitcoin_reserve_btc": total_btc,
             "trust_net_assets_btc": total_btc,
             "bitcoin_in_trust": total_btc,
@@ -995,24 +1080,16 @@ def _parse_grayscale_snapshot(
         source_type=HTML_ONLY_SOURCE_TYPE,
         extra_fields={
             "aum_non_gaap": aum_usd,
-            "nav_per_share": _extract_first_matching_value(
+            "nav_per_share": _extract_optional_matching_value(
                 normalized, ["NAV PER SHARE", "GAAP NAV PER SHARE"]
-            )
-            if "nav per share" in normalized.lower()
-            else None,
-            "market_price": _extract_first_matching_value(normalized, ["MARKET PRICE"])
-            if "market price" in normalized.lower()
-            else None,
-            "premium_discount_pct": _extract_first_matching_value(
+            ),
+            "market_price": _extract_optional_matching_value(normalized, ["MARKET PRICE"]),
+            "premium_discount_pct": _extract_optional_matching_value(
                 normalized, ["PREMIUM/DISCOUNT", "PREMIUM DISCOUNT"]
-            )
-            if "premium" in normalized.lower()
-            else None,
-            "bid_ask_spread_30d": _extract_first_matching_value(
+            ),
+            "bid_ask_spread_30d": _extract_optional_matching_value(
                 normalized, ["BID ASK SPREAD 30D", "BID/ASK SPREAD 30D"]
-            )
-            if "bid ask" in normalized.lower()
-            else None,
+            ),
             "total_bitcoin_in_trust": total_btc,
         },
     )
@@ -1024,63 +1101,6 @@ def parse_gbtc_snapshot(text: str) -> BitcoinEtfIssuerSnapshot:
 
 def parse_btc_mini_snapshot(text: str) -> BitcoinEtfIssuerSnapshot:
     return _parse_grayscale_snapshot("BTC", "Grayscale Bitcoin Mini Trust", BTC_MINI_URL, text)
-
-
-def parse_fbtc_snapshot(text: str) -> BitcoinEtfIssuerSnapshot:
-    normalized = FBTC_LABEL_DATE_STRIP_RE.sub("", _normalize_page_text(text))
-    as_of_str = _extract_page_date(normalized)
-    shares_outstanding = int(
-        round(_extract_first_matching_value(normalized, ["Shares Outstanding"]))
-    )
-    aum_usd = _extract_first_matching_value(normalized, ["Net Assets", "AUM"])
-    bitcoin_per_share = _extract_first_matching_value(
-        normalized, ["Bitcoin per share", "Bitcoin Per Share"]
-    )
-    estimated_total_btc: float | None = None
-    try:
-        total_btc = _extract_first_matching_value(
-            normalized, ["Total bitcoin in fund", "Total Bitcoin in Fund"]
-        )
-    except HttpFetchError:
-        total_btc = shares_outstanding * bitcoin_per_share
-        estimated_total_btc = round(total_btc, 8)
-    daily_volume = (
-        int(round(_extract_first_matching_value(normalized, ["Daily Volume", "Volume"])))
-        if "volume" in normalized.lower()
-        else 0
-    )
-    snapshot = _snapshot_from_values(
-        ticker="FBTC",
-        issuer="Fidelity",
-        source_url=FBTC_URL,
-        as_of_str=as_of_str,
-        shares_outstanding=shares_outstanding,
-        daily_volume=daily_volume,
-        aum_usd=aum_usd,
-        total_btc=total_btc,
-        bitcoin_per_share=bitcoin_per_share,
-        source_type=HTML_ONLY_SOURCE_TYPE,
-        extra_fields={
-            "market_price": _extract_first_matching_value(normalized, ["Market Price"])
-            if "market price" in normalized.lower()
-            else None,
-            "nav_per_share": _extract_first_matching_value(normalized, ["NAV"])
-            if "nav" in normalized.lower()
-            else None,
-            "premium_discount_pct": _extract_first_matching_value(
-                normalized, ["Premium/discount", "Premium Discount"]
-            )
-            if "premium" in normalized.lower()
-            else None,
-            "primary_exchange": "CBOE",
-            "estimated_total_btc": estimated_total_btc,
-        },
-    )
-    if estimated_total_btc is not None:
-        from dataclasses import replace as _replace
-
-        snapshot = _replace(snapshot, quality_status="degraded")
-    return snapshot
 
 
 def _persist_collected_snapshot(
@@ -1165,6 +1185,37 @@ def _collect_primary_snapshot(
     page_url: str,
     html_parser,
 ) -> CollectedOfficialSnapshot:
+    def _try_structured_candidates(
+        candidates: list[tuple[str, str]],
+    ) -> CollectedOfficialSnapshot | None:
+        for source_type, source_url in candidates:
+            try:
+                return _collect_structured_snapshot(
+                    ticker=ticker,
+                    issuer=issuer,
+                    page_url=page_url,
+                    source_type=source_type,
+                    source_url=source_url,
+                )
+            except Exception as exc:
+                log_structured(
+                    logger,
+                    event="etf.structured_source_failed",
+                    message="구조화 공식 소스를 읽지 못해 다음 후보로 넘어갑니다.",
+                    level=logging.WARNING,
+                    provider=OFFICIAL_BTC_ETF_PROVIDER,
+                    ticker=ticker,
+                    source_type=source_type,
+                    source_url=source_url,
+                    reason=str(exc),
+                )
+        return None
+
+    direct_candidates = _ordered_structured_candidates(ticker, "", page_url=page_url)
+    direct_result = _try_structured_candidates(direct_candidates)
+    if direct_result is not None:
+        return direct_result
+
     page_payload = get_bytes_with_retry(
         page_url,
         provider=OFFICIAL_BTC_ETF_PROVIDER,
@@ -1172,29 +1223,14 @@ def _collect_primary_snapshot(
     )
     page_text = page_payload.decode("utf-8", errors="ignore")
 
-    for source_type, source_url in _ordered_structured_candidates(
-        ticker, page_text, page_url=page_url
-    ):
-        try:
-            return _collect_structured_snapshot(
-                ticker=ticker,
-                issuer=issuer,
-                page_url=page_url,
-                source_type=source_type,
-                source_url=source_url,
-            )
-        except Exception as exc:
-            log_structured(
-                logger,
-                event="etf.structured_source_failed",
-                message="구조화 공식 소스를 읽지 못해 다음 후보로 넘어갑니다.",
-                level=logging.WARNING,
-                provider=OFFICIAL_BTC_ETF_PROVIDER,
-                ticker=ticker,
-                source_type=source_type,
-                source_url=source_url,
-                reason=str(exc),
-            )
+    structured_candidates = [
+        candidate
+        for candidate in _ordered_structured_candidates(ticker, page_text, page_url=page_url)
+        if candidate not in direct_candidates
+    ]
+    structured_result = _try_structured_candidates(structured_candidates)
+    if structured_result is not None:
+        return structured_result
 
     snapshot = html_parser(page_text)
     return CollectedOfficialSnapshot(
@@ -1221,7 +1257,6 @@ def _fetch_direct_reference_snapshots(
         ("BITB", "Bitwise", BITB_URL, parse_bitb_snapshot),
         ("GBTC", "Grayscale", GBTC_URL, parse_gbtc_snapshot),
         ("BTC", "Grayscale Bitcoin Mini Trust", BTC_MINI_URL, parse_btc_mini_snapshot),
-        ("FBTC", "Fidelity", FBTC_URL, parse_fbtc_snapshot),
     )
 
     missing_tickers: set[str] = set()

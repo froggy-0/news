@@ -24,8 +24,7 @@
 | `btc` 현물 가격 | CoinGecko `api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true` | yfinance `BTC-USD` | ✅ |
 | BTC ETF 보유량 (IBIT) | `ishares.com` structured file 우선, HTML fallback | aggregator reference-only | ✅ |
 | BTC ETF 보유량 (BITB) | `bitbetf.com` 공식 다운로드 / `__NEXT_DATA__` / HTML fallback | aggregator reference-only | ✅ |
-| BTC ETF 보유량 (GBTC/BTC) | `etfs.grayscale.com` XLSX 우선, HTML fallback | aggregator reference-only | ✅ |
-| BTC ETF 보유량 (FBTC) | `digital.fidelity.com` 공식 페이지 파싱 | aggregator reference-only | ✅ |
+| BTC ETF 보유량 (GBTC/BTC) | `etfs.grayscale.com` XLSX 직링크 | aggregator reference-only | ✅ |
 | Fear & Greed | `api.alternative.me/fng/?limit=1` | — | ✅ |
 
 **FRED 호출**: 최근 15개 관측값 중 유효한 최신 2개로 변화량(bp) 계산

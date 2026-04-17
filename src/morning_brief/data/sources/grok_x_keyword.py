@@ -55,7 +55,7 @@ Output format: {{"signals": [...]}}"""
 
 BITCOIN_CRYPTO_PROMPT = """Search X for the most significant Bitcoin and crypto market posts from the last {lookback_hours} hours.
 Focus on:
-1. Bitcoin ETF flow data and AUM — IBIT, BITB, GBTC, FBTC, ARKB inflows/outflows
+1. Bitcoin ETF flow data and AUM — IBIT, BITB, GBTC, ARKB inflows/outflows
 2. BTC price action and market sentiment
 3. Crypto regulatory news (SEC, CFTC decisions and enforcement)
 4. Institutional demand, new ETF filings, fee changes, and fund manager commentary

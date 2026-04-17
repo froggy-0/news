@@ -49,7 +49,6 @@ _EXCD_MAP: dict[str, str] = {
     "ASML": "NAS",
     "AVGO": "NAS",
     "IBIT": "NAS",
-    "FBTC": "AMS",
     "ARKB": "AMS",
     "BITB": "AMS",
     "GBTC": "AMS",

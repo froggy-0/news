@@ -15,7 +15,8 @@ from morning_brief.logging_utils import log_structured
 
 logger = logging.getLogger(__name__)
 
-ETF_ANALYSIS_TICKERS = ("IBIT", "BITB")
+ETF_ANALYSIS_TICKERS = ("IBIT", "BITB", "GBTC")
+ETF_HISTORY_LOOKBACK_BUFFER_DAYS = 30
 
 
 def _date_strings(start_date: str, end_date: str) -> list[str]:
@@ -46,12 +47,20 @@ def _coerce_float(value: object) -> float | None:
         return None
 
 
+def _history_query_window(start_date: str, end_date: str) -> tuple[str, str]:
+    start = datetime.fromisoformat(start_date).date()
+    end = datetime.fromisoformat(end_date).date()
+    query_start = (start - timedelta(days=ETF_HISTORY_LOOKBACK_BUFFER_DAYS)).isoformat()
+    return query_start, end.isoformat()
+
+
 def _query_gold_history(start_date: str, end_date: str) -> list[dict[str, Any]]:
     supabase_url = os.getenv("SUPABASE_URL", "").strip()
     service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
     if not supabase_url or not service_role_key:
         return []
 
+    query_start_date, query_end_date = _history_query_window(start_date, end_date)
     client = create_client(supabase_url, service_role_key)
     response = (
         client.table(
@@ -59,8 +68,8 @@ def _query_gold_history(start_date: str, end_date: str) -> list[dict[str, Any]]:
             or DEFAULT_ETF_GOLD_TABLE
         )
         .select("ticker,as_of_date,aum_usd,total_btc,source_type,quality_status")
-        .gte("as_of_date", start_date)
-        .lte("as_of_date", end_date)
+        .gte("as_of_date", query_start_date)
+        .lte("as_of_date", query_end_date)
         .in_("ticker", list(ETF_ANALYSIS_TICKERS))
         .order("as_of_date")
         .execute()
@@ -88,8 +97,12 @@ def _fallback_latest_snapshot(end_date: str) -> list[dict[str, Any]]:
     return rows
 
 
-def _rows_to_totals(rows: list[dict[str, Any]]) -> dict[str, dict[str, float]]:
-    by_date: dict[str, dict[str, float]] = {}
+def _rows_to_totals(
+    rows: list[dict[str, Any]],
+    *,
+    dates: list[str],
+) -> dict[str, dict[str, float]]:
+    normalized_rows: list[dict[str, object]] = []
     for row in rows:
         if not isinstance(row, dict):
             continue
@@ -105,10 +118,39 @@ def _rows_to_totals(rows: list[dict[str, Any]]) -> dict[str, dict[str, float]]:
         aum_usd = _coerce_float(row.get("aum_usd"))
         if total_btc is None or aum_usd is None:
             continue
-        slot = by_date.setdefault(as_of_date, {"etf_total_btc": 0.0, "etf_total_aum_usd": 0.0})
-        slot["etf_total_btc"] += total_btc
-        slot["etf_total_aum_usd"] += aum_usd
-    return by_date
+        normalized_rows.append(
+            {
+                "ticker": ticker,
+                "date": as_of_date,
+                "total_btc": total_btc,
+                "aum_usd": aum_usd,
+            }
+        )
+
+    if not normalized_rows:
+        return {}
+
+    df = pd.DataFrame(normalized_rows)
+    date_index = pd.Index(dates, name="date")
+    totals_by_metric: dict[str, pd.Series] = {}
+
+    for metric, output_name in (
+        ("total_btc", "etf_total_btc"),
+        ("aum_usd", "etf_total_aum_usd"),
+    ):
+        pivot = df.pivot_table(index="date", columns="ticker", values=metric, aggfunc="last")
+        pivot = pivot.reindex(date_index).sort_index().ffill()
+        totals_by_metric[output_name] = pivot.sum(axis=1, min_count=1)
+
+    return {
+        date: {
+            "etf_total_btc": float(totals_by_metric["etf_total_btc"].loc[date]),
+            "etf_total_aum_usd": float(totals_by_metric["etf_total_aum_usd"].loc[date]),
+        }
+        for date in dates
+        if pd.notna(totals_by_metric["etf_total_btc"].loc[date])
+        or pd.notna(totals_by_metric["etf_total_aum_usd"].loc[date])
+    }
 
 
 def fetch_etf_flow_features(
@@ -149,7 +191,7 @@ def fetch_etf_flow_features(
             )
             rows = []
 
-    totals_by_date = _rows_to_totals(rows)
+    totals_by_date = _rows_to_totals(rows, dates=dates)
     if not totals_by_date:
         return frame
 
@@ -169,4 +211,8 @@ def fetch_etf_flow_features(
     return frame
 
 
-__all__ = ["ETF_ANALYSIS_TICKERS", "fetch_etf_flow_features"]
+__all__ = [
+    "ETF_ANALYSIS_TICKERS",
+    "ETF_HISTORY_LOOKBACK_BUFFER_DAYS",
+    "fetch_etf_flow_features",
+]

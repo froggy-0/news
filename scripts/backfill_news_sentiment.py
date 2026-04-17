@@ -44,6 +44,7 @@ from backfill.scorer import score_and_aggregate  # noqa: E402
 from backfill.sources.alpaca import fetch_alpaca_articles  # noqa: E402
 from backfill.sources.coindesk import fetch_coindesk_articles  # noqa: E402
 from backfill.uploader import create_s3_client, upload_all  # noqa: E402
+from validate_credentials import BackfillCredentialValidator  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +128,21 @@ def main() -> int:
     )
 
     args = _parse_args()
+
+    # 인증정보 검증 (--skip-validation으로 건너뜀 가능)
+    if "--skip-validation" not in sys.argv and not args.dry_run:
+        print("\n[1/3] 인증정보 검증 중...\n")
+        validator = BackfillCredentialValidator(verbose=False)
+        if validator.validate_all() != 0:
+            print("❌ 인증정보 검증 실패. 필수 환경변수를 설정한 후 다시 시도하세요.")
+            print("   python scripts/validate_credentials.py --backfill --verbose  # 자세한 정보\n")
+            return 1
+        print("[2/3] 백필 시작...\n")
+    elif args.dry_run:
+        print("⏭️  인증정보 검증 건너뜀 (--dry-run 모드)\n")
+    else:
+        print("⏭️  인증정보 검증 건너뜀 (--skip-validation)\n")
+
     _validate_env(args)
 
     start_time = time.time()
