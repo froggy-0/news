@@ -11,13 +11,18 @@ from morning_brief.logging_utils import log_structured
 logger = logging.getLogger(__name__)
 
 # Req 13: PCA 입력 후보 변수들 (DataFrame에 있는 것만 사용)
+# §1: 모든 predictor를 lag1 버전으로 통일. look-ahead bias 제거.
+# §5.2: 목록 변경 시 feature_schema_version을 함께 올려야 PCA loadings 불연속을 추적할 수 있습니다.
 HYBRID_FEATURE_CANDIDATES = [
-    "news_sentiment_mean",
-    "fng_value",
+    "news_sentiment_mean_lag1",
+    "fng_value_lag1",
     "funding_rate_lag1",
     "btc_long_short_ratio_lag1",
     "etf_net_inflow_usd_lag1",
 ]
+HYBRID_FEATURE_SCHEMA_VERSION = "v2"  # v1: news_sentiment_mean/fng_value 원본; v2: lag1 버전
+# §5.2: PC1 부호 정규화 기준 변수. 이 변수의 loading이 양수가 되도록 PC1 방향을 고정합니다.
+HYBRID_SIGN_ANCHOR = "fng_value_lag1"
 VIF_THRESHOLD = 10.0
 MIN_PCA_FEATURES = 2
 MIN_PCA_ROWS = 10
@@ -163,6 +168,16 @@ def compute_hybrid_index(df: pd.DataFrame) -> pd.DataFrame:
 
     # 변수 기여 가중치 기록
     loadings = {selected[i]: float(pca_final.components_[0, i]) for i in range(len(selected))}
+
+    # §5.2: 부호 정규화 — HYBRID_SIGN_ANCHOR의 PC1 loading이 양수가 되도록 고정
+    # fng_value_lag1이 높을수록(공포감 낮음, 탐욕) hybrid_index가 양수 방향이어야 합니다.
+    if HYBRID_SIGN_ANCHOR in selected:
+        anchor_idx = selected.index(HYBRID_SIGN_ANCHOR)
+        if pca_final.components_[0, anchor_idx] < 0:
+            components[:, 0] = -components[:, 0]
+            pca_final.components_[0] = -pca_final.components_[0]
+            loadings = {k: -v for k, v in loadings.items()}
+
     log_structured(
         logger,
         event="stats.pca_complete",
@@ -171,6 +186,7 @@ def compute_hybrid_index(df: pd.DataFrame) -> pd.DataFrame:
         explained_variance=float(cumvar[n_components - 1]),
         features=selected,
         loadings=loadings,
+        feature_schema_version=HYBRID_FEATURE_SCHEMA_VERSION,
     )
 
     result.loc[clean_idx, "hybrid_index"] = components[:, 0]
@@ -182,9 +198,10 @@ def compute_hybrid_index(df: pd.DataFrame) -> pd.DataFrame:
             "n_components": n_components,
             "explained_variance": float(cumvar[n_components - 1]),
             "loadings": loadings,
+            "feature_schema_version": HYBRID_FEATURE_SCHEMA_VERSION,
         },
     }
     return result
 
 
-__all__ = ["compute_hybrid_index"]
+__all__ = ["compute_hybrid_index", "HYBRID_FEATURE_SCHEMA_VERSION", "HYBRID_SIGN_ANCHOR"]

@@ -10,6 +10,7 @@ from hypothesis import strategies as st
 
 from morning_brief.analysis.sentiment_join.join import (
     _add_btc_direction_label,
+    _add_sentiment_lag_columns,
     _apply_sentiment_quality_gate,
     detect_outliers_rolling_iqr,
     merge_sources,
@@ -309,3 +310,49 @@ def test_merge_sources_exclusion_counts_in_attrs() -> None:
     counts = merged.attrs["exclusion_counts"]
     assert isinstance(counts, dict)
     assert "missing_backfill_marker" in counts
+
+
+# ── §1: 감성·공포지수 Lag-1 테스트 ──
+
+
+def test_merge_sources_adds_sentiment_lag1_columns() -> None:
+    """§1: merge_sources 결과에 news_sentiment_mean_lag1, fng_value_lag1이 존재해야 한다."""
+    merged = merge_sources(_sentiment_df(35), _fng_df(35), _btc_df(35), _usdkrw_df(35))
+
+    assert "news_sentiment_mean_lag1" in merged.columns
+    assert "fng_value_lag1" in merged.columns
+
+
+def test_add_sentiment_lag_columns_first_row_is_nan() -> None:
+    """§1: 첫 행은 NaN이어야 한다 (shift(1) 특성)."""
+    df = _sentiment_df(5).merge(_fng_df(5), on="date")
+    result = _add_sentiment_lag_columns(df)
+
+    assert pd.isna(result.loc[0, "news_sentiment_mean_lag1"])
+    assert pd.isna(result.loc[0, "fng_value_lag1"])
+
+
+def test_add_sentiment_lag_columns_second_row_equals_first_value() -> None:
+    """§1: 두 번째 행은 이전 날 원본 값과 동일해야 한다."""
+    df = _sentiment_df(5).merge(_fng_df(5), on="date")
+    result = _add_sentiment_lag_columns(df)
+
+    assert result.loc[1, "news_sentiment_mean_lag1"] == pytest.approx(
+        df.loc[0, "news_sentiment_mean"]
+    )
+    assert result.loc[1, "fng_value_lag1"] == pytest.approx(float(df.loc[0, "fng_value"]))
+
+
+def test_merge_sources_sentiment_lag1_is_t_minus_1() -> None:
+    """§1: lag1 값이 실제로 T-1 시점의 원본 값과 일치해야 한다."""
+    sentiment_df = _sentiment_df(10)
+    # 날짜별로 다른 값 설정
+    for i in range(10):
+        sentiment_df.loc[i, "news_sentiment_mean"] = round(0.1 * (i + 1), 2)
+
+    merged = merge_sources(sentiment_df, _fng_df(10), _btc_df(10), _usdkrw_df(10))
+
+    for i in range(1, len(merged)):
+        assert merged.loc[i, "news_sentiment_mean_lag1"] == pytest.approx(
+            merged.loc[i - 1, "news_sentiment_mean"]
+        )

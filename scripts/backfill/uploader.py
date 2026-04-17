@@ -36,30 +36,50 @@ class UploadResults:
 
 
 def build_minimal_brief_json(date: str, aggregate: DailyAggregate) -> dict:
-    """fetch_r2_sentiment()가 읽는 최소 스키마 JSON 생성."""
+    """fetch_r2_sentiment()가 읽는 최소 스키마 JSON 생성.
+
+    analytics_contract.validate_analytics_sentiment_payload()와 호환되는
+    flat format으로 생성합니다. 기존 meta 래퍼 형식은 r2_sentiment.py가 파싱할 수
+    없었으므로 top-level 필드 구조로 전환합니다.
+
+    §2: textSchemaVersion — 백필/실시간 FinBERT 입력 텍스트 차이 추적용.
+    """
     now_utc = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     return {
-        "meta": {
-            "date": date,
-            "generatedAt": f"{date}T08:00:00+09:00",
-            "sentimentStatus": aggregate.status,
-            "signalSentimentStatus": "skipped",
-            "newsSentiment": {
-                "mean": aggregate.mean,
-                "std": aggregate.std,
-                "count": aggregate.count,
-            },
-            "signalSentiment": None,
-            "_backfill": True,
-            "_backfillSource": "coindesk+alpaca+finbert",
-            "_backfillGeneratedAt": now_utc,
-        }
+        "schemaVersion": "v1",
+        "producer": "backfill/finbert",
+        "generatedAt": now_utc,
+        "date": date,
+        "symbol": "btc",
+        "sentimentStatus": aggregate.status,
+        "signalSentimentStatus": "skipped",
+        "newsSentiment": {
+            "mean": aggregate.mean,
+            "std": aggregate.std,
+            "count": aggregate.count,
+        },
+        "signalSentiment": None,
+        "_backfill": True,
+        "_backfillSource": "coindesk+alpaca+finbert",
+        "_backfillGeneratedAt": now_utc,
+        # §2: 텍스트 스키마 버전 — 백필은 "title_summary" (why_it_matters 미포함)
+        "textSchemaVersion": aggregate.text_schema_version,
     }
 
 
 def _is_pipeline_file(existing_json: dict) -> bool:
-    """_backfill 필드 없는 파일 = 파이프라인 원본 → 덮어쓰기 금지."""
-    return "_backfill" not in existing_json.get("meta", {})
+    """_backfillSource 없는 파일 = 파이프라인 원본 → 덮어쓰기 금지.
+
+    라이브 파이프라인은 _backfillSource를 기록하지 않습니다.
+    백필 파일(현행 flat format 및 레거시 meta 래퍼) 모두 _backfillSource를 포함합니다.
+    """
+    # flat format (현행): top-level _backfillSource
+    if "_backfillSource" in existing_json:
+        return False
+    # legacy meta-wrapped format: meta._backfillSource
+    if "_backfillSource" in existing_json.get("meta", {}):
+        return False
+    return True
 
 
 def create_s3_client():

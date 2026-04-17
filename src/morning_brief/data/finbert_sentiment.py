@@ -90,6 +90,19 @@ class FinBertScorer:
             self._tokenizer = AutoTokenizer.from_pretrained(model_id, **kwargs)
             self._model = AutoModelForSequenceClassification.from_pretrained(model_id, **kwargs)
             self._model.eval()
+
+            # §5.3: 결정성 고정 — 동일 입력에 대해 동일 출력을 보장합니다.
+            # 일부 CUDA 커널에서는 deterministic 모드 미지원 시 경고를 내고 계속 진행합니다.
+            import torch
+
+            torch.manual_seed(0)
+            try:
+                torch.use_deterministic_algorithms(True)
+            except Exception:
+                logger.warning(
+                    "torch.use_deterministic_algorithms(True) 설정 실패 — 비결정성 허용으로 계속 진행합니다"
+                )
+
             self._available = True
         except Exception:
             logger.warning("FinBERT 모델 로드 실패 — 감성 점수를 건너뜁니다", exc_info=True)

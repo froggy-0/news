@@ -29,12 +29,16 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class _BackfillFinBertSettings:
-    """FinBertScorer 생성자에 필요한 최소 설정 (duck typing 호환)."""
+    """FinBertScorer 생성자에 필요한 최소 설정 (duck typing 호환).
+
+    §3: finbert_batch_size를 운영 파이프라인 기본값(16)과 통일.
+    dynamic padding 차이로 인한 softmax 미세 오차를 제거합니다.
+    """
 
     finbert_model: str = "ProsusAI/finbert"
     finbert_model_path: str = ""
     finbert_model_revision: str = ""
-    finbert_batch_size: int = 32
+    finbert_batch_size: int = 16  # §3: 운영 파이프라인(config.py 기본값 16)과 통일
     finbert_bullish_threshold: float = 0.3
     finbert_bearish_threshold: float = -0.3
 
@@ -54,6 +58,9 @@ class DailyAggregate:
     status: Literal["ok", "degraded", "skipped"]
     coindesk_count: int  # 소스별 기사 수 (리포트용)
     alpaca_count: int
+    # §2: 텍스트 스키마 버전 — FinBERT 입력 텍스트 구성 방식을 추적합니다.
+    # 백필은 title+summary만 사용("title_summary"), 실시간은 why_it_matters 포함 가능.
+    text_schema_version: str = "title_summary"
 
 
 def _determine_status(count: int) -> Literal["ok", "degraded", "skipped"]:
@@ -67,7 +74,7 @@ def _determine_status(count: int) -> Literal["ok", "degraded", "skipped"]:
 def score_and_aggregate(
     articles_by_date: dict[str, list[RawArticle]],
     *,
-    batch_size: int = 32,
+    batch_size: int = 16,
 ) -> list[DailyAggregate]:
     """전체 기사를 일괄 배치 추론 후 날짜별 DailyAggregate 리스트 반환.
 
@@ -77,7 +84,15 @@ def score_and_aggregate(
     3. build_news_sentiment_text()로 텍스트 변환
     4. scorer.score_texts()로 일괄 추론
     5. 날짜별 집계
+
+    §3: batch_size 기본값을 운영 파이프라인(16)과 통일.
+    §5.3: TOKENIZERS_PARALLELISM, PYTHONHASHSEED 고정으로 재현성 확보.
     """
+    import os
+
+    # §5.3: 결정성 환경변수 — 토크나이저 스레드 경쟁 제거 + 해시 시드 고정
+    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+    os.environ.setdefault("PYTHONHASHSEED", "0")
     if not articles_by_date:
         return []
 

@@ -225,6 +225,7 @@ def test_fetch_r2_sentiment_output_columns() -> None:
         "sentiment_status",
         "is_backfill_valid",
         "ingest_validation_reason",
+        "text_schema_version",  # §2: 텍스트 스키마 버전 추가
     }
     assert set(frame.columns) == expected
     # signal 컬럼이 없어야 한다
