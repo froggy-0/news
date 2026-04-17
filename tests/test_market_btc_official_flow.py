@@ -143,12 +143,11 @@ def test_fetch_bitcoin_snapshot_calls_kis_once_per_etf(monkeypatch, tmp_path: Pa
 
     assert [point.ticker for point in snapshot.etf_points] == [
         "IBIT",
-        "FBTC",
         "ARKB",
         "BITB",
         "GBTC",
     ]
-    assert calls == ["IBIT", "FBTC", "ARKB", "BITB", "GBTC"]
+    assert calls == ["IBIT", "ARKB", "BITB", "GBTC"]
 
 
 def test_fetch_bitcoin_snapshot_keeps_pipeline_alive_when_perplexity_etf_parsing_fails(
@@ -201,14 +200,6 @@ def test_fetch_bitcoin_snapshot_excludes_reference_only_and_critical_from_totals
                 total_btc=37_700.0,
                 aum_usd=4_300_000_000.0,
                 shares_outstanding=112_000_000,
-            ),
-            _snapshot(
-                ticker="FBTC",
-                total_btc=150_000.0,
-                aum_usd=10_000_000_000.0,
-                shares_outstanding=120_000_000,
-                source_type="aggregator",
-                quality_status="degraded",
             ),
             _snapshot(
                 ticker="GBTC",

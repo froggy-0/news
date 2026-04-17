@@ -72,6 +72,8 @@ def test_extract_daily_long_short_ratio_value_above_one_is_valid() -> None:
 def test_fetch_futures_data_lsr_failure_does_not_block_funding_oi(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    import os
+
     target_day = datetime.now(timezone.utc).date() - timedelta(days=1)
     funding_rows = [
         {
@@ -86,12 +88,22 @@ def test_fetch_futures_data_lsr_failure_does_not_block_funding_oi(
         }
     ]
 
+    # GitHub Actions 환경 감지를 비활성화 (로컬 Binance 직접 호출 사용)
+    # os.getenv를 monkeypatch하여 GITHUB_ACTIONS를 "false"로 반환하도록 함
+    original_getenv = os.getenv
+
+    def mock_getenv(key: str, default: str = "") -> str:
+        if key == "GITHUB_ACTIONS":
+            return ""  # Empty string → not github actions
+        return original_getenv(key, default)
+
+    monkeypatch.setattr(os, "getenv", mock_getenv)
     monkeypatch.setattr(futures, "_fetch_funding_rate_history", lambda start_ms: funding_rows)
-    monkeypatch.setattr(futures, "_fetch_oi_history", lambda start_ms: oi_rows)
+    monkeypatch.setattr(futures, "_fetch_oi_history", lambda limit_days: oi_rows)
     monkeypatch.setattr(
         futures,
         "_fetch_long_short_ratio",
-        lambda start_ms: (_ for _ in ()).throw(RuntimeError("LSR network error")),
+        lambda limit_days: (_ for _ in ()).throw(RuntimeError("LSR network error")),
     )
 
     df = futures.fetch_futures_data(lookback_days=2)

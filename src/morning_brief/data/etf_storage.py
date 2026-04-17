@@ -112,7 +112,13 @@ def build_gold_record(
         "bitcoin_per_share": snapshot.bitcoin_per_share,
         "daily_volume": snapshot.daily_volume,
     }
-    payload.update(snapshot.extra_fields)
+    payload.update(
+        {
+            field_name: field_value
+            for field_name, field_value in snapshot.extra_fields.items()
+            if field_value is not None
+        }
+    )
     return payload
 
 

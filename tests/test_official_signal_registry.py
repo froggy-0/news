@@ -191,7 +191,6 @@ _ORIGINAL_25_ENTITY_IDS = [
     "federal_reserve",
     "us_treasury",
     "sec",
-    "fidelity",
     "blackrock_ishares",
     "apple",
     "tsmc",

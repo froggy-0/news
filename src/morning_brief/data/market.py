@@ -94,7 +94,7 @@ TECH_STOCK_TICKERS = [
     "ASML",
     "AVGO",
 ]
-BTC_ETF_TICKERS = ["IBIT", "FBTC", "ARKB", "BITB", "GBTC"]
+BTC_ETF_TICKERS = ["IBIT", "ARKB", "BITB", "GBTC"]
 
 # yfinance tries to write cache files under user cache directory by default.
 # In restricted environments (CI/sandbox), use /tmp to avoid permission issues.

@@ -5,6 +5,7 @@ from datetime import date
 from pathlib import Path
 
 from morning_brief.data.sources import btc_etf_official as official
+from morning_brief.data.sources.http_client import HttpFetchError
 from morning_brief.models import BitcoinEtfIssuerSnapshot
 from morning_brief.observability import PipelineObserver
 
@@ -26,7 +27,7 @@ Bitcoin per Share 0.00033605
 
 BITB_CURRENT_SAMPLE = """
 <script id="__NEXT_DATA__" type="application/json">
-{"props":{"pageProps":{"fundPageData":{"fundDetailsData":{"netAssets":2725606286.52,"sharesOutstanding":71500000,"volume":3209174}},"proofOfReservesSnapshotData":{"fundName":"BITB","totalReserve":38920.51992677,"timestamp":"2026-03-13T01:01:51.772Z"}}}}
+{"props":{"pageProps":{"fundPageData":{"fundDetailsData":{"netAssets":2725606286.52,"sharesOutstanding":71500000,"volume":3209174}},"proofOfReservesSnapshotData":{"fundName":"BITB","totalReserve":38920.51992677,"timestamp":"2026-03-13T01:01:51.772Z"},"fundData":{"data":{"navAndMarketPrice":{"nav":38.12,"marketPrice":38.44},"premiumDiscount":{"asOfValues":[{"label":"03/13/2026","value":"0.84"}]}}}}}}
 </script>
 Data as of 03/11/2026
 Net Assets (AUM) $2,725,606,287
@@ -41,14 +42,6 @@ SHARES OUTSTANDING 190,850,100
 DAILY VOLUME (SHARES)* 3,707,892
 TOTAL BITCOIN IN TRUST 193,530.1058
 BITCOIN PER SHARE 0.00101403
-"""
-
-FBTC_SAMPLE = """
-Data as of 03/12/2026
-Shares Outstanding 165,000,000
-Net Assets $12,345,678,901
-Bitcoin per share 0.00055123
-Daily Volume 1,234,567
 """
 
 
@@ -87,6 +80,9 @@ def test_parse_bitb_snapshot_prefers_structured_page_payload_when_available():
     assert snapshot.bitcoin_per_share == round(38920.51992677 / 71_500_000, 10)
     assert snapshot.source_type == "official_json"
     assert snapshot.quality_status == "ok"
+    assert snapshot.extra_fields["nav_per_share"] == 38.12
+    assert snapshot.extra_fields["market_price"] == 38.44
+    assert snapshot.extra_fields["premium_discount_pct"] == 0.84
 
 
 def test_parse_gbtc_snapshot_reads_direct_holdings_fields():
@@ -97,16 +93,6 @@ def test_parse_gbtc_snapshot_reads_direct_holdings_fields():
     assert snapshot.total_btc == 193_530.1058
     assert snapshot.bitcoin_per_share == 0.00101403
     assert snapshot.source_type == "official_html"
-    assert snapshot.quality_status == "degraded"
-
-
-def test_parse_fbtc_snapshot_estimates_total_btc_when_label_missing():
-    snapshot = official.parse_fbtc_snapshot(FBTC_SAMPLE)
-
-    assert snapshot.ticker == "FBTC"
-    assert snapshot.as_of_date == date(2026, 3, 12)
-    assert snapshot.total_btc == round(165_000_000 * 0.00055123, 8)
-    assert snapshot.extra_fields["estimated_total_btc"] == snapshot.total_btc
     assert snapshot.quality_status == "degraded"
 
 
@@ -369,6 +355,85 @@ def test_fetch_official_btc_etf_snapshots_falls_back_to_direct_official_pages(mo
     assert snapshots[1].source_url == official.IBIT_URL
 
 
+def test_fetch_official_btc_etf_snapshots_keeps_partial_success_when_other_issuers_fail(
+    monkeypatch,
+):
+    def fake_collect_primary_snapshot(*, ticker: str, issuer: str, page_url: str, html_parser):
+        if ticker == "IBIT":
+            return official.CollectedOfficialSnapshot(
+                snapshot=official.parse_ibit_snapshot(IBIT_SAMPLE),
+                raw_payload=IBIT_SAMPLE.encode("utf-8"),
+                source_format="html",
+                parse_method="ibit_html",
+            )
+        if ticker == "BITB":
+            return official.CollectedOfficialSnapshot(
+                snapshot=official.parse_bitb_snapshot(BITB_CURRENT_SAMPLE),
+                raw_payload=BITB_CURRENT_SAMPLE.encode("utf-8"),
+                source_format="json",
+                parse_method="bitb_json",
+            )
+        if ticker in {"GBTC", "BTC"}:
+            raise HttpFetchError(
+                f"HTTP 429 응답을 받았어요: {page_url}",
+                status_code=429,
+                provider=official.OFFICIAL_BTC_ETF_PROVIDER,
+                retryable=False,
+                rate_limited=True,
+            )
+        raise HttpFetchError("공식 ETF 페이지에서 기준일을 찾지 못했어요.")
+
+    monkeypatch.setattr(official, "_collect_primary_snapshot", fake_collect_primary_snapshot)
+    monkeypatch.setattr(official, "build_storage_bundle_from_env", lambda: None)
+
+    snapshots = official.fetch_official_btc_etf_snapshots(api_key="")
+
+    assert [snapshot.ticker for snapshot in snapshots] == ["BITB", "IBIT"]
+
+
+def test_collect_primary_snapshot_tries_known_grayscale_xlsx_before_page_fetch(monkeypatch):
+    expected = official.CollectedOfficialSnapshot(
+        snapshot=BitcoinEtfIssuerSnapshot(
+            ticker="GBTC",
+            issuer="Grayscale",
+            source_url=official.GBTC_URL,
+            as_of_date=date(2026, 4, 17),
+            shares_outstanding=1,
+            daily_volume=1,
+            aum_usd=1.0,
+            total_btc=1.0,
+            bitcoin_per_share=1.0,
+            source_type="official_csv",
+        ),
+        raw_payload=b"xlsx",
+        source_format="xlsx",
+        parse_method="gbtc_xlsx",
+    )
+
+    def fake_collect_structured_snapshot(
+        *, ticker: str, issuer: str, page_url: str, source_type: str, source_url: str
+    ):
+        assert ticker == "GBTC"
+        assert source_type == "official_csv"
+        assert source_url == official.GBTC_XLSX_URL
+        return expected
+
+    def fail_if_page_requested(url: str, **kwargs):
+        raise AssertionError(f"page fetch should be skipped, got {url}")
+
+    monkeypatch.setattr(official, "_collect_structured_snapshot", fake_collect_structured_snapshot)
+    monkeypatch.setattr(official, "get_bytes_with_retry", fail_if_page_requested)
+
+    collected = official._collect_primary_snapshot(
+        ticker="GBTC",
+        issuer="Grayscale",
+        page_url=official.GBTC_URL,
+        html_parser=lambda _: (_ for _ in ()).throw(AssertionError("html parser should not run")),
+    )
+
+    assert collected == expected
+
+
 def test_ordered_structured_candidates_follow_ticker_priority_matrix():
     page_text = """
     <a href="/download/ibit.json">json</a>
@@ -392,6 +457,60 @@ def test_structured_download_links_rejects_non_whitelisted_domains():
         assert "공식 도메인" in str(exc)
     else:
         raise AssertionError("ValueError was expected")
+
+
+def test_validate_issuer_url_accepts_known_grayscale_xlsx_urls():
+    official._validate_issuer_url(official.GBTC_XLSX_URL)
+    official._validate_issuer_url(official.BTC_MINI_XLSX_URL)
+
+
+def test_parse_grayscale_xlsx_snapshot_reads_current_workbook_layout(monkeypatch):
+    monkeypatch.setattr(
+        official,
+        "_read_xlsx_workbook_rows",
+        lambda payload: {
+            "Daily Performance": [
+                [
+                    "Product Name",
+                    "Date",
+                    "Shares Outstanding",
+                    "NAV Per Share",
+                    "Market Price Per Share",
+                    "AUM",
+                ],
+                [
+                    "Grayscale Bitcoin Trust ETF",
+                    "2026-04-16",
+                    "196420100",
+                    "58.64",
+                    "58.64",
+                    "11517554235.62",
+                ],
+            ],
+            "Holdings": [
+                ["Name", "Date", "Asset/Share"],
+                ["BTC", "2026-04-16", "0.00077799"],
+            ],
+        },
+    )
+
+    snapshot = official._parse_grayscale_xlsx_snapshot(
+        ticker="GBTC",
+        issuer="Grayscale",
+        page_url=official.GBTC_URL,
+        xlsx_url=official.GBTC_XLSX_URL,
+        payload=b"",
+    )
+
+    assert snapshot.as_of_date == date(2026, 4, 16)
+    assert snapshot.shares_outstanding == 196_420_100
+    assert snapshot.aum_usd == 11_517_554_235.62
+    assert snapshot.bitcoin_per_share == 0.00077799
+    assert snapshot.total_btc == round(196_420_100 * 0.00077799, 8)
+    assert snapshot.daily_volume == 0
+    assert snapshot.quality_status == "degraded"
+    assert snapshot.extra_fields["nav_per_share"] == 58.64
+    assert snapshot.extra_fields["market_price"] == 58.64
 
 
 def test_request_reference_snapshots_uses_json_schema_response_format(monkeypatch):
