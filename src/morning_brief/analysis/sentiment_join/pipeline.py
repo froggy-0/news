@@ -88,6 +88,17 @@ def _has_any_data(df: pd.DataFrame, cols: list[str]) -> bool:
     return any(col in df.columns and df[col].notna().any() for col in cols)
 
 
+def _build_granger_correction(statistical_results: dict[str, object]) -> dict[str, object]:
+    """BH-FDR 보정 메타데이터 생성 (pipeline.py → build_stats_metadata_payload 전달용)."""
+    granger = statistical_results.get("granger")
+    n_tests = len(granger) if isinstance(granger, list) else 0
+    return {
+        "method": "bh_fdr",
+        "n_tests": n_tests,
+        "bonferroni_threshold": round(0.05 / n_tests, 10) if n_tests > 0 else None,
+    }
+
+
 def _hybrid_signal_label(series: pd.Series) -> str | None:
     clean = pd.to_numeric(series, errors="coerce").dropna()
     if clean.empty:
@@ -243,19 +254,31 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             )
             return 1
 
-        analysis_df = master_df.loc[~master_df["is_outlier"]].reset_index(drop=True)
-        outlier_filtered_count = len(master_df) - len(analysis_df)
-        outlier_filtered_ratio = (
-            round(outlier_filtered_count / len(master_df), 4) if len(master_df) else 0.0
+        # §8-A: 이상치 행은 제거하지 않고 수치 컬럼만 NaN으로 마스킹.
+        # 달력 연속성을 유지해 Granger 검정의 time-index gap 문제를 방지합니다.
+        _NON_MASK_COLS = frozenset(
+            {
+                "date",
+                "is_outlier",
+                "sentiment_status",
+                "is_backfill_valid",
+                "ingest_validation_reason",
+                "btc_direction_label",
+                "text_schema_version",
+            }
         )
+        analysis_df = master_df.copy()
+        _mask_cols = [c for c in analysis_df.columns if c not in _NON_MASK_COLS]
+        analysis_df.loc[analysis_df["is_outlier"], _mask_cols] = np.nan
+        masked_count = int(analysis_df["is_outlier"].sum())
+        masked_ratio = round(masked_count / len(analysis_df), 4) if len(analysis_df) else 0.0
         log_structured(
             logger,
             event="stats.outlier_filter_applied",
-            message="통계 분석용 이상값 필터를 적용했습니다.",
-            rows_before=len(master_df),
-            rows_after=len(analysis_df),
-            filtered_count=outlier_filtered_count,
-            filtered_ratio=outlier_filtered_ratio,
+            message="통계 분석용 이상값을 NaN으로 마스킹했습니다. (행은 유지)",
+            total_rows=len(analysis_df),
+            masked_count=masked_count,
+            masked_ratio=masked_ratio,
         )
 
         # Req 12: ADF·Granger 통계 검정 (로그만 남기고 파이프라인을 중단하지 않음)
@@ -308,7 +331,9 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
         stats_metadata = build_stats_metadata_payload(
             run_id=f"sentiment-join-{run_date}",
             generated_at_utc=datetime.now(timezone.utc).isoformat(),
-            adf=statistical_results.get("adf") if isinstance(statistical_results, dict) else None,
+            adf=statistical_results.get("stationarity_results")
+            if isinstance(statistical_results, dict)
+            else None,
             granger_results=(
                 statistical_results.get("granger", [])
                 if isinstance(statistical_results, dict)
@@ -326,8 +351,8 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             ),
             rows_before_outlier_filter=len(master_df),
             rows_after_outlier_filter=len(analysis_df),
-            outlier_filtered_count=outlier_filtered_count,
-            outlier_filtered_ratio=outlier_filtered_ratio,
+            outlier_filtered_count=masked_count,
+            outlier_filtered_ratio=masked_ratio,
             hybrid_signal_label=hybrid_signal_label,
             granger_eligible_rows=(
                 statistical_results.get("granger_eligible_rows")
@@ -340,6 +365,12 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
                 else False
             ),
             exclusion_counts=exclusion_counts if exclusion_counts else None,
+            granger_correction=(
+                _build_granger_correction(statistical_results)
+                if isinstance(statistical_results, dict)
+                and statistical_results.get("granger_executed")
+                else None
+            ),
         )
 
         validate_master(master_df)

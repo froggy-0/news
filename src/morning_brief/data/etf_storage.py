@@ -273,12 +273,14 @@ def build_stats_metadata_payload(
     granger_eligible_rows: int | None = None,
     granger_executed: bool = False,
     exclusion_counts: dict[str, int] | None = None,
+    granger_correction: dict[str, Any] | None = None,
 ) -> bytes:
     payload = {
         "run_id": run_id,
         "generated_at_utc": generated_at_utc,
         "adf": adf or {},
         "granger_results": granger_results,
+        "granger_correction": granger_correction or {},
         "vif_diagnostics": vif_diagnostics or [],
         "pca_summary": pca_summary or {},
         "rows_before_outlier_filter": rows_before_outlier_filter,

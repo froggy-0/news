@@ -76,11 +76,22 @@ class TestBuildAnalyticsPayload:
         assert "signalSentiment" not in payload
         assert "signalSentimentStatus" not in payload
 
-    def test_backfill_always_true(self) -> None:
+    def test_backfill_false_for_live_pipeline(self) -> None:
+        """D-3: 라이브 파이프라인 기본값은 _backfill=False."""
         payload = build_analytics_sentiment_payload(
             symbol="btc",
             run_date="2026-04-14",
             full_payload=_full_payload(),
+        )
+        assert payload["_backfill"] is False
+
+    def test_backfill_true_when_is_backfill_set(self) -> None:
+        """D-3: is_backfill=True 전달 시 _backfill=True."""
+        payload = build_analytics_sentiment_payload(
+            symbol="btc",
+            run_date="2026-04-14",
+            full_payload=_full_payload(),
+            is_backfill=True,
         )
         assert payload["_backfill"] is True
 
@@ -147,12 +158,12 @@ class TestValidateAnalyticsPayload:
         assert result["valid"] is True
         assert result["reason"] is None
 
-    def test_missing_backfill_rejected(self) -> None:
+    def test_backfill_false_passes_validation(self) -> None:
+        """D-3: _backfill=False도 키가 존재하면 valid (라이브 파이프라인 지원)."""
         payload = self._valid_payload()
         payload["_backfill"] = False
         result = validate_analytics_sentiment_payload(payload)
-        assert result["valid"] is False
-        assert result["reason"] == "missing_backfill_marker"
+        assert result["valid"] is True
 
     def test_absent_backfill_rejected(self) -> None:
         payload = self._valid_payload()

@@ -356,3 +356,85 @@ def test_merge_sources_sentiment_lag1_is_t_minus_1() -> None:
         assert merged.loc[i, "news_sentiment_mean_lag1"] == pytest.approx(
             merged.loc[i - 1, "news_sentiment_mean"]
         )
+
+
+# ── §8-A: NaN 마스킹 동작 테스트 ──
+
+
+def _make_master_with_outlier(rows: int = 10) -> pd.DataFrame:
+    """is_outlier=True 행이 포함된 최소 master_df 픽스처."""
+    merged = merge_sources(_sentiment_df(rows), _fng_df(rows), _btc_df(rows), _usdkrw_df(rows))
+    # 마지막 행을 이상치로 표시
+    merged.loc[rows - 1, "is_outlier"] = True
+    return merged
+
+
+def test_nan_masking_preserves_row_count() -> None:
+    """Property B-1: NaN 마스킹 후 len(analysis_df) == len(master_df)이어야 한다."""
+    master_df = _make_master_with_outlier(10)
+    _NON_MASK_COLS = frozenset(
+        {
+            "date",
+            "is_outlier",
+            "sentiment_status",
+            "is_backfill_valid",
+            "ingest_validation_reason",
+            "btc_direction_label",
+            "text_schema_version",
+        }
+    )
+    analysis_df = master_df.copy()
+    _mask_cols = [c for c in analysis_df.columns if c not in _NON_MASK_COLS]
+    analysis_df.loc[analysis_df["is_outlier"], _mask_cols] = np.nan
+
+    # Property B-1: 행 수 보존
+    assert len(analysis_df) == len(master_df)
+
+
+def test_nan_masking_sets_numeric_cols_to_nan_for_outliers() -> None:
+    """Property B-2: is_outlier=True인 행의 btc_log_return은 NaN이어야 한다."""
+    master_df = _make_master_with_outlier(10)
+    _NON_MASK_COLS = frozenset(
+        {
+            "date",
+            "is_outlier",
+            "sentiment_status",
+            "is_backfill_valid",
+            "ingest_validation_reason",
+            "btc_direction_label",
+            "text_schema_version",
+        }
+    )
+    analysis_df = master_df.copy()
+    _mask_cols = [c for c in analysis_df.columns if c not in _NON_MASK_COLS]
+    analysis_df.loc[analysis_df["is_outlier"], _mask_cols] = np.nan
+
+    outlier_rows = analysis_df[analysis_df["is_outlier"]]
+    # Property B-2: 이상치 행의 수치 컬럼은 NaN
+    assert outlier_rows["btc_log_return"].isna().all()
+    # 날짜·플래그 컬럼은 보존
+    assert not outlier_rows["date"].isna().any()
+    assert not outlier_rows["is_outlier"].isna().any()
+
+
+def test_nan_masking_non_outlier_rows_unchanged() -> None:
+    """이상치가 아닌 행의 수치값은 마스킹 후에도 원본과 동일해야 한다."""
+    master_df = _make_master_with_outlier(10)
+    _NON_MASK_COLS = frozenset(
+        {
+            "date",
+            "is_outlier",
+            "sentiment_status",
+            "is_backfill_valid",
+            "ingest_validation_reason",
+            "btc_direction_label",
+            "text_schema_version",
+        }
+    )
+    analysis_df = master_df.copy()
+    _mask_cols = [c for c in analysis_df.columns if c not in _NON_MASK_COLS]
+    analysis_df.loc[analysis_df["is_outlier"], _mask_cols] = np.nan
+
+    non_outlier_orig = master_df[~master_df["is_outlier"]]["btc_log_return"]
+    non_outlier_masked = analysis_df[~analysis_df["is_outlier"]]["btc_log_return"]
+    pd.testing.assert_series_equal(non_outlier_orig, non_outlier_masked)

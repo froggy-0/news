@@ -4,7 +4,10 @@ import pandas as pd
 import pytest
 
 from morning_brief.analysis.sentiment_join import statistical_tests
-from morning_brief.analysis.sentiment_join.statistical_tests import _apply_bh_correction
+from morning_brief.analysis.sentiment_join.statistical_tests import (
+    _apply_bh_correction,
+    _run_granger_all_lags,
+)
 
 
 def _sample_df(rows: int = 35) -> pd.DataFrame:
@@ -30,19 +33,32 @@ def test_run_statistical_tests_skips_when_rows_are_insufficient() -> None:
     assert results == {}
 
 
-def test_run_statistical_tests_adf_runs_at_30_rows(monkeypatch: pytest.MonkeyPatch) -> None:
-    """ADF는 30행 이상이면 실행된다."""
+_STATIONARY_RESULT = {
+    "adf_statistic": -3.0,
+    "adf_pvalue": 0.01,
+    "kpss_statistic": 0.1,
+    "kpss_pvalue": 0.10,
+    "stationary": True,
+    "conclusion": "stationary",
+}
+
+
+def test_run_statistical_tests_stationarity_runs_at_30_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADF+KPSS 공동검정은 30행 이상이면 실행된다."""
     monkeypatch.setattr(
         statistical_tests,
-        "_run_adf",
-        lambda series: {"statistic": -3.0, "pvalue": 0.01, "stationary": True},
+        "_run_stationarity",
+        lambda series: _STATIONARY_RESULT,
     )
     monkeypatch.setattr(statistical_tests, "_run_granger", lambda *args, **kwargs: None)
 
     results = statistical_tests.run_statistical_tests(_sample_df(rows=35))
 
-    assert "adf" in results
-    assert "btc_log_return" in results["adf"]
+    assert "stationarity_results" in results
+    assert "btc_log_return" in results["stationarity_results"]
+    assert "adf" not in results  # 구 키 제거 확인
 
 
 def test_run_statistical_tests_granger_skips_at_179_rows(
@@ -51,21 +67,21 @@ def test_run_statistical_tests_granger_skips_at_179_rows(
     """Property 6: 179행이면 Granger 미실행."""
     monkeypatch.setattr(
         statistical_tests,
-        "_run_adf",
-        lambda series: {"statistic": -3.0, "pvalue": 0.01, "stationary": True},
+        "_run_stationarity",
+        lambda series: _STATIONARY_RESULT,
     )
-    granger_calls: list[tuple] = []
+    pair_calls: list[tuple] = []
 
-    def fake_granger(df, predictor, target, lag):
-        granger_calls.append((predictor, target, lag))
-        return {"predictor": predictor, "target": target, "lag": lag, "pvalue": 0.04}
+    def fake_granger_all_lags(df, predictor, target, max_lag=3):
+        pair_calls.append((predictor, target))
+        return None  # skip
 
-    monkeypatch.setattr(statistical_tests, "_run_granger", fake_granger)
+    monkeypatch.setattr(statistical_tests, "_run_granger_all_lags", fake_granger_all_lags)
 
     results = statistical_tests.run_statistical_tests(_sample_df(rows=179))
 
     assert results["granger"] == []
-    assert granger_calls == []
+    assert pair_calls == []
     assert results["granger_executed"] is False
     assert results["granger_eligible_rows"] == 179
 
@@ -73,71 +89,82 @@ def test_run_statistical_tests_granger_skips_at_179_rows(
 def test_run_statistical_tests_granger_runs_at_180_rows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Property 6: 180행이면 Granger 실행. §4.3 역방향 포함 → 10쌍 × 3 lags = 30 호출."""
+    """Property 6: 180행이면 Granger 실행. §4.3 역방향 포함 → 10쌍 호출, 각 3 lag → 30 entry."""
     monkeypatch.setattr(
         statistical_tests,
-        "_run_adf",
-        lambda series: {"statistic": -3.0, "pvalue": 0.01, "stationary": True},
+        "_run_stationarity",
+        lambda series: _STATIONARY_RESULT,
     )
-    granger_calls: list[tuple] = []
+    pair_calls: list[tuple] = []
 
-    def fake_granger(df, predictor, target, lag):
-        granger_calls.append((predictor, target, lag))
-        return {
-            "predictor": predictor,
-            "target": target,
-            "lag": lag,
-            "pvalue": 0.04,
-            "pvalue_raw": 0.04,
-        }
+    def fake_granger_all_lags(df, predictor, target, max_lag=3):
+        pair_calls.append((predictor, target))
+        return [
+            {
+                "predictor": predictor,
+                "target": target,
+                "lag": lag,
+                "pvalue": 0.04,
+                "pvalue_raw": 0.04,
+            }
+            for lag in range(1, max_lag + 1)
+        ]
 
-    monkeypatch.setattr(statistical_tests, "_run_granger", fake_granger)
+    monkeypatch.setattr(statistical_tests, "_run_granger_all_lags", fake_granger_all_lags)
 
     results = statistical_tests.run_statistical_tests(_sample_df(rows=180))
 
-    # §4.3: 순방향(5) + 역방향(5) × 3 lags = 30 호출
-    assert len(granger_calls) == 30
+    # §4.3: 순방향(5) + 역방향(5) = 10쌍 호출, 각 3 lag → 30 entry
+    assert len(pair_calls) == 10
     assert len(results["granger"]) == 30
     assert results["granger_executed"] is True
     assert results["granger_eligible_rows"] == 180
 
 
-def test_run_statistical_tests_returns_multi_adf(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_statistical_tests_returns_stationarity_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """결과 dict에 stationarity_results 키가 존재하고 adf 키는 없어야 한다."""
     monkeypatch.setattr(
         statistical_tests,
-        "_run_adf",
-        lambda series: {"statistic": -3.0, "pvalue": 0.01, "stationary": True},
+        "_run_stationarity",
+        lambda series: _STATIONARY_RESULT,
     )
-    monkeypatch.setattr(statistical_tests, "_run_granger", lambda *args, **kwargs: None)
+    monkeypatch.setattr(statistical_tests, "_run_granger_all_lags", lambda *args, **kwargs: None)
 
     results = statistical_tests.run_statistical_tests(_sample_df())
 
-    assert isinstance(results["adf"], dict)
-    assert "btc_log_return" in results["adf"]
+    assert isinstance(results["stationarity_results"], dict)
+    assert "btc_log_return" in results["stationarity_results"]
+    assert "adf" not in results
 
 
-def test_run_statistical_tests_skips_missing_adf_column(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_statistical_tests_skips_missing_stationarity_column(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     df = _sample_df().drop(columns=["btc_long_short_ratio"])
     monkeypatch.setattr(
         statistical_tests,
-        "_run_adf",
-        lambda series: {"statistic": -3.0, "pvalue": 0.01, "stationary": True},
+        "_run_stationarity",
+        lambda series: _STATIONARY_RESULT,
     )
-    monkeypatch.setattr(statistical_tests, "_run_granger", lambda *args, **kwargs: None)
+    monkeypatch.setattr(statistical_tests, "_run_granger_all_lags", lambda *args, **kwargs: None)
 
     results = statistical_tests.run_statistical_tests(df)
 
-    assert "btc_long_short_ratio" not in results["adf"]
-    assert "btc_log_return" in results["adf"]
+    assert "btc_long_short_ratio" not in results["stationarity_results"]
+    assert "btc_log_return" in results["stationarity_results"]
 
 
-def test_run_statistical_tests_isolates_adf_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_statistical_tests_isolates_stationarity_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(
         statistical_tests,
-        "_run_adf",
+        "_run_stationarity",
         lambda series: (_ for _ in ()).throw(RuntimeError("boom")),
     )
-    monkeypatch.setattr(statistical_tests, "_run_granger", lambda *args, **kwargs: None)
+    monkeypatch.setattr(statistical_tests, "_run_granger_all_lags", lambda *args, **kwargs: None)
 
     results = statistical_tests.run_statistical_tests(_sample_df())
 
@@ -235,7 +262,7 @@ def test_apply_bh_correction_single_entry_preserves_significance() -> None:
 
 
 def test_ensure_stationary_returns_series_when_stationary(monkeypatch: pytest.MonkeyPatch) -> None:
-    """§4.1: ADF p<0.05인 시계열은 원본을 그대로 반환해야 한다."""
+    """§4.1: ADF+KPSS 공동검정 통과 시계열은 원본을 그대로 반환해야 한다."""
     import numpy as np
 
     from morning_brief.analysis.sentiment_join.statistical_tests import _ensure_stationary
@@ -244,15 +271,102 @@ def test_ensure_stationary_returns_series_when_stationary(monkeypatch: pytest.Mo
         "morning_brief.analysis.sentiment_join.statistical_tests.MIN_ROWS_FOR_ADF", 5
     )
     series = pd.Series(np.random.randn(30))
-    # ADF를 monkeypatch
-    import statsmodels.tsa.stattools as _sts
-
-    monkeypatch.setattr(_sts, "adfuller", lambda s, **kw: (-5.0, 0.001, None, None, {}, None))
+    # _run_stationarity를 monkeypatch로 정상 판정
+    monkeypatch.setattr(
+        statistical_tests,
+        "_run_stationarity",
+        lambda s: _STATIONARY_RESULT,
+    )
 
     result, is_stationary, was_differenced = _ensure_stationary(series)
 
     assert is_stationary is True
     assert was_differenced is False
+
+
+# ── §1 KPSS 공동검정 신규 케이스 ──
+
+
+def test_run_stationarity_stationary_when_adf_and_kpss_agree(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Property C-1 (정상): ADF p<0.05 + KPSS p>0.05 → conclusion='stationary', stationary=True."""
+    import statsmodels.tsa.stattools as _sts
+
+    monkeypatch.setattr(_sts, "adfuller", lambda s, **kw: (-5.0, 0.001, None, None, {}, None))
+    monkeypatch.setattr(_sts, "kpss", lambda s, **kw: (0.1, 0.10, None, {}))
+
+    from morning_brief.analysis.sentiment_join.statistical_tests import _run_stationarity
+
+    result = _run_stationarity(pd.Series([0.1] * 50))
+
+    assert result["stationary"] is True
+    assert result["conclusion"] == "stationary"
+
+
+def test_run_stationarity_non_stationary_when_both_reject(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADF p>=0.05 + KPSS p<=0.05 → conclusion='non_stationary', stationary=False."""
+    import statsmodels.tsa.stattools as _sts
+
+    monkeypatch.setattr(_sts, "adfuller", lambda s, **kw: (-1.0, 0.30, None, None, {}, None))
+    monkeypatch.setattr(_sts, "kpss", lambda s, **kw: (0.5, 0.01, None, {}))
+
+    from morning_brief.analysis.sentiment_join.statistical_tests import _run_stationarity
+
+    result = _run_stationarity(pd.Series([float(i) for i in range(50)]))
+
+    assert result["stationary"] is False
+    assert result["conclusion"] == "non_stationary"
+
+
+def test_run_stationarity_trend_stationary_on_disagreement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Property C-1 (불일치): ADF p<0.05 + KPSS p<=0.05 → conclusion='trend_stationary', stationary=False."""
+    import statsmodels.tsa.stattools as _sts
+
+    monkeypatch.setattr(_sts, "adfuller", lambda s, **kw: (-5.0, 0.001, None, None, {}, None))
+    monkeypatch.setattr(_sts, "kpss", lambda s, **kw: (0.5, 0.01, None, {}))
+
+    from morning_brief.analysis.sentiment_join.statistical_tests import _run_stationarity
+
+    result = _run_stationarity(pd.Series([0.1] * 50))
+
+    assert result["stationary"] is False
+    assert result["conclusion"] == "trend_stationary"
+
+
+def test_granger_skipped_when_stationarity_is_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Property C-2: stationary=False인 predictor는 어떤 lag에도 Granger 결과를 생성하지 않아야 한다."""
+    import statsmodels.tsa.stattools as _sts
+
+    # ADF+KPSS 불일치 → stationary=False
+    monkeypatch.setattr(_sts, "adfuller", lambda s, **kw: (-5.0, 0.001, None, None, {}, None))
+    monkeypatch.setattr(_sts, "kpss", lambda s, **kw: (0.5, 0.01, None, {}))
+
+    import numpy as np
+
+    rng = np.random.default_rng(0)
+    n = 200
+    dates = pd.date_range("2025-01-01", periods=n, freq="D").strftime("%Y-%m-%d").tolist()
+    df = pd.DataFrame(
+        {
+            "date": dates,
+            "btc_log_return": rng.normal(0, 0.02, n),
+            "news_sentiment_mean_lag1": rng.normal(0, 0.1, n),
+        }
+    )
+
+    from morning_brief.analysis.sentiment_join.statistical_tests import _run_granger
+
+    entry = _run_granger(df, "news_sentiment_mean_lag1", "btc_log_return", lag=1)
+
+    # trend_stationary → stationary=False → Granger skip → None 반환
+    assert entry is None
 
 
 def test_granger_pairs_use_lag1_predictors() -> None:
@@ -275,23 +389,336 @@ def test_run_statistical_tests_granger_entries_have_direction(
     """§4.3: Granger 결과 각 항목에 direction 필드가 있어야 한다."""
     monkeypatch.setattr(
         statistical_tests,
-        "_run_adf",
-        lambda series: {"statistic": -3.0, "pvalue": 0.01, "stationary": True},
+        "_run_stationarity",
+        lambda series: _STATIONARY_RESULT,
     )
 
-    def fake_granger(df, predictor, target, lag):
-        return {
-            "predictor": predictor,
-            "target": target,
-            "lag": lag,
-            "pvalue": 0.10,
-            "pvalue_raw": 0.10,
-        }
+    def fake_granger_all_lags(df, predictor, target, max_lag=3):
+        return [
+            {
+                "predictor": predictor,
+                "target": target,
+                "lag": lag,
+                "pvalue": 0.10,
+                "pvalue_raw": 0.10,
+            }
+            for lag in range(1, max_lag + 1)
+        ]
 
-    monkeypatch.setattr(statistical_tests, "_run_granger", fake_granger)
+    monkeypatch.setattr(statistical_tests, "_run_granger_all_lags", fake_granger_all_lags)
 
     results = statistical_tests.run_statistical_tests(_sample_df(rows=180))
 
     for entry in results["granger"]:
         assert "direction" in entry
         assert entry["direction"] in ("forward", "reverse")
+
+
+# ── §5·§8: 쌍별 유효 행 수 + 달력 gap 진단 테스트 ──
+
+
+def _sample_df_with_gap(rows: int = 200, gap_start: int = 50, gap_days: int = 3) -> pd.DataFrame:
+    """중간에 달력 gap이 있는 샘플 DataFrame 생성."""
+    import numpy as np
+
+    dates_before = pd.date_range("2025-01-01", periods=gap_start, freq="D")
+    dates_after = pd.date_range(
+        dates_before[-1] + pd.Timedelta(days=gap_days + 1), periods=rows - gap_start, freq="D"
+    )
+    dates = list(dates_before.strftime("%Y-%m-%d")) + list(dates_after.strftime("%Y-%m-%d"))
+    n = len(dates)
+    rng = np.random.default_rng(42)
+    return pd.DataFrame(
+        {
+            "date": dates,
+            "news_sentiment_mean": rng.normal(0, 0.1, n),
+            "news_sentiment_mean_lag1": rng.normal(0, 0.1, n),
+            "fng_value": pd.array([55] * n, dtype="Int64"),
+            "fng_value_lag1": [55.0] * n,
+            "funding_rate_lag1": [0.001] * n,
+            "btc_log_return": rng.normal(0, 0.02, n),
+            "btc_long_short_ratio": [0.9] * n,
+            "btc_long_short_ratio_lag1": [0.9] * n,
+            "etf_net_inflow_usd_lag1": [1000000.0] * n,
+        }
+    )
+
+
+def test_calendar_span_returns_correct_days() -> None:
+    """_calendar_span이 날짜 시리즈의 max-min 일수를 반환해야 한다."""
+    from morning_brief.analysis.sentiment_join.statistical_tests import _calendar_span
+
+    dates = pd.Series(["2026-01-01", "2026-01-05", "2026-01-10"])
+    assert _calendar_span(dates) == 9  # 10 - 1
+
+
+def test_calendar_span_returns_zero_for_single_date() -> None:
+    from morning_brief.analysis.sentiment_join.statistical_tests import _calendar_span
+
+    assert _calendar_span(pd.Series(["2026-01-01"])) == 0
+
+
+def test_max_consecutive_gap_detects_gap() -> None:
+    """_max_consecutive_gap이 불연속 구간의 최대 갭 일수를 반환해야 한다."""
+    from morning_brief.analysis.sentiment_join.statistical_tests import _max_consecutive_gap
+
+    # 2026-01-01, 2026-01-02, 2026-01-05 → gap=3
+    dates = pd.Series(["2026-01-01", "2026-01-02", "2026-01-05"])
+    assert _max_consecutive_gap(dates) == 3
+
+
+def test_max_consecutive_gap_returns_one_for_contiguous() -> None:
+    """연속된 날짜에서는 최대 갭이 1이어야 한다."""
+    from morning_brief.analysis.sentiment_join.statistical_tests import _max_consecutive_gap
+
+    dates = pd.Series(pd.date_range("2026-01-01", periods=10, freq="D").strftime("%Y-%m-%d"))
+    assert _max_consecutive_gap(dates) == 1
+
+
+def test_run_granger_returns_effective_rows_and_gap_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Property B-4: effective_rows, calendar_span_days, max_consecutive_gap_days 필드가 존재해야 한다."""
+    import numpy as np
+
+    rng = np.random.default_rng(0)
+    n = 200
+    dates = pd.date_range("2025-01-01", periods=n, freq="D").strftime("%Y-%m-%d").tolist()
+    df = pd.DataFrame(
+        {
+            "date": dates,
+            "btc_log_return": rng.normal(0, 0.02, n),
+            "news_sentiment_mean_lag1": rng.normal(0, 0.1, n),
+        }
+    )
+
+    import statsmodels.tsa.stattools as _sts
+
+    monkeypatch.setattr(_sts, "adfuller", lambda s, **kw: (-5.0, 0.001, None, None, {}, None))
+
+    from morning_brief.analysis.sentiment_join.statistical_tests import _run_granger
+
+    entry = _run_granger(df, "news_sentiment_mean_lag1", "btc_log_return", lag=1)
+
+    assert entry is not None
+    assert "effective_rows" in entry
+    assert "calendar_span_days" in entry
+    assert "max_consecutive_gap_days" in entry
+    assert entry["effective_rows"] > 0
+
+
+def test_run_granger_adds_warning_for_non_contiguous_dates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Property B-3: max_consecutive_gap_days > 1이면 warning='non_contiguous_dates'가 존재해야 한다."""
+    import numpy as np
+
+    rng = np.random.default_rng(1)
+    # 중간에 5일 gap이 있는 날짜 시리즈
+    dates_a = pd.date_range("2025-01-01", periods=100, freq="D")
+    dates_b = pd.date_range("2025-05-01", periods=100, freq="D")  # gap ~100일
+    dates = list(dates_a.strftime("%Y-%m-%d")) + list(dates_b.strftime("%Y-%m-%d"))
+    n = len(dates)
+    df = pd.DataFrame(
+        {
+            "date": dates,
+            "btc_log_return": rng.normal(0, 0.02, n),
+            "news_sentiment_mean_lag1": rng.normal(0, 0.1, n),
+        }
+    )
+
+    import statsmodels.tsa.stattools as _sts
+
+    monkeypatch.setattr(_sts, "adfuller", lambda s, **kw: (-5.0, 0.001, None, None, {}, None))
+
+    from morning_brief.analysis.sentiment_join.statistical_tests import _run_granger
+
+    entry = _run_granger(df, "news_sentiment_mean_lag1", "btc_log_return", lag=1)
+
+    assert entry is not None
+    assert entry["max_consecutive_gap_days"] > 1
+    assert entry.get("warning") == "non_contiguous_dates"
+
+
+# ── PR-D: _run_granger_all_lags / _select_optimal_lag / analytics_contract 테스트 ──
+
+
+def test_run_granger_all_lags_returns_list_with_all_lags(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Property D-1: grangercausalitytests는 max_lag=3으로 단 1회만 호출되어야 한다."""
+    import numpy as np
+
+    rng = np.random.default_rng(42)
+    n = 200
+    dates = pd.date_range("2025-01-01", periods=n, freq="D").strftime("%Y-%m-%d").tolist()
+    df = pd.DataFrame(
+        {
+            "date": dates,
+            "btc_log_return": rng.normal(0, 0.02, n),
+            "news_sentiment_mean_lag1": rng.normal(0, 0.1, n),
+        }
+    )
+
+    import statsmodels.tsa.stattools as _sts
+
+    gc_call_count = 0
+
+    original_gc = _sts.grangercausalitytests
+
+    def counting_gc(data, maxlag, verbose=False):
+        nonlocal gc_call_count
+        gc_call_count += 1
+        return original_gc(data, maxlag=maxlag, verbose=False)
+
+    monkeypatch.setattr(_sts, "grangercausalitytests", counting_gc)
+    monkeypatch.setattr(_sts, "adfuller", lambda s, **kw: (-5.0, 0.001, None, None, {}, None))
+    monkeypatch.setattr(_sts, "kpss", lambda s, **kw: (0.1, 0.10, None, {}))
+
+    entries = _run_granger_all_lags(df, "news_sentiment_mean_lag1", "btc_log_return", max_lag=3)
+
+    # Property D-1: grangercausalitytests 단 1회 호출
+    assert gc_call_count == 1
+    assert entries is not None
+    assert len(entries) == 3
+    assert [e["lag"] for e in entries] == [1, 2, 3]
+
+
+def test_run_granger_all_lags_entries_have_f_statistic_and_df(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """§6·§7: 각 entry에 f_statistic, df_num, df_denom이 존재해야 한다."""
+    import numpy as np
+
+    rng = np.random.default_rng(7)
+    n = 200
+    dates = pd.date_range("2025-01-01", periods=n, freq="D").strftime("%Y-%m-%d").tolist()
+    df = pd.DataFrame(
+        {
+            "date": dates,
+            "btc_log_return": rng.normal(0, 0.02, n),
+            "news_sentiment_mean_lag1": rng.normal(0, 0.1, n),
+        }
+    )
+
+    import statsmodels.tsa.stattools as _sts
+
+    monkeypatch.setattr(_sts, "adfuller", lambda s, **kw: (-5.0, 0.001, None, None, {}, None))
+    monkeypatch.setattr(_sts, "kpss", lambda s, **kw: (0.1, 0.10, None, {}))
+
+    entries = _run_granger_all_lags(df, "news_sentiment_mean_lag1", "btc_log_return", max_lag=3)
+
+    assert entries is not None
+    for entry in entries:
+        assert "f_statistic" in entry
+        assert "df_num" in entry
+        assert "df_denom" in entry
+        assert "optimal_lag" in entry
+        assert "granger_primary" in entry
+        assert "inference" in entry
+        assert entry["inference"] == "ssr_ftest_ols"
+
+
+def test_run_granger_all_lags_granger_primary_unique_per_pair(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Property D-2: granger_primary=True인 entry는 각 (predictor, target) 방향당 정확히 1개여야 한다."""
+    import numpy as np
+
+    rng = np.random.default_rng(99)
+    n = 200
+    dates = pd.date_range("2025-01-01", periods=n, freq="D").strftime("%Y-%m-%d").tolist()
+    df = pd.DataFrame(
+        {
+            "date": dates,
+            "btc_log_return": rng.normal(0, 0.02, n),
+            "news_sentiment_mean_lag1": rng.normal(0, 0.1, n),
+        }
+    )
+
+    import statsmodels.tsa.stattools as _sts
+
+    monkeypatch.setattr(_sts, "adfuller", lambda s, **kw: (-5.0, 0.001, None, None, {}, None))
+    monkeypatch.setattr(_sts, "kpss", lambda s, **kw: (0.1, 0.10, None, {}))
+
+    entries = _run_granger_all_lags(df, "news_sentiment_mean_lag1", "btc_log_return", max_lag=3)
+
+    assert entries is not None
+    primary_count = sum(1 for e in entries if e["granger_primary"])
+    # Property D-2: 한 쌍당 granger_primary=True는 정확히 1개
+    assert primary_count == 1
+
+
+# ── PR-D: analytics_contract _backfill 파라미터화 테스트 ──
+
+
+def test_build_analytics_sentiment_payload_default_is_not_backfill() -> None:
+    """build_analytics_sentiment_payload 기본값은 _backfill=False여야 한다."""
+    from morning_brief.data.storage.analytics_contract import build_analytics_sentiment_payload
+
+    payload = build_analytics_sentiment_payload(
+        symbol="btc",
+        run_date="2026-01-01",
+        full_payload={
+            "meta": {
+                "sentimentStatus": "ok",
+                "newsSentiment": {"mean": 0.1, "std": 0.05, "count": 5},
+            }
+        },
+    )
+    assert payload["_backfill"] is False
+
+
+def test_build_analytics_sentiment_payload_is_backfill_true() -> None:
+    """is_backfill=True를 전달하면 _backfill=True여야 한다."""
+    from morning_brief.data.storage.analytics_contract import build_analytics_sentiment_payload
+
+    payload = build_analytics_sentiment_payload(
+        symbol="btc",
+        run_date="2026-01-01",
+        full_payload={
+            "meta": {
+                "sentimentStatus": "ok",
+                "newsSentiment": {"mean": 0.1, "std": 0.05, "count": 5},
+            }
+        },
+        is_backfill=True,
+    )
+    assert payload["_backfill"] is True
+
+
+def test_validate_analytics_payload_passes_with_backfill_false() -> None:
+    """Property D-3: _backfill=False여도 키가 존재하면 missing_backfill_marker 오류 없어야 한다."""
+    from morning_brief.data.storage.analytics_contract import validate_analytics_sentiment_payload
+
+    payload = {
+        "schemaVersion": "v1",
+        "producer": "public_site.publish_public_brief",
+        "generatedAt": "2026-01-01T00:00:00Z",
+        "date": "2026-01-01",
+        "symbol": "btc",
+        "sentimentStatus": "ok",
+        "newsSentiment": {"mean": 0.1, "std": 0.05, "count": 5},
+        "_backfill": False,
+    }
+    result = validate_analytics_sentiment_payload(payload)
+    assert result["valid"] is True
+    assert result["reason"] is None
+
+
+def test_validate_analytics_payload_fails_without_backfill_key() -> None:
+    """_backfill 키 자체가 없으면 missing_backfill_marker여야 한다."""
+    from morning_brief.data.storage.analytics_contract import validate_analytics_sentiment_payload
+
+    payload = {
+        "schemaVersion": "v1",
+        "producer": "public_site.publish_public_brief",
+        "generatedAt": "2026-01-01T00:00:00Z",
+        "date": "2026-01-01",
+        "symbol": "btc",
+        "sentimentStatus": "ok",
+        "newsSentiment": {"mean": 0.1, "std": 0.05, "count": 5},
+    }
+    result = validate_analytics_sentiment_payload(payload)
+    assert result["valid"] is False
+    assert result["reason"] == "missing_backfill_marker"

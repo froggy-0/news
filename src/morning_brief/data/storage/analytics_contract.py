@@ -49,8 +49,14 @@ def build_analytics_sentiment_payload(
     symbol: str,
     run_date: str,
     full_payload: dict[str, Any],
+    is_backfill: bool = False,
 ) -> AnalyticsSentimentPayload:
-    """curated full payload → analytics 최소 JSON을 파생한다."""
+    """curated full payload → analytics 최소 JSON을 파생한다.
+
+    is_backfill: 라이브 파이프라인은 False(기본값), 백필 경로는 True.
+    _backfill 필드를 호출자가 제어할 수 있어 validate_analytics_sentiment_payload의
+    키 존재 여부 검증을 통과하면서도 실시간/백필을 구분합니다.
+    """
     meta = full_payload.get("meta", {})
     raw_sentiment = meta.get("newsSentiment", {})
     if not isinstance(raw_sentiment, dict):
@@ -68,7 +74,7 @@ def build_analytics_sentiment_payload(
             "std": raw_sentiment.get("std"),
             "count": raw_sentiment.get("count", 0),
         },
-        _backfill=True,
+        _backfill=is_backfill,
     )
 
 
@@ -76,8 +82,8 @@ def validate_analytics_sentiment_payload(
     payload: dict[str, Any],
 ) -> AnalyticsValidationResult:
     """analytics payload가 계약을 만족하는지 검증한다."""
-    # _backfill 필수
-    if not payload.get("_backfill"):
+    # _backfill 키 존재 필수 (값이 False여도 키가 있으면 통과 — 실시간 파이프라인 지원)
+    if "_backfill" not in payload:
         return AnalyticsValidationResult(valid=False, reason="missing_backfill_marker")
 
     # schemaVersion 지원 여부

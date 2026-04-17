@@ -87,14 +87,32 @@ def test_fetch_r2_sentiment_sets_nan_for_skipped_status(
     assert df.loc[0, "sentiment_status"] == "skipped"
 
 
-def test_fetch_r2_sentiment_rejects_missing_backfill(
+def test_fetch_r2_sentiment_accepts_backfill_false(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Req 5.2: _backfill: true가 없으면 해당 날짜 제외."""
+    """D-3: _backfill=False(라이브 파이프라인)도 키가 존재하면 수집 대상."""
     monkeypatch.setattr(
         r2_sentiment,
         "get_json_with_retry",
         lambda *args, **kwargs: _analytics_payload(backfill=False),
+    )
+
+    df = r2_sentiment.fetch_r2_sentiment(["2026-04-10"], "https://bucket.example", 2)
+
+    assert bool(df.loc[0, "is_backfill_valid"]) is True
+
+
+def test_fetch_r2_sentiment_rejects_absent_backfill_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Req 5.2: _backfill 키 자체가 없으면 해당 날짜 제외."""
+    payload_without_key = _analytics_payload()
+    del payload_without_key["_backfill"]
+
+    monkeypatch.setattr(
+        r2_sentiment,
+        "get_json_with_retry",
+        lambda *args, **kwargs: payload_without_key,
     )
 
     df = r2_sentiment.fetch_r2_sentiment(["2026-04-10"], "https://bucket.example", 2)

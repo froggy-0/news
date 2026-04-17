@@ -33,33 +33,83 @@ ADF_TARGETS = [
     "news_sentiment_mean_lag1",
     "fng_value_lag1",
     "funding_rate",
+    "funding_rate_lag1",
     "oi_change_pct_lag1",
     "btc_long_short_ratio",
+    "btc_long_short_ratio_lag1",
     "etf_net_inflow_usd_lag1",
 ]
 
 
-def _run_adf(series: pd.Series) -> dict[str, Any]:
-    from statsmodels.tsa.stattools import adfuller
+def _calendar_span(date_series: pd.Series) -> int:
+    """날짜 시계열의 달력 span 일수 (max - min)."""
+    dates = pd.to_datetime(date_series.dropna(), errors="coerce").dropna()
+    if len(dates) < 2:
+        return 0
+    return int((dates.max() - dates.min()).days)
 
-    stat, pvalue, *_ = adfuller(series.dropna())
-    stationary = bool(pvalue < 0.05)
+
+def _max_consecutive_gap(date_series: pd.Series) -> int:
+    """연속 날짜 간 최대 갭 일수."""
+    dates = pd.to_datetime(date_series.dropna(), errors="coerce").dropna().sort_values()
+    if len(dates) < 2:
+        return 0
+    return int(dates.diff().dropna().dt.days.max())
+
+
+def _run_stationarity(series: pd.Series) -> dict[str, Any]:
+    """ADF + KPSS 공동검정. 둘 다 동의할 때만 확정 판정.
+
+    판정 기준 (표준 관행):
+    - adf_p < 0.05 AND kpss_p > 0.05 → "stationary"
+    - adf_p >= 0.05 AND kpss_p <= 0.05 → "non_stationary"
+    - adf_p < 0.05 AND kpss_p <= 0.05 → "trend_stationary" (불일치)
+    - adf_p >= 0.05 AND kpss_p > 0.05 → "difference_stationary" (불일치)
+
+    불일치 케이스는 stationary=False로 Granger gate에서 차단됩니다.
+    ADF보다 KPSS를 병행함으로써 fng_value 같은 bounded persistent series의
+    false positive를 줄입니다.
+    """
+    from statsmodels.tsa.stattools import adfuller, kpss
+
+    s = series.dropna()
+    adf_stat, adf_p, *_ = adfuller(s)
+    kpss_stat, kpss_p, *_ = kpss(s, regression="c", nlags="auto")
+
+    if adf_p < 0.05 and kpss_p > 0.05:
+        conclusion = "stationary"
+    elif adf_p >= 0.05 and kpss_p <= 0.05:
+        conclusion = "non_stationary"
+    elif adf_p < 0.05 and kpss_p <= 0.05:
+        conclusion = "trend_stationary"
+    else:
+        conclusion = "difference_stationary"
+
+    stationary = conclusion == "stationary"
     if not stationary:
         log_structured(
             logger,
-            event="stats.adf_non_stationary",
-            message="시계열이 정상성 조건(p<0.05)을 만족하지 않습니다.",
+            event="stats.stationarity_non_stationary",
+            message="시계열이 정상성 조건을 만족하지 않습니다.",
             level=logging.WARNING,
-            pvalue=float(pvalue),
-            statistic=float(stat),
+            adf_pvalue=float(adf_p),
+            kpss_pvalue=float(kpss_p),
+            conclusion=conclusion,
         )
-    return {"statistic": float(stat), "pvalue": float(pvalue), "stationary": stationary}
+    return {
+        "adf_statistic": float(adf_stat),
+        "adf_pvalue": float(adf_p),
+        "kpss_statistic": float(kpss_stat),
+        "kpss_pvalue": float(kpss_p),
+        "stationary": stationary,
+        "conclusion": conclusion,
+    }
 
 
 def _ensure_stationary(
     series: pd.Series,
 ) -> tuple[pd.Series, bool, bool]:
-    """ADF 검정 후 비정상이면 첫 차분 적용.
+    """ADF+KPSS 공동검정 후 비정상이면 첫 차분 적용.
 
     Returns:
         (series_to_use, is_stationary, was_differenced)
@@ -67,34 +117,51 @@ def _ensure_stationary(
         - is_stationary: 최종 정상성 여부 (False면 Granger 건너뜀)
         - was_differenced: 차분 적용 여부
     """
-    from statsmodels.tsa.stattools import adfuller
 
     s = pd.to_numeric(series, errors="coerce").dropna()
     if len(s) < MIN_ROWS_FOR_ADF:
         # 데이터 부족 → pass-through (Granger에서 행 수 부족으로 자연스럽게 skip)
         return series, True, False
 
-    _, pvalue, *_ = adfuller(s)
-    if pvalue < 0.05:
+    adf_result = _run_stationarity(s)
+    if adf_result["stationary"]:
         return series, True, False
 
     # 비정상 → 첫 차분 후 재검정
     diff_s = series.diff()
     s_diff = pd.to_numeric(diff_s, errors="coerce").dropna()
     if len(s_diff) >= MIN_ROWS_FOR_ADF:
-        _, pvalue_diff, *_ = adfuller(s_diff)
-        if pvalue_diff < 0.05:
+        diff_result = _run_stationarity(s_diff)
+        if diff_result["stationary"]:
             return diff_s, True, True
 
     return series, False, False
 
 
-def _run_granger(
+def _select_optimal_lag(work: pd.DataFrame, max_lag: int = 5) -> int:
+    """VAR AIC 기준 최적 lag 선택. 실패 시 1 반환."""
+    from statsmodels.tsa.vector_ar.var_model import VAR
+
+    try:
+        cap = max(1, min(max_lag, len(work) // 10))
+        res = VAR(work.astype(float)).select_order(maxlags=cap)
+        return max(int(res.aic), 1)
+    except Exception:
+        return 1
+
+
+def _run_granger_all_lags(
     df: pd.DataFrame,
     predictor: str,
     target: str,
-    lag: int,
-) -> dict[str, Any] | None:
+    max_lag: int = 3,
+) -> list[dict[str, Any]] | None:
+    """grangercausalitytests 단 1회 호출로 lag 1…max_lag 전체 결과 반환.
+
+    §6·§7: F-statistic, df_num, df_denom 기록.
+    §2: optimal_lag(AIC 기반), granger_primary 플래그.
+    §5·§8: effective_rows, calendar_span_days, max_consecutive_gap_days.
+    """
     from statsmodels.tsa.stattools import grangercausalitytests
 
     if predictor not in df.columns or target not in df.columns:
@@ -109,7 +176,7 @@ def _run_granger(
     if len(work) < MIN_ROWS_FOR_GRANGER:
         return None
 
-    # §4.1: 정상성 gate — predictor·target 모두 ADF p<0.05 통과해야 실행
+    # §4.1: 정상성 gate — predictor·target 모두 ADF+KPSS 통과해야 실행
     pred_series, pred_stationary, pred_differenced = _ensure_stationary(work[predictor])
     tgt_series, tgt_stationary, tgt_differenced = _ensure_stationary(work[target])
 
@@ -117,11 +184,10 @@ def _run_granger(
         log_structured(
             logger,
             event="stats.granger_skipped_non_stationary",
-            message="비정상 시계열(ADF 비통과)이 포함되어 Granger 검정을 건너뜁니다.",
+            message="비정상 시계열이 포함되어 Granger 검정을 건너뜁니다.",
             level=logging.INFO,
             predictor=predictor,
             target=target,
-            lag=lag,
             pred_stationary=pred_stationary,
             tgt_stationary=tgt_stationary,
         )
@@ -135,8 +201,7 @@ def _run_granger(
         work = work_stationary
 
     try:
-        result = grangercausalitytests(work, maxlag=lag, verbose=False)
-        pvalue = float(result[lag][0]["ssr_ftest"][1])
+        gc_result = grangercausalitytests(work, maxlag=max_lag, verbose=False)
     except Exception as exc:
         log_structured(
             logger,
@@ -145,21 +210,63 @@ def _run_granger(
             level=logging.WARNING,
             predictor=predictor,
             target=target,
-            lag=lag,
             reason=str(exc),
         )
         return None
 
-    # §4.2: pvalue_raw 기록 (BH 보정은 run_statistical_tests에서 일괄 적용)
-    entry: dict[str, Any] = {
-        "predictor": predictor,
-        "target": target,
-        "lag": lag,
-        "pvalue": pvalue,
-        "pvalue_raw": pvalue,
-        "significant": pvalue < 0.05,
-    }
-    return entry
+    # §5·§8: 쌍별 유효 행 수 + 달력 gap 진단 (페어당 1회 계산)
+    if "date" in df.columns:
+        span_dates = df.loc[work.index, "date"]
+        calendar_span = _calendar_span(span_dates)
+        gap_days = _max_consecutive_gap(span_dates)
+    else:
+        calendar_span, gap_days = 0, 0
+
+    # §2: AIC 기반 최적 lag
+    optimal_lag = _select_optimal_lag(work, max_lag=max_lag)
+
+    entries: list[dict[str, Any]] = []
+    for lag in range(1, max_lag + 1):
+        pvalue = float(gc_result[lag][0]["ssr_ftest"][1])
+        entry: dict[str, Any] = {
+            "predictor": predictor,
+            "target": target,
+            "lag": lag,
+            "pvalue": pvalue,
+            "pvalue_raw": pvalue,
+            "significant": pvalue < 0.05,
+            "f_statistic": float(gc_result[lag][0]["ssr_ftest"][0]),
+            "df_num": int(gc_result[lag][0]["ssr_ftest"][2]),
+            "df_denom": int(gc_result[lag][0]["ssr_ftest"][3]),
+            "effective_rows": len(work),
+            "calendar_span_days": calendar_span,
+            "max_consecutive_gap_days": gap_days,
+            "optimal_lag": optimal_lag,
+            "granger_primary": lag == optimal_lag,
+            "inference": "ssr_ftest_ols",
+        }
+        if gap_days > 1:
+            entry["warning"] = "non_contiguous_dates"
+        entries.append(entry)
+
+    return entries
+
+
+# _run_granger는 단일 lag 결과가 필요한 테스트 호환성을 위해 유지.
+# 내부적으로 _run_granger_all_lags를 호출하고 해당 lag 항목만 반환합니다.
+def _run_granger(
+    df: pd.DataFrame,
+    predictor: str,
+    target: str,
+    lag: int,
+) -> dict[str, Any] | None:
+    entries = _run_granger_all_lags(df, predictor, target, max_lag=lag)
+    if entries is None:
+        return None
+    for e in entries:
+        if e["lag"] == lag:
+            return e
+    return None
 
 
 def _apply_bh_correction(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -176,6 +283,7 @@ def _apply_bh_correction(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return entries
 
     m = len(entries)
+    bonferroni_threshold = round(0.05 / m, 10)
     # p-value 오름차순 정렬 인덱스
     order = sorted(range(m), key=lambda i: entries[i]["pvalue"])
 
@@ -194,6 +302,7 @@ def _apply_bh_correction(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for rank_0, orig_idx in enumerate(order):
         corrected[orig_idx]["pvalue_adjusted"] = round(adj[rank_0], 10)
         corrected[orig_idx]["significant"] = adj[rank_0] < 0.05
+        corrected[orig_idx]["bonferroni_threshold"] = bonferroni_threshold
 
     return corrected
 
@@ -220,36 +329,37 @@ def run_statistical_tests(df: pd.DataFrame) -> dict[str, Any]:
     if "btc_log_return" not in df.columns or df["btc_log_return"].dropna().empty:
         return results
 
-    # ── ADF 검정 (MIN_ROWS_FOR_ADF 기준) ──
-    adf_results: dict[str, Any] = {}
+    # ── ADF+KPSS 공동 정상성 검정 (MIN_ROWS_FOR_ADF 기준) ──
+    stationarity_results: dict[str, Any] = {}
     for col in ADF_TARGETS:
         if col not in df.columns or df[col].dropna().shape[0] < MIN_ROWS_FOR_ADF:
             continue
         try:
-            adf_results[col] = _run_adf(df[col])
+            stationarity_results[col] = _run_stationarity(df[col])
         except Exception as exc:
             log_structured(
                 logger,
-                event="stats.adf_error",
-                message="ADF 검정 실행 중 오류가 발생했습니다.",
+                event="stats.stationarity_error",
+                message="정상성 검정(ADF+KPSS) 실행 중 오류가 발생했습니다.",
                 level=logging.WARNING,
                 column=col,
                 reason=str(exc),
             )
-    results["adf"] = adf_results
+    results["stationarity_results"] = stationarity_results
 
     # ── Granger 검정 (MIN_ROWS_FOR_GRANGER 기준) ──
+    # §6: _run_granger_all_lags로 페어당 1회 호출 (중복 grangercausalitytests 제거)
     granger_results: list[dict[str, Any]] = []
     if len(df) >= MIN_ROWS_FOR_GRANGER:
         all_pairs = [(predictor, target, "forward") for predictor, target in GRANGER_PAIRS] + [
             (predictor, target, "reverse") for predictor, target in GRANGER_PAIRS_REVERSE
         ]
         for predictor, target, direction in all_pairs:
-            for lag in GRANGER_LAGS:
-                entry = _run_granger(df, predictor, target, lag)
-                if entry is not None:
+            entries = _run_granger_all_lags(df, predictor, target, max_lag=max(GRANGER_LAGS))
+            if entries is not None:
+                for entry in entries:
                     entry["direction"] = direction
-                    granger_results.append(entry)
+                granger_results.extend(entries)
 
         # §4.2: Benjamini–Hochberg FDR 보정 — 모든 테스트에 일괄 적용
         # significant 플래그는 보정 후 기준으로만 True로 설정됩니다.
@@ -266,7 +376,9 @@ def run_statistical_tests(df: pd.DataFrame) -> dict[str, Any]:
                     target=entry["target"],
                     lag=entry["lag"],
                     pvalue_raw=entry["pvalue_raw"],
-                    pvalue_adjusted=entry["pvalue_adjusted"],
+                    pvalue_adjusted=entry.get("pvalue_adjusted"),
+                    optimal_lag=entry.get("optimal_lag"),
+                    granger_primary=entry.get("granger_primary"),
                 )
     else:
         log_structured(
@@ -292,6 +404,11 @@ __all__ = [
     "MIN_ROWS_FOR_ADF",
     "MIN_ROWS_FOR_GRANGER",
     "_apply_bh_correction",
+    "_calendar_span",
     "_ensure_stationary",
+    "_max_consecutive_gap",
+    "_run_granger_all_lags",
+    "_run_stationarity",
+    "_select_optimal_lag",
     "run_statistical_tests",
 ]
