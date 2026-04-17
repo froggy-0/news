@@ -355,8 +355,8 @@ def _select_xlsx_data_row(rows: list[list[str]]) -> tuple[list[str], dict[str, s
     header_index = -1
     headers: list[str] = []
     for idx, row in enumerate(rows):
-        normalized_headers = {_header_key(cell) for cell in row if cell.strip()}
-        if "asofdate" in normalized_headers or "date" in normalized_headers:
+        normalized_header_keys = {_header_key(cell) for cell in row if cell.strip()}
+        if "asofdate" in normalized_header_keys or "date" in normalized_header_keys:
             header_index = idx
             headers = row
             break
@@ -995,7 +995,7 @@ def parse_ibit_snapshot(text: str) -> BitcoinEtfIssuerSnapshot:
 def parse_bitb_snapshot(text: str) -> BitcoinEtfIssuerSnapshot:
     normalized = _normalize_page_text(text)
     source_type: str
-    optional_values = {
+    optional_values: dict[str, float | None] = {
         "nav_per_share": None,
         "market_price": None,
         "premium_discount_pct": None,
