@@ -365,13 +365,17 @@ def test_run_sentiment_join_adf_dict_structure_compatible(
     monkeypatch.setattr(
         pipeline, "fetch_etf_flow_features", lambda *args, **kwargs: _etf_df(main_dates)
     )
-    # 다중 ADF 구조 mock
+    # 다중 stationarity 구조 mock (run_statistical_tests는 "stationarity_results" 키를 반환)
     monkeypatch.setattr(
         pipeline,
         "run_statistical_tests",
         lambda df: {
-            "adf": {"btc_log_return": {"statistic": -3.2, "pvalue": 0.02, "stationary": True}},
+            "stationarity_results": {
+                "btc_log_return": {"adf_statistic": -3.2, "adf_pvalue": 0.02, "stationary": True}
+            },
             "granger": [],
+            "granger_eligible_rows": 0,
+            "granger_executed": False,
         },
     )
 

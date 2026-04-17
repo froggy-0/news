@@ -39,44 +39,56 @@ def build_minimal_brief_json(date: str, aggregate: DailyAggregate) -> dict:
     """fetch_r2_sentiment()가 읽는 최소 스키마 JSON 생성.
 
     analytics_contract.validate_analytics_sentiment_payload()와 호환되는
-    flat format으로 생성합니다. 기존 meta 래퍼 형식은 r2_sentiment.py가 파싱할 수
-    없었으므로 top-level 필드 구조로 전환합니다.
-
-    §2: textSchemaVersion — 백필/실시간 FinBERT 입력 텍스트 차이 추적용.
+    flat format으로 생성합니다. 정확히 _ANALYTICS_ALLOWED_KEYS 8개 키만 포함합니다.
+    진단용 필드(_backfillSource, textSchemaVersion 등)는 사이드카로 분리됩니다.
     """
     now_utc = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     return {
         "schemaVersion": "v1",
-        "producer": "backfill/finbert",
+        "producer": "backfill.finbert",
         "generatedAt": now_utc,
         "date": date,
         "symbol": "btc",
         "sentimentStatus": aggregate.status,
-        "signalSentimentStatus": "skipped",
         "newsSentiment": {
             "mean": aggregate.mean,
             "std": aggregate.std,
             "count": aggregate.count,
         },
-        "signalSentiment": None,
         "_backfill": True,
+    }
+
+
+def build_backfill_sidecar_json(date: str, aggregate: DailyAggregate) -> dict:
+    """진단용 사이드카 JSON 생성 (analytics 계약 미적용).
+
+    본체(_ANALYTICS_ALLOWED_KEYS)에 포함되지 않는 백필 진단 필드를
+    {key}.backfill-meta.json에 별도 저장합니다.
+    """
+    now_utc = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return {
         "_backfillSource": "coindesk+alpaca+finbert",
         "_backfillGeneratedAt": now_utc,
-        # §2: 텍스트 스키마 버전 — 백필은 "title_summary" (why_it_matters 미포함)
         "textSchemaVersion": aggregate.text_schema_version,
+        "date": date,
     }
 
 
 def _is_pipeline_file(existing_json: dict) -> bool:
-    """_backfillSource 없는 파일 = 파이프라인 원본 → 덮어쓰기 금지.
+    """파이프라인 원본 파일 판별 → True이면 덮어쓰기 금지.
 
-    라이브 파이프라인은 _backfillSource를 기록하지 않습니다.
-    백필 파일(현행 flat format 및 레거시 meta 래퍼) 모두 _backfillSource를 포함합니다.
+    판별 순서:
+    1. flat format (현행): producer 접두사로 판별.
+       - "backfill."로 시작하면 백필 파일 → False
+       - 그 외("public_site." 등)는 파이프라인 원본 → True
+    2. legacy meta-wrapped 백필: meta._backfillSource 존재 여부로 폴백 → False
+    3. producer 없고 _backfillSource도 없으면 파이프라인 원본으로 간주 → True
     """
-    # flat format (현행): top-level _backfillSource
-    if "_backfillSource" in existing_json:
-        return False
-    # legacy meta-wrapped format: meta._backfillSource
+    # flat format (현행 및 신규 백필): producer 접두사로 판별
+    producer = str(existing_json.get("producer", ""))
+    if producer:
+        return not producer.startswith("backfill.")
+    # legacy meta-wrapped 백필: _backfillSource 존재 여부로 폴백
     if "_backfillSource" in existing_json.get("meta", {}):
         return False
     return True
@@ -141,7 +153,7 @@ def upload_brief(
                 )
                 return "skipped_protected"
 
-        # 업로드
+        # 본체 업로드
         payload = build_minimal_brief_json(date, aggregate)
         body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         s3_client.put_object(
@@ -161,6 +173,26 @@ def upload_brief(
                 },
             },
         )
+
+        # 사이드카 업로드 (진단용, 실패해도 반환값에 영향 없음)
+        try:
+            sidecar_key = f"{key}.backfill-meta.json"
+            sidecar = build_backfill_sidecar_json(date, aggregate)
+            s3_client.put_object(
+                Bucket=bucket,
+                Key=sidecar_key,
+                Body=json.dumps(sidecar, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+                ContentType="application/json",
+            )
+        except Exception as sidecar_exc:
+            logger.warning(
+                "사이드카 업로드 실패 (무시)",
+                extra={
+                    "event": "upload.sidecar_fail",
+                    "attributes": {"date": date, "reason": str(sidecar_exc)},
+                },
+            )
+
         return "uploaded"
 
     except Exception as exc:
