@@ -29,6 +29,7 @@ def _valid_df() -> pd.DataFrame:
             "funding_rate": [float("nan")],
             "open_interest_usd": [float("nan")],
             "funding_rate_lag1": [float("nan")],
+            "oi_change_pct": [float("nan")],
             "oi_change_pct_lag1": [float("nan")],
             "btc_long_short_ratio": [float("nan")],
             "btc_long_short_ratio_lag1": [float("nan")],
@@ -36,6 +37,11 @@ def _valid_df() -> pd.DataFrame:
             "etf_total_aum_usd": [float("nan")],
             "etf_net_inflow_usd": [float("nan")],
             "etf_net_inflow_usd_lag1": [float("nan")],
+            # §3: Granger raw predictors (NaN 허용)
+            "volume_change_pct": [float("nan")],
+            # §5: PCA / correlation용 lag1 (NaN 허용)
+            "usdkrw_log_return_lag1": [float("nan")],
+            "volume_change_pct_lag1": [float("nan")],
             # Req 8: BTC 방향 라벨
             "btc_direction_label": ["up"],
             # Req 13: 하이브리드 지수 (NaN 허용)
@@ -162,6 +168,11 @@ def test_validate_master_strict_requires_all_new_columns() -> None:
         "fng_value_lag1",
         # §2: 텍스트 스키마 버전
         "text_schema_version",
+        # §3, §5: task 03 신규 raw / lag1 컬럼
+        "oi_change_pct",
+        "volume_change_pct",
+        "usdkrw_log_return_lag1",
+        "volume_change_pct_lag1",
     ):
         df = _valid_df().drop(columns=[missing_col])
         with pytest.raises(SchemaError):

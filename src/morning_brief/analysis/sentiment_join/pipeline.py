@@ -93,7 +93,8 @@ def _build_granger_correction(statistical_results: dict[str, object]) -> dict[st
     granger = statistical_results.get("granger")
     n_tests = len(granger) if isinstance(granger, list) else 0
     return {
-        "method": "bh_fdr",
+        "correction_method": "fdr_bh",  # statsmodels 관례; 설계 §3.D 정렬
+        "granger_method": "pairwise_granger",  # §6: 후속 VAR 확장 시 구분 포인트
         "n_tests": n_tests,
         "bonferroni_threshold": round(0.05 / n_tests, 10) if n_tests > 0 else None,
     }

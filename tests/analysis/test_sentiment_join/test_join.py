@@ -10,6 +10,7 @@ from hypothesis import strategies as st
 
 from morning_brief.analysis.sentiment_join.join import (
     _add_btc_direction_label,
+    _add_futures_lag_columns,
     _add_sentiment_lag_columns,
     _apply_sentiment_quality_gate,
     detect_outliers_rolling_iqr,
@@ -438,3 +439,125 @@ def test_nan_masking_non_outlier_rows_unchanged() -> None:
     non_outlier_orig = master_df[~master_df["is_outlier"]]["btc_log_return"]
     non_outlier_masked = analysis_df[~analysis_df["is_outlier"]]["btc_log_return"]
     pd.testing.assert_series_equal(non_outlier_orig, non_outlier_masked)
+
+
+# ── §7: raw 컬럼 생성 + btc_quote_volume 방어 테스트 ──
+
+
+def _futures_base_df(n: int = 5) -> pd.DataFrame:
+    """_add_futures_lag_columns 테스트용 최소 DataFrame."""
+    return pd.DataFrame(
+        {
+            "funding_rate": [0.001] * n,
+            "open_interest_usd": [1000.0, 1100.0, 990.0, 1050.0, 1020.0][:n],
+            "btc_long_short_ratio": [0.9] * n,
+            "etf_net_inflow_usd": [0.0] * n,
+        }
+    )
+
+
+def test_add_futures_lag_columns_oi_raw_and_lag1_consistent() -> None:
+    """Property J-1: oi_change_pct_lag1은 oi_change_pct를 1행 shift한 값이어야 한다."""
+    df = _futures_base_df()
+    result = _add_futures_lag_columns(df)
+
+    assert "oi_change_pct" in result.columns
+    assert "oi_change_pct_lag1" in result.columns
+    # lag1[k] == raw[k-1] (k >= 1)
+    pd.testing.assert_series_equal(
+        result["oi_change_pct_lag1"].iloc[2:].reset_index(drop=True),
+        result["oi_change_pct"].iloc[1:-1].reset_index(drop=True),
+        check_names=False,
+    )
+
+
+def test_add_futures_lag_columns_volume_with_btc_quote_volume() -> None:
+    """btc_quote_volume이 있으면 volume_change_pct / volume_change_pct_lag1이 생성된다."""
+    df = _futures_base_df()
+    df["btc_quote_volume"] = [100.0, 120.0, 110.0, 130.0, 125.0]
+    result = _add_futures_lag_columns(df)
+
+    assert "volume_change_pct" in result.columns
+    assert "volume_change_pct_lag1" in result.columns
+    assert result["volume_change_pct"].notna().any()
+
+
+def test_add_futures_lag_columns_volume_without_btc_quote_volume() -> None:
+    """Property J-2: btc_quote_volume 없으면 volume_change_pct / lag1이 NaN으로 생성된다."""
+    df = _futures_base_df()  # btc_quote_volume 없음
+    result = _add_futures_lag_columns(df)
+
+    assert "volume_change_pct" in result.columns
+    assert "volume_change_pct_lag1" in result.columns
+    assert result["volume_change_pct"].isna().all()
+    assert result["volume_change_pct_lag1"].isna().all()
+
+
+def test_add_sentiment_lag_columns_includes_usdkrw_lag1() -> None:
+    """usdkrw_log_return이 있으면 usdkrw_log_return_lag1 컬럼이 생성된다."""
+    df = pd.DataFrame(
+        {
+            "news_sentiment_mean": [0.1, 0.2, 0.3],
+            "fng_value": pd.array([50, 60, 55], dtype="Int64"),
+            "usdkrw_log_return": [0.001, -0.002, 0.003],
+        }
+    )
+    result = _add_sentiment_lag_columns(df)
+
+    assert "usdkrw_log_return_lag1" in result.columns
+    assert pd.isna(result["usdkrw_log_return_lag1"].iloc[0])
+    assert result["usdkrw_log_return_lag1"].iloc[1] == pytest.approx(0.001)
+
+
+def test_add_sentiment_lag_columns_usdkrw_lag1_nan_when_missing() -> None:
+    """usdkrw_log_return이 없으면 usdkrw_log_return_lag1이 NaN으로 채워진다."""
+    df = pd.DataFrame(
+        {
+            "news_sentiment_mean": [0.1, 0.2],
+            "fng_value": pd.array([50, 60], dtype="Int64"),
+        }
+    )
+    result = _add_sentiment_lag_columns(df)
+
+    assert "usdkrw_log_return_lag1" in result.columns
+    assert result["usdkrw_log_return_lag1"].isna().all()
+
+
+def test_merge_sources_btc_quote_volume_missing_defense(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Property J-3: btc_returns_df에 btc_quote_volume 없어도 merge_sources가 정상 완료된다.
+    결과에 volume_change_pct 컬럼이 NaN으로 존재해야 한다.
+    """
+    n = 5
+    dates = pd.date_range("2026-01-01", periods=n).strftime("%Y-%m-%d").tolist()
+
+    sentiment_df = pd.DataFrame(
+        {
+            "date": dates,
+            "news_sentiment_mean": [0.1] * n,
+            "news_sentiment_std": [0.01] * n,
+            "n_articles": pd.array([5] * n, dtype="Int64"),
+            "sentiment_status": ["ok"] * n,
+            "is_backfill_valid": [True] * n,
+            "ingest_validation_reason": [None] * n,
+            "_backfill": [False] * n,
+        }
+    )
+    fng_df = pd.DataFrame({"date": dates, "fng_value": pd.array([55] * n, dtype="Int64")})
+    btc_df = pd.DataFrame(
+        {
+            "date": dates,
+            "btc_log_return": [0.01] * n,
+            "btc_return": [0.01] * n,
+            # btc_quote_volume 없음
+        }
+    )
+    usdkrw_df = pd.DataFrame(
+        {"date": dates, "usdkrw_log_return": [0.001] * n, "usdkrw_return": [0.001] * n}
+    )
+
+    result = merge_sources(sentiment_df, fng_df, btc_df, usdkrw_df)
+
+    assert "volume_change_pct" in result.columns
+    assert result["volume_change_pct"].isna().all()

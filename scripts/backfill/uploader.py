@@ -39,8 +39,9 @@ def build_minimal_brief_json(date: str, aggregate: DailyAggregate) -> dict:
     """fetch_r2_sentiment()가 읽는 최소 스키마 JSON 생성.
 
     analytics_contract.validate_analytics_sentiment_payload()와 호환되는
-    flat format으로 생성합니다. 정확히 _ANALYTICS_ALLOWED_KEYS 8개 키만 포함합니다.
-    진단용 필드(_backfillSource, textSchemaVersion 등)는 사이드카로 분리됩니다.
+    flat format으로 생성합니다. _ANALYTICS_ALLOWED_KEYS 범위 내 키만 포함합니다.
+    textSchemaVersion은 본체에 포함해 r2_sentiment.py가 text_schema_version을
+    마스터 DataFrame에 전달할 수 있도록 합니다.
     """
     now_utc = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     return {
@@ -56,6 +57,7 @@ def build_minimal_brief_json(date: str, aggregate: DailyAggregate) -> dict:
             "count": aggregate.count,
         },
         "_backfill": True,
+        "textSchemaVersion": aggregate.text_schema_version,  # r2_sentiment.py 투명 공개
     }
 
 

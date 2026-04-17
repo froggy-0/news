@@ -320,16 +320,18 @@ if "btc_quote_volume" not in merged.columns:
 
 ## 11. 체크리스트 (백필 전)
 
-- [ ] §0: `GRANGER_PAIRS`를 raw 기반으로 복원 (task 01의 pre-shift는 PCA 전용으로만 유지)
-- [ ] §3.D: BH-FDR을 1차 판정 기준으로 삼고 Bonferroni 임계값은 참고 기록
-- [ ] §4: ADF+KPSS 합의 gate가 실제 Granger 실행 분기와 연결됨
-- [ ] §5: `volume_change_pct_lag1` PCA 포함 여부 후처리 결정 프로세스 문서화
-- [ ] §7: `oi_change_pct`, `volume_change_pct` raw 컬럼 추가 & `btc_quote_volume` 누락 방어
-- [ ] §7: 이상치 처리는 task 02 §8 마스킹 방식과 일치
-- [ ] §8: `usdkrw_log_return` 채널 근거 또는 exploratory family 분리
-- [ ] master 스키마 마이그레이션 (task 01 §5.1) & hybrid feature schema 버전 기록
-- [ ] 검정력 경고를 리포트 템플릿에 포함 (§3.D ⚠️)
-- [ ] regime 안정성 추적을 PR-E 이슈로 분리 기록 (§9)
+> _2026-04-17 task-03 구현 완료_
+
+- [x] §0: `GRANGER_PAIRS`를 raw 기반으로 복원 (task 01의 pre-shift는 PCA 전용으로만 유지)
+- [x] §3.D: BH-FDR을 1차 판정 기준으로 삼고 Bonferroni 임계값은 참고 기록
+- [x] §4: ADF+KPSS 합의 gate가 실제 Granger 실행 분기와 연결됨
+- [x] §5: `volume_change_pct_lag1` PCA 포함 여부 후처리 결정 프로세스 문서화 (VIF gate 자동 처리, `HYBRID_FEATURE_SCHEMA_VERSION=v3`)
+- [x] §7: `oi_change_pct`, `volume_change_pct` raw 컬럼 추가 & `btc_quote_volume` 누락 방어
+- [x] §7: 이상치 처리는 task 02 §8 마스킹 방식과 일치
+- [x] §8: `usdkrw_log_return` 채널 근거 주석 추가 (KIMP + 글로벌 리스크 채널) — CORE 유지
+- [x] master 스키마 마이그레이션 (task 01 §5.1) & hybrid feature schema 버전 기록 (v3)
+- [x] 검정력 경고를 리포트 메타(`power_warning`)에 포함 (§3.D ⚠️)
+- [x] regime 안정성 추적을 PR-E 이슈로 분리 기록 (§9) — `tasks.md` 미포함 항목에 명시
 
 ---
 

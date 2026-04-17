@@ -27,6 +27,7 @@ _ALLOWED_KEYS = frozenset(
         "sentimentStatus",
         "newsSentiment",
         "_backfill",
+        "textSchemaVersion",
     }
 )
 
@@ -105,7 +106,9 @@ def test_build_minimal_brief_json_schema() -> None:
     assert "_backfillSource" not in payload
     assert "signalSentimentStatus" not in payload
     assert "signalSentiment" not in payload
-    assert "textSchemaVersion" not in payload
+    # textSchemaVersion은 r2_sentiment.py 투명 공개를 위해 본체에 포함
+    assert "textSchemaVersion" in payload
+    assert payload["textSchemaVersion"] == "title_summary"
 
 
 def test_build_minimal_brief_json_mean_none_serializes_null() -> None:

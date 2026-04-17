@@ -11,19 +11,28 @@ from morning_brief.analysis.sentiment_join.statistical_tests import (
 
 
 def _sample_df(rows: int = 35) -> pd.DataFrame:
-    """§1: GRANGER_PAIRS가 lag1 컬럼을 사용하므로 news_sentiment_mean_lag1, fng_value_lag1 포함."""
+    """§0: GRANGER_PAIRS는 raw 컬럼을 사용한다 (double-lag 방지).
+    _lag1 컬럼도 포함해 ADF_TARGETS 검정 및 기존 테스트와 공존한다.
+    """
     return pd.DataFrame(
         {
             "date": pd.date_range("2026-03-01", periods=rows, freq="D").strftime("%Y-%m-%d"),
+            # raw (Granger + ADF 용)
             "news_sentiment_mean": [0.1] * rows,
-            "news_sentiment_mean_lag1": [0.1] * rows,
             "fng_value": pd.array([55] * rows, dtype="Int64"),
+            "funding_rate": [0.001] * rows,
+            "btc_long_short_ratio": [0.9] * rows,
+            "oi_change_pct": [0.01] * rows,
+            "etf_net_inflow_usd": [1_000_000.0] * rows,
+            "usdkrw_log_return": [0.001] * rows,
+            "volume_change_pct": [0.02] * rows,
+            "btc_log_return": [0.01] * rows,
+            # _lag1 (PCA / correlation 용 — 기존 테스트 호환)
+            "news_sentiment_mean_lag1": [0.1] * rows,
             "fng_value_lag1": [55.0] * rows,
             "funding_rate_lag1": [0.001] * rows,
-            "btc_log_return": [0.01] * rows,
-            "btc_long_short_ratio": [0.9] * rows,
             "btc_long_short_ratio_lag1": [0.9] * rows,
-            "etf_net_inflow_usd_lag1": [1000000.0] * rows,
+            "etf_net_inflow_usd_lag1": [1_000_000.0] * rows,
         }
     )
 
@@ -89,7 +98,7 @@ def test_run_statistical_tests_granger_skips_at_179_rows(
 def test_run_statistical_tests_granger_runs_at_180_rows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Property 6: 180행이면 Granger 실행. §4.3 역방향 포함 → 10쌍 호출, 각 3 lag → 30 entry."""
+    """Property 6: 180행이면 Granger 실행. forward(16) + reverse(5) = 21쌍, 각 3 lag → 63 entry."""
     monkeypatch.setattr(
         statistical_tests,
         "_run_stationarity",
@@ -114,9 +123,9 @@ def test_run_statistical_tests_granger_runs_at_180_rows(
 
     results = statistical_tests.run_statistical_tests(_sample_df(rows=180))
 
-    # §4.3: 순방향(5) + 역방향(5) = 10쌍 호출, 각 3 lag → 30 entry
-    assert len(pair_calls) == 10
-    assert len(results["granger"]) == 30
+    # forward(16: TARGET 8 + CROSS 8) + reverse(5) = 21쌍, 각 3 lag → 63 entry
+    assert len(pair_calls) == 21
+    assert len(results["granger"]) == 63
     assert results["granger_executed"] is True
     assert results["granger_eligible_rows"] == 180
 
@@ -369,18 +378,30 @@ def test_granger_skipped_when_stationarity_is_false(
     assert entry is None
 
 
-def test_granger_pairs_use_lag1_predictors() -> None:
-    """§1: 모든 GRANGER_PAIRS predictor는 lag1 버전이어야 한다."""
+def test_granger_pairs_use_raw_predictors() -> None:
+    """Property R-1: GRANGER_PAIRS의 모든 predictor는 raw(비-lag1) 컬럼이어야 한다.
+    double-lag 방지: _lag1 버전을 투입하면 실제 검정 관계가 한 칸 더 밀린다.
+    """
     for predictor, target in statistical_tests.GRANGER_PAIRS:
-        assert predictor.endswith("_lag1") or predictor == "btc_log_return", (
-            f"predictor '{predictor}'가 lag1 버전이 아닙니다."
+        assert not predictor.endswith("_lag1"), (
+            f"predictor '{predictor}'가 raw가 아닙니다. double-lag 위험."
         )
 
 
+def test_granger_pairs_count() -> None:
+    """GRANGER_PAIRS = TARGET(8) + CROSS(8) = 16쌍."""
+    assert len(statistical_tests.GRANGER_PAIRS_TARGET) == 8
+    assert len(statistical_tests.GRANGER_PAIRS_CROSS) == 8
+    assert len(statistical_tests.GRANGER_PAIRS) == 16
+
+
 def test_granger_pairs_reverse_has_btc_as_predictor() -> None:
-    """§4.3: GRANGER_PAIRS_REVERSE는 btc_log_return이 predictor여야 한다."""
+    """§4.3: GRANGER_PAIRS_REVERSE는 btc_log_return이 predictor, target은 raw여야 한다."""
     for predictor, target in statistical_tests.GRANGER_PAIRS_REVERSE:
         assert predictor == "btc_log_return"
+        assert not target.endswith("_lag1"), (
+            f"GRANGER_PAIRS_REVERSE target '{target}'이 raw가 아닙니다."
+        )
 
 
 def test_run_statistical_tests_granger_entries_have_direction(
@@ -431,15 +452,22 @@ def _sample_df_with_gap(rows: int = 200, gap_start: int = 50, gap_days: int = 3)
     return pd.DataFrame(
         {
             "date": dates,
+            # raw
             "news_sentiment_mean": rng.normal(0, 0.1, n),
-            "news_sentiment_mean_lag1": rng.normal(0, 0.1, n),
             "fng_value": pd.array([55] * n, dtype="Int64"),
+            "funding_rate": [0.001] * n,
+            "btc_long_short_ratio": [0.9] * n,
+            "oi_change_pct": [0.01] * n,
+            "etf_net_inflow_usd": [1_000_000.0] * n,
+            "usdkrw_log_return": [0.001] * n,
+            "volume_change_pct": [0.02] * n,
+            "btc_log_return": rng.normal(0, 0.02, n),
+            # _lag1 (기존 테스트 호환)
+            "news_sentiment_mean_lag1": rng.normal(0, 0.1, n),
             "fng_value_lag1": [55.0] * n,
             "funding_rate_lag1": [0.001] * n,
-            "btc_log_return": rng.normal(0, 0.02, n),
-            "btc_long_short_ratio": [0.9] * n,
             "btc_long_short_ratio_lag1": [0.9] * n,
-            "etf_net_inflow_usd_lag1": [1000000.0] * n,
+            "etf_net_inflow_usd_lag1": [1_000_000.0] * n,
         }
     )
 
@@ -722,3 +750,129 @@ def test_validate_analytics_payload_fails_without_backfill_key() -> None:
     result = validate_analytics_sentiment_payload(payload)
     assert result["valid"] is False
     assert result["reason"] == "missing_backfill_marker"
+
+
+# ── §0: double-lag 회귀 테스트 ──
+
+
+def test_raw_and_lag1_predictor_produce_different_pvalues(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Property R-2: raw predictor와 _lag1 predictor는 Granger p-value가 달라야 한다.
+    동일한 시리즈를 한 칸 밀면 검정되는 시간 관계가 달라지므로 결과도 달라야 한다.
+    """
+    import numpy as np
+    import statsmodels.tsa.stattools as _sts
+
+    monkeypatch.setattr(_sts, "adfuller", lambda s, **kw: (-5.0, 0.001, None, None, {}, None))
+    monkeypatch.setattr(_sts, "kpss", lambda s, **kw: (0.1, 0.10, None, {}))
+
+    rng = np.random.default_rng(7)
+    n = 200
+    dates = pd.date_range("2025-01-01", periods=n, freq="D").strftime("%Y-%m-%d").tolist()
+    df = pd.DataFrame(
+        {
+            "date": dates,
+            "btc_log_return": rng.normal(0, 0.02, n),
+            "news_sentiment_mean": rng.normal(0, 0.1, n),
+        }
+    )
+    df["news_sentiment_mean_lag1"] = df["news_sentiment_mean"].shift(1)
+
+    from morning_brief.analysis.sentiment_join.statistical_tests import _run_granger
+
+    entry_raw = _run_granger(df, "news_sentiment_mean", "btc_log_return", lag=1)
+    entry_lag1 = _run_granger(df, "news_sentiment_mean_lag1", "btc_log_return", lag=1)
+
+    assert entry_raw is not None
+    assert entry_lag1 is not None
+    assert entry_raw["pvalue"] != pytest.approx(entry_lag1["pvalue"]), (
+        "raw와 _lag1 predictor의 p-value가 같습니다. double-lag 의심."
+    )
+
+
+# ── §3.D: power_warning 테스트 ──
+
+
+def test_run_statistical_tests_includes_power_warning_when_granger_executed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Property W-1: granger_executed=True이면 power_warning 키가 존재해야 한다."""
+    monkeypatch.setattr(statistical_tests, "_run_stationarity", lambda s: _STATIONARY_RESULT)
+    monkeypatch.setattr(statistical_tests, "_run_granger_all_lags", lambda *a, **kw: None)
+
+    results = statistical_tests.run_statistical_tests(_sample_df(rows=180))
+
+    assert "power_warning" in results
+    assert isinstance(results["power_warning"], str)
+
+
+def test_run_statistical_tests_no_power_warning_when_insufficient_rows() -> None:
+    """Property W-2: 180행 미만이면 power_warning 키가 없어야 한다 (empty dict 반환)."""
+    results = statistical_tests.run_statistical_tests(_sample_df(rows=10))
+    assert "power_warning" not in results
+
+
+# ── §10(b): fng_value Int64 target dtype 회귀 테스트 ──
+
+
+def test_run_granger_all_lags_handles_fng_value_as_target_int64() -> None:
+    """Property INT64: fng_value(Int64 nullable)가 cross pair TARGET일 때 오류 없이 완료된다.
+    GRANGER_PAIRS_CROSS에 ("news_sentiment_mean", "fng_value")가 있으므로 반드시 동작해야 한다.
+    _run_granger_all_lags 내부 pd.to_numeric(target, errors="coerce")가 이를 처리한다.
+    """
+    import numpy as np
+
+    rng = np.random.default_rng(42)
+    n = 200
+    dates = pd.date_range("2025-01-01", periods=n, freq="D").strftime("%Y-%m-%d").tolist()
+    df = pd.DataFrame(
+        {
+            "date": dates,
+            "news_sentiment_mean": rng.normal(0, 0.1, n),
+            "fng_value": pd.array(rng.integers(20, 80, n).tolist(), dtype="Int64"),
+        }
+    )
+
+    # 실제 통계 라이브러리 호출 — Int64 dtype이 문제 없이 float 변환되어야 한다
+    entries = _run_granger_all_lags(df, "news_sentiment_mean", "fng_value", max_lag=3)
+
+    # 정상성 gate를 통과하면 list, 미통과하면 None — 어떤 경우도 예외가 없어야 한다
+    assert entries is None or isinstance(entries, list)
+
+
+# ── §10(c): BH-FDR 보정 결과 스키마 테스트 ──
+
+
+def test_granger_results_schema_has_required_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Property BH-SCHEMA: cross pair 포함 전체 Granger 결과에 필수 스키마 필드가 존재해야 한다.
+    pvalue_raw, pvalue_adjusted, significant, direction — §3.D 결과 구조.
+    """
+    monkeypatch.setattr(statistical_tests, "_run_stationarity", lambda s: _STATIONARY_RESULT)
+
+    def fake_granger_all_lags(df, predictor, target, max_lag=3):
+        return [
+            {
+                "predictor": predictor,
+                "target": target,
+                "lag": lag,
+                "pvalue": 0.04,
+                "pvalue_raw": 0.04,
+            }
+            for lag in range(1, max_lag + 1)
+        ]
+
+    monkeypatch.setattr(statistical_tests, "_run_granger_all_lags", fake_granger_all_lags)
+
+    results = statistical_tests.run_statistical_tests(_sample_df(rows=180))
+
+    assert len(results["granger"]) > 0
+    for entry in results["granger"]:
+        assert "pvalue_raw" in entry, f"pvalue_raw 누락: {entry}"
+        assert "pvalue_adjusted" in entry, f"pvalue_adjusted 누락: {entry}"
+        assert "significant" in entry, f"significant 누락: {entry}"
+        assert "direction" in entry, f"direction 누락: {entry}"
+        assert isinstance(entry["significant"], bool)
+        assert entry["direction"] in ("forward", "reverse")

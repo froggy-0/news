@@ -22,13 +22,14 @@ _ANALYTICS_ALLOWED_KEYS = frozenset(
         "sentimentStatus",
         "newsSentiment",
         "_backfill",
+        "textSchemaVersion",  # FinBERT 입력 텍스트 구성 버전 (백필/실시간 차이 추적)
     }
 )
 
 _SENTIMENT_ALLOWED_KEYS = frozenset({"mean", "std", "count"})
 
 
-class AnalyticsSentimentPayload(TypedDict):
+class AnalyticsSentimentPayload(TypedDict, total=False):
     schemaVersion: str
     producer: str
     generatedAt: str
@@ -37,6 +38,7 @@ class AnalyticsSentimentPayload(TypedDict):
     sentimentStatus: str
     newsSentiment: dict[str, float | int | None]
     _backfill: bool
+    textSchemaVersion: str | None  # FinBERT 입력 텍스트 구성 버전; None = 미기록
 
 
 class AnalyticsValidationResult(TypedDict):
@@ -50,12 +52,15 @@ def build_analytics_sentiment_payload(
     run_date: str,
     full_payload: dict[str, Any],
     is_backfill: bool = False,
+    text_schema_version: str | None = None,
 ) -> AnalyticsSentimentPayload:
     """curated full payload → analytics 최소 JSON을 파생한다.
 
-    is_backfill: 라이브 파이프라인은 False(기본값), 백필 경로는 True.
-    _backfill 필드를 호출자가 제어할 수 있어 validate_analytics_sentiment_payload의
-    키 존재 여부 검증을 통과하면서도 실시간/백필을 구분합니다.
+    is_backfill: 라이브 파이프라인은 False(명시 필수), 백필 경로는 True.
+    text_schema_version: FinBERT 입력 텍스트 구성 버전.
+      - 백필: "title_summary" (title + body, why_it_matters 없음)
+      - 실시간: "title_summary_whyitmatters" (rawTitle + rawSummary + rawInterpretation)
+      - 미설정(None): 구버전 호환 — r2_sentiment.py에서 None으로 처리
     """
     meta = full_payload.get("meta", {})
     raw_sentiment = meta.get("newsSentiment", {})
@@ -75,6 +80,7 @@ def build_analytics_sentiment_payload(
             "count": raw_sentiment.get("count", 0),
         },
         _backfill=is_backfill,
+        textSchemaVersion=text_schema_version,
     )
 
 
