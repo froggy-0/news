@@ -1792,10 +1792,14 @@ def _dual_write_storage_layers(
     client.put_json(paths.curated_key, brief_payload)
 
     # 2) analytics payload 파생 + 저장
+    # is_backfill=False 명시: 실시간 파이프라인은 반드시 계약 함수로 _backfill=False를 보장
+    # text_schema_version: build_public_news_sentiment_text = title+summary+interpretation
     analytics_payload = build_analytics_sentiment_payload(
         symbol="btc",
         run_date=date_key,
         full_payload=brief_payload,
+        is_backfill=False,
+        text_schema_version="title_summary_whyitmatters",
     )
     client.put_json(paths.analytics_key, dict(analytics_payload))
 

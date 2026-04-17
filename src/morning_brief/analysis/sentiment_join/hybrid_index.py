@@ -19,8 +19,13 @@ HYBRID_FEATURE_CANDIDATES = [
     "funding_rate_lag1",
     "btc_long_short_ratio_lag1",
     "etf_net_inflow_usd_lag1",
+    "volume_change_pct_lag1",  # v3 신규: VIF gate가 funding_rate/OI와 공선성 시 자동 제거
+    # usdkrw_log_return_lag1은 Granger 전용 채널(KIMP/리스크온오프), PCA 제외
 ]
-HYBRID_FEATURE_SCHEMA_VERSION = "v2"  # v1: news_sentiment_mean/fng_value 원본; v2: lag1 버전
+HYBRID_FEATURE_SCHEMA_VERSION = "v3"
+# v1: news_sentiment_mean/fng_value 원본
+# v2: _lag1 버전 (look-ahead bias 제거)
+# v3: volume_change_pct_lag1 추가. usdkrw_log_return_lag1은 Granger 전용으로 PCA 제외.
 # §5.2: PC1 부호 정규화 기준 변수. 이 변수의 loading이 양수가 되도록 PC1 방향을 고정합니다.
 HYBRID_SIGN_ANCHOR = "fng_value_lag1"
 VIF_THRESHOLD = 10.0

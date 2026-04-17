@@ -11,7 +11,7 @@ from morning_brief.analysis.sentiment_join.hybrid_index import (
 
 
 def _frame(rows: int = 40) -> pd.DataFrame:
-    """§1: HYBRID_FEATURE_CANDIDATES가 lag1 버전으로 변경되어 lag1 컬럼 사용."""
+    """§5: HYBRID_FEATURE_CANDIDATES = lag1 버전 6개 (v3). volume_change_pct_lag1 포함."""
     idx = np.arange(rows)
     return pd.DataFrame(
         {
@@ -20,6 +20,7 @@ def _frame(rows: int = 40) -> pd.DataFrame:
             "funding_rate_lag1": np.sin(idx / 7) * 0.01 + (idx / rows) * 0.001,
             "btc_long_short_ratio_lag1": 0.9 + np.cos(idx / 6) * 0.1,
             "etf_net_inflow_usd_lag1": np.sin(idx / 8) * 100000.0,
+            "volume_change_pct_lag1": np.cos(idx / 9) * 0.05,
         }
     )
 
@@ -67,3 +68,38 @@ def test_compute_hybrid_index_sign_anchor_loading_is_positive() -> None:
         assert loadings[HYBRID_SIGN_ANCHOR] >= 0, (
             f"HYBRID_SIGN_ANCHOR '{HYBRID_SIGN_ANCHOR}'의 loading이 음수입니다: {loadings[HYBRID_SIGN_ANCHOR]}"
         )
+
+
+# ── §5: v3 HYBRID_FEATURE_CANDIDATES 테스트 ──
+
+
+def test_hybrid_feature_candidates_includes_volume() -> None:
+    """v3: volume_change_pct_lag1이 HYBRID_FEATURE_CANDIDATES에 포함돼야 한다."""
+    from morning_brief.analysis.sentiment_join.hybrid_index import HYBRID_FEATURE_CANDIDATES
+
+    assert "volume_change_pct_lag1" in HYBRID_FEATURE_CANDIDATES
+
+
+def test_hybrid_feature_schema_version_is_v3() -> None:
+    """v3으로 올라야 PCA loading 불연속을 추적할 수 있다."""
+    assert HYBRID_FEATURE_SCHEMA_VERSION == "v3"
+
+
+def test_compute_hybrid_index_removes_all_nan_volume_feature() -> None:
+    """volume_change_pct_lag1이 NaN만 있으면 VIF gate / dropna가 제거하고 PCA가 완료된다."""
+    rng = np.random.default_rng(0)
+    n = 30
+    df = pd.DataFrame(
+        {
+            "news_sentiment_mean_lag1": rng.normal(0, 0.1, n),
+            "fng_value_lag1": rng.uniform(30, 70, n),
+            "funding_rate_lag1": rng.normal(0, 0.001, n),
+            "btc_long_short_ratio_lag1": rng.uniform(0.8, 1.2, n),
+            "etf_net_inflow_usd_lag1": rng.normal(0, 1e6, n),
+            "volume_change_pct_lag1": [float("nan")] * n,
+        }
+    )
+    result = compute_hybrid_index(df)
+
+    status = result.attrs["hybrid_index_diagnostics"]["pca_summary"]["status"]
+    assert status in ("ok", "insufficient_rows", "insufficient_features")

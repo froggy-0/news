@@ -12,32 +12,66 @@ logger = logging.getLogger(__name__)
 MIN_ROWS_FOR_ADF = 30
 MIN_ROWS_FOR_GRANGER = 180
 GRANGER_LAGS = [1, 2, 3]
-# lag1 = T-1 시점 값. 모든 predictor는 btc_log_return보다 시간적으로 앞서야 합니다.
-GRANGER_PAIRS = [
-    ("news_sentiment_mean_lag1", "btc_log_return"),
-    ("funding_rate_lag1", "btc_log_return"),
-    ("fng_value_lag1", "btc_log_return"),
-    ("btc_long_short_ratio_lag1", "btc_log_return"),
-    ("etf_net_inflow_usd_lag1", "btc_log_return"),
-]
-# §4.3: 역방향 페어 — 가격이 감성/지표를 선행하는지 확인 (단순 선행 해석 방지)
-GRANGER_PAIRS_REVERSE = [
-    ("btc_log_return", "news_sentiment_mean_lag1"),
-    ("btc_log_return", "funding_rate_lag1"),
-    ("btc_log_return", "fng_value_lag1"),
-    ("btc_log_return", "btc_long_short_ratio_lag1"),
-    ("btc_log_return", "etf_net_inflow_usd_lag1"),
-]
-ADF_TARGETS = [
-    "btc_log_return",
-    "news_sentiment_mean_lag1",
-    "fng_value_lag1",
+
+# §0: Granger 내부에서 predictor[t-1..t-k]를 자체 처리하므로 raw 컬럼을 투입해야 한다.
+# _lag1 버전을 투입하면 실제 검정 관계가 한 칸 더 밀리는 double-lag이 발생한다.
+_TARGET = "btc_log_return"
+
+# usdkrw_log_return: 두 채널로 btc_log_return 선행 가능 (한국 투자자 차별화 지표)
+# (1) KIMP 채널: 원달러 변동 → 업비트·빗썸 프리미엄(KIMP) → 국내 BTC 유동성 전가
+# (2) 글로벌 리스크온/오프: USD 강세 → 리스크자산 매도 연쇄 → BTC 하방 압력
+# 채널 근거가 약하다고 판단될 경우 GRANGER_PAIRS_EXPLORATORY로 이동 고려 (§8)
+_PREDICTORS_RAW = [
+    "news_sentiment_mean",
+    "fng_value",
     "funding_rate",
-    "funding_rate_lag1",
-    "oi_change_pct_lag1",
     "btc_long_short_ratio",
-    "btc_long_short_ratio_lag1",
-    "etf_net_inflow_usd_lag1",
+    "oi_change_pct",
+    "etf_net_inflow_usd",
+    "usdkrw_log_return",
+    "volume_change_pct",
+]
+
+GRANGER_PAIRS_TARGET = [(p, _TARGET) for p in _PREDICTORS_RAW]  # 8쌍
+
+GRANGER_PAIRS_CROSS = [
+    # 정보 전파 경로 — Granger lag=k: "k일 전 predictor → 오늘 target"
+    # §6: pairwise 결과는 직접 인과의 증거가 아니라 상관 구조의 지표 (omitted variable bias 주의)
+    ("news_sentiment_mean", "fng_value"),
+    ("fng_value", "news_sentiment_mean"),
+    ("news_sentiment_mean", "funding_rate"),
+    ("news_sentiment_mean", "etf_net_inflow_usd"),
+    ("fng_value", "btc_long_short_ratio"),
+    ("fng_value", "etf_net_inflow_usd"),
+    ("usdkrw_log_return", "volume_change_pct"),
+    ("funding_rate", "etf_net_inflow_usd"),
+]  # 8쌍
+
+GRANGER_PAIRS = GRANGER_PAIRS_TARGET + GRANGER_PAIRS_CROSS  # 16쌍 × 3 lag = 48 검정
+
+# §4.3: 역방향 페어 — 가격이 지표를 선행하는지 확인 (단순 선행 해석 방지)
+# target은 raw 컬럼 (double-lag 방지와 동일한 이유)
+GRANGER_PAIRS_REVERSE = [
+    ("btc_log_return", "news_sentiment_mean"),
+    ("btc_log_return", "funding_rate"),
+    ("btc_log_return", "fng_value"),
+    ("btc_log_return", "btc_long_short_ratio"),
+    ("btc_log_return", "etf_net_inflow_usd"),
+]  # 5쌍 × 3 lag = 15 검정
+
+# 전체 BH-FDR family: (16 + 5) × 3 = 63 검정
+
+ADF_TARGETS = [
+    # §4: Granger에 투입되는 모든 raw 변수에 ADF+KPSS 합의 검정 적용
+    "btc_log_return",
+    "news_sentiment_mean",
+    "fng_value",
+    "funding_rate",
+    "btc_long_short_ratio",
+    "oi_change_pct",
+    "etf_net_inflow_usd",
+    "usdkrw_log_return",
+    "volume_change_pct",
 ]
 
 
@@ -394,13 +428,25 @@ def run_statistical_tests(df: pd.DataFrame) -> dict[str, Any]:
     results["granger_eligible_rows"] = len(df)
     results["granger_executed"] = len(df) >= MIN_ROWS_FOR_GRANGER
 
+    # §3.D ⚠️ 검정력 경고: 작은 효과는 현재 데이터 규모에서 검출이 어려울 수 있음
+    if len(df) >= MIN_ROWS_FOR_GRANGER:
+        n_tests = len(granger_results)
+        results["power_warning"] = (
+            f"n≈{len(df)}, BH-FDR, {n_tests} tests: "
+            "작은 효과(f²≈0.02)의 검정력은 약 20~40% 수준. "
+            "'유의하지 않음'이 효과 부재가 아닌 검정력 부족에서 기인할 수 있음. "
+            "360일 이상 확보 권장."
+        )
+
     return results
 
 
 __all__ = [
     "ADF_TARGETS",
     "GRANGER_PAIRS",
+    "GRANGER_PAIRS_CROSS",
     "GRANGER_PAIRS_REVERSE",
+    "GRANGER_PAIRS_TARGET",
     "MIN_ROWS_FOR_ADF",
     "MIN_ROWS_FOR_GRANGER",
     "_apply_bh_correction",

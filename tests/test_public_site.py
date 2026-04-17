@@ -1435,10 +1435,12 @@ def test_publish_public_brief_analytics_payload_matches_contract(monkeypatch, tm
     analytics = captured_payloads["analytics/btc/2026-03-21.json"]
     validation = validate_analytics_sentiment_payload(analytics)
     assert validation["valid"] is True
-    assert analytics["_backfill"] is False  # D-3: 라이브 파이프라인은 _backfill=False
+    assert analytics["_backfill"] is False  # D-3: 라이브 파이프라인은 _backfill=False (명시)
     assert analytics["symbol"] == "btc"
     assert analytics["date"] == "2026-03-21"
     assert set(analytics["newsSentiment"].keys()) == {"mean", "std", "count"}
+    # 실시간 파이프라인은 build_public_news_sentiment_text (title+summary+interpretation)
+    assert analytics["textSchemaVersion"] == "title_summary_whyitmatters"
 
 
 def test_publish_public_brief_curated_preserves_full_payload(monkeypatch, tmp_path) -> None:

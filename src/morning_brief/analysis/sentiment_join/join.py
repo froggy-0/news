@@ -75,15 +75,22 @@ def detect_outliers_rolling_iqr(
 
 
 def _add_futures_lag_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Req 11.3: 선물 지표에 Lag-1 처리를 적용해 미래 오염을 방지합니다."""
+    """Req 11.3: 선물 지표에 Lag-1 처리를 적용해 미래 오염을 방지합니다.
+
+    §0: Granger에는 raw 컬럼을 투입해야 double-lag를 방지할 수 있으므로
+    raw와 _lag1을 함께 생성합니다. PCA·correlation에는 _lag1을 사용합니다.
+    """
     result = df.copy()
     if "funding_rate" in result.columns:
         result["funding_rate_lag1"] = result["funding_rate"].shift(1)
     else:
         result["funding_rate_lag1"] = float("nan")
     if "open_interest_usd" in result.columns:
-        result["oi_change_pct_lag1"] = result["open_interest_usd"].pct_change().shift(1)
+        oi = pd.to_numeric(result["open_interest_usd"], errors="coerce")
+        result["oi_change_pct"] = oi.pct_change()
+        result["oi_change_pct_lag1"] = result["oi_change_pct"].shift(1)
     else:
+        result["oi_change_pct"] = float("nan")
         result["oi_change_pct_lag1"] = float("nan")
     if "btc_long_short_ratio" in result.columns:
         result["btc_long_short_ratio_lag1"] = result["btc_long_short_ratio"].shift(1)
@@ -93,18 +100,26 @@ def _add_futures_lag_columns(df: pd.DataFrame) -> pd.DataFrame:
         result["etf_net_inflow_usd_lag1"] = result["etf_net_inflow_usd"].shift(1)
     else:
         result["etf_net_inflow_usd_lag1"] = float("nan")
+    # §7: volume_change_pct raw (Granger용) + lag1 (PCA용)
+    if "btc_quote_volume" in result.columns:
+        vol = pd.to_numeric(result["btc_quote_volume"], errors="coerce")
+        result["volume_change_pct"] = vol.pct_change()
+        result["volume_change_pct_lag1"] = result["volume_change_pct"].shift(1)
+    else:
+        result["volume_change_pct"] = float("nan")
+        result["volume_change_pct_lag1"] = float("nan")
     return result
 
 
 def _add_sentiment_lag_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """감성·공포지수에 Lag-1 처리를 적용해 look-ahead bias를 제거합니다.
+    """감성·공포지수·환율에 Lag-1 처리를 적용해 look-ahead bias를 제거합니다.
 
+    §0: PCA·correlation용 lag1 컬럼. Granger 검정에는 raw 컬럼을 사용한다(double-lag 방지).
     lag1 = T-1 시점 값 (.shift(1)).
-    "어제의 감성/공포지수가 오늘 BTC 수익률을 예측하는가"를 올바르게
-    검정하려면 predictor가 target보다 시간적으로 앞서야 합니다.
 
     - news_sentiment_mean_lag1: 순수 .shift(1) (원본과 동일한 스케일)
     - fng_value_lag1: Int64 → float 변환 후 .shift(1)
+    - usdkrw_log_return_lag1: PCA·correlation용. Granger에는 raw usdkrw_log_return 사용.
     """
     result = df.copy()
     if "news_sentiment_mean" in result.columns:
@@ -118,6 +133,10 @@ def _add_sentiment_lag_columns(df: pd.DataFrame) -> pd.DataFrame:
         )
     else:
         result["fng_value_lag1"] = float("nan")
+    if "usdkrw_log_return" in result.columns:
+        result["usdkrw_log_return_lag1"] = result["usdkrw_log_return"].shift(1)
+    else:
+        result["usdkrw_log_return_lag1"] = float("nan")
     return result
 
 
@@ -234,6 +253,10 @@ def merge_sources(
         merged["etf_total_aum_usd"] = float("nan")
         merged["etf_net_inflow_usd"] = float("nan")
 
+    # §7: btc_quote_volume 누락 방어 — _empty_return_frame fallback 경로에서 컬럼이 없을 수 있음
+    if "btc_quote_volume" not in merged.columns:
+        merged["btc_quote_volume"] = float("nan")
+
     merged = _add_futures_lag_columns(merged)
     merged = _add_sentiment_lag_columns(merged)
     merged = _add_btc_direction_label(merged)
@@ -249,6 +272,11 @@ def merge_sources(
             "funding_rate",
             "open_interest_usd",
             "btc_long_short_ratio",
+            # §7: 이상치 감지 대상 확장 (task 02 §8 마스킹 방식 — 행 유지, 값만 NaN)
+            "news_sentiment_mean",
+            "fng_value",
+            "etf_net_inflow_usd",
+            "btc_quote_volume",
         ],
     )
 

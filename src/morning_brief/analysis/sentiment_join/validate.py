@@ -30,6 +30,8 @@ MASTER_SCHEMA = pa.DataFrameSchema(
         "funding_rate": pa.Column(float, nullable=True),
         "open_interest_usd": pa.Column(float, nullable=True),
         "funding_rate_lag1": pa.Column(float, nullable=True),
+        # §3: Granger raw predictors — Granger 내부에서 lag 처리, double-lag 방지
+        "oi_change_pct": pa.Column(float, nullable=True),
         "oi_change_pct_lag1": pa.Column(float, nullable=True),
         "btc_long_short_ratio": pa.Column(float, pa.Check.ge(0), nullable=True),
         "btc_long_short_ratio_lag1": pa.Column(float, nullable=True),
@@ -37,6 +39,11 @@ MASTER_SCHEMA = pa.DataFrameSchema(
         "etf_total_aum_usd": pa.Column(float, pa.Check.ge(0), nullable=True),
         "etf_net_inflow_usd": pa.Column(float, nullable=True),
         "etf_net_inflow_usd_lag1": pa.Column(float, nullable=True),
+        # §3: Granger raw predictor
+        "volume_change_pct": pa.Column(float, nullable=True),
+        # §5: PCA / correlation용 lag1 (Granger에는 미사용)
+        "usdkrw_log_return_lag1": pa.Column(float, nullable=True),
+        "volume_change_pct_lag1": pa.Column(float, nullable=True),
         # Req 8: BTC 방향 라벨
         "btc_direction_label": pa.Column(nullable=True),
         # Req 13: PCA 하이브리드 지수 (데이터 부족 시 NaN 허용)

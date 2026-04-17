@@ -53,6 +53,7 @@ class TestBuildAnalyticsPayload:
             "sentimentStatus",
             "newsSentiment",
             "_backfill",
+            "textSchemaVersion",
         }
         assert set(payload.keys()) == allowed
 
@@ -94,6 +95,25 @@ class TestBuildAnalyticsPayload:
             is_backfill=True,
         )
         assert payload["_backfill"] is True
+
+    def test_text_schema_version_none_by_default(self) -> None:
+        """text_schema_version 미지정 시 textSchemaVersion=None."""
+        payload = build_analytics_sentiment_payload(
+            symbol="btc",
+            run_date="2026-04-14",
+            full_payload=_full_payload(),
+        )
+        assert payload["textSchemaVersion"] is None
+
+    def test_text_schema_version_propagated(self) -> None:
+        """text_schema_version 지정 시 textSchemaVersion에 그대로 기록된다."""
+        payload = build_analytics_sentiment_payload(
+            symbol="btc",
+            run_date="2026-04-14",
+            full_payload=_full_payload(),
+            text_schema_version="title_summary_whyitmatters",
+        )
+        assert payload["textSchemaVersion"] == "title_summary_whyitmatters"
 
     def test_schema_version(self) -> None:
         payload = build_analytics_sentiment_payload(
