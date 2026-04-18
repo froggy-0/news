@@ -44,6 +44,20 @@ class ParquetInspection:
     full_data: pd.DataFrame
 
 
+_PREFERRED_PREVIEW_COLUMNS = [
+    "date",
+    "news_sentiment_mean",
+    "news_sentiment_std",
+    "n_articles",
+    "sentiment_status",
+    "fng_value",
+    "btc_log_return",
+    "funding_rate",
+    "hybrid_index",
+    "is_outlier",
+]
+
+
 def _format_scalar(value: Any) -> str:
     if value is None or pd.isna(value):
         return "<NA>"
@@ -186,6 +200,40 @@ def _render_full_data(df: pd.DataFrame) -> str:
     return df.to_string(index=False)
 
 
+def _truncate(value: str, *, limit: int = 96) -> str:
+    if len(value) <= limit:
+        return value
+    return f"{value[: limit - 3]}..."
+
+
+def _select_preview_columns(df: pd.DataFrame, *, limit: int = 10) -> list[str]:
+    preferred = [column for column in _PREFERRED_PREVIEW_COLUMNS if column in df.columns]
+    if len(preferred) >= limit:
+        return preferred[:limit]
+
+    remaining = [column for column in df.columns if column not in preferred]
+    return (preferred + remaining)[:limit]
+
+
+def _extract_stats_summary(metadata: dict[str, str]) -> dict[str, str]:
+    raw = metadata.get("sentiment_join_stats")
+    if not raw:
+        return {}
+
+    stats = json.loads(raw)
+    pca_summary = stats.get("pca_summary") or {}
+    return {
+        "run_id": str(stats.get("run_id", "<missing>")),
+        "granger_executed": str(stats.get("granger_executed", "<missing>")),
+        "granger_result_count": str(len(stats.get("granger_results", []))),
+        "outlier_filtered_count": str(stats.get("outlier_filtered_count", "<missing>")),
+        "outlier_filtered_ratio": str(stats.get("outlier_filtered_ratio", "<missing>")),
+        "hybrid_signal_label": str(stats.get("hybrid_signal_label", "<missing>")),
+        "pca_status": str(pca_summary.get("status", "<missing>")),
+        "pca_explained_variance": str(pca_summary.get("explained_variance", "<missing>")),
+    }
+
+
 def _render_compare_section(inspections: list[ParquetInspection]) -> str:
     if len(inspections) < 2:
         return ""
@@ -276,9 +324,169 @@ def render_report(inspections: list[ParquetInspection]) -> str:
     return "\n".join(sections) + "\n"
 
 
+def _build_summary_table(inspection: ParquetInspection):
+    from rich.table import Table
+
+    table = Table(show_header=False, box=None, pad_edge=False)
+    table.add_column(style="bold cyan", width=18)
+    table.add_column()
+    table.add_row("file", str(inspection.path))
+    table.add_row("rows", str(inspection.row_count))
+    table.add_row("columns", str(inspection.column_count))
+    table.add_row("row_groups", str(inspection.row_group_count))
+    table.add_row("created_by", inspection.created_by)
+    table.add_row(
+        "date_range",
+        f"{inspection.date_min or '<missing>'} -> {inspection.date_max or '<missing>'}",
+    )
+    table.add_row(
+        "duplicate_dates",
+        (
+            str(inspection.duplicate_date_count)
+            if inspection.duplicate_date_count is not None
+            else "<no date column>"
+        ),
+    )
+    return table
+
+
+def _build_key_metadata_table(inspection: ParquetInspection):
+    from rich.table import Table
+
+    stats_summary = _extract_stats_summary(inspection.schema_metadata)
+    table = Table(title="Metadata", expand=True)
+    table.add_column("Key", style="bold cyan", no_wrap=True)
+    table.add_column("Value")
+
+    keys = ["btc_source", "ffill_days"]
+    for key in keys:
+        if key in inspection.schema_metadata:
+            table.add_row(key, _truncate(inspection.schema_metadata[key]))
+
+    for key, value in stats_summary.items():
+        table.add_row(key, _truncate(value))
+
+    if table.row_count == 0:
+        table.add_row("<none>", "<none>")
+    return table
+
+
+def _build_column_summary_table(summaries: list[ColumnSummary]):
+    from rich.table import Table
+
+    table = Table(title="Column Summary", expand=True)
+    table.add_column("Column", style="bold")
+    table.add_column("Parquet")
+    table.add_column("Pandas")
+    table.add_column("Nulls", justify="right")
+    table.add_column("Unique", justify="right")
+    table.add_column("Min")
+    table.add_column("Max")
+
+    for summary in summaries:
+        table.add_row(
+            summary.name,
+            summary.parquet_type,
+            summary.pandas_dtype,
+            str(summary.null_count),
+            str(summary.unique_count),
+            _truncate(summary.minimum, limit=24),
+            _truncate(summary.maximum, limit=24),
+        )
+    return table
+
+
+def _build_preview_table(df: pd.DataFrame):
+    from rich.table import Table
+
+    if df.empty:
+        table = Table(title="Preview")
+        table.add_column("Value")
+        table.add_row("<empty>")
+        return table
+
+    preview_columns = _select_preview_columns(df)
+    table = Table(title="Preview", expand=True)
+    for column in preview_columns:
+        table.add_column(column, overflow="fold")
+
+    for _, row in df[preview_columns].iterrows():
+        table.add_row(
+            *[_truncate(_format_scalar(row[column]), limit=32) for column in preview_columns]
+        )
+    return table
+
+
+def _build_compare_table(inspections: list[ParquetInspection]):
+    from rich.table import Table
+
+    if len(inspections) < 2:
+        return None
+
+    first, second = inspections[0], inspections[1]
+    table = Table(title="Comparison", expand=True)
+    table.add_column("Metric", style="bold cyan")
+    table.add_column(first.path.name)
+    table.add_column(second.path.name)
+
+    table.add_row("rows", str(first.row_count), str(second.row_count))
+    table.add_row("columns", str(first.column_count), str(second.column_count))
+    table.add_row(
+        "date_range",
+        f"{first.date_min or '<missing>'} -> {first.date_max or '<missing>'}",
+        f"{second.date_min or '<missing>'} -> {second.date_max or '<missing>'}",
+    )
+
+    first_columns = set(first.full_data.columns)
+    second_columns = set(second.full_data.columns)
+    table.add_row(
+        "left_only_columns",
+        ", ".join(sorted(first_columns - second_columns)) or "<none>",
+        "",
+    )
+    table.add_row(
+        "right_only_columns",
+        "",
+        ", ".join(sorted(second_columns - first_columns)) or "<none>",
+    )
+    return table
+
+
+def print_rich_report(inspections: list[ParquetInspection], console=None) -> None:
+    from rich.console import Console, Group
+    from rich.panel import Panel
+
+    console = console or Console()
+    renderables: list[object] = []
+    for inspection in inspections:
+        renderables.extend(
+            [
+                Panel(
+                    _build_summary_table(inspection),
+                    title=f"[bold green]{inspection.path.name}[/bold green]",
+                    border_style="green",
+                ),
+                _build_key_metadata_table(inspection),
+                _build_column_summary_table(inspection.column_summaries),
+                _build_preview_table(inspection.preview),
+            ]
+        )
+
+    compare_table = _build_compare_table(inspections)
+    if compare_table is not None:
+        renderables.append(compare_table)
+
+    console.print(Group(*renderables))
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Inspect sentiment join parquet files with schema, stats, and comparison output."
+    )
+    parser.add_argument(
+        "--plain",
+        action="store_true",
+        help="rich 출력 대신 기존 텍스트 리포트를 사용합니다.",
     )
     parser.add_argument("paths", nargs="+", type=Path, help="Parquet files to inspect")
     return parser.parse_args(argv)
@@ -287,8 +495,25 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     inspections = [inspect_parquet(path) for path in args.paths]
-    print(render_report(inspections), end="")
+    if args.plain:
+        print(render_report(inspections), end="")
+        return 0
+
+    try:
+        print_rich_report(inspections)
+    except ImportError:
+        print(render_report(inspections), end="")
     return 0
 
 
-__all__ = ["inspect_parquet", "main", "parse_args", "render_report"]
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+
+__all__ = [
+    "inspect_parquet",
+    "main",
+    "parse_args",
+    "print_rich_report",
+    "render_report",
+]

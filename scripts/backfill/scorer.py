@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
@@ -75,6 +76,7 @@ def score_and_aggregate(
     articles_by_date: dict[str, list[RawArticle]],
     *,
     batch_size: int = 16,
+    progress_callback: Callable[[dict[str, object]], None] | None = None,
 ) -> list[DailyAggregate]:
     """전체 기사를 일괄 배치 추론 후 날짜별 DailyAggregate 리스트 반환.
 
@@ -116,7 +118,23 @@ def score_and_aggregate(
     ]
 
     # 일괄 추론
-    results: list[SentimentResult] = scorer.score_texts(texts)
+    effective_batch_size = max(1, batch_size)
+    total_batches = math.ceil(len(texts) / effective_batch_size)
+    results: list[SentimentResult] = []
+
+    for batch_index, start in enumerate(range(0, len(texts), effective_batch_size), start=1):
+        batch = texts[start : start + effective_batch_size]
+        results.extend(scorer.score_texts(batch))
+        if progress_callback:
+            progress_callback(
+                {
+                    "status": "running",
+                    "batch_index": batch_index,
+                    "total_batches": total_batches,
+                    "processed_articles": min(start + len(batch), len(texts)),
+                    "total_articles": len(texts),
+                }
+            )
 
     # 날짜별 집계
     aggregates: list[DailyAggregate] = []
@@ -156,6 +174,17 @@ def score_and_aggregate(
                 coindesk_count=coindesk_count,
                 alpaca_count=alpaca_count,
             )
+        )
+
+    if progress_callback:
+        progress_callback(
+            {
+                "status": "completed",
+                "processed_articles": len(texts),
+                "total_articles": len(texts),
+                "total_batches": total_batches,
+                "dates": len(aggregates),
+            }
         )
 
     return aggregates

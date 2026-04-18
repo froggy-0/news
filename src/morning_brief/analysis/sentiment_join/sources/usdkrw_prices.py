@@ -89,8 +89,19 @@ def _kis_headers(token: str, app_key: str, app_secret: str) -> dict[str, str]:
     }
 
 
-def _kis_chartprice(app_key: str, app_secret: str, start_date: str, end_date: str) -> pd.DataFrame:
-    token = _kis_token(app_key, app_secret)
+# KIS `FHKST03030100` (해외지수 일봉) 응답은 단일 호출당 약 100영업일만 돌려준다.
+# 1년 이상을 한 번에 요청해도 나머지는 잘려서 응답되므로 chunk 페이지네이션이 필요하다.
+# 100영업일 ≈ 140 달력일이므로 안전 마진을 위해 120일 단위로 분할한다.
+_KIS_CHART_CHUNK_DAYS = 120
+
+
+def _kis_chartprice_page(
+    token: str,
+    app_key: str,
+    app_secret: str,
+    start_date: str,
+    end_date: str,
+) -> pd.DataFrame:
     params = {
         "FID_COND_MRKT_DIV_CODE": "X",
         "FID_INPUT_ISCD": USDKRW_ISCD,
@@ -152,6 +163,75 @@ def _kis_chartprice(app_key: str, app_secret: str, start_date: str, end_date: st
     frame = pd.DataFrame(parsed_rows)
     return (
         frame.groupby("date", as_index=False)["close"]
+        .last()
+        .sort_values("date")
+        .reset_index(drop=True)
+    )
+
+
+def _kis_chartprice(
+    app_key: str,
+    app_secret: str,
+    start_date: str,
+    end_date: str,
+) -> pd.DataFrame:
+    """KIS 일봉 응답 cap(≈100영업일)을 회피하기 위한 chunk 페이지네이션 래퍼.
+
+    토큰은 1회만 발급해 재사용하며, end→start 방향으로 chunk를 반복한다.
+    동일 날짜가 겹쳐도 `groupby.last()`로 중복을 제거한다.
+    한 chunk가 비어 있으면 더 이전 구간에도 데이터가 없다고 보고 조기 종료한다.
+    """
+    token = _kis_token(app_key, app_secret)
+    start_dt = datetime.fromisoformat(start_date).date()
+    end_dt = datetime.fromisoformat(end_date).date()
+    if start_dt > end_dt:
+        raise HttpFetchError("KIS 환율 요청: start_date가 end_date보다 큽니다.", provider="kis")
+
+    frames: list[pd.DataFrame] = []
+    cursor_end = end_dt
+    last_error: Exception | None = None
+    while cursor_end >= start_dt:
+        chunk_start = max(start_dt, cursor_end - timedelta(days=_KIS_CHART_CHUNK_DAYS - 1))
+        try:
+            page = _kis_chartprice_page(
+                token,
+                app_key,
+                app_secret,
+                chunk_start.isoformat(),
+                cursor_end.isoformat(),
+            )
+        except HttpFetchError as exc:
+            # 한 chunk 실패는 기록만 하고 그 이전 chunk를 계속 시도한다.
+            # 모든 chunk가 실패하면 바깥으로 에러를 던진다.
+            last_error = exc
+            log_structured(
+                logger,
+                event="kis.chunk_failed",
+                message="KIS 환율 chunk 수집에 실패했습니다.",
+                level=logging.WARNING,
+                chunk_start=chunk_start.isoformat(),
+                chunk_end=cursor_end.isoformat(),
+                reason=str(exc),
+            )
+            page = pd.DataFrame(
+                {"date": pd.Series(dtype="object"), "close": pd.Series(dtype="float64")}
+            )
+
+        if not page.empty:
+            frames.append(page)
+
+        if chunk_start == start_dt:
+            break
+        cursor_end = chunk_start - timedelta(days=1)
+
+    if not frames:
+        if last_error is not None:
+            raise last_error
+        raise HttpFetchError("KIS 환율 응답에서 유효한 값을 찾지 못했어요.", provider="kis")
+
+    merged = pd.concat(frames, ignore_index=True)
+    return (
+        merged.groupby("date", as_index=False)["close"]
         .last()
         .sort_values("date")
         .reset_index(drop=True)

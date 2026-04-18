@@ -267,16 +267,16 @@ def merge_sources(
     merged = detect_outliers_rolling_iqr(
         merged,
         cols=[
+            # 변화율·수익률 계열에만 rolling IQR×3 적용.
+            # level/bounded 컬럼(fng_value[0,100], news_sentiment_mean[-1,1],
+            # btc_long_short_ratio, open_interest_usd, btc_quote_volume)은
+            # 분포 특성상 false positive가 많아 제외.
             "btc_return",
             "usdkrw_return",
             "funding_rate",
-            "open_interest_usd",
-            "btc_long_short_ratio",
-            # §7: 이상치 감지 대상 확장 (task 02 §8 마스킹 방식 — 행 유지, 값만 NaN)
-            "news_sentiment_mean",
-            "fng_value",
+            "oi_change_pct",
+            "volume_change_pct",
             "etf_net_inflow_usd",
-            "btc_quote_volume",
         ],
     )
 

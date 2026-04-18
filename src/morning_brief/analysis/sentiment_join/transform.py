@@ -35,6 +35,35 @@ def forward_fill_prices(
     return filled, total_filled
 
 
+def reindex_to_calendar(
+    df: pd.DataFrame,
+    start_date: str,
+    end_date: str,
+    date_col: str = "date",
+) -> pd.DataFrame:
+    """결측 달력일을 포함하도록 DataFrame을 reindex한다.
+
+    USDKRW처럼 외환시장이 주말에 닫혀 Sat/Sun 행이 비는 소스를
+    전체 달력일로 확장해 이후 ffill이 주말을 금요일 값으로 채울 수 있게 한다.
+    BTC(24/7) 기준 inner merge에서 주말 행이 유지되도록 하는 것이 목적.
+
+    기존 행은 그대로 유지하고, 누락된 날짜는 NaN으로 채워진 행이 추가된다.
+    """
+    if df.empty:
+        return df.copy()
+
+    start = pd.to_datetime(start_date).date()
+    end = pd.to_datetime(end_date).date()
+    all_dates = pd.date_range(start, end, freq="D").strftime("%Y-%m-%d").tolist()
+
+    working = df.copy()
+    working[date_col] = working[date_col].astype(str)
+    indexed = working.set_index(date_col)
+    reindexed = indexed.reindex(all_dates)
+    reindexed.index.name = date_col
+    return reindexed.reset_index()
+
+
 def compute_returns(df: pd.DataFrame, price_col: str) -> pd.DataFrame:
     computed = df.copy()
     if computed.empty:
@@ -58,5 +87,6 @@ __all__ = [
     "compute_returns",
     "forward_fill_prices",
     "normalize_dates",
+    "reindex_to_calendar",
     "trim_to_date_range",
 ]

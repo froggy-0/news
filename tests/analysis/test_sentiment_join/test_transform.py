@@ -10,6 +10,7 @@ from morning_brief.analysis.sentiment_join.transform import (
     compute_returns,
     forward_fill_prices,
     normalize_dates,
+    reindex_to_calendar,
     trim_to_date_range,
 )
 
@@ -76,6 +77,52 @@ def test_trim_to_date_range_removes_extra_row() -> None:
     trimmed = trim_to_date_range(df, "2026-04-10", "2026-04-11")
 
     assert list(trimmed["date"]) == ["2026-04-10", "2026-04-11"]
+
+
+def test_reindex_to_calendar_fills_weekend_gaps_with_nan() -> None:
+    """USDKRW처럼 주말에 비는 소스를 전체 달력일로 확장한다."""
+    df = pd.DataFrame(
+        {
+            "date": ["2026-04-10", "2026-04-13"],  # Fri → Mon (Sat/Sun 누락)
+            "close": [1430.0, 1435.0],
+        }
+    )
+
+    reindexed = reindex_to_calendar(df, "2026-04-10", "2026-04-13")
+
+    assert list(reindexed["date"]) == [
+        "2026-04-10",
+        "2026-04-11",
+        "2026-04-12",
+        "2026-04-13",
+    ]
+    assert reindexed.loc[0, "close"] == 1430.0
+    assert pd.isna(reindexed.loc[1, "close"])  # Sat
+    assert pd.isna(reindexed.loc[2, "close"])  # Sun
+    assert reindexed.loc[3, "close"] == 1435.0
+
+
+def test_reindex_to_calendar_then_ffill_propagates_friday_price() -> None:
+    """reindex + ffill 조합이 금요일 가격을 주말로 전파하는지 검증."""
+    df = pd.DataFrame(
+        {
+            "date": ["2026-04-10", "2026-04-13"],
+            "close": [1430.0, 1435.0],
+        }
+    )
+
+    reindexed = reindex_to_calendar(df, "2026-04-10", "2026-04-13")
+    filled, n_filled = forward_fill_prices(reindexed, ["close"], max_periods=3)
+
+    assert n_filled == 2  # Sat + Sun
+    assert filled.loc[1, "close"] == 1430.0  # Sat gets Fri close
+    assert filled.loc[2, "close"] == 1430.0  # Sun gets Fri close
+
+
+def test_reindex_to_calendar_returns_empty_on_empty_input() -> None:
+    df = pd.DataFrame({"date": [], "close": []})
+    result = reindex_to_calendar(df, "2026-04-10", "2026-04-12")
+    assert result.empty
 
 
 def test_compute_returns_constant_series_yields_zero_change() -> None:

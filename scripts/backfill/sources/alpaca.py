@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import re
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 
 import requests
@@ -72,6 +73,7 @@ def fetch_alpaca_articles(
     api_secret_key: str,
     *,
     delay_seconds: float = 0.2,
+    progress_callback: Callable[[dict[str, object]], None] | None = None,
 ) -> list[RawArticle]:
     """next_page_token 방식 순방향 페이지네이션.
 
@@ -103,10 +105,13 @@ def fetch_alpaca_articles(
     }
 
     collected: list[RawArticle] = []
+    pages_fetched = 0
 
     while True:
         data = _get_with_retry(ALPACA_NEWS_URL, headers, params)
         news_items = data.get("news", [])
+        if news_items:
+            pages_fetched += 1
 
         for item in news_items:
             article_id = str(item.get("id", ""))
@@ -141,6 +146,22 @@ def fetch_alpaca_articles(
                 )
             )
 
+        if progress_callback and news_items:
+            created_ats = [
+                str(item.get("created_at") or "") for item in news_items if item.get("created_at")
+            ]
+            progress_callback(
+                {
+                    "source": "alpaca",
+                    "status": "running",
+                    "pages_fetched": pages_fetched,
+                    "page_articles": len(news_items),
+                    "collected": len(collected),
+                    "oldest_seen": _iso_to_utc_date(min(created_ats)) if created_ats else "",
+                    "newest_seen": _iso_to_utc_date(max(created_ats)) if created_ats else "",
+                }
+            )
+
         next_token = data.get("next_page_token")
         if not next_token:
             break
@@ -148,5 +169,15 @@ def fetch_alpaca_articles(
         params = dict(params)
         params["page_token"] = next_token
         time.sleep(delay_seconds)
+
+    if progress_callback:
+        progress_callback(
+            {
+                "source": "alpaca",
+                "status": "completed",
+                "pages_fetched": pages_fetched,
+                "collected": len(collected),
+            }
+        )
 
     return collected

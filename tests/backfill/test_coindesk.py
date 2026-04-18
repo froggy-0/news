@@ -179,3 +179,30 @@ def test_body_empty_string_sets_empty_string() -> None:
             result = fetch_coindesk_articles("2024-01-01", "2024-01-02", delay_seconds=0)
 
     assert result[0].body == ""
+
+
+def test_progress_callback_reports_pages_and_completion() -> None:
+    ts = _date_to_ts("2024-01-01") + 3600
+    events: list[dict[str, object]] = []
+
+    with patch(
+        "backfill.sources.coindesk._get_with_retry",
+        side_effect=[
+            {"Data": [_make_item(1, ts), _make_item(2, ts - 60)]},
+            {"Data": []},
+        ],
+    ):
+        with patch("backfill.sources.coindesk.time.sleep"):
+            fetch_coindesk_articles(
+                "2024-01-01",
+                "2024-01-02",
+                delay_seconds=0,
+                progress_callback=events.append,
+            )
+
+    assert events[0]["source"] == "coindesk"
+    assert events[0]["status"] == "running"
+    assert events[0]["pages_fetched"] == 1
+    assert events[0]["collected"] == 2
+    assert events[-1]["status"] == "completed"
+    assert events[-1]["collected"] == 2

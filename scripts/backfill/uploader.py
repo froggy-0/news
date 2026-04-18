@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -215,6 +216,7 @@ def upload_all(
     *,
     force: bool = False,
     max_concurrency: int = 5,
+    progress_callback: Callable[[dict[str, object]], None] | None = None,
 ) -> UploadResults:
     """ThreadPoolExecutor로 날짜별 병렬 업로드. UploadResults 반환."""
     results = UploadResults(
@@ -230,8 +232,11 @@ def upload_all(
 
     with ThreadPoolExecutor(max_workers=max_concurrency) as executor:
         futures = {executor.submit(_upload_one, agg): agg for agg in aggregates}
+        total = len(futures)
+        completed = 0
         for future in as_completed(futures):
             outcome = future.result()
+            completed += 1
             if outcome == "uploaded":
                 results.uploaded += 1
             elif outcome == "skipped_exists":
@@ -240,5 +245,20 @@ def upload_all(
                 results.skipped_protected += 1
             else:
                 results.failed += 1
+            if progress_callback:
+                aggregate = futures[future]
+                progress_callback(
+                    {
+                        "status": "running" if completed < total else "completed",
+                        "date": aggregate.date,
+                        "completed": completed,
+                        "total": total,
+                        "outcome": outcome,
+                        "uploaded": results.uploaded,
+                        "skipped_exists": results.skipped_exists,
+                        "skipped_protected": results.skipped_protected,
+                        "failed": results.failed,
+                    }
+                )
 
     return results

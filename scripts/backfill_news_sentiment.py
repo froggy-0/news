@@ -26,6 +26,7 @@ import logging
 import os
 import sys
 import time
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -50,6 +51,213 @@ logger = logging.getLogger(__name__)
 
 _R2_REQUIRED = ["R2_ENDPOINT_URL", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"]
 _MAX_BACKFILL_DAYS = 460
+
+
+@dataclass
+class _StageSnapshot:
+    label: str
+    detail: str = "대기 중"
+
+
+@dataclass
+class _SourceRange:
+    requested_start: str
+    requested_end: str
+    collected_start: str = ""
+    collected_end: str = ""
+
+
+def _merge_date_range(
+    current_start: str,
+    current_end: str,
+    new_start: str,
+    new_end: str,
+) -> tuple[str, str]:
+    if not new_start or not new_end:
+        return current_start, current_end
+    if not current_start or new_start < current_start:
+        current_start = new_start
+    if not current_end or new_end > current_end:
+        current_end = new_end
+    return current_start, current_end
+
+
+class _BackfillLiveUI:
+    def __init__(self, *, total_steps: int, requested_start: str, requested_end: str) -> None:
+        from rich.console import Group
+        from rich.live import Live
+        from rich.panel import Panel
+        from rich.progress import (
+            BarColumn,
+            Progress,
+            SpinnerColumn,
+            TaskProgressColumn,
+            TextColumn,
+            TimeElapsedColumn,
+        )
+        from rich.table import Table
+
+        self._Group = Group
+        self._Panel = Panel
+        self._Table = Table
+        self.steps = Progress(
+            SpinnerColumn(),
+            TextColumn("[bold cyan]{task.description}"),
+            BarColumn(bar_width=32),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+        )
+        self.work = Progress(
+            SpinnerColumn(),
+            TextColumn("{task.description}"),
+            BarColumn(bar_width=32),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+        )
+        self.overall_task = self.steps.add_task("전체 단계", total=total_steps)
+        self.coindesk_task = self.work.add_task("CoinDesk 수집", total=None)
+        self.alpaca_task = self.work.add_task("Alpaca 수집", total=None)
+        self.finbert_task = self.work.add_task("FinBERT 추론", total=100, completed=0)
+        self.upload_task = self.work.add_task("R2 업로드", total=100, completed=0)
+        self.current_stage = "초기화"
+        self.current_detail = "시작 준비 중"
+        self.source_ranges = {
+            "coindesk": _SourceRange(requested_start=requested_start, requested_end=requested_end),
+            "alpaca": _SourceRange(requested_start=requested_start, requested_end=requested_end),
+        }
+        self.snapshots = {
+            "coindesk": _StageSnapshot("CoinDesk", f"요청 {requested_start} ~ {requested_end}"),
+            "alpaca": _StageSnapshot("Alpaca", f"요청 {requested_start} ~ {requested_end}"),
+            "finbert": _StageSnapshot("FinBERT", "대기 중"),
+            "upload": _StageSnapshot("업로드", "대기 중"),
+        }
+        self.live = Live(self._render(), refresh_per_second=8, transient=False)
+
+    def __enter__(self) -> "_BackfillLiveUI":
+        self.live.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.live.__exit__(exc_type, exc, tb)
+
+    def _render(self):
+        table = self._Table.grid(padding=(0, 1))
+        table.add_column(style="bold cyan", width=12)
+        table.add_column()
+        table.add_row("현재 단계", self.current_stage)
+        table.add_row("상세", self.current_detail)
+        for key in ("coindesk", "alpaca", "finbert", "upload"):
+            snapshot = self.snapshots[key]
+            table.add_row(snapshot.label, snapshot.detail)
+        return self._Panel(
+            self._Group(table, self.steps, self.work),
+            title="BTC 뉴스 감성 백필 진행 상황",
+            border_style="cyan",
+        )
+
+    def refresh(self) -> None:
+        self.live.update(self._render())
+
+    def set_stage(self, stage: str, detail: str) -> None:
+        self.current_stage = stage
+        self.current_detail = detail
+        self.refresh()
+
+    def advance_step(self, detail: str) -> None:
+        self.steps.advance(self.overall_task, 1)
+        self.current_detail = detail
+        self.refresh()
+
+    def mark_skipped(self, key: str, detail: str) -> None:
+        self.snapshots[key].detail = detail
+        if key == "alpaca":
+            self.work.update(self.alpaca_task, completed=1, total=1)
+        self.refresh()
+
+    def update_source(self, key: str, event: dict[str, object]) -> None:
+        task_id = self.coindesk_task if key == "coindesk" else self.alpaca_task
+        pages = int(event.get("pages_fetched", 0))
+        collected = int(event.get("collected", 0))
+        status = str(event.get("status", "running"))
+        oldest = str(event.get("oldest_seen", "")).strip()
+        newest = str(event.get("newest_seen", "")).strip()
+        source_range = self.source_ranges[key]
+        (
+            source_range.collected_start,
+            source_range.collected_end,
+        ) = _merge_date_range(
+            source_range.collected_start,
+            source_range.collected_end,
+            oldest,
+            newest,
+        )
+        requested_window = f"{source_range.requested_start} ~ {source_range.requested_end}"
+        collected_window = (
+            f"{source_range.collected_start} ~ {source_range.collected_end}"
+            if source_range.collected_start and source_range.collected_end
+            else "아직 없음"
+        )
+        page_window = f"{oldest} ~ {newest}" if oldest and newest else "계산 중"
+        self.work.update(task_id, total=max(pages, 1), completed=pages)
+        self.snapshots[key].detail = (
+            f"요청 {requested_window}, 누적 {collected_window}, 현재 페이지 {page_window}, "
+            f"{pages}페이지, {collected}건"
+        )
+        if status == "completed":
+            self.work.update(task_id, total=max(pages, 1), completed=max(pages, 1))
+            self.snapshots[key].detail = (
+                f"완료: 요청 {requested_window}, 수집 {collected_window}, "
+                f"{pages}페이지, 총 {collected}건"
+            )
+        elif status == "failed":
+            self.snapshots[key].detail = (
+                f"실패 후 종료: 요청 {requested_window}, 수집 {collected_window}, "
+                f"{pages}페이지, 총 {collected}건"
+            )
+        self.refresh()
+
+    def prepare_finbert(self, total_articles: int) -> None:
+        total = max(total_articles, 1)
+        self.work.update(self.finbert_task, total=total, completed=0)
+        self.snapshots["finbert"].detail = f"대기 중: 총 {total_articles}건"
+        self.refresh()
+
+    def update_finbert(self, event: dict[str, object]) -> None:
+        processed = int(event.get("processed_articles", 0))
+        total = max(int(event.get("total_articles", 0)), 1)
+        batch_index = int(event.get("batch_index", 0))
+        total_batches = max(int(event.get("total_batches", 0)), 1)
+        self.work.update(self.finbert_task, total=total, completed=processed)
+        if str(event.get("status", "running")) == "completed":
+            dates = int(event.get("dates", 0))
+            self.snapshots["finbert"].detail = f"완료: {processed}건, {dates}일 집계"
+        else:
+            self.snapshots[
+                "finbert"
+            ].detail = f"배치 {batch_index}/{total_batches}, 처리 {processed}/{total}건"
+        self.refresh()
+
+    def prepare_upload(self, total_dates: int) -> None:
+        total = max(total_dates, 1)
+        self.work.update(self.upload_task, total=total, completed=0)
+        self.snapshots["upload"].detail = f"대기 중: 총 {total_dates}일"
+        self.refresh()
+
+    def update_upload(self, event: dict[str, object]) -> None:
+        completed = int(event.get("completed", 0))
+        total = max(int(event.get("total", 0)), 1)
+        uploaded = int(event.get("uploaded", 0))
+        skipped_exists = int(event.get("skipped_exists", 0))
+        skipped_protected = int(event.get("skipped_protected", 0))
+        failed = int(event.get("failed", 0))
+        current_date = str(event.get("date", ""))
+        outcome = str(event.get("outcome", ""))
+        self.work.update(self.upload_task, total=total, completed=completed)
+        self.snapshots["upload"].detail = (
+            f"{completed}/{total}일, 최근 {current_date} -> {outcome}, "
+            f"성공 {uploaded}, 존재 {skipped_exists}, 보호 {skipped_protected}, 실패 {failed}"
+        )
+        self.refresh()
 
 
 def _parse_args() -> argparse.Namespace:
@@ -123,9 +331,16 @@ def _alpaca_creds_present() -> bool:
 
 def main() -> int:
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.WARNING,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
+
+    try:
+        import rich  # noqa: F401
+    except ImportError as exc:
+        raise ImportError(
+            "rich가 설치되어 있지 않습니다. `pip install -r requirements.txt` 후 다시 실행하세요."
+        ) from exc
 
     args = _parse_args()
 
@@ -149,55 +364,86 @@ def main() -> int:
 
     logger.info(f"백필 시작: {args.start} ~ {args.end} (dry_run={args.dry_run})")
 
-    # ── 1. CoinDesk 수집 ──────────────────────────────────
-    logger.info("CoinDesk 수집 시작...")
-    coindesk_articles = fetch_coindesk_articles(args.start, args.end)
-    logger.info(f"CoinDesk 수집 완료: {len(coindesk_articles)}건")
+    run_alpaca = not args.skip_alpaca and _alpaca_creds_present()
+    total_steps = 3 + (1 if run_alpaca else 0) + (0 if args.dry_run else 1)
 
-    # ── 2. Alpaca 수집 (선택) ─────────────────────────────
-    alpaca_articles = []
-    if not args.skip_alpaca and _alpaca_creds_present():
-        logger.info("Alpaca 수집 시작...")
-        alpaca_articles = fetch_alpaca_articles(
+    with _BackfillLiveUI(
+        total_steps=total_steps,
+        requested_start=args.start,
+        requested_end=args.end,
+    ) as ui:
+        ui.set_stage("뉴스 수집 준비", f"기간 {args.start} ~ {args.end}")
+
+        # ── 1. CoinDesk 수집 ──────────────────────────────────
+        ui.set_stage("CoinDesk 수집", "페이지를 순차적으로 가져오는 중")
+        coindesk_articles = fetch_coindesk_articles(
             args.start,
             args.end,
-            os.getenv("ALPACA_API_KEY_ID", ""),
-            os.getenv("ALPACA_API_SECRET_KEY", ""),
+            progress_callback=lambda event: ui.update_source("coindesk", event),
         )
-        logger.info(f"Alpaca 수집 완료: {len(alpaca_articles)}건")
-    elif args.skip_alpaca:
-        logger.info("Alpaca 수집 건너뜀 (--skip-alpaca)")
-    else:
-        logger.info("Alpaca 수집 건너뜀 (자격증명 없음)")
+        ui.advance_step(f"CoinDesk 수집 완료: {len(coindesk_articles)}건")
 
-    # ── 3. 병합 ──────────────────────────────────────────
-    articles_by_date = merge_articles(coindesk_articles, alpaca_articles)
-    logger.info(
-        f"병합 완료: {len(articles_by_date)}개 날짜, "
-        f"{sum(len(v) for v in articles_by_date.values())}건 (dedup 후)"
-    )
+        # ── 2. Alpaca 수집 (선택) ─────────────────────────────
+        alpaca_articles = []
+        if run_alpaca:
+            ui.set_stage("Alpaca 수집", "보완 소스를 페이지 단위로 수집하는 중")
+            alpaca_articles = fetch_alpaca_articles(
+                args.start,
+                args.end,
+                os.getenv("ALPACA_API_KEY_ID", ""),
+                os.getenv("ALPACA_API_SECRET_KEY", ""),
+                progress_callback=lambda event: ui.update_source("alpaca", event),
+            )
+            ui.advance_step(f"Alpaca 수집 완료: {len(alpaca_articles)}건")
+        elif args.skip_alpaca:
+            ui.mark_skipped("alpaca", "건너뜀: --skip-alpaca")
+        else:
+            ui.mark_skipped("alpaca", "건너뜀: 자격증명 없음")
 
-    # ── 4. FinBERT 추론 (dry-run 포함 항상 실행) ──────────
-    logger.info("FinBERT 추론 시작...")
-    aggregates = score_and_aggregate(articles_by_date, batch_size=args.batch_size)
-    logger.info(f"FinBERT 추론 완료: {len(aggregates)}개 날짜")
+        # ── 3. 병합 ──────────────────────────────────────────
+        ui.set_stage("기사 병합", "중복 제거 후 날짜별로 정리하는 중")
+        articles_by_date = merge_articles(coindesk_articles, alpaca_articles)
+        deduped_count = sum(len(v) for v in articles_by_date.values())
+        ui.advance_step(f"병합 완료: {len(articles_by_date)}일, {deduped_count}건")
 
-    # ── 5. dry-run: 커버리지 리포트 후 종료 ──────────────
-    if args.dry_run:
-        print_coverage_report(aggregates)
-        return 0
+        # ── 4. FinBERT 추론 (dry-run 포함 항상 실행) ──────────
+        total_articles = sum(len(v) for v in articles_by_date.values())
+        ui.set_stage("FinBERT 추론", f"기사 {total_articles}건을 배치 처리하는 중")
+        ui.prepare_finbert(total_articles)
+        aggregates = score_and_aggregate(
+            articles_by_date,
+            batch_size=args.batch_size,
+            progress_callback=ui.update_finbert,
+        )
+        ui.advance_step(f"FinBERT 완료: {len(aggregates)}일 집계")
 
-    # ── 6. R2 업로드 ──────────────────────────────────────
-    bucket = os.environ["R2_BUCKET_NAME"]
-    concurrency = int(os.getenv("BACKFILL_R2_MAX_CONCURRENCY", "5"))
-    logger.info(f"R2 업로드 시작: bucket={bucket}, concurrency={concurrency}")
+        # ── 5. dry-run: 커버리지 리포트 후 종료 ──────────────
+        if args.dry_run:
+            ui.set_stage("dry-run 종료", "커버리지 리포트를 출력합니다")
+            print_coverage_report(aggregates)
+            return 0
 
-    s3 = create_s3_client()
-    results = upload_all(aggregates, s3, bucket, force=args.force, max_concurrency=concurrency)
+        # ── 6. R2 업로드 ──────────────────────────────────────
+        bucket = os.environ["R2_BUCKET_NAME"]
+        concurrency = int(os.getenv("BACKFILL_R2_MAX_CONCURRENCY", "5"))
+        ui.set_stage("R2 업로드", f"bucket={bucket}, 동시성 {concurrency}")
+        ui.prepare_upload(len(aggregates))
 
-    # ── 7. 최종 요약 ──────────────────────────────────────
-    print_summary(results, aggregates, start_time)
-    return 0 if results.failed == 0 else 1
+        s3 = create_s3_client()
+        results = upload_all(
+            aggregates,
+            s3,
+            bucket,
+            force=args.force,
+            max_concurrency=concurrency,
+            progress_callback=ui.update_upload,
+        )
+        ui.advance_step("업로드 완료")
+        ui.set_stage("완료", "최종 요약을 출력합니다")
+
+        # ── 7. 최종 요약 ──────────────────────────────────────
+        print_summary(results, aggregates, start_time)
+        return 0 if results.failed == 0 else 1
 
 
 if __name__ == "__main__":
