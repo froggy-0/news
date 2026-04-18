@@ -55,6 +55,13 @@ MASTER_SCHEMA = pa.DataFrameSchema(
         "full_hybrid_index_score": pa.Column(float, pa.Check.between(0.0, 100.0), nullable=True),
         "core_hybrid_index": pa.Column(float, nullable=True),
         "core_hybrid_index_score": pa.Column(float, pa.Check.between(0.0, 100.0), nullable=True),
+        # §4 v4: hybrid index score Lag-1 — alpha validation용 (첫 행은 NaN)
+        "full_hybrid_index_score_lag1": pa.Column(
+            float, pa.Check.between(0.0, 100.0), nullable=True
+        ),
+        "core_hybrid_index_score_lag1": pa.Column(
+            float, pa.Check.between(0.0, 100.0), nullable=True
+        ),
         # §1: 감성·공포지수 Lag-1 — look-ahead bias 제거용 (첫 행은 NaN)
         "news_sentiment_mean_lag1": pa.Column(float, pa.Check.between(-1.0, 1.0), nullable=True),
         "fng_value_lag1": pa.Column(float, pa.Check.between(0.0, 100.0), nullable=True),

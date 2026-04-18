@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 
@@ -141,3 +142,102 @@ def test_build_stats_metadata_payload_serializes_contract_fields() -> None:
     assert '"hybrid_indices"' in decoded
     assert '"full"' in decoded
     assert '"core"' in decoded
+
+
+# ---------------------------------------------------------------------------
+# Metadata 확장 필드 단위 테스트 (Alpha Validation)
+# Validates: Requirements 6.4
+# ---------------------------------------------------------------------------
+
+
+def test_build_stats_metadata_payload_includes_alpha_validation_fields() -> None:
+    """hit_rates, correlations, backtest, walk_forward 필드가 직렬화에 포함된다."""
+    hit_rates = [
+        {
+            "predictor": "news_sentiment_mean_lag1",
+            "threshold": 0,
+            "hit_rate": 0.55,
+            "tp": 40,
+            "fp": 30,
+            "tn": 35,
+            "fn": 25,
+            "precision": 0.57,
+            "recall": 0.62,
+            "f1": 0.59,
+            "n_valid": 130,
+            "inverted": False,
+            "granger_significant": True,
+        }
+    ]
+    correlations = [
+        {
+            "col_a": "news_sentiment_mean_lag1",
+            "col_b": "btc_log_return",
+            "pearson_r": 0.12,
+            "pearson_pvalue": 0.08,
+            "spearman_rho": 0.15,
+            "spearman_pvalue": 0.04,
+            "n_valid": 130,
+            "differenced": False,
+        }
+    ]
+    backtest = [
+        {
+            "predictor": "full_hybrid_index_score_lag1",
+            "threshold": 50,
+            "strategy_cumulative_return": 0.15,
+            "bnh_cumulative_return": 0.10,
+            "alpha": 0.05,
+            "sharpe_ratio": 1.2,
+            "max_drawdown": -0.08,
+            "n_trades": 25,
+            "transaction_cost_bps": 10.0,
+            "inverted": False,
+            "granger_significant": None,
+        }
+    ]
+    walk_forward = {
+        "folds": [{"fold": 0, "test_start": "2024-05-01", "test_end": "2024-05-30"}],
+        "avg_hit_rate": 0.52,
+        "avg_cumulative_return": 0.03,
+        "avg_alpha": 0.01,
+        "train_days": 120,
+        "test_days": 30,
+    }
+
+    payload = build_stats_metadata_payload(
+        run_id="sentiment-join-20260501",
+        generated_at_utc="2026-05-01T00:00:00+00:00",
+        adf={"pvalue": 0.01},
+        granger_results=[],
+        hybrid_indices=None,
+        hit_rates=hit_rates,
+        correlations=correlations,
+        backtest=backtest,
+        walk_forward=walk_forward,
+    )
+
+    decoded = json.loads(payload.decode("utf-8"))
+
+    assert decoded["hit_rates"] == hit_rates
+    assert decoded["correlations"] == correlations
+    assert decoded["backtest"] == backtest
+    assert decoded["walk_forward"] == walk_forward
+
+
+def test_build_stats_metadata_payload_defaults_empty_when_none() -> None:
+    """alpha validation 파라미터가 None이면 빈 dict/list로 직렬화된다."""
+    payload = build_stats_metadata_payload(
+        run_id="sentiment-join-20260501",
+        generated_at_utc="2026-05-01T00:00:00+00:00",
+        adf=None,
+        granger_results=[],
+        hybrid_indices=None,
+    )
+
+    decoded = json.loads(payload.decode("utf-8"))
+
+    assert decoded["hit_rates"] == []
+    assert decoded["correlations"] == []
+    assert decoded["backtest"] == []
+    assert decoded["walk_forward"] == {}

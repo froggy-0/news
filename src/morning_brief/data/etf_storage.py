@@ -278,6 +278,10 @@ def build_stats_metadata_payload(
     granger_executed: bool = False,
     exclusion_counts: dict[str, int] | None = None,
     granger_correction: dict[str, Any] | None = None,
+    hit_rates: list[dict[str, Any]] | None = None,
+    correlations: list[dict[str, Any]] | None = None,
+    backtest: list[dict[str, Any]] | None = None,
+    walk_forward: dict[str, Any] | None = None,
 ) -> bytes:
     # §4 v4: 이전 단일 `pca_summary` / `vif_diagnostics` / `hybrid_signal_label`는
     # `hybrid_indices` 하위의 full / core 지수별 블록으로 대체됩니다.
@@ -295,6 +299,10 @@ def build_stats_metadata_payload(
         "granger_eligible_rows": granger_eligible_rows,
         "granger_executed": granger_executed,
         "exclusion_counts": exclusion_counts or {},
+        "hit_rates": hit_rates or [],
+        "correlations": correlations or [],
+        "backtest": backtest or [],
+        "walk_forward": walk_forward or {},
     }
     return json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
 

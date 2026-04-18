@@ -135,8 +135,17 @@ def _compute_single_index(
     df: pd.DataFrame,
     spec: IndexSpec,
     total_rows: int,
+    *,
+    pre_fitted_scaler: Any | None = None,
+    pre_fitted_pca: Any | None = None,
+    pre_fitted_pc1_min: float | None = None,
+    pre_fitted_pc1_max: float | None = None,
+    pre_fitted_features: list[str] | None = None,
 ) -> tuple[pd.Series, pd.Series, dict[str, Any]]:
     """단일 하이브리드 지수와 0~100 score를 계산합니다.
+
+    pre-fitted 파라미터가 모두 제공되면 VIF 선택/scaler fit/PCA fit을 건너뛰고
+    transform만 수행합니다 (Walk-Forward test 구간용).
 
     반환: (raw_pc1_series, score_series, diagnostics) — 두 Series 모두 df.index 기준.
     """
@@ -145,6 +154,87 @@ def _compute_single_index(
 
     raw_series = pd.Series(np.nan, index=df.index, dtype=float)
     score_series = pd.Series(np.nan, index=df.index, dtype=float)
+
+    # pre-fitted 모드 판정
+    _pre_fitted = (
+        pre_fitted_scaler is not None
+        and pre_fitted_pca is not None
+        and pre_fitted_pc1_min is not None
+        and pre_fitted_pc1_max is not None
+        and pre_fitted_features is not None
+    )
+
+    if _pre_fitted:
+        # ── pre-fitted 모드: train에서 선택된 feature 목록 사용, fit 건너뜀 ──
+        selected = [f for f in pre_fitted_features if f in df.columns]  # type: ignore[union-attr]
+        if len(selected) < MIN_PCA_FEATURES:
+            return (
+                raw_series,
+                score_series,
+                _empty_diagnostics(
+                    "insufficient_features",
+                    available_features=selected,
+                    coverage={"rows_total": total_rows, "rows_used": 0, "ratio": 0.0},
+                ),
+            )
+
+        work = df[selected].copy()
+        for col in selected:
+            work[col] = pd.to_numeric(work[col], errors="coerce")
+        clean_idx = work.dropna().index
+        df_clean = work.loc[clean_idx]
+
+        if len(df_clean) == 0:
+            return (
+                raw_series,
+                score_series,
+                _empty_diagnostics(
+                    "insufficient_rows",
+                    rows=0,
+                    coverage={"rows_total": total_rows, "rows_used": 0, "ratio": 0.0},
+                ),
+            )
+
+        # transform only
+        assert pre_fitted_scaler is not None
+        assert pre_fitted_pca is not None
+        assert pre_fitted_pc1_min is not None
+        assert pre_fitted_pc1_max is not None
+        scaled = pre_fitted_scaler.transform(df_clean[selected].values)
+        components = pre_fitted_pca.transform(scaled)
+
+        # 부호 고정: train에서 이미 부호 보정된 PCA를 사용하므로 추가 보정 불필요
+        raw_pc1 = components[:, 0]
+
+        # train의 min/max로 0~100 스케일링 + clip
+        spread = pre_fitted_pc1_max - pre_fitted_pc1_min
+        if spread > 0:
+            score_arr = (raw_pc1 - pre_fitted_pc1_min) / spread * 100.0
+        else:
+            score_arr = np.full_like(raw_pc1, 50.0, dtype=float)
+        score_arr = np.clip(score_arr, 0, 100)
+
+        raw_series.loc[clean_idx] = raw_pc1
+        score_series.loc[clean_idx] = score_arr
+
+        diagnostics: dict[str, Any] = {
+            "vif_diagnostics": [],
+            "pca_summary": {
+                "status": "ok_pre_fitted",
+                "selected_features": selected,
+                "pc1_min": pre_fitted_pc1_min,
+                "pc1_max": pre_fitted_pc1_max,
+                "score_scale_method": "minmax_0_100_pre_fitted",
+            },
+            "coverage": {
+                "rows_total": total_rows,
+                "rows_used": len(df_clean),
+                "ratio": round(len(df_clean) / total_rows, 4) if total_rows else 0.0,
+            },
+        }
+        return raw_series, score_series, diagnostics
+
+    # ── 통상 모드 (기존 로직) ──
 
     # 전 행 NaN인 후보는 dropna에서 전체 행을 날리므로 사전에 제외합니다.
     # §4 3-4: VIX가 수집되지 않은 run에서도 full 지수가 계산되도록 하기 위한 방어.
@@ -293,6 +383,9 @@ def _compute_single_index(
             "rows_used": len(df_clean),
             "ratio": round(len(df_clean) / total_rows, 4) if total_rows else 0.0,
         },
+        # Walk-Forward에서 재사용할 fitted 객체 (JSON 직렬화 대상 아님)
+        "_fitted_scaler": scaler,
+        "_fitted_pca": pca_final,
     }
     return raw_series, score_series, diagnostics
 
@@ -331,5 +424,6 @@ __all__ = [
     "HYBRID_SIGN_ANCHOR",
     "INDEX_SPECS",
     "IndexSpec",
+    "_compute_single_index",
     "compute_hybrid_indices",
 ]

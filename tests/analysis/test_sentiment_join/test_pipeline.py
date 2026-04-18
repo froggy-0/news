@@ -432,3 +432,50 @@ def test_run_sentiment_join_records_etf_columns_and_outlier_metadata(
     assert "granger_executed" in stats
     assert "exclusion_counts" in stats
     assert isinstance(stats["exclusion_counts"], dict)
+
+
+def test_run_sentiment_join_creates_hybrid_score_lag1_columns(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """§4 v4: hybrid index score lag1 컬럼이 pipeline에서 생성되고 MASTER_SCHEMA를 통과하는지 확인."""
+    settings = _settings(tmp_path)
+    _, _, _, main_dates, btc_dates = _core_dates(settings)
+
+    monkeypatch.setattr(
+        pipeline, "fetch_r2_sentiment", lambda *args, **kwargs: _sentiment_df(main_dates)
+    )
+    monkeypatch.setattr(pipeline, "fetch_fng", lambda *args, **kwargs: _fng_df(main_dates))
+    monkeypatch.setattr(
+        pipeline,
+        "fetch_btc_close_binance",
+        lambda *args, **kwargs: _btc_close_df(btc_dates, base=100.0),
+    )
+    monkeypatch.setattr(
+        pipeline, "fetch_usdkrw_close", lambda *args, **kwargs: _close_df(btc_dates, base=1300.0)
+    )
+    monkeypatch.setattr(
+        pipeline, "fetch_etf_flow_features", lambda *args, **kwargs: _etf_df(main_dates)
+    )
+
+    assert pipeline.run_sentiment_join(settings) == 0
+
+    file_path = next(tmp_path.glob("master_*.parquet"))
+    saved = pd.read_parquet(file_path)
+
+    # lag1 컬럼이 존재해야 한다
+    assert "full_hybrid_index_score_lag1" in saved.columns
+    assert "core_hybrid_index_score_lag1" in saved.columns
+
+    # 첫 번째 행은 NaN이어야 한다 (shift(1) 결과)
+    assert pd.isna(saved["full_hybrid_index_score_lag1"].iloc[0])
+    assert pd.isna(saved["core_hybrid_index_score_lag1"].iloc[0])
+
+    # lag1 값은 원본 score의 shift(1)과 일치해야 한다
+    for prefix in ("full", "core"):
+        score_col = f"{prefix}_hybrid_index_score"
+        lag1_col = f"{score_col}_lag1"
+        expected = saved[score_col].shift(1)
+        pd.testing.assert_series_equal(
+            saved[lag1_col], expected, check_names=False, check_dtype=False
+        )
