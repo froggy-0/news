@@ -15,12 +15,19 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with:
+          aws-region: ap-northeast-2
+          role-to-assume: arn:aws:iam::254849613915:role/kr-pr-ses-news-v1a
 
       - name: Set up Python
         uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
@@ -74,8 +81,11 @@ jobs:
           KIS_APP_KEY: ${{ secrets.KIS_APP_KEY || '' }}
           KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET || '' }}
           KIS_TOKEN_CACHE_PATH: .cache/kis_token/token.json
-          SENTIMENT_JOIN_LOOKBACK_DAYS: ${{ github.event.inputs.lookback_days || vars.SENTIMENT_JOIN_LOOKBACK_DAYS || '30' }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          SENTIMENT_JOIN_LOOKBACK_DAYS: ${{ github.event.inputs.lookback_days || vars.SENTIMENT_JOIN_LOOKBACK_DAYS || '180' }}
           SENTIMENT_JOIN_RETAIN_DAYS: ${{ vars.SENTIMENT_JOIN_RETAIN_DAYS || '90' }}
+          SENTIMENT_JOIN_BINANCE_KEY: ${{ secrets.SENTIMENT_JOIN_BINANCE_KEY || '' }}
+          FUTURES_LAMBDA_ARN: ${{ vars.FUTURES_LAMBDA_ARN || '' }}
           LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
 
       - name: Save KIS token cache
