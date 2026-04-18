@@ -6,6 +6,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from morning_brief.r2_env import load_public_r2_env
+
 DEFAULT_OPENAI_MODEL = "gpt-5-mini-2025-08-07"
 DEFAULT_PROMPT_TEMPLATE_VERSION = "market_brief_v4"
 DEFAULT_SUBSCRIPTION_NEWSLETTER_KEY = "morning-brief"
@@ -119,6 +121,7 @@ def load_settings() -> Settings:
     load_dotenv()
 
     output_dir = Path(os.getenv("OUTPUT_DIR", "outputs")).resolve()
+    r2_env = load_public_r2_env()
 
     return Settings(
         timezone=os.getenv("TIMEZONE", "Asia/Seoul"),
@@ -227,10 +230,10 @@ def load_settings() -> Settings:
             "MARKET_POINT_CACHE_MAX_AGE_HOURS", default=26, minimum=4, maximum=72
         ),
         output_dir=output_dir,
-        r2_public_bucket=os.getenv("R2_PUBLIC_BUCKET", "").strip(),
-        r2_s3_endpoint=os.getenv("R2_S3_ENDPOINT", "").strip(),
-        r2_access_key_id=os.getenv("R2_ACCESS_KEY_ID", "").strip(),
-        r2_secret_access_key=os.getenv("R2_SECRET_ACCESS_KEY", "").strip(),
+        r2_public_bucket=r2_env.public_bucket,
+        r2_s3_endpoint=r2_env.s3_endpoint,
+        r2_access_key_id=r2_env.access_key_id,
+        r2_secret_access_key=r2_env.secret_access_key,
         send_email=_env_bool("SEND_EMAIL", True),
         # FinBERT sentiment
         finbert_enabled=_env_bool("FINBERT_ENABLED", True),

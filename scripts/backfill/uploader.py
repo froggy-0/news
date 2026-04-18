@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -19,6 +18,7 @@ from botocore.exceptions import ClientError
 
 from backfill.scorer import DailyAggregate
 from morning_brief.data.storage.news_data_paths import build_publish_paths
+from morning_brief.r2_env import load_public_r2_env
 
 logger = logging.getLogger(__name__)
 
@@ -101,11 +101,12 @@ def create_s3_client():
     """boto3 S3 호환 R2 클라이언트 생성."""
     import boto3
 
+    r2_env = load_public_r2_env()
     return boto3.client(
         "s3",
-        endpoint_url=os.environ["R2_ENDPOINT_URL"],
-        aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
-        aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+        endpoint_url=r2_env.s3_endpoint,
+        aws_access_key_id=r2_env.access_key_id,
+        aws_secret_access_key=r2_env.secret_access_key,
         region_name="auto",
     )
 

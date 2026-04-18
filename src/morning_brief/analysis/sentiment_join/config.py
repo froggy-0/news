@@ -6,6 +6,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from morning_brief.r2_env import load_public_r2_env
+
 
 @dataclass(frozen=True)
 class SentimentJoinSettings:
@@ -19,6 +21,9 @@ class SentimentJoinSettings:
     kis_app_secret: str
     binance_api_key: str
     futures_lambda_arn: str
+    r2_s3_endpoint: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -43,6 +48,7 @@ def _env_bounded_int(name: str, default: int, minimum: int, maximum: int) -> int
 
 def load_sentiment_join_settings() -> SentimentJoinSettings:
     load_dotenv()
+    r2_env = load_public_r2_env()
 
     lookback_days = _env_bounded_int(
         "SENTIMENT_JOIN_LOOKBACK_DAYS",
@@ -70,8 +76,11 @@ def load_sentiment_join_settings() -> SentimentJoinSettings:
     return SentimentJoinSettings(
         lookback_days=lookback_days,
         output_dir=output_dir,
-        r2_public_bucket=os.getenv("R2_PUBLIC_BUCKET", "").strip(),
-        r2_base_url=os.getenv("NEXT_PUBLIC_R2_BASE_URL", "").strip(),
+        r2_public_bucket=r2_env.public_bucket,
+        r2_s3_endpoint=r2_env.s3_endpoint,
+        r2_access_key_id=r2_env.access_key_id,
+        r2_secret_access_key=r2_env.secret_access_key,
+        r2_base_url=r2_env.base_url,
         r2_max_concurrency=r2_max_concurrency,
         retain_days=retain_days,
         kis_app_key=os.getenv("KIS_APP_KEY", "").strip(),

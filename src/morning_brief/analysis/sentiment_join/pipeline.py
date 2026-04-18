@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -418,9 +417,9 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
         upload_to_r2(
             path,
             f"sentiment_join/{path.name}",
-            r2_s3_endpoint=os.getenv("R2_S3_ENDPOINT", "").strip(),
-            r2_access_key_id=os.getenv("R2_ACCESS_KEY_ID", "").strip(),
-            r2_secret_access_key=os.getenv("R2_SECRET_ACCESS_KEY", "").strip(),
+            r2_s3_endpoint=settings.r2_s3_endpoint,
+            r2_access_key_id=settings.r2_access_key_id,
+            r2_secret_access_key=settings.r2_secret_access_key,
             r2_public_bucket=settings.r2_public_bucket,
         )
         return 0
