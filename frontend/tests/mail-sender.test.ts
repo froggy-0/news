@@ -18,7 +18,7 @@ function env(): SubscriptionEnv {
     AWS_ACCESS_KEY_ID: "test-access-key",
     AWS_SECRET_ACCESS_KEY: "test-secret-key",
     AWS_REGION: "ap-northeast-2",
-    CONFIRMATION_SES_SENDER: "no-reply@sovereignbriefing.com",
+    SES_SENDER: "no-reply@sovereignbriefing.com",
   };
 }
 
@@ -54,7 +54,7 @@ test("buildConfirmationEmailRequest rejects missing sender secret", () => {
       buildConfirmationEmailRequest(
         {
           ...env(),
-          CONFIRMATION_SES_SENDER: "",
+          SES_SENDER: "",
         },
         {
           to: "reader@example.com",
@@ -63,8 +63,26 @@ test("buildConfirmationEmailRequest rejects missing sender secret", () => {
           html: "<p>본문</p>",
         },
       ),
-    /CONFIRMATION_SES_SENDER is required/,
+    /SES_SENDER is required/,
   );
+});
+
+test("buildConfirmationEmailRequest accepts legacy confirmation sender alias", () => {
+  const request = buildConfirmationEmailRequest(
+    {
+      ...env(),
+      SES_SENDER: undefined,
+      CONFIRMATION_SES_SENDER: "no-reply@sovereignbriefing.com",
+    },
+    {
+      to: "reader@example.com",
+      subject: "제목",
+      text: "본문",
+      html: "<p>본문</p>",
+    },
+  );
+
+  assert.equal(request.FromEmailAddress, "no-reply@sovereignbriefing.com");
 });
 
 test("sendConfirmationMail surfaces auth_failure when credentials are rejected", async () => {

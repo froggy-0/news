@@ -16,7 +16,7 @@ const env = {
   AWS_ACCESS_KEY_ID: "test-access-key",
   AWS_SECRET_ACCESS_KEY: "test-secret-key",
   AWS_REGION: "ap-northeast-2",
-  CONFIRMATION_SES_SENDER: "no-reply@sovereignbriefing.com",
+  SES_SENDER: "no-reply@sovereignbriefing.com",
 };
 
 test("request route returns 400 on invalid email payload", async () => {

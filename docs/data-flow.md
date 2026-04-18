@@ -466,6 +466,10 @@ packet = {
 | `SENTIMENT_JOIN_RETAIN_DAYS` | `30` | 로컬 보관 기간 |
 | `SENTIMENT_JOIN_R2_MAX_CONCURRENCY` | `10` | R2 업로드 동시성 |
 
+R2 관련 canonical 키는 `R2_PUBLIC_BUCKET`, `R2_S3_ENDPOINT`, `R2_ACCESS_KEY_ID`,
+`R2_SECRET_ACCESS_KEY`, `NEXT_PUBLIC_R2_BASE_URL`입니다. 기존
+`R2_BUCKET_NAME`, `R2_ENDPOINT_URL`, `R2_BASE_URL`는 하위호환 alias로만 유지합니다.
+
 ### 9.2 행 수와 NaN 컬럼 관계
 
 | 상황 | 영향 받는 컬럼 |

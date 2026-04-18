@@ -11,8 +11,16 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 import requests
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_PATH = PROJECT_ROOT / "src"
+if str(SRC_PATH) not in sys.path:
+    sys.path.insert(0, str(SRC_PATH))
+
+from morning_brief.r2_env import load_public_r2_env  # noqa: E402
 
 COLOR_RESET = "\033[0m"
 COLOR_GREEN = "\033[92m"
@@ -41,11 +49,12 @@ class CredentialValidator:
 
     def _test_r2(self) -> CredentialResult:
         """R2 크레덴셜 검증."""
-        endpoint = os.getenv("R2_S3_ENDPOINT", "").strip()
-        access_key = os.getenv("R2_ACCESS_KEY_ID", "").strip()
-        secret_key = os.getenv("R2_SECRET_ACCESS_KEY", "").strip()
-        bucket = os.getenv("R2_PUBLIC_BUCKET", "").strip()
-        base_url = os.getenv("NEXT_PUBLIC_R2_BASE_URL", "").strip()
+        r2_env = load_public_r2_env()
+        endpoint = r2_env.s3_endpoint
+        access_key = r2_env.access_key_id
+        secret_key = r2_env.secret_access_key
+        bucket = r2_env.public_bucket
+        base_url = r2_env.base_url
 
         missing = []
         if not endpoint:
@@ -336,20 +345,21 @@ class BackfillCredentialValidator:
 
     def _test_r2(self) -> CredentialResult:
         """R2 크레덴셜 검증 (백필 업로드용)."""
-        endpoint = os.getenv("R2_ENDPOINT_URL", "").strip()
-        access_key = os.getenv("R2_ACCESS_KEY_ID", "").strip()
-        secret_key = os.getenv("R2_SECRET_ACCESS_KEY", "").strip()
-        bucket = os.getenv("R2_BUCKET_NAME", "").strip()
+        r2_env = load_public_r2_env()
+        endpoint = r2_env.s3_endpoint
+        access_key = r2_env.access_key_id
+        secret_key = r2_env.secret_access_key
+        bucket = r2_env.public_bucket
 
         missing = []
         if not endpoint:
-            missing.append("R2_ENDPOINT_URL")
+            missing.append("R2_S3_ENDPOINT")
         if not access_key:
             missing.append("R2_ACCESS_KEY_ID")
         if not secret_key:
             missing.append("R2_SECRET_ACCESS_KEY")
         if not bucket:
-            missing.append("R2_BUCKET_NAME")
+            missing.append("R2_PUBLIC_BUCKET")
 
         if missing:
             return CredentialResult(

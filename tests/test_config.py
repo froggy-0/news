@@ -166,6 +166,20 @@ def test_r2_public_settings_loaded(monkeypatch):
     assert settings.r2_secret_access_key == "secret"
 
 
+def test_r2_public_settings_accept_legacy_aliases(monkeypatch):
+    monkeypatch.delenv("R2_PUBLIC_BUCKET", raising=False)
+    monkeypatch.delenv("R2_S3_ENDPOINT", raising=False)
+    monkeypatch.setenv("R2_BUCKET_NAME", "legacy-public")
+    monkeypatch.setenv("R2_ENDPOINT_URL", "https://legacy.r2.cloudflarestorage.com")
+    monkeypatch.setenv("R2_ACCESS_KEY_ID", "key-id")
+    monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "secret")
+
+    settings = load_settings()
+
+    assert settings.r2_public_bucket == "legacy-public"
+    assert settings.r2_s3_endpoint == "https://legacy.r2.cloudflarestorage.com"
+
+
 def test_subscription_settings_loaded(monkeypatch):
     monkeypatch.setenv("PUBLIC_APP_BASE_URL", "https://brief.example.com/")
     monkeypatch.setenv("SUBSCRIPTION_TOKEN_SECRET", "token-secret")

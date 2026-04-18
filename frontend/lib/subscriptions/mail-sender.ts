@@ -8,6 +8,7 @@ import type { SubscriptionEnv } from "./types";
 
 const REQUIRED_REGION = "ap-northeast-2";
 const REQUIRED_SENDER = "no-reply@sovereignbriefing.com";
+const SENDER_ENV_NAME = "SES_SENDER";
 
 function classifyConfirmationSesError(error: unknown): {
   category: "auth_failure" | "identity_failure" | "recipient_failure" | "delivery_failure";
@@ -69,9 +70,12 @@ function configuredRegion(env: SubscriptionEnv): string {
 }
 
 function configuredSender(env: SubscriptionEnv): string {
-  const sender = requireEnvValue(env.CONFIRMATION_SES_SENDER, "CONFIRMATION_SES_SENDER");
+  const sender = requireEnvValue(
+    env.SES_SENDER?.trim() || env.CONFIRMATION_SES_SENDER?.trim() || "",
+    SENDER_ENV_NAME,
+  );
   if (sender !== REQUIRED_SENDER) {
-    throw new Error(`CONFIRMATION_SES_SENDER must be ${REQUIRED_SENDER}, got ${sender}`);
+    throw new Error(`${SENDER_ENV_NAME} must be ${REQUIRED_SENDER}, got ${sender}`);
   }
   return sender;
 }

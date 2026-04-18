@@ -11,7 +11,8 @@ Usage:
         [--dry-run] [--force] [--batch-size 32] [--skip-alpaca]
 
 Required env (일반 모드):
-    R2_ENDPOINT_URL, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME
+    R2_S3_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_PUBLIC_BUCKET
+    (legacy alias: R2_ENDPOINT_URL, R2_BUCKET_NAME)
 
 Optional env:
     ALPACA_API_KEY_ID, ALPACA_API_SECRET_KEY  (없으면 Alpaca 단계 skip)
@@ -45,11 +46,11 @@ from backfill.scorer import score_and_aggregate  # noqa: E402
 from backfill.sources.alpaca import fetch_alpaca_articles  # noqa: E402
 from backfill.sources.coindesk import fetch_coindesk_articles  # noqa: E402
 from backfill.uploader import create_s3_client, upload_all  # noqa: E402
+from morning_brief.r2_env import load_public_r2_env  # noqa: E402
 from validate_credentials import BackfillCredentialValidator  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
-_R2_REQUIRED = ["R2_ENDPOINT_URL", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"]
 _MAX_BACKFILL_DAYS = 460
 
 
@@ -317,11 +318,20 @@ def _validate_env(args: argparse.Namespace) -> None:
     if args.dry_run:
         return
 
-    missing = [v for v in _R2_REQUIRED if not os.getenv(v)]
+    r2_env = load_public_r2_env()
+    missing = []
+    if not r2_env.s3_endpoint:
+        missing.append("R2_S3_ENDPOINT")
+    if not r2_env.access_key_id:
+        missing.append("R2_ACCESS_KEY_ID")
+    if not r2_env.secret_access_key:
+        missing.append("R2_SECRET_ACCESS_KEY")
+    if not r2_env.public_bucket:
+        missing.append("R2_PUBLIC_BUCKET")
     if missing:
         raise EnvironmentError(
             f"필수 환경변수 누락: {', '.join(missing)}\n"
-            "R2_ENDPOINT_URL, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME을 설정하세요."
+            "R2_S3_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_PUBLIC_BUCKET을 설정하세요."
         )
 
 
@@ -424,7 +434,7 @@ def main() -> int:
             return 0
 
         # ── 6. R2 업로드 ──────────────────────────────────────
-        bucket = os.environ["R2_BUCKET_NAME"]
+        bucket = load_public_r2_env().public_bucket
         concurrency = int(os.getenv("BACKFILL_R2_MAX_CONCURRENCY", "5"))
         ui.set_stage("R2 업로드", f"bucket={bucket}, 동시성 {concurrency}")
         ui.prepare_upload(len(aggregates))

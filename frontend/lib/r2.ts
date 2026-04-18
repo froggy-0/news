@@ -5,6 +5,11 @@ import path from "node:path";
 import type { BriefData, BriefIndex } from "@schema/brief.types";
 
 import { parseBriefData, parseBriefIndex } from "./brief-schema";
+import {
+  PUBLIC_R2_BASE_URL_ENV,
+  requireAbsoluteHttpUrl,
+  resolvePublicR2BaseUrl,
+} from "./public-r2-env";
 
 const remoteBriefCache = new Map<string, Promise<BriefData>>();
 
@@ -133,7 +138,7 @@ function parseArchiveSummary(value: unknown, expectedDate?: string): ArchiveBrie
 }
 
 function publicBaseUrl(): string | null {
-  return process.env.NEXT_PUBLIC_R2_BASE_URL ?? process.env.R2_BASE_URL ?? null;
+  return resolvePublicR2BaseUrl();
 }
 
 function useFixtureData(): boolean {
@@ -148,18 +153,10 @@ function requirePublicBaseUrl(): string {
   const baseUrl = publicBaseUrl();
   if (!baseUrl) {
     throw new Error(
-      "NEXT_PUBLIC_R2_BASE_URL is required. Set BRIEF_DATA_SOURCE=fixture only for explicit local fixture mode.",
+      `${PUBLIC_R2_BASE_URL_ENV} is required. Set BRIEF_DATA_SOURCE=fixture only for explicit local fixture mode.`,
     );
   }
-  try {
-    const url = new URL(baseUrl);
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-      throw new Error("invalid protocol");
-    }
-  } catch {
-    throw new Error(`NEXT_PUBLIC_R2_BASE_URL must be an absolute http(s) URL. Received: ${baseUrl}`);
-  }
-  return baseUrl.replace(/\/$/, "");
+  return requireAbsoluteHttpUrl(baseUrl, PUBLIC_R2_BASE_URL_ENV);
 }
 
 function normalizeRemotePath(pathValue: string): string {

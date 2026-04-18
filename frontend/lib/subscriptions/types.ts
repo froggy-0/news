@@ -54,5 +54,6 @@ export interface SubscriptionEnv {
   AWS_ACCESS_KEY_ID: string;
   AWS_SECRET_ACCESS_KEY: string;
   AWS_REGION: string;
-  CONFIRMATION_SES_SENDER: string;
+  SES_SENDER?: string;
+  CONFIRMATION_SES_SENDER?: string;
 }

@@ -24,6 +24,8 @@
 
 필수 환경변수:
 - `NEXT_PUBLIC_R2_BASE_URL`
+
+`NEXT_PUBLIC_R2_BASE_URL`를 canonical로 사용합니다. 기존 `R2_BASE_URL`은 legacy alias로만 읽습니다.
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_PAGES_PROJECT_NAME`

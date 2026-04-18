@@ -4,6 +4,12 @@ import assert from "node:assert/strict";
 import { loadBriefByDate, loadIndex, loadLatest, loadRenderableIndex } from "../lib/r2";
 import type { BriefData } from "@schema/brief.types";
 
+test.beforeEach(() => {
+  delete process.env.BRIEF_DATA_SOURCE;
+  delete process.env.NEXT_PUBLIC_R2_BASE_URL;
+  delete process.env.R2_BASE_URL;
+});
+
 test.afterEach(() => {
   delete process.env.BRIEF_DATA_SOURCE;
   delete process.env.NEXT_PUBLIC_R2_BASE_URL;
@@ -18,6 +24,38 @@ test("loadLatest loads local fixture only in explicit fixture mode", async () =>
   process.env.BRIEF_DATA_SOURCE = "fixture";
   const brief = await loadLatest();
   assert.equal(brief.meta.date, "2026-03-21");
+});
+
+test("loadLatest accepts legacy R2_BASE_URL alias", async () => {
+  process.env.R2_BASE_URL = "https://example.com";
+
+  const originalFetch = global.fetch;
+  global.fetch = (async (input) => {
+    const url = new URL(typeof input === "string" ? input : input.toString());
+    if (url.pathname === "/index.json") {
+      return new Response(
+        JSON.stringify({
+          dates: ["2026-03-21"],
+          updatedAt: "2026-03-21T12:30:00Z",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+    if (url.pathname === "/curated/btc/2026-03-21.json" || url.pathname === "/briefs/2026-03-21.json") {
+      return new Response(JSON.stringify(buildBriefPayload()), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(null, { status: 404 });
+  }) as typeof fetch;
+
+  try {
+    const brief = await loadLatest();
+    assert.equal(brief.aiJudgment.headline, "오늘은 관망 국면입니다.");
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
 
 test("loadIndex loads local fixture only in explicit fixture mode", async () => {
@@ -52,9 +90,13 @@ test("loadLatest uses index.latest.path when expanded index is present", async (
       dataQuality: "ok",
       qualityNotes: [],
       displayHeadline: "",
-      sourceCounts: {},
+      sourceCounts: buildSourceCounts(),
       translationStatus: "ok",
+      publicNewsAnalysis: null,
       sentimentStatus: "ok",
+      newsSentiment: null,
+      signalSentiment: null,
+      sentimentByCategory: null,
     },
     marketSnapshot: { items: [] },
     aiJudgment: { headline: "오늘은 관망 국면입니다.", body: "본문", summaryLead: "요약", summarySupport: null },
@@ -200,9 +242,13 @@ function buildBriefPayload(): BriefData {
       dataQuality: "ok",
       qualityNotes: [],
       displayHeadline: "",
-      sourceCounts: {},
+      sourceCounts: buildSourceCounts(),
       translationStatus: "ok",
+      publicNewsAnalysis: null,
       sentimentStatus: "ok",
+      newsSentiment: null,
+      signalSentiment: null,
+      sentimentByCategory: null,
     },
     marketSnapshot: { items: [] },
     aiJudgment: { headline: "오늘은 관망 국면입니다.", body: "본문", summaryLead: "요약", summarySupport: null },
@@ -213,5 +259,18 @@ function buildBriefPayload(): BriefData {
     allXSignals: null,
     featuredNews: [],
     allNews: [],
+  };
+}
+
+function buildSourceCounts(): BriefData["meta"]["sourceCounts"] {
+  return {
+    newsCandidates: 0,
+    newsRanked: 0,
+    newsFeatured: 0,
+    newsAll: 0,
+    xSignalCandidates: 0,
+    xSignalRanked: 0,
+    xSignalFeatured: 0,
+    xSignalAll: 0,
   };
 }
