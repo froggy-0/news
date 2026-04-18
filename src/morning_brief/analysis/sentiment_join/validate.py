@@ -44,10 +44,17 @@ MASTER_SCHEMA = pa.DataFrameSchema(
         # §5: PCA / correlation용 lag1 (Granger에는 미사용)
         "usdkrw_log_return_lag1": pa.Column(float, nullable=True),
         "volume_change_pct_lag1": pa.Column(float, nullable=True),
+        # §4 3-4: VIX optional feature. 수집 실패/키 미설정 시 전 행 NaN.
+        "vix": pa.Column(float, nullable=True),
+        "vix_lag1": pa.Column(float, nullable=True),
         # Req 8: BTC 방향 라벨
         "btc_direction_label": pa.Column(nullable=True),
-        # Req 13: PCA 하이브리드 지수 (데이터 부족 시 NaN 허용)
-        "hybrid_index": pa.Column(float, nullable=True),
+        # §4 v4: full / core 이중 하이브리드 지수 + 0~100 score.
+        # 이전 단일 `hybrid_index` 컬럼은 v4에서 삭제되었습니다.
+        "full_hybrid_index": pa.Column(float, nullable=True),
+        "full_hybrid_index_score": pa.Column(float, pa.Check.between(0.0, 100.0), nullable=True),
+        "core_hybrid_index": pa.Column(float, nullable=True),
+        "core_hybrid_index_score": pa.Column(float, pa.Check.between(0.0, 100.0), nullable=True),
         # §1: 감성·공포지수 Lag-1 — look-ahead bias 제거용 (첫 행은 NaN)
         "news_sentiment_mean_lag1": pa.Column(float, pa.Check.between(-1.0, 1.0), nullable=True),
         "fng_value_lag1": pa.Column(float, pa.Check.between(0.0, 100.0), nullable=True),

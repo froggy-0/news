@@ -44,13 +44,19 @@ def _valid_df() -> pd.DataFrame:
             "volume_change_pct_lag1": [float("nan")],
             # Req 8: BTC 방향 라벨
             "btc_direction_label": ["up"],
-            # Req 13: 하이브리드 지수 (NaN 허용)
-            "hybrid_index": [float("nan")],
+            # §4 v4: full / core 하이브리드 지수 + 0~100 score (NaN 허용)
+            "full_hybrid_index": [float("nan")],
+            "full_hybrid_index_score": [float("nan")],
+            "core_hybrid_index": [float("nan")],
+            "core_hybrid_index_score": [float("nan")],
             # §1: 감성·공포지수 Lag-1 (첫 행은 NaN 허용)
             "news_sentiment_mean_lag1": [float("nan")],
             "fng_value_lag1": [float("nan")],
             # §2: 텍스트 스키마 버전 (없으면 None 허용)
             "text_schema_version": [None],
+            # §4 3-4: VIX optional (수집 실패 시 NaN)
+            "vix": [float("nan")],
+            "vix_lag1": [float("nan")],
         }
     )
 

@@ -425,7 +425,9 @@ def test_run_sentiment_join_records_etf_columns_and_outlier_metadata(
     assert "etf_net_inflow_usd_lag1" in saved.columns
     assert "rows_before_outlier_filter" in stats
     assert "rows_after_outlier_filter" in stats
-    assert "hybrid_signal_label" in stats
+    assert "hybrid_indices" in stats
+    assert "full" in stats["hybrid_indices"]
+    assert "core" in stats["hybrid_indices"]
     assert "granger_eligible_rows" in stats
     assert "granger_executed" in stats
     assert "exclusion_counts" in stats

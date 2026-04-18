@@ -286,37 +286,44 @@ label = "bullish" if score >= 0.3 else "bearish" if score <= -0.3 else "neutral"
 
 ---
 
-## 5. PCA 하이브리드 지수
+## 5. PCA 하이브리드 지수 (v4: 이중 지수)
 
-### 5.1 방법론
+### 5.1 방법론 (§4 v4)
 
-1. VIF(분산팽창인자) ≥ 10인 변수 제거
-2. StandardScaler 정규화
-3. PCA — 누적 설명 분산 ≥ 80% 달성하는 최소 주성분 수 자동 선택
-4. 첫 번째 주성분 = `hybrid_index`
+두 세트의 하이브리드 지수를 독립적으로 계산합니다:
 
-후보 변수 (`HYBRID_FEATURE_CANDIDATES`, `hybrid_index.py`):
+**공통 단계:**
+1. StandardScaler 정규화
+2. PCA — 누적 설명 분산 ≥ 80% 달성하는 최소 주성분 수 자동 선택
+3. PC1 값을 min-max 스케일링 → 0~100 score
+4. 부호 정규화: `fng_value_lag1` loading이 양수가 되도록 PC1 반전 (필요 시)
 
-| # | 변수 |
-|---|---|
-| 1 | `news_sentiment_mean` |
-| 2 | `fng_value` |
-| 3 | `funding_rate_lag1` |
-| 4 | `btc_long_short_ratio_lag1` |
-| 5 | `etf_net_inflow_usd_lag1` |
+**Full 지수** (`HYBRID_FEATURE_CANDIDATES_FULL`):
+- 후보: `news_sentiment_mean_lag1`, `fng_value_lag1`, `funding_rate_lag1`, `btc_long_short_ratio_lag1`, `etf_net_inflow_usd_lag1`, `volume_change_pct_lag1`, `vix_lag1`
+- VIF gate: VIF ≥ 10인 변수 반복 제거 (높은 공선성 우려 시)
+- 출력: `full_hybrid_index` (raw PC1), `full_hybrid_index_score` (0~100)
+
+**Core 지수** (`HYBRID_FEATURE_CANDIDATES_CORE`):
+- 후보: `news_sentiment_mean_lag1`, `fng_value_lag1`, `funding_rate_lag1`, `volume_change_pct_lag1` (엄선된 4개)
+- VIF gate: 없음 (이미 큐레이션됨, 결측 내성 높음)
+- 출력: `core_hybrid_index` (raw PC1), `core_hybrid_index_score` (0~100)
 
 상수:
 
 | 파라미터 | 값 |
 |---|---|
-| `VIF_THRESHOLD` | 10.0 |
+| `VIF_THRESHOLD_FULL` | 10.0 |
+| `VIF_THRESHOLD_CORE` | None (gate 없음) |
 | `MIN_PCA_FEATURES` | 2 |
 | `MIN_PCA_ROWS` | 10 |
 | `TARGET_EXPLAINED_VARIANCE` | 0.80 (80%) |
+| `HYBRID_SIGN_ANCHOR` | `fng_value_lag1` |
 
 ### 5.2 현재 상태
 
-> ⚠️ **미실행** — `status: "insufficient_rows"` (clean data 0행)
+> ✅ **v4 운영 중** — full / core 이중 지수, 각각 독립 PCA 진단
+> - core: 높은 연속성 (항상 4개 특성), 운영 신호로 사용
+> - full: 더 많은 정보(7개 특성), 보조 지표로 제공
 
 ---
 
@@ -493,17 +500,56 @@ SENTIMENT_JOIN_LOOKBACK_DAYS=200 make sentiment-join
   "granger_results": [],
   "granger_eligible_rows": null,
   "granger_executed": null,
-  "rows_before_outlier_filter": 1,
-  "rows_after_outlier_filter": 1,
-  "outlier_filtered_count": 0,
-  "outlier_filtered_ratio": 0.0,
-  "pca_summary": { "status": "insufficient_rows", "rows": 0 },
-  "vif_diagnostics": [],
-  "hybrid_signal_label": null,
+  "rows_before_outlier_filter": 40,
+  "rows_after_outlier_filter": 38,
+  "outlier_filtered_count": 2,
+  "outlier_filtered_ratio": 0.05,
+  "hybrid_indices": {
+    "full": {
+      "vif_diagnostics": [
+        { "feature": "news_sentiment_mean_lag1", "vif": 1.2 },
+        { "feature": "fng_value_lag1", "vif": 1.5 }
+      ],
+      "pca_summary": {
+        "status": "ok",
+        "selected_features": ["news_sentiment_mean_lag1", "fng_value_lag1", "funding_rate_lag1"],
+        "n_components": 1,
+        "explained_variance": 0.82,
+        "loadings": {
+          "news_sentiment_mean_lag1": 0.45,
+          "fng_value_lag1": 0.52,
+          "funding_rate_lag1": -0.31
+        },
+        "feature_schema_version": "v4"
+      },
+      "coverage": { "rows_total": 38, "rows_used": 30, "ratio": 0.79 },
+      "signal_label": "risk_on",
+      "signal_zscore": 1.2
+    },
+    "core": {
+      "vif_diagnostics": [],
+      "pca_summary": {
+        "status": "ok",
+        "selected_features": ["news_sentiment_mean_lag1", "fng_value_lag1", "funding_rate_lag1", "volume_change_pct_lag1"],
+        "n_components": 1,
+        "explained_variance": 0.85,
+        "loadings": {
+          "news_sentiment_mean_lag1": 0.43,
+          "fng_value_lag1": 0.54,
+          "funding_rate_lag1": -0.28,
+          "volume_change_pct_lag1": -0.18
+        },
+        "feature_schema_version": "v4"
+      },
+      "coverage": { "rows_total": 38, "rows_used": 36, "ratio": 0.95 },
+      "signal_label": "neutral",
+      "signal_zscore": 0.1
+    }
+  },
   "exclusion_counts": {
-    "missing_backfill_marker": 29,
-    "invalid_contract": 1,
-    "insufficient_article_count": 0,
+    "missing_backfill_marker": 0,
+    "invalid_contract": 0,
+    "insufficient_article_count": 2,
     "no_sentiment": 0,
     "skipped_sentiment": 0
   }

@@ -9,14 +9,19 @@ import numpy as np
 import pandas as pd
 
 from morning_brief.analysis.sentiment_join.config import SentimentJoinSettings
-from morning_brief.analysis.sentiment_join.hybrid_index import compute_hybrid_index
+from morning_brief.analysis.sentiment_join.hybrid_index import (
+    INDEX_SPECS,
+    compute_hybrid_indices,
+)
 from morning_brief.analysis.sentiment_join.join import merge_sources
+from morning_brief.analysis.sentiment_join.signals import hybrid_signal_label
 from morning_brief.analysis.sentiment_join.sources.binance import fetch_btc_close_binance
 from morning_brief.analysis.sentiment_join.sources.etf_flows import fetch_etf_flow_features
 from morning_brief.analysis.sentiment_join.sources.fng import fetch_fng
 from morning_brief.analysis.sentiment_join.sources.futures import fetch_futures_data
 from morning_brief.analysis.sentiment_join.sources.r2_sentiment import fetch_r2_sentiment
 from morning_brief.analysis.sentiment_join.sources.usdkrw_prices import fetch_usdkrw_close
+from morning_brief.analysis.sentiment_join.sources.vix import fetch_vix_history
 from morning_brief.analysis.sentiment_join.statistical_tests import run_statistical_tests
 from morning_brief.analysis.sentiment_join.storage import (
     cleanup_old_files,
@@ -101,24 +106,6 @@ def _build_granger_correction(statistical_results: dict[str, object]) -> dict[st
     }
 
 
-def _hybrid_signal_label(series: pd.Series) -> str | None:
-    clean = pd.to_numeric(series, errors="coerce").dropna()
-    if clean.empty:
-        return None
-    window = clean.tail(30)
-    if len(window) < 2:
-        return "neutral"
-    std = float(window.std(ddof=0))
-    if std == 0:
-        return "neutral"
-    zscore = float((window.iloc[-1] - float(window.mean())) / std)
-    if zscore >= 0.5:
-        return "risk_on"
-    if zscore <= -0.5:
-        return "risk_off"
-    return "neutral"
-
-
 def run_sentiment_join(settings: SentimentJoinSettings) -> int:
     try:
         today = datetime.now(timezone.utc).date()
@@ -166,6 +153,14 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
         if usdkrw_close_df.empty:
             usdkrw_close_df = _empty_close_frame(btc_start_date, end_date)
 
+        # §4 3-4: VIX optional feature. FRED_API_KEY 미설정·실패 시 빈 DataFrame.
+        vix_df = fetch_vix_history(btc_start_date, end_date)
+        _log_source_complete(
+            "vix",
+            vix_df,
+            fallback_used=bool(vix_df.attrs.get("fallback_used", False)),
+        )
+
         # Req 11: 선물 지표 수집 (실패 시 빈 DataFrame — merge_sources에서 NaN 컬럼으로 처리)
         futures_df = fetch_futures_data(settings.lookback_days, settings.futures_lambda_arn)
         _log_source_complete(
@@ -185,6 +180,14 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
         btc_close_df = normalize_dates(btc_close_df)
         usdkrw_close_df = normalize_dates(usdkrw_close_df)
         etf_df = normalize_dates(etf_df) if not etf_df.empty else etf_df
+        # §4 3-4: VIX는 미국 시장 종가 기반이라 주말/공휴일이 비어 있으므로
+        # 전체 달력으로 reindex + 2일 ffill. usdkrw와 동일한 패턴.
+        if not vix_df.empty:
+            vix_df = normalize_dates(vix_df)
+            vix_df = reindex_to_calendar(vix_df, btc_start_date, end_date)
+            vix_df, vix_ffill_days = forward_fill_prices(vix_df, ["vix"], max_periods=2)
+        else:
+            vix_ffill_days = 0
 
         total_ffill_days = 0
         btc_close_df, btc_ffill_days = forward_fill_prices(btc_close_df, ["close"])
@@ -196,7 +199,7 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
         usdkrw_close_df, usdkrw_ffill_days = forward_fill_prices(
             usdkrw_close_df, ["close"], max_periods=3
         )
-        total_ffill_days += btc_ffill_days + usdkrw_ffill_days
+        total_ffill_days += btc_ffill_days + usdkrw_ffill_days + vix_ffill_days
         if not etf_df.empty:
             etf_df["etf_total_btc"] = pd.to_numeric(
                 etf_df["etf_total_btc"], errors="coerce"
@@ -222,9 +225,17 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             usdkrw_returns_df = _empty_return_frame("usdkrw", start_date, end_date)
 
         futures_df = normalize_dates(futures_df) if not futures_df.empty else futures_df
+        if not vix_df.empty:
+            vix_df = trim_to_date_range(vix_df, start_date, end_date)
 
         master_df = merge_sources(
-            sentiment_df, fng_df, btc_returns_df, usdkrw_returns_df, futures_df, etf_df
+            sentiment_df,
+            fng_df,
+            btc_returns_df,
+            usdkrw_returns_df,
+            futures_df,
+            etf_df,
+            vix_df,
         )
 
         exclusion_counts = master_df.attrs.get("exclusion_counts", {})
@@ -315,12 +326,17 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
                 reason=str(exc),
             )
 
-        # Req 13: PCA 하이브리드 지수 생성
+        # §4 v4: full / core 두 하이브리드 지수 + 0~100 score를 생성합니다.
+        hybrid_column_names = [f"{spec.name}_hybrid_index" for spec in INDEX_SPECS] + [
+            f"{spec.name}_hybrid_index_score" for spec in INDEX_SPECS
+        ]
+        for col in hybrid_column_names:
+            master_df[col] = float("nan")
         try:
-            analysis_with_hybrid = compute_hybrid_index(analysis_df)
-            master_df["hybrid_index"] = float("nan")
-            hybrid_map = analysis_with_hybrid.set_index("date")["hybrid_index"].to_dict()
-            master_df["hybrid_index"] = master_df["date"].map(hybrid_map)
+            analysis_with_hybrid = compute_hybrid_indices(analysis_df)
+            for col in hybrid_column_names:
+                hybrid_map = analysis_with_hybrid.set_index("date")[col].to_dict()
+                master_df[col] = master_df["date"].map(hybrid_map)
             master_df.attrs["hybrid_index_diagnostics"] = analysis_with_hybrid.attrs.get(
                 "hybrid_index_diagnostics", {}
             )
@@ -332,11 +348,28 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
                 level=logging.WARNING,
                 reason=str(exc),
             )
-            master_df["hybrid_index"] = float("nan")
 
         run_date = today.strftime("%Y%m%d")
         hybrid_diagnostics = master_df.attrs.get("hybrid_index_diagnostics", {})
-        hybrid_signal_label = _hybrid_signal_label(master_df["hybrid_index"])
+
+        hybrid_indices_meta: dict[str, dict[str, object]] = {}
+        for spec in INDEX_SPECS:
+            diag = (
+                hybrid_diagnostics.get(spec.name, {})
+                if isinstance(hybrid_diagnostics, dict)
+                else {}
+            )
+            label, zscore = hybrid_signal_label(master_df[f"{spec.name}_hybrid_index"])
+            hybrid_indices_meta[spec.name] = {
+                "vif_diagnostics": diag.get("vif_diagnostics", [])
+                if isinstance(diag, dict)
+                else [],
+                "pca_summary": diag.get("pca_summary", {}) if isinstance(diag, dict) else {},
+                "coverage": diag.get("coverage", {}) if isinstance(diag, dict) else {},
+                "signal_label": label,
+                "signal_zscore": zscore,
+            }
+
         stats_metadata = build_stats_metadata_payload(
             run_id=f"sentiment-join-{run_date}",
             generated_at_utc=datetime.now(timezone.utc).isoformat(),
@@ -348,21 +381,11 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
                 if isinstance(statistical_results, dict)
                 else []
             ),
-            vif_diagnostics=(
-                hybrid_diagnostics.get("vif_diagnostics", [])
-                if isinstance(hybrid_diagnostics, dict)
-                else []
-            ),
-            pca_summary=(
-                hybrid_diagnostics.get("pca_summary")
-                if isinstance(hybrid_diagnostics, dict)
-                else None
-            ),
+            hybrid_indices=hybrid_indices_meta,
             rows_before_outlier_filter=len(master_df),
             rows_after_outlier_filter=len(analysis_df),
             outlier_filtered_count=masked_count,
             outlier_filtered_ratio=masked_ratio,
-            hybrid_signal_label=hybrid_signal_label,
             granger_eligible_rows=(
                 statistical_results.get("granger_eligible_rows")
                 if isinstance(statistical_results, dict)

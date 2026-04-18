@@ -108,6 +108,13 @@ def _add_futures_lag_columns(df: pd.DataFrame) -> pd.DataFrame:
     else:
         result["volume_change_pct"] = float("nan")
         result["volume_change_pct_lag1"] = float("nan")
+    # §4 3-4: VIX optional feature. 수집 실패 시 vix 컬럼이 없으므로 NaN 채우기.
+    if "vix" in result.columns:
+        result["vix"] = pd.to_numeric(result["vix"], errors="coerce")
+        result["vix_lag1"] = result["vix"].shift(1)
+    else:
+        result["vix"] = float("nan")
+        result["vix_lag1"] = float("nan")
     return result
 
 
@@ -230,6 +237,7 @@ def merge_sources(
     usdkrw_df: pd.DataFrame,
     futures_df: pd.DataFrame | None = None,
     etf_df: pd.DataFrame | None = None,
+    vix_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     filtered_sentiment, exclusion_counts = _apply_sentiment_quality_gate(sentiment_df)
 
@@ -252,6 +260,13 @@ def merge_sources(
         merged["etf_total_btc"] = float("nan")
         merged["etf_total_aum_usd"] = float("nan")
         merged["etf_net_inflow_usd"] = float("nan")
+
+    # §4 3-4: VIX optional — fetch 실패 시 vix_df가 None/empty이면 NaN 컬럼으로 left-join fallback.
+    if vix_df is not None and not vix_df.empty:
+        vix_cols = [c for c in vix_df.columns if c != "date"]
+        merged = merged.merge(vix_df[["date"] + vix_cols], on="date", how="left")
+    else:
+        merged["vix"] = float("nan")
 
     # §7: btc_quote_volume 누락 방어 — _empty_return_frame fallback 경로에서 컬럼이 없을 수 있음
     if "btc_quote_volume" not in merged.columns:

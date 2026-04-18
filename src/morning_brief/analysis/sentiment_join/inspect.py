@@ -53,7 +53,8 @@ _PREFERRED_PREVIEW_COLUMNS = [
     "fng_value",
     "btc_log_return",
     "funding_rate",
-    "hybrid_index",
+    "full_hybrid_index",
+    "core_hybrid_index",
     "is_outlier",
 ]
 
@@ -221,17 +222,25 @@ def _extract_stats_summary(metadata: dict[str, str]) -> dict[str, str]:
         return {}
 
     stats = json.loads(raw)
-    pca_summary = stats.get("pca_summary") or {}
-    return {
+    hybrid_indices = stats.get("hybrid_indices") or {}
+    summary: dict[str, str] = {
         "run_id": str(stats.get("run_id", "<missing>")),
         "granger_executed": str(stats.get("granger_executed", "<missing>")),
         "granger_result_count": str(len(stats.get("granger_results", []))),
         "outlier_filtered_count": str(stats.get("outlier_filtered_count", "<missing>")),
         "outlier_filtered_ratio": str(stats.get("outlier_filtered_ratio", "<missing>")),
-        "hybrid_signal_label": str(stats.get("hybrid_signal_label", "<missing>")),
-        "pca_status": str(pca_summary.get("status", "<missing>")),
-        "pca_explained_variance": str(pca_summary.get("explained_variance", "<missing>")),
     }
+    for name in ("full", "core"):
+        entry = hybrid_indices.get(name) if isinstance(hybrid_indices, dict) else None
+        if not isinstance(entry, dict):
+            continue
+        pca = entry.get("pca_summary") or {}
+        coverage = entry.get("coverage") or {}
+        summary[f"{name}_signal_label"] = str(entry.get("signal_label", "<missing>"))
+        summary[f"{name}_pca_status"] = str(pca.get("status", "<missing>"))
+        summary[f"{name}_explained_variance"] = str(pca.get("explained_variance", "<missing>"))
+        summary[f"{name}_coverage_ratio"] = str(coverage.get("ratio", "<missing>"))
+    return summary
 
 
 def _render_compare_section(inspections: list[ParquetInspection]) -> str:
