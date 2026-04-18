@@ -320,3 +320,23 @@ def test_upload_all_counts_correctly() -> None:
     assert results.aggregates_ok == 1
     assert results.aggregates_degraded == 1
     assert results.aggregates_skipped == 1
+
+
+def test_upload_all_reports_progress() -> None:
+    aggs = [
+        _agg("2024-01-01", status="ok"),
+        _agg("2024-01-02", status="degraded"),
+    ]
+    events: list[dict[str, object]] = []
+
+    with patch(
+        "backfill.uploader.upload_brief",
+        side_effect=["uploaded", "skipped_exists"],
+    ):
+        upload_all(aggs, MagicMock(), "bucket", progress_callback=events.append)
+
+    assert len(events) == 2
+    assert events[-1]["status"] == "completed"
+    assert events[-1]["completed"] == 2
+    assert events[-1]["uploaded"] == 1
+    assert events[-1]["skipped_exists"] == 1

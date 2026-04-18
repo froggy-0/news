@@ -220,3 +220,29 @@ def test_source_counts_tracked_correctly() -> None:
 
     assert result[0].coindesk_count == 2
     assert result[0].alpaca_count == 1
+
+
+def test_score_and_aggregate_reports_batch_progress() -> None:
+    items = [_make_article(str(i), score=0.1 * i) for i in range(1, 4)]
+    articles = [a for a, _ in items]
+    scores = [s for _, s in items]
+    events: list[dict[str, object]] = []
+
+    from morning_brief.data.finbert_sentiment import SentimentResult
+
+    mock_results = [SentimentResult(score=s, confidence=0.9, label="neutral") for s in scores]
+    articles_by_date = {"2024-01-01": articles}
+
+    with patch("backfill.scorer.FinBertScorer") as MockScorer:
+        instance = MagicMock()
+        instance.score_texts.side_effect = [mock_results[:2], mock_results[2:]]
+        MockScorer.return_value = instance
+
+        score_and_aggregate(articles_by_date, batch_size=2, progress_callback=events.append)
+
+    assert events[0]["batch_index"] == 1
+    assert events[0]["processed_articles"] == 2
+    assert events[1]["batch_index"] == 2
+    assert events[1]["processed_articles"] == 3
+    assert events[-1]["status"] == "completed"
+    assert events[-1]["dates"] == 1

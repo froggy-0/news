@@ -1,157 +1,231 @@
-# 3순위: 하이브리드 지수 모델링 — 코드 리뷰 결과
+# 3순위: 하이브리드 지수 모델링 — 최신 코드 기준 정리
 
-> 1순위(Lag-1, 백필 동기화), 2순위(ADF/Granger 엄밀성, 백필 JSON 구조) 완료 후 적용
+> 2026-04-18 기준 업데이트.
+> 이 문서는 최초 리뷰안에서 **이미 반영된 항목**과 **아직 진행할 가치가 있는 항목**을 다시 분리한 최신 버전입니다.
 
 ---
 
 ## 현재 구현 상태 요약
 
-`compute_hybrid_index` (`hybrid_index.py`) 흐름:
+`compute_hybrid_index` (`src/morning_brief/analysis/sentiment_join/hybrid_index.py`) 흐름:
 
+```text
+후보 변수 선별
+→ 수치형 변환 + dropna
+→ VIF 반복 제거 (>= 10)
+→ StandardScaler
+→ PCA (누적 설명 분산 >= 80%)
+→ PC1 부호 정규화 (fng_value_lag1 loading 양수 고정)
+→ raw PC1 값을 hybrid_index로 저장
 ```
-후보 변수 선별 → 수치형 변환 + dropna → VIF 반복 제거(≥10)
-→ StandardScaler → PCA(누적 분산 ≥80%) → 첫 번째 주성분 = hybrid_index
-```
 
-### ✅ 이미 올바른 부분
+### ✅ 이미 반영된 부분
 
-| 항목 | 구현 | 코드 위치 |
+| 항목 | 현재 상태 | 코드 위치 |
 |---|---|---|
-| VIF 반복 제거 | 가장 높은 VIF 변수를 하나씩 제거, 임계값 10.0 | `_select_low_vif_features` |
-| StandardScaler 정규화 | VIF 계산과 PCA 모두에 적용 | `_select_low_vif_features`, `compute_hybrid_index` |
-| 누적 설명 분산 자동 선택 | ≥80% 달성하는 최소 주성분 수 | `np.searchsorted(cumvar, 0.80)` |
-| loadings 기록 | 변수별 PC1 기여 가중치를 메타데이터에 저장 | `pca_summary.loadings` |
-| 최소 변수/행 수 게이트 | 변수 < 2 또는 행 < 10이면 NaN | 3단계 분기 |
-| VIF 진단 로그 | 매 반복마다 구조화 로그 | `stats.vif_diagnostics` |
+| VIF 반복 제거 | 구현 완료 | `hybrid_index.py:_select_low_vif_features` |
+| StandardScaler 정규화 | 구현 완료 | `hybrid_index.py:_select_low_vif_features`, `compute_hybrid_index` |
+| 누적 설명 분산 자동 선택 | 구현 완료 | `hybrid_index.py:164-169` |
+| loadings 기록 | 구현 완료 | `hybrid_index.py:174-205` |
+| 최소 변수/행 수 게이트 | 구현 완료 | `hybrid_index.py:103-158` |
+| PC1 부호 안정화 | **이미 구현 완료** | `hybrid_index.py:177-184` |
+| feature schema version 기록 | 구현 완료 | `hybrid_index.py:25-30`, `197-207` |
+| `volume_change_pct_lag1` 후보 추가 | 구현 완료 (`v3`) | `hybrid_index.py:16-28` |
+
+### ✅ 이미 맞지 않는 옛 제안
+
+기존 문서의 아래 항목은 더 이상 "개선 필요"가 아닙니다.
+
+1. **PC1 부호 안정성 미보장**
+현재는 `HYBRID_SIGN_ANCHOR = "fng_value_lag1"` 기준으로 부호 정규화가 들어가 있습니다.
+
+2. **후보 변수 목록이 옛 버전**
+현재 후보는 raw `news_sentiment_mean`, `fng_value`가 아니라 lag1 기반 `v3` 스키마입니다.
 
 ---
 
-## 🔴 개선 필요: 0~100 스케일링 없음
+## 🔴 여전히 중요: 0~100 스케일링은 필요하지만 `hybrid_index` 원본을 덮어쓰면 안 됩니다
 
-### 현상
+### 현재 상태
 
-현재 `hybrid_index`는 PCA 첫 번째 주성분의 **원시 값**(StandardScaler 후 PCA 투영)입니다. 범위가 고정되어 있지 않고, 데이터에 따라 음수~양수 임의 범위를 가집니다.
+현재 `hybrid_index`는 raw PC1 값입니다.
 
 ```python
-# hybrid_index.py:170
-result.loc[clean_idx, "hybrid_index"] = components[:, 0]  # 원시 PC1 값
+# hybrid_index.py:197
+result.loc[clean_idx, "hybrid_index"] = components[:, 0]
 ```
 
-가이드라인은 **0~100 사이의 '소버린 하이브리드 감성 지표'**를 요구합니다.
+이 값은 run마다 범위가 달라질 수 있어 UI/리포트에 직접 노출하면 해석이 불편합니다.
 
-### 수정 방안
+### 수정 방향
 
-PCA 투영 후 rolling window 기반 min-max 스케일링을 적용합니다:
+기존 문서처럼 `hybrid_index` 자체를 0~100으로 덮어쓰는 것은 권장하지 않습니다.
+
+이유:
+
+- raw 분석 지표와 표시용 score가 섞입니다.
+- 새 데이터가 들어올 때 min/max가 바뀌면 과거 값 의미가 흔들립니다.
+- 기존 parquet 비교와 migration 부담이 커집니다.
+
+### 권장안
+
+`hybrid_index`는 **raw PC1 그대로 유지**하고, 별도 `hybrid_index_score`를 추가합니다.
+
+예시:
 
 ```python
 raw_pc1 = components[:, 0]
-# 전체 기간 min-max → 0~100
 pc1_min, pc1_max = raw_pc1.min(), raw_pc1.max()
 if pc1_max - pc1_min > 0:
-    scaled = (raw_pc1 - pc1_min) / (pc1_max - pc1_min) * 100
+    score = (raw_pc1 - pc1_min) / (pc1_max - pc1_min) * 100
 else:
-    scaled = np.full_like(raw_pc1, 50.0)
-result.loc[clean_idx, "hybrid_index"] = scaled
+    score = np.full_like(raw_pc1, 50.0)
+
+result.loc[clean_idx, "hybrid_index"] = raw_pc1
+result.loc[clean_idx, "hybrid_index_score"] = score
 ```
 
-메타데이터에 `pc1_min`, `pc1_max`를 기록하면 새 데이터 추가 시 동일 스케일로 변환할 수 있습니다.
+메타데이터에는 최소 아래 값을 함께 저장합니다.
+
+- `pc1_min`
+- `pc1_max`
+- `score_scale_method`
+- `hybrid_index_score_schema_version`
 
 수정 대상:
 
 | 파일 | 변경 |
 |---|---|
-| `hybrid_index.py` | PC1 → 0~100 min-max 스케일링 추가 |
-| `validate.py` | `MASTER_SCHEMA`의 `hybrid_index`에 `Check.between(0, 100)` 추가 |
-| `intelligence.py` | `_hybrid_signal_label`의 z-score 기반 해석을 0~100 기준으로 조정 |
-| `pipeline.py` | 동일 함수 조정 |
+| `hybrid_index.py` | `hybrid_index_score` 생성 |
+| `validate.py` | `hybrid_index_score`를 `0~100` 범위로 스키마 추가 |
+| `pipeline.py` | raw index와 score를 함께 메타에 기록 |
+| `intelligence.py` | UI/리포트용 해석은 score 우선 사용 검토 |
 
 ---
 
-## 🔴 개선 필요: PC1 부호 안정성 미보장
+## 🔴 새로 중요: feature sparsity 때문에 `hybrid_index` coverage가 너무 낮습니다
 
-### 현상
+### 현재 상태
 
-PCA의 첫 번째 주성분은 **부호가 임의적**입니다. 같은 데이터라도 라이브러리 버전이나 수치 오차에 따라 PC1의 부호가 뒤집힐 수 있습니다. 현재 부호 보정(sign convention) 로직이 없습니다.
+2026-04-18 parquet 기준:
 
-### 문제
+- 전체 행: `180`
+- `hybrid_index` non-null: `25`
+- PCA feature complete rows: 약 `29`
 
-- 어떤 run에서는 `hybrid_index` 높음 = risk-on, 다른 run에서는 높음 = risk-off가 될 수 있음
-- `_hybrid_signal_label`이 z-score ≥ 0.5를 `risk_on`으로 해석하는데, PC1 부호가 뒤집히면 의미가 반전됨
-- 시계열 연속성이 깨짐
+즉, 현재의 더 큰 문제는 "0~100 미스케일링"보다 **지수가 너무 드물게 계산된다**는 점입니다.
 
-### 수정 방안
+### 원인
 
-PC1의 부호를 `fng_value` loading 기준으로 고정합니다. F&G Index는 높을수록 탐욕(risk-on)이므로, `fng_value`의 loading이 양수가 되도록 보정합니다:
+현재 구현은 PCA 후보 변수 전체가 존재하는 행만 사용합니다.
 
 ```python
-if "fng_value" in selected:
-    fng_idx = selected.index("fng_value")
-    if pca_final.components_[0, fng_idx] < 0:
-        components[:, 0] *= -1
-        pca_final.components_[0] *= -1
+# hybrid_index.py:123-124
+clean_idx = work.dropna().index
+df_clean = work.loc[clean_idx]
 ```
 
-`fng_value`가 VIF 제거로 빠진 경우에는 `news_sentiment_mean` 등 다른 앵커 변수를 사용합니다.
+그리고 실제 운영 데이터에서 아래 feature들이 매우 sparse 합니다.
+
+- `open_interest_usd`
+- `btc_long_short_ratio`
+- `etf_total_aum_usd`
+- `etf_net_inflow_usd_lag1`
+
+### 수정 방향
+
+`hybrid_index`를 계속 운영 신호로 쓸 생각이라면, VIX 추가보다 먼저 **degradation path**를 설계해야 합니다.
+
+권장안:
+
+1. `full_hybrid_index`
+   - 선물/ETF feature 포함 full feature set
+2. `core_hybrid_index`
+   - 뉴스 감성 + F&G + funding + volume 같은 상대적으로 coverage 높은 핵심 feature만 사용
+3. 메타데이터에 coverage 기록
+   - `hybrid_index_coverage_rows`
+   - `hybrid_index_coverage_ratio`
+   - `selected_features`
+
+이렇게 하면 sparse한 날에도 core 지수는 유지하고, full 지수는 품질 좋은 구간에서만 비교할 수 있습니다.
 
 ---
 
-## 🟡 개선 필요: VIX 후보 변수 미포함
+## 🟡 여전히 유효: VIX 후보 변수 추가
 
-### 현상
+### 현재 상태
 
-가이드라인에서 "F&G 지수, 뉴스 점수, VIX 중 서로 겹치는 정보가 있는지 VIF로 확인"을 요구하지만, 현재 `HYBRID_FEATURE_CANDIDATES`에 VIX가 없습니다:
+VIX는 아직 sentiment-join 마스터 테이블과 hybrid feature set에 포함되지 않습니다.
 
-```python
-HYBRID_FEATURE_CANDIDATES = [
-    "news_sentiment_mean",
-    "fng_value",
-    "funding_rate_lag1",
-    "btc_long_short_ratio_lag1",
-    "etf_net_inflow_usd_lag1",
-]
-# VIX 없음
-```
+이 제안은 여전히 유효합니다. 다만 **우선순위는 기존 문서보다 낮춰야** 합니다.
 
-VIX는 Market Packet에는 수집되지만 sentiment-join 마스터 테이블에는 합류하지 않습니다.
+이유:
 
-### 수정 방안
+- 현재 병목은 VIX 부재보다 feature sparsity와 coverage 부족입니다.
+- VIX를 추가해도 결측 구조가 개선되지 않으면 실제 hybrid coverage는 크게 늘지 않을 수 있습니다.
 
-1순위 Lag-1 수정과 함께 VIX를 sentiment-join 소스로 추가합니다:
+### 진행 조건
+
+VIX를 추가한다면 아래 원칙으로 진행합니다.
+
+1. `optional feature`로 추가
+2. 없다고 파이프라인이 깨지지 않아야 함
+3. `feature_schema_version`을 올리고 migration 영향 명시
+
+수정 대상:
 
 | 파일 | 변경 |
 |---|---|
-| `pipeline.py` | VIX 수집 소스 추가 (FRED `VIXCLS` — 이미 `fetch_macro_points`에 구현됨) |
-| `join.py` | `merge_sources`에 VIX DataFrame 조인 |
-| `hybrid_index.py` | `HYBRID_FEATURE_CANDIDATES`에 `"vix_lag1"` 추가 |
-| `validate.py` | `MASTER_SCHEMA`에 `vix`, `vix_lag1` 컬럼 추가 |
-| `statistical_tests.py` | `ADF_TARGETS`에 `vix` 추가 (선택) |
+| `pipeline.py` | VIX 수집/주입 |
+| `join.py` | VIX 조인 |
+| `hybrid_index.py` | `vix_lag1` 후보 추가 |
+| `validate.py` | `vix`, `vix_lag1` 컬럼 추가 |
+| `statistical_tests.py` | 필요 시 `ADF_TARGETS` 확장 |
 
 ---
 
-## 🟡 개선 필요: `_hybrid_signal_label` 중복 구현
+## 🟡 여전히 유효: `_hybrid_signal_label` 중복 제거
 
-### 현상
+### 현재 상태
 
-`_hybrid_signal_label`이 두 곳에 별도 구현되어 있습니다:
+아직 두 곳에 중복 구현이 있습니다.
 
-| 파일 | 반환 타입 | z-score 반환 |
-|---|---|---|
-| `pipeline.py:91-106` | `str \| None` | ❌ |
-| `intelligence.py:56-72` | `tuple[str, float \| None]` | ✅ |
+| 파일 | 반환 타입 |
+|---|---|
+| `pipeline.py:104-119` | `str \| None` |
+| `intelligence.py:56-72` | `tuple[str, float \| None]` |
 
-로직은 동일(z-score ±0.5 기준)하지만 시그니처가 다릅니다. 한쪽을 수정하면 다른 쪽을 놓칠 위험이 있습니다.
+로직은 거의 같지만 시그니처가 달라 drift 위험이 있습니다.
 
-### 수정 방안
+### 권장안
 
-`intelligence.py` 버전을 정본으로 하고, `pipeline.py`에서 import하여 재사용합니다.
+`intelligence.py` 버전을 정본으로 두고 공용 함수로 추출합니다.
+
+예시 후보:
+
+- `analysis/sentiment_join/signals.py`
+- 또는 `intelligence.py`에 두고 `pipeline.py`에서 import
 
 ---
 
-## 수정 우선순위 (3순위 내)
+## 수정 우선순위 (최신판)
 
 | 순위 | 항목 | 영향도 | 난이도 |
 |---|---|---|---|
-| **3-1** | 0~100 스케일링 (§1) | 🔴 가이드라인 핵심 요구사항 | 중 |
-| **3-2** | PC1 부호 안정성 (§2) | 🔴 시계열 해석 신뢰도 | 저 |
-| **3-3** | VIX 후보 변수 추가 (§3) | 🟡 가이드라인 명시 항목 | 중 |
-| **3-4** | `_hybrid_signal_label` 중복 제거 (§4) | 🟢 유지보수 | 저 |
+| **3-1** | feature sparsity 대응 / degradation path | 🔴 운영 활용성 핵심 | 중~상 |
+| **3-2** | `hybrid_index_score` 추가 (raw 유지) | 🔴 해석 가능성 개선 | 중 |
+| **3-3** | `_hybrid_signal_label` 중복 제거 | 🟡 유지보수 / drift 방지 | 저 |
+| **3-4** | VIX optional feature 추가 | 🟡 모델 확장 | 중 |
+
+---
+
+## 권장 결론
+
+현재 기준에서는 아래 순서가 안전합니다.
+
+1. `hybrid_index` raw 값은 유지
+2. 별도 `hybrid_index_score` 도입
+3. sparse feature 대응 설계
+4. 그 다음 VIX 추가
+
+즉, 원래 문서의 핵심 아이디어 중 일부는 여전히 좋지만, **"PC1 부호 안정성"은 이미 완료**, **"0~100 스케일링"은 raw overwrite 대신 별도 score**, **"VIX 추가"보다 "coverage 개선"이 더 우선**으로 보는 것이 현재 코드 상태에 맞습니다.

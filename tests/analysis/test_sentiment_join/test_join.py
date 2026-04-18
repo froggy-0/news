@@ -182,13 +182,30 @@ def test_merge_sources_adds_etf_flow_lag1() -> None:
     assert merged.loc[2, "etf_net_inflow_usd_lag1"] == pytest.approx(850000.0)
 
 
-def test_merge_sources_outlier_detection_includes_long_short_ratio() -> None:
+def test_merge_sources_outlier_detection_includes_funding_rate() -> None:
+    """이상치 감지는 변화율·수익률 계열 한정(funding_rate 포함) — bounded level은 제외."""
     futures_df = _futures_df(40)
-    futures_df.loc[39, "btc_long_short_ratio"] = 999.0
+    futures_df.loc[39, "funding_rate"] = 5.0  # 평소 0.0001 수준 대비 극단값
 
     merged = merge_sources(_sentiment_df(40), _fng_df(40), _btc_df(40), _usdkrw_df(40), futures_df)
 
     assert bool(merged.iloc[-1]["is_outlier"]) is True
+
+
+def test_merge_sources_outlier_detection_skips_bounded_levels() -> None:
+    """bounded/level 컬럼(btc_long_short_ratio 등)은 이상치 감지 대상에서 제외된다."""
+    # 기본 _btc_df는 row 39에 의도적 극단값(btc_return=0.5)을 넣어 다른 테스트를 위해
+    # 사용되므로 여기선 안정된 시리즈로 덮어쓴다.
+    btc_df = _btc_df(40)
+    btc_df.loc[39, "btc_return"] = 0.01
+    btc_df.loc[39, "btc_log_return"] = 0.01
+    futures_df = _futures_df(40)
+    futures_df.loc[39, "btc_long_short_ratio"] = 999.0  # 극단값이지만 level 계열 → 감지 X
+
+    merged = merge_sources(_sentiment_df(40), _fng_df(40), btc_df, _usdkrw_df(40), futures_df)
+
+    # btc_long_short_ratio 극단값 하나만으로는 is_outlier가 트리거되지 않아야 한다.
+    assert bool(merged.iloc[-1]["is_outlier"]) is False
 
 
 def test_merge_sources_btc_quote_volume_preserved() -> None:

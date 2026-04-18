@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Literal
@@ -81,6 +82,7 @@ def fetch_coindesk_articles(
     end_date: str,
     *,
     delay_seconds: float = 0.3,
+    progress_callback: Callable[[dict[str, object]], None] | None = None,
 ) -> list[RawArticle]:
     """to_ts 커서 방식으로 역방향 페이지네이션.
 
@@ -94,6 +96,7 @@ def fetch_coindesk_articles(
     cursor = end_ts
     seen_ids: set[str] = set()
     collected: list[RawArticle] = []
+    pages_fetched = 0
 
     while True:
         params = {
@@ -116,11 +119,23 @@ def fetch_coindesk_articles(
                     },
                 },
             )
+            if progress_callback:
+                progress_callback(
+                    {
+                        "source": "coindesk",
+                        "status": "failed",
+                        "pages_fetched": pages_fetched,
+                        "collected": len(collected),
+                        "cursor": cursor,
+                        "message": str(exc),
+                    }
+                )
             break
 
         articles = data.get("Data", [])
         if not articles:
             break
+        pages_fetched += 1
 
         has_old = False
         for item in articles:
@@ -150,11 +165,47 @@ def fetch_coindesk_articles(
             )
 
         if has_old:
+            if progress_callback:
+                published_values = [int(item.get("PUBLISHED_ON", 0)) for item in articles]
+                progress_callback(
+                    {
+                        "source": "coindesk",
+                        "status": "running",
+                        "pages_fetched": pages_fetched,
+                        "page_articles": len(articles),
+                        "collected": len(collected),
+                        "oldest_seen": _ts_to_utc_date(min(published_values)),
+                        "newest_seen": _ts_to_utc_date(max(published_values)),
+                    }
+                )
             break
 
         min_ts = min(int(item.get("PUBLISHED_ON", cursor)) for item in articles)
         cursor = min_ts - 1  # to_ts inclusive이므로 -1 필수
+        if progress_callback:
+            published_values = [int(item.get("PUBLISHED_ON", 0)) for item in articles]
+            progress_callback(
+                {
+                    "source": "coindesk",
+                    "status": "running",
+                    "pages_fetched": pages_fetched,
+                    "page_articles": len(articles),
+                    "collected": len(collected),
+                    "oldest_seen": _ts_to_utc_date(min(published_values)),
+                    "newest_seen": _ts_to_utc_date(max(published_values)),
+                }
+            )
 
         time.sleep(delay_seconds)
+
+    if progress_callback:
+        progress_callback(
+            {
+                "source": "coindesk",
+                "status": "completed",
+                "pages_fetched": pages_fetched,
+                "collected": len(collected),
+            }
+        )
 
     return collected

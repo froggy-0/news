@@ -27,6 +27,7 @@ from morning_brief.analysis.sentiment_join.transform import (
     compute_returns,
     forward_fill_prices,
     normalize_dates,
+    reindex_to_calendar,
     trim_to_date_range,
 )
 from morning_brief.analysis.sentiment_join.validate import validate_master
@@ -187,7 +188,14 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
 
         total_ffill_days = 0
         btc_close_df, btc_ffill_days = forward_fill_prices(btc_close_df, ["close"])
-        usdkrw_close_df, usdkrw_ffill_days = forward_fill_prices(usdkrw_close_df, ["close"])
+        # USDKRW는 외환시장이 주말 휴장이라 Sat/Sun 행이 비어 있다.
+        # BTC(24/7)와 inner merge 시 주말 행이 전부 drop되어 Granger 최소치(180)에
+        # 도달하지 못하므로, 전체 달력일로 reindex해 금요일 close를 주말로 ffill한다.
+        # max_periods를 3으로 올려 3일 연휴까지 커버한다.
+        usdkrw_close_df = reindex_to_calendar(usdkrw_close_df, btc_start_date, end_date)
+        usdkrw_close_df, usdkrw_ffill_days = forward_fill_prices(
+            usdkrw_close_df, ["close"], max_periods=3
+        )
         total_ffill_days += btc_ffill_days + usdkrw_ffill_days
         if not etf_df.empty:
             etf_df["etf_total_btc"] = pd.to_numeric(

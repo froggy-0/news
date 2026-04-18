@@ -3,8 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+from rich.console import Console
 
-from morning_brief.analysis.sentiment_join.inspect import inspect_parquet, render_report
+from morning_brief.analysis.sentiment_join.inspect import (
+    inspect_parquet,
+    main,
+    print_rich_report,
+    render_report,
+)
 from morning_brief.analysis.sentiment_join.storage import save_parquet
 
 
@@ -58,3 +64,43 @@ def test_render_report_includes_column_and_value_differences(tmp_path: Path) -> 
     assert "news_sentiment_mean" in report
     assert "0.1" in report
     assert "0.2" in report
+
+
+def test_main_prints_report(tmp_path: Path, capsys) -> None:
+    df = pd.DataFrame(
+        {
+            "date": ["2026-04-10"],
+            "news_sentiment_mean": [0.1],
+            "n_articles": pd.array([3], dtype="Int64"),
+            "is_outlier": [False],
+        }
+    )
+    path = save_parquet(df, tmp_path, "20260410")
+
+    exit_code = main([str(path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "Metadata" in captured.out
+    assert path.name in captured.out
+
+
+def test_print_rich_report_includes_filename_and_metadata(tmp_path: Path) -> None:
+    df = pd.DataFrame(
+        {
+            "date": ["2026-04-10"],
+            "news_sentiment_mean": [0.1],
+            "n_articles": pd.array([3], dtype="Int64"),
+            "is_outlier": [False],
+        }
+    )
+    path = save_parquet(df, tmp_path, "20260410")
+    inspection = inspect_parquet(path)
+
+    console = Console(record=True, force_terminal=False, width=120)
+    print_rich_report([inspection], console=console)
+
+    output = console.export_text()
+    assert path.name in output
+    assert "Metadata" in output
+    assert "Column Summary" in output
