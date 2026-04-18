@@ -1,161 +1,190 @@
 # SOVEREIGN BRIEF
 
-한국 시간 아침에 미국 기술주와 비트코인 시장을 빠르게 파악할 수 있도록, 여러 시장 데이터와 뉴스 흐름을 한 번 더 정리해 이메일 브리핑으로 전달하는 프로젝트입니다.
+암호화폐 시장과 거시경제 데이터를 수집·분석하여, 한국 시간 아침에 읽을 수 있는 시장 브리핑을 자동 생성하고 이메일로 발송하는 프로젝트입니다.
 
-이 프로젝트의 목적은 단순한 뉴스 모음이 아니라, 한국 투자자 입장에서 "오늘 시장을 어떻게 봐야 하는지"를 짧고 일관된 형식으로 정리하는 데 있습니다.
+단순한 뉴스 모음이 아니라, 정량 데이터와 감성 분석을 결합해 "오늘 시장을 어떻게 봐야 하는지"를 일관된 형식으로 정리하는 데 목적이 있습니다.
 
-## 무엇을 다루는가
+## 프로젝트 구조
 
-이 브리핑은 아래 네 가지 축을 함께 다룹니다.
+이 프로젝트는 세 개의 독립 파이프라인으로 구성됩니다.
+
+1. **브리핑 파이프라인** — 시장 데이터 + 뉴스 수집 → LLM 브리핑 생성 → 이메일 발송
+2. **Sentiment Join 파이프라인** — 감성·심리 지표 시계열 조인 → 통계 검정 → Alpha Validation
+3. **프론트엔드** — Next.js SSG + Cloudflare Pages 공개 브리핑 사이트
+
+## 수집 데이터
 
 ### 시장 데이터
 
-- 미국 금리와 변동성
-- 하이일드 스프레드
-- 달러 흐름
-- 미국 주요 지수
-- 기술주 주요 종목
-- 비트코인 현물 가격
-- 미국 현물 비트코인 ETF 보유 현황
+| 데이터 | 소스 | 폴백 |
+|---|---|---|
+| BTC 현물 가격·거래량 | Binance Spot klines | KIS → yfinance |
+| BTC 선물 지표 (펀딩비, 미결제약정, Long/Short Ratio) | Lambda 프록시 → Binance FAPI | Bybit 공개 API → NaN |
+| BTC ETF 보유량·순유입 | 공식 발행사 (IBIT, BITB 등) | HTML fallback |
+| Fear & Greed Index | alternative.me | — |
+| USD/KRW 환율 | KIS 일봉 API | yfinance KRW=X |
+| VIX | FRED API | — (optional) |
+| 미국 금리·달러·하이일드 스프레드 | FRED API | yfinance |
+| 미국 주요 지수·기술주 | KIS API | yfinance |
+| 한국 지수 (KOSPI, KOSDAQ) | KIS API | yfinance |
 
-### 한국 투자자 참고 지표
+### 뉴스·시그널
 
-- 원/달러 환율
-- 나스닥 선물
-- 미국 시장 흐름이 한국 개장에 줄 수 있는 영향
+| 소스 | 역할 |
+|---|---|
+| Perplexity Sonar | 토픽별 요약 + citation 기반 뉴스 추출 (1차) |
+| Perplexity Search | 키워드 기반 뉴스 검색 |
+| Grok 공식 X 시그널 | allowlist 계정의 실시간 시그널 |
+| Grok X 키워드 검색 | 시장 반응 시그널 |
+| Grok Web Search | 웹 검색 보강 (선택) |
+| Gemini Grounding | Perplexity 0건 시 대체 |
+| Google News RSS | 레거시 폴백 |
+| NewsAPI | 레거시 폴백 |
 
-### 뉴스와 시그널
+### 감성 분석
 
-- 거시경제 관련 뉴스
-- 미국 증시와 기술주 관련 뉴스
-- AI·빅테크 관련 뉴스
-- 비트코인 및 ETF 관련 뉴스
-- 공식 X 계정에서 나온 실시간 시그널
+- ProsusAI/finbert 모델로 영문 원본 텍스트에 -1.0~1.0 연속 감성 점수 부여
+- 뉴스, X 시그널, 공개 뉴스 카드에 각각 적용
+- `FINBERT_ENABLED=false`로 비활성화 가능, ML 의존성 미설치 환경에서도 파이프라인 정상 동작
 
-### 브리핑 출력
+## 브리핑 파이프라인
 
-- 오늘의 판단
-- 주요 뉴스
-- 종목별 흐름
-- 거시 지표 요약
-- 출처와 데이터 처리 메모
+```
+시장 데이터 수집 → 뉴스·시그널 수집 → FinBERT 감성 분석
+→ Sonar 맥락 보강 → 데이터 품질 평가 → OpenAI 브리핑 생성
+→ 브리핑 검증·재작성 → 공개 JSON 발행 (R2) → 이메일 발송 (SES)
+```
 
-## 어떻게 수집하고 정리하는가
+- OpenAI GPT 모델로 한국어 브리핑 생성 (Jinja2 템플릿 기반)
+- 브리핑 품질 검증 후 필요 시 자동 재작성 (최대 1~2회)
+- Sentiment Join 파이프라인의 하이브리드 지수·통계 검정 결과를 브리핑에 반영
 
-브리핑은 아래 흐름으로 만들어집니다.
+### 이메일 발송
 
-1. 시장 데이터를 먼저 모읍니다.
-금리, 달러, 지수, 기술주, 비트코인, ETF 관련 데이터를 수집하고 이상값이나 결측값을 점검합니다.
+- AWS SES (ap-northeast-2) 경유, sender: `no-reply@sovereignbriefing.com`
+- Supabase 구독 저장소에서 active 구독자만 조회하여 개별 발송
+- HTML + plain text 이중 포맷
+- HMAC-SHA256 기반 구독 해지 토큰 (30일 TTL)
 
-- 미국 현물 BTC ETF 보유량은 공식 issuer source를 우선 사용하고, Bronze/Silver/Gold 계층으로 raw payload, 정규화 필드, daily primary snapshot을 분리 저장합니다.
-- 공식 structured source가 없으면 HTML fallback으로 내리고, aggregator 데이터는 reference-only로만 분리 기록합니다.
+### 공개 산출물
 
-2. 뉴스와 시그널을 모읍니다.
-Perplexity 검색 결과를 중심으로 뉴스를 수집하고, 공식 X 시그널도 함께 확인합니다.
+- Cloudflare R2에 JSON 업로드 (index, briefs, news, signals)
+- R2 미설정 시 로컬 `outputs/public`에만 저장, 파이프라인 계속 진행
+- 공개 뉴스 카드용 한국어 해설·시장 함의 별도 생성 (선택)
 
-2.5. 뉴스와 시그널에 감성 점수를 매깁니다.
-ProsusAI/finbert 모델로 영문 원본 텍스트에 -1.0~1.0 범위의 연속 감성 점수를 부여합니다. 이 점수는 시계열 통계 분석의 입력으로 활용됩니다. `FINBERT_ENABLED=false`로 비활성화할 수 있으며, `transformers`/`torch`가 미설치된 환경에서도 파이프라인은 정상 동작합니다.
+## Sentiment Join 파이프라인
 
-- sentiment join 산출물은 Binance 선물 지표 Lag-1 컬럼, ADF/Granger 검정 요약, VIF/PCA 기반 `hybrid_index`를 포함하고 Parquet schema metadata의 `sentiment_join_stats`에 진단 요약을 함께 저장합니다.
-- 선물 데이터(펀딩비·미결제약정·Long/Short Ratio)는 ap-northeast-2 Lambda 프록시 → Bybit 공개 API → NaN 순서로 폴백합니다. GitHub Actions(US IP)에서 `fapi.binance.com`이 지역 제한(HTTP 451)으로 차단되기 때문입니다.
-- `make sentiment-join`으로 직접 실행하며 `FUTURES_LAMBDA_ARN`, `SENTIMENT_JOIN_LOOKBACK_DAYS` 등 환경변수로 동작을 제어합니다.
+브리핑과 독립된 분석용 배치입니다. 감성·심리 지표와 BTC 수익률 간의 통계적 관계를 검증합니다.
 
-3. 맥락을 보강합니다.
-Perplexity Sonar 요약을 통해 개별 기사보다 큰 흐름을 함께 보고, 필요할 때는 web search 기반 보강 경로로 부족한 부분을 메웁니다.
+```
+데이터 수집 (BTC 가격, 감성, FNG, 선물, ETF, VIX, USD/KRW)
+→ 날짜 정규화·forward-fill → inner join → 수익률 계산
+→ 이상값 필터 (Z-score) → ADF+KPSS 정상성 검정
+→ Granger 인과 검정 (63 검정, BH-FDR 보정)
+→ VIF + PCA → 하이브리드 지수 (full/core)
+→ Lag-1 컬럼 생성 → Alpha Validation
+→ Parquet 저장 + R2 업로드
+```
 
-4. 품질을 다시 거릅니다.
-중복 기사, 품질이 낮은 제목, 비정상적인 수치, 빠진 값, 출처가 좁은 뉴스 묶음을 다시 걸러냅니다.
+### 하이브리드 지수
 
-5. 한국어 브리핑으로 정리합니다.
-수집된 데이터와 뉴스, 시그널을 바탕으로 아침에 읽기 쉬운 형태의 브리핑을 만들고 이메일로 발송합니다.
+감성·심리 지표를 PCA로 결합한 0~100 종합 점수입니다.
 
-## 이 프로젝트가 특히 신경 쓰는 점
+| 지수 | 입력 feature | VIF gate |
+|---|---|---|
+| full | 뉴스 감성, FNG, 펀딩비, Long/Short Ratio, ETF 순유입, 거래량 변화, VIX | 적용 (threshold=10) |
+| core | 뉴스 감성, FNG, 펀딩비, 거래량 변화 | 미적용 (큐레이션) |
 
-- 숫자를 그대로 믿지 않고 한 번 더 점검합니다.
-- 추정 성격이 강한 수치는 줄이고, 원본 레벨값 중심으로 정리합니다.
-- 뉴스는 많이 모으는 것보다, 읽을 가치가 있는 항목만 남기는 데 초점을 둡니다.
-- 공식 X 시그널과 일반 뉴스, 구조화된 ETF 정보처럼 성격이 다른 데이터를 섞어 보되, 역할은 분리합니다.
-- 공개 사이트의 기사형 뉴스 카드는 선택된 기사만 대상으로 한국어 해설과 시장 함의를 별도로 생성합니다.
-- 브리핑 구조가 무너지거나 데이터가 부족하면 그 사실도 함께 남깁니다.
-- 어떤 공급자가 어떤 역할로 사용됐는지 실행 로그를 남깁니다.
+- fng_value_lag1을 부호 앵커로 사용하여 두 지수의 방향성 통일
+- 모든 feature는 Lag-1 값을 사용하여 look-ahead bias 방지
 
-## 결과물
+### Alpha Validation
 
-실행이 끝나면 아래 결과물이 만들어집니다.
+하이브리드 지수와 감성 지표가 실제로 BTC 가격 방향을 맞추는지 정량 검증합니다.
 
-- Markdown 브리핑 파일
-- 이메일 본문(HTML / plain text)
-- 실행 요약 로그
-- 뉴스 수집 감사 로그
+| 분석 | 내용 |
+|---|---|
+| Hit Rate | 5개 predictor의 방향 적중률, Confusion Matrix, Precision/Recall/F1 |
+| Correlation | Pearson (정상성 기반 차분) + Spearman, predictor 간 다중공선성 포함 |
+| Backtest | 신호 기반 매수/현금 전략 누적 수익률 vs Buy & Hold, Alpha, Sharpe, Max Drawdown |
+| Walk-Forward | 120일 train / 30일 test rolling window, out-of-sample 성능 평가 (full + core) |
 
-## 메일 구독 운영
+5개 Predictor: `news_sentiment_mean_lag1`(0), `fng_value_lag1`(50), `vix_lag1`(24, 반전), `full_hybrid_index_score_lag1`(50), `core_hybrid_index_score_lag1`(50)
 
-- Python 파이프라인은 Supabase 구독 저장소에서 `active` 구독자만 읽어 recipient별 개별 발송합니다.
-- newsletter 발송은 GitHub Actions OIDC role과 AWS SES `ap-northeast-2`를 사용하고 sender는 `no-reply@sovereignbriefing.com`입니다.
-- GitHub Actions `Generate Sovereign Briefing` workflow는 현재 `workflow_dispatch`로만 수동 실행합니다.
-- newsletter SES 발송이 실패하면 run은 `degraded`로 기록하고 공개 산출물과 후속 frontend deploy는 계속 진행합니다.
-- 구독 신청, 확인 메일, 구독 해지는 Cloudflare Pages Functions API가 처리하며 confirmation 메일도 같은 SES sender/region을 사용합니다.
-- 로컬 개발에서는 실제 SES 발송 smoke test를 지원하지 않고, route 초기화와 테스트 기반 비발송 검증만 수행합니다.
-- 필요한 secret와 migration 절차는 `docs/subscriptions-ops.md`에 정리합니다.
+모든 결과는 Parquet 메타데이터(`sentiment_join_stats`)에 JSON으로 저장됩니다.
 
-## 공개 산출물 R2 업로드
+### 실행
 
-- 공개 JSON 업로드는 선택적 단계입니다. R2가 미설정이거나 업로드 인증이 실패하면 로컬 `outputs/public` 산출물은 계속 생성하고 파이프라인은 이어서 진행합니다.
-- canonical R2 키는 `R2_PUBLIC_BUCKET`, `R2_S3_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `NEXT_PUBLIC_R2_BASE_URL`입니다.
-- `R2_S3_ENDPOINT`는 bucket/path/query가 붙지 않은 account-level S3 endpoint 형식이어야 합니다. 예: `https://<account-id>.r2.cloudflarestorage.com`
-- 기존 `R2_BUCKET_NAME`, `R2_ENDPOINT_URL`, `R2_BASE_URL`도 alias로 읽지만, 새 설정은 canonical 키로 맞춥니다.
+```bash
+# 기본 180일
+make sentiment-join
 
-## FinBERT 감성 분석
+# 360일 (Granger 검정력 향상, Walk-Forward fold 증가)
+SENTIMENT_JOIN_LOOKBACK_DAYS=360 make sentiment-join
 
-- `FINBERT_ENABLED` 환경변수로 켜고 끌 수 있습니다 (기본값 `true`).
-- ML 의존성(`transformers`, `torch`)은 `requirements-ml.txt`에 별도 관리하며, `requirements.txt`에 포함하지 않습니다.
-- 뉴스와 X 시그널의 영문 원본에 대해 ProsusAI/finbert 모델로 감성 점수(`sentimentScore`)와 확신도(`sentimentConfidence`)를 산출합니다.
-- 결과는 최종 JSON의 각 뉴스·시그널 항목과 `meta` 섹션의 집계 지표(`newsSentiment`, `signalSentiment`, `sentimentByCategory`)에 포함됩니다.
-- 모델 버전은 `FINBERT_MODEL_REVISION`으로 commit hash를 고정하여 시계열 연속성을 보장합니다.
-- 임계값(`FINBERT_BULLISH_THRESHOLD`, `FINBERT_BEARISH_THRESHOLD`)으로 라벨 매핑 기준을 조정할 수 있습니다.
+# 결과 확인
+python scripts/inspect_sentiment_join_parquet.py data/sentiment_join/
+```
 
-## 공개 뉴스 카드 해설 생성
+### 뉴스 감성 백필
 
-- 공개 뉴스 카드용 해설 생성은 `OPENAI_PUBLIC_NEWS_ANALYSIS_ENABLED`로 켜고 끌 수 있습니다.
-- 모델은 `OPENAI_PUBLIC_NEWS_ANALYSIS_MODEL`로 별도 지정할 수 있고, 비우면 공개 번역 모델 또는 기본 OpenAI 모델을 순서대로 사용합니다.
-- 이 단계는 공개 기사형 뉴스에만 적용되며, 이메일 뉴스 경로나 X 시그널 경로에는 영향을 주지 않습니다.
+```bash
+# 과거 뉴스 감성 데이터 수집 (CoinDesk + Alpaca, 최대 460일)
+python scripts/backfill_news_sentiment.py --start 2025-01-01 --end 2026-04-18
+```
 
-## 누구를 위한 프로젝트인가
+## 프론트엔드
 
-이 프로젝트는 아래 같은 사용자에게 맞춰져 있습니다.
+- Next.js App Router 기반 SSG
+- Cloudflare Pages 배포
+- Cloudflare Pages Functions API (구독 관리)
+- R2 JSON 소비
+- RSS 피드, llms.txt 자동 생성
 
-- 한국 시간 아침에 미국 장 상황을 빠르게 파악하고 싶은 투자자
-- 기술주와 비트코인을 함께 보는 사용자
-- 숫자와 뉴스, 둘 다 놓치고 싶지 않은 사용자
-- 사람이 일일이 정리하지 않아도 읽을 수 있는 브리핑을 원하는 사용자
+## 실행 방법
 
-## 자세한 문서
+### 환경 설정
 
-README에는 프로젝트의 목적과 흐름만 남기고, 상세 기준은 별도 문서로 분리했습니다.
+```bash
+cp .env.example .env
+# .env에 필수 키 설정: OPENAI_API_KEY, PERPLEXITY_API_KEY, KIS_APP_KEY/SECRET 등
+```
 
-## 검증 원칙
+### 브리핑 파이프라인
 
-- 로컬 pre-commit 훅은 빠른 Python 포맷/린트만 맡습니다.
-- PR CI는 Python과 frontend를 모두 정식 품질 게이트로 검증합니다.
-- 배포 워크플로우는 테스트를 중복 실행하지 않고 build와 deploy에 집중합니다.
-- 커밋 가능 여부가 로컬 `.venv` 존재 여부에 묶이지 않도록 유지합니다.
+```bash
+python scripts/validate_credentials.py  # 인증정보 사전 검증
+python -m morning_brief                  # 또는 GitHub Actions workflow_dispatch
+```
 
-자주 쓰는 검증 명령:
+### 검증
 
-- `make fmt`
-- `make lint`
-- `make test`
-- `make typecheck`
-- `make check`
-- `cd frontend && npm run lint`
-- `cd frontend && npm test`
-- `cd frontend && npm run build:fixture`
+```bash
+make fmt        # 포맷
+make lint       # 린트
+make test       # 테스트
+make typecheck  # 타입 체크
+make check      # 전체 (위 4개 순차 실행)
+```
 
-- 개발 기준: [docs/development-standards.md](docs/development-standards.md)
-- 품질 점검 기준: [docs/ai-evals.md](docs/ai-evals.md)
-- 데이터 소스 및 품질 기준: [docs/data-sources.md](docs/data-sources.md)
-- 데이터 수집·정제 흐름: [docs/data-flow.md](docs/data-flow.md)
-- LLM 비용 운영: [docs/llm-cost-ops.md](docs/llm-cost-ops.md)
-- 로깅 운영 가이드: [docs/logging-ops.md](docs/logging-ops.md)
-- Codex 운영 가이드: [docs/codex-ops.md](docs/codex-ops.md)
-- 구독 운영 가이드: [docs/subscriptions-ops.md](docs/subscriptions-ops.md)
+## GitHub Actions
+
+| 워크플로우 | 트리거 | 내용 |
+|---|---|---|
+| Generate Sovereign Briefing | workflow_dispatch | 브리핑 생성 → sentiment join → 프론트엔드 배포 |
+| Build Sentiment Join | workflow_dispatch | sentiment join 단독 실행 |
+| CI | push to main, PR | fmt, lint, test, typecheck |
+
+## 문서
+
+| 문서 | 내용 |
+|---|---|
+| [docs/data-flow.md](docs/data-flow.md) | 데이터 수집·정제 전체 흐름 |
+| [docs/data-sources.md](docs/data-sources.md) | 데이터 소스별 명세 |
+| [docs/data-source-reliability.md](docs/data-source-reliability.md) | 소스 신뢰도 기준 |
+| [docs/development-standards.md](docs/development-standards.md) | 개발 규칙 |
+| [docs/ai-evals.md](docs/ai-evals.md) | AI 품질 점검 기준 |
+| [docs/logging-ops.md](docs/logging-ops.md) | 로깅 운영 가이드 |
+| [docs/llm-cost-ops.md](docs/llm-cost-ops.md) | LLM 비용 운영 |
+| [docs/codex-ops.md](docs/codex-ops.md) | Codex 운영 가이드 |
+| [docs/subscriptions-ops.md](docs/subscriptions-ops.md) | 구독 운영 가이드 |

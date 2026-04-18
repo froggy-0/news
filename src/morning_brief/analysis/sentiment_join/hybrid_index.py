@@ -413,7 +413,13 @@ def compute_hybrid_indices(df: pd.DataFrame) -> pd.DataFrame:
         result[f"{spec.name}_hybrid_index_score"] = score_series
         diagnostics[spec.name] = index_diag
 
-    result.attrs["hybrid_index_diagnostics"] = diagnostics
+    # attrs에는 JSON 직렬화 가능한 키만 저장 (_fitted_* 객체 제외)
+    serializable_diagnostics: dict[str, dict[str, Any]] = {}
+    for name, diag in diagnostics.items():
+        serializable_diagnostics[name] = {
+            k: v for k, v in diag.items() if not k.startswith("_fitted_")
+        }
+    result.attrs["hybrid_index_diagnostics"] = serializable_diagnostics
     return result
 
 
