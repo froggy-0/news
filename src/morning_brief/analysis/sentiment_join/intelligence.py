@@ -10,6 +10,9 @@ from typing import Any
 import pandas as pd
 import pyarrow.parquet as pq
 
+from morning_brief.analysis.sentiment_join.hybrid_index import INDEX_SPECS
+from morning_brief.analysis.sentiment_join.signals import hybrid_signal_label
+
 logger = logging.getLogger(__name__)
 
 MASTER_FILE_RE = re.compile(r"^master_(\d{8})\.parquet$")
@@ -53,25 +56,6 @@ def _previous_non_null(series: pd.Series) -> float | None:
     return float(clean.iloc[-2])
 
 
-def _hybrid_signal_label(series: pd.Series) -> tuple[str, float | None]:
-    clean = pd.to_numeric(series, errors="coerce").dropna()
-    if clean.empty:
-        return "neutral", None
-    window = clean.tail(30)
-    if len(window) < 2:
-        return "neutral", None
-    mean = float(window.mean())
-    std = float(window.std(ddof=0))
-    if std == 0:
-        return "neutral", 0.0
-    zscore = float((window.iloc[-1] - mean) / std)
-    if zscore >= 0.5:
-        return "risk_on", zscore
-    if zscore <= -0.5:
-        return "risk_off", zscore
-    return "neutral", zscore
-
-
 def _adf_summary(stats: dict[str, Any]) -> dict[str, Any]:
     adf = stats.get("adf", {})
     if not isinstance(adf, dict):
@@ -100,6 +84,43 @@ def _granger_summary(stats: dict[str, Any]) -> dict[str, Any]:
     return {"significant": significant[:5]}
 
 
+def _build_hybrid_block(df: pd.DataFrame, stats: dict[str, Any], index_name: str) -> dict[str, Any]:
+    raw_col = f"{index_name}_hybrid_index"
+    score_col = f"{index_name}_hybrid_index_score"
+    if raw_col not in df.columns:
+        return {
+            "raw": None,
+            "raw_prev": None,
+            "raw_delta": None,
+            "score": None,
+            "signal_label": "neutral",
+            "zscore": None,
+            "coverage": {},
+        }
+    raw_last = _last_non_null(df[raw_col])
+    raw_prev = _previous_non_null(df[raw_col])
+    raw_delta = (
+        float(raw_last - raw_prev) if raw_last is not None and raw_prev is not None else None
+    )
+    score_last = _last_non_null(df[score_col]) if score_col in df.columns else None
+    label, zscore = hybrid_signal_label(df[raw_col])
+    hybrid_indices_meta = stats.get("hybrid_indices", {})
+    coverage: dict[str, Any] = {}
+    if isinstance(hybrid_indices_meta, dict):
+        entry = hybrid_indices_meta.get(index_name, {})
+        if isinstance(entry, dict):
+            coverage = entry.get("coverage", {}) or {}
+    return {
+        "raw": raw_last,
+        "raw_prev": raw_prev,
+        "raw_delta": raw_delta,
+        "score": score_last,
+        "signal_label": label,
+        "zscore": zscore,
+        "coverage": coverage,
+    }
+
+
 def load_sentiment_intelligence(output_dir: Path) -> dict[str, Any] | None:
     path = _latest_parquet_path(output_dir)
     if path is None:
@@ -112,20 +133,15 @@ def load_sentiment_intelligence(output_dir: Path) -> dict[str, Any] | None:
         raise ValueError(f"sentiment intelligence parquet 형식이 올바르지 않습니다: {path.name}")
 
     meta = _metadata_for(path)
-    latest = df.iloc[-1]
-    hybrid_index = _last_non_null(df["hybrid_index"]) if "hybrid_index" in df.columns else None
-    hybrid_prev = _previous_non_null(df["hybrid_index"]) if "hybrid_index" in df.columns else None
-    hybrid_delta = (
-        float(hybrid_index - hybrid_prev)
-        if hybrid_index is not None and hybrid_prev is not None
-        else None
-    )
-    hybrid_signal_label, hybrid_zscore = (
-        _hybrid_signal_label(df["hybrid_index"])
-        if "hybrid_index" in df.columns
-        else ("neutral", None)
-    )
 
+    # §4 v4: full / core 두 지수를 모두 노출합니다. 운영 신호(delta/score)는 core가 더
+    # 연속성이 높으므로 primary로 사용하고, full은 보조 지표로 함께 반환합니다.
+    hybrid_blocks = {
+        spec.name: _build_hybrid_block(df, meta["stats"], spec.name) for spec in INDEX_SPECS
+    }
+    primary = hybrid_blocks.get("core", hybrid_blocks["full"])
+
+    latest = df.iloc[-1]
     etf_flow = pd.to_numeric(df.get("etf_net_inflow_usd"), errors="coerce")
     latest_flow = _last_non_null(etf_flow) if isinstance(etf_flow, pd.Series) else None
     if latest_flow is None:
@@ -139,11 +155,14 @@ def load_sentiment_intelligence(output_dir: Path) -> dict[str, Any] | None:
 
     return {
         "as_of_date": str(latest["date"]),
-        "hybrid_index": hybrid_index,
-        "hybrid_index_prev": hybrid_prev,
-        "hybrid_index_delta": hybrid_delta,
-        "hybrid_signal_label": hybrid_signal_label,
-        "hybrid_zscore": hybrid_zscore,
+        "hybrid_indices": hybrid_blocks,
+        "hybrid_primary": "core",
+        "hybrid_index": primary["raw"],
+        "hybrid_index_prev": primary["raw_prev"],
+        "hybrid_index_delta": primary["raw_delta"],
+        "hybrid_index_score": primary["score"],
+        "hybrid_signal_label": primary["signal_label"],
+        "hybrid_zscore": primary["zscore"],
         "adf_summary": _adf_summary(meta["stats"]),
         "granger_summary": _granger_summary(meta["stats"]),
         "futures_summary": {

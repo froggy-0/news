@@ -115,17 +115,29 @@ def test_build_stats_metadata_payload_serializes_contract_fields() -> None:
         generated_at_utc="2026-04-12T00:00:00+00:00",
         adf={"pvalue": 0.01},
         granger_results=[{"predictor": "fng_value", "lag": 1, "pvalue": 0.03}],
-        vif_diagnostics=[{"feature": "fng_value", "vif": 1.2}],
-        pca_summary={"status": "ok", "n_components": 1},
+        hybrid_indices={
+            "full": {
+                "pca_summary": {"status": "ok", "n_components": 1},
+                "vif_diagnostics": [{"feature": "fng_value_lag1", "vif": 1.2}],
+                "coverage": {"rows_total": 40, "rows_used": 30, "ratio": 0.75},
+                "signal_label": "risk_on",
+            },
+            "core": {
+                "pca_summary": {"status": "ok", "n_components": 1},
+                "vif_diagnostics": [],
+                "coverage": {"rows_total": 40, "rows_used": 38, "ratio": 0.95},
+                "signal_label": "neutral",
+            },
+        },
         rows_before_outlier_filter=42,
         rows_after_outlier_filter=40,
         outlier_filtered_count=2,
         outlier_filtered_ratio=0.0476,
-        hybrid_signal_label="risk_on",
     )
 
     decoded = payload.decode("utf-8")
     assert '"run_id": "sentiment-join-20260412"' in decoded
     assert '"granger_results"' in decoded
-    assert '"pca_summary"' in decoded
-    assert '"hybrid_signal_label": "risk_on"' in decoded
+    assert '"hybrid_indices"' in decoded
+    assert '"full"' in decoded
+    assert '"core"' in decoded
