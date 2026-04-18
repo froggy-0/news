@@ -1,39 +1,60 @@
 # 데이터 소스 및 품질 기준
 
-코드 기반 실제 호출 경로·폴백·품질 판정 기준을 한 곳에 정리한 문서입니다.
+코드 기반 실제 호출 경로, 폴백, 품질 판정 기준을 정리한 문서입니다.
 
 ---
 
 ## 1. 시장 데이터
 
-| 데이터 (canonical_key) | 1차 소스 / 엔드포인트 | 폴백 | 상태 |
+### 1.1 거시 지표
+
+| 데이터 (canonical_key) | 1차 소스 | 폴백 | 단위 |
 |---|---|---|---|
-| `us10y` 미국 10년물 | FRED `DGS10` → `api.stlouisfed.org/fred/series/observations` | yfinance `^TNX` ×0.1 | ✅ |
-| `us2y` 미국 2년물 | FRED `DGS2` → 동일 | — | ✅ |
-| `vix` VIX | FRED `VIXCLS` → 동일 | yfinance `^VIX` | ✅ |
-| `dxy` 달러 인덱스 | FRED `DTWEXAFEGS` (연준 AFE 무역가중 달러 지수) | yfinance `DX=F` | ✅ |
-| `hy_spread` 하이일드 스프레드 | FRED `BAMLH0A0HYM2` (ICE BofA 미국 HY 스프레드) | — | ✅ |
-| `usdkrw` 원달러 | KIS `/uapi/overseas-price/v1/quotations/inquire-daily-chartprice` (`FID_COND_MRKT_DIV_CODE="X"`, `FID_INPUT_ISCD="FX@KRW"`) | yfinance `KRW=X` | ✅ |
-| `nq_futures` 나스닥선물 | yfinance `NQ=F` | — | ✅ |
-| `dow30` 다우30 | KIS `/uapi/overseas-price/v1/quotations/inquire-daily-chartprice` (`FID_COND_MRKT_DIV_CODE="N"`, `FID_INPUT_ISCD=".DJI"`) | yfinance `^DJI` | ✅ |
-| `kospi` 코스피 | KIS `/uapi/domestic-stock/v1/quotations/inquire-index-price` (`FID_COND_MRKT_DIV_CODE="U"`, `FID_INPUT_ISCD="0001"`) | yfinance `^KS11` | ✅ |
-| `kosdaq` 코스닥 | KIS `/uapi/domestic-stock/v1/quotations/inquire-index-price` (`FID_COND_MRKT_DIV_CODE="U"`, `FID_INPUT_ISCD="1001"`) | yfinance `^KQ11` | ✅ |
-| `spy/qqq/soxx` 미국지수 | KIS `/uapi/overseas-price/v1/quotations/price` | yfinance | ✅ |
-| 빅테크 10종 | KIS `/uapi/overseas-price/v1/quotations/price` | yfinance | ✅ |
-| BTC ETF 가격 5종 | KIS `/uapi/overseas-price/v1/quotations/price` | yfinance | ✅ |
-| `btc` 현물 가격 | CoinGecko `api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true` | yfinance `BTC-USD` | ✅ |
-| BTC ETF 보유량 (IBIT) | `ishares.com` structured file 우선, HTML fallback | aggregator reference-only | ✅ |
-| BTC ETF 보유량 (BITB) | `bitbetf.com` 공식 다운로드 / `__NEXT_DATA__` / HTML fallback | aggregator reference-only | ✅ |
-| BTC ETF 보유량 (GBTC/BTC) | `etfs.grayscale.com` XLSX 직링크 | aggregator reference-only | ✅ |
-| Fear & Greed | `api.alternative.me/fng/?limit=1` | — | ✅ |
+| `us10y` 미국 10년물 | FRED `DGS10` | yfinance `^TNX` (×0.1) | % |
+| `us2y` 미국 2년물 | FRED `DGS2` | — | % |
+| `vix` VIX | FRED `VIXCLS` | yfinance `^VIX` | 포인트 |
+| `dxy` 달러 인덱스 | FRED `DTWEXAFEGS` (연준 AFE 무역가중) | yfinance `DX=F` | 포인트 |
+| `hy_spread` 하이일드 스프레드 | FRED `BAMLH0A0HYM2` (ICE BofA) | — | % |
 
-**FRED 호출**: 최근 15개 관측값 중 유효한 최신 2개로 변화량(bp) 계산
-**yfinance 호출**: `period="7d", interval="1d"` 일봉 마지막 2행
-**KIS 호출**: 해외주식 현재체결가(`price`)와 환율 일자별 시세(`inquire-daily-chartprice`)를 사용하며, 실패 시 yfinance로 폴백
+FRED: 최근 15개 관측값 중 유효한 최신 2개로 변화량(bp) 계산. yfinance: `period="7d", interval="1d"` 일봉 마지막 2행.
 
-**데이터 검증 범위** (`market_policy.py`):
+### 1.2 지수·주식
 
-| key | 허용 범위 | 이탈 시 |
+| 데이터 (canonical_key) | 1차 소스 | 폴백 |
+|---|---|---|
+| `dow30` 다우30 | KIS `inquire-daily-chartprice` (`.DJI`) | yfinance `^DJI` |
+| `spy` S&P 500 ETF | KIS `price` | yfinance `SPY` |
+| `qqq` Nasdaq 100 ETF | KIS `price` | yfinance `QQQ` |
+| `soxx` 반도체 ETF | KIS `price` | yfinance `SOXX` |
+| `kospi` 코스피 | KIS `inquire-index-price` (`0001`) | yfinance `^KS11` |
+| `kosdaq` 코스닥 | KIS `inquire-index-price` (`1001`) | yfinance `^KQ11` |
+| 빅테크 10종 | KIS `price` | yfinance |
+| BTC ETF 가격 5종 | KIS `price` | yfinance |
+
+빅테크: `NVDA`, `MSFT`, `AAPL`, `AMZN`, `GOOGL`, `META`, `AMD`, `TSM`, `ASML`, `AVGO`
+
+### 1.3 한국 투자자 참고 지표
+
+| 데이터 (canonical_key) | 1차 소스 | 폴백 |
+|---|---|---|
+| `usdkrw` 원/달러 환율 | KIS `inquire-daily-chartprice` (`FX@KRW`) | yfinance `KRW=X` |
+| `nq_futures` 나스닥 선물 | yfinance `NQ=F` | — |
+
+### 1.4 암호화폐
+
+| 데이터 | 1차 소스 | 폴백 |
+|---|---|---|
+| BTC 현물 가격 | CoinGecko `/api/v3/simple/price` | yfinance `BTC-USD` |
+| Fear & Greed Index | `api.alternative.me/fng/?limit=1` | — |
+| BTC ETF 보유량 (IBIT) | `ishares.com` structured file → HTML fallback | aggregator reference-only |
+| BTC ETF 보유량 (BITB) | `bitbetf.com` 공식 다운로드 / `__NEXT_DATA__` / HTML | aggregator reference-only |
+| BTC ETF 보유량 (GBTC/BTC) | `etfs.grayscale.com` XLSX 직링크 | aggregator reference-only |
+
+BTC ETF는 Bronze/Silver/Gold 계층으로 저장됩니다. 공식 issuer source를 primary로 사용하고, aggregator 데이터는 reference-only로 분리 기록합니다.
+
+### 1.5 데이터 검증 범위
+
+| canonical_key | 허용 범위 | 이탈 시 |
 |---|---|---|
 | `dxy` | 95 ~ 130 | `anomaly` → price 제거 |
 | `vix` | 10 ~ 80 | 동일 |
@@ -47,63 +68,145 @@
 
 수집 실패 시 전일 캐시 복원 (`is_previous_value=True`). 캐시도 없으면 `missing`.
 
-### KIS phase 1 contract 검증
-
-- standalone probe: `python scripts/kis_parameter_probe.py`
-- live contract test: `python -m pytest -q -m live_kis tests/test_kis_live_contract.py`
-- production 편입 범위: `usdkrw`, `dow30`, `kospi`, `kosdaq`
-- future phase로 남긴 후보: `sp500`, `nasdaq100`, `nasdaq_composite`, `jpykrw`, `eurkrw`, `cnykrw`, 한국 국채, 원자재
-
-**폐기된 경로**:
-- `us3m / ^IRX` — 단기금리 항목 제거됨 (CANONICAL_LABELS에서 삭제)
-- `DX-Y.NYB` — 상장폐지, 0% 성공 → 하위 호환 캐시 키만 유지
-- `DX=F` (yfinance ICE Dollar Futures) — FRED DTWEXAFEGS로 교체, 현재는 FRED 실패 시 폴백으로만 사용
-- BTC ETF aggregator snapshot — primary 합산 제외, reference-only 저장
-- Perplexity structured BTC ETF — primary 미사용, reference-only 보조 경로로만 유지
-
 ---
 
-## 2. 뉴스 데이터
+## 2. 뉴스·시그널 데이터
 
-수집 → 중복제거 → 점수 기반 랭킹 순서. 각 소스는 독립 실패 허용.
+수집 → 중복 제거 → 점수 기반 랭킹 순서. 각 소스는 독립 실패 허용.
+
+### 2.1 수집 소스
 
 | 순서 | 소스 | 방식 | 발동 조건 |
 |---|---|---|---|
-| 1 | **Grok 공식 X 시그널** | `xai_sdk` x_search, allowlist 계정 최근 48h | 항상 |
-| 2 | **Perplexity Sonar** | `perplexity` SDK, model=`sonar` (기본값, `PERPLEXITY_SONAR_MODEL`로 변경 가능), 4개 토픽 | 항상 |
-| 3 | **Grok X 키워드** | `xai_sdk` x_search, 시장 키워드 검색 24h | 항상 |
-| 4 | **Grok 웹 검색** | `xai_sdk` web search | 선택적 |
-| 5 | **Perplexity Search** | `perplexity` SDK | Sonar 미사용 시 |
-| 6 | **Gemini Grounding** | `google.genai` + GoogleSearch tool, `gemini-2.0-flash` | Perplexity 0건 시 |
-| 7 | **Google News RSS** | `feedparser` + `news.google.com/rss/search?q=…` | 품질 미달 시 |
-| 8 | **NewsAPI** | `newsapi.org/v2/everything`, PREFERRED_DOMAINS 필터 | 품질 미달 시 |
+| 1 | Grok 공식 X 시그널 | `xai_sdk` x_search, allowlist 계정 최근 48h | 항상 |
+| 2 | Perplexity Sonar | `perplexity` SDK, 4개 토픽별 구조화 요약 | 항상 |
+| 3 | Grok X 키워드 검색 | `xai_sdk` x_search, 시장 키워드 24h | 항상 |
+| 4 | Grok Web Search | `xai_sdk` web search | 선택적 (`GROK_WEB_SEARCH_ENABLED`) |
+| 5 | Perplexity Search | `perplexity` SDK 직접 검색 | Sonar 미사용 시 |
+| 6 | Gemini Grounding | `google.genai` + GoogleSearch, `gemini-2.0-flash` | Perplexity 0건 시 |
+| 7 | Google News RSS | `feedparser` + `news.google.com/rss/search` | 품질 미달 시 |
+| 8 | NewsAPI | `newsapi.org/v2/everything` | 품질 미달 시 |
 
-**Grok 공식 X allowlist 그룹**:
-- `macro_regulator` → topic: `macro` (Fed, SEC, 재무부)
-- `ai_bigtech_primary` → topic: `ai_bigtech` (빅테크 IR 계정)
-- `btc_etf_primary` → topic: `bitcoin` (ETF 운용사)
+### 2.2 Grok 공식 X allowlist 그룹
 
-**Sonar 토픽**: `macro`, `us_equity`, `ai_bigtech`, `bitcoin`
+| 그룹 | 토픽 매핑 | 대상 |
+|---|---|---|
+| `macro_regulator` | `macro` | 연준, SEC, 재무부 등 정책 기관 |
+| `btc_etf_primary` | `bitcoin` | ETF 운용사 (Fidelity, BlackRock 등) |
+| `macro_and_equity` | X 키워드 검색용 | 거시·주식 시장 계정 |
+| `crypto_and_etf` | X 키워드 검색용 | 암호화폐·ETF 계정 |
 
-**Google RSS 쿼리** (`news_policy.py`):
-```
-"Fed interest rates US Treasury yields"
-"US stock market Nasdaq S&P 500 semiconductor"
-"NVIDIA Microsoft Apple Amazon Google Meta AMD TSM ASML AVGO"
-"Bitcoin ETF flows regulation"
-```
+`ai_bigtech_primary` 그룹은 현재 비활성 (빅테크 IR 계정은 X 시그널 대비 정보 밀도가 낮아 제외).
 
-**신뢰 도메인 계층**:
-- Tier 1 (score 4.5~5.0): `reuters.com`, `bloomberg.com`, `wsj.com`, `ft.com`, `federalreserve.gov`, `home.treasury.gov`, `sec.gov`
-- Tier 2 (score 3.8~4.0): `cnbc.com`, `coindesk.com`, `ishares.com`, `bitbetf.com`, 빅테크 IR 도메인 12종
+### 2.3 Sonar 토픽
+
+`macro`, `us_equity`, `ai_bigtech`, `bitcoin` — 4개 토픽별로 구조화 요약 + citation 기반 뉴스 추출.
+
+### 2.4 신뢰 도메인 계층
+
+| 등급 | 도메인 | score |
+|---|---|---|
+| Tier 1 | `reuters.com`, `bloomberg.com`, `wsj.com`, `ft.com`, `federalreserve.gov`, `home.treasury.gov`, `sec.gov` | 4.5~5.0 |
+| Tier 2 | `cnbc.com`, `coindesk.com`, `ishares.com`, `bitbetf.com`, 빅테크 IR 도메인 | 3.8~4.0 |
+
+### 2.5 시장 키워드 자동 추출
+
+`extract_market_keywords()`가 수집된 시장 수치에서 이상 움직임을 감지해 검색 키워드를 생성합니다.
+
+| 조건 | 키워드 예시 |
+|---|---|
+| VIX > 25 | `volatility spike market fear` |
+| US10Y 변동률 > ±1% | `treasury yields surge` |
+| SPY 변동률 > ±1.5% | `S&P 500 selloff` |
+| 개별 기술주 > ±3% | `NVDA surge` |
+| BTC > ±3% | `bitcoin drop` |
 
 ---
 
-## 3. 품질 판정 기준 (`data_quality.py`)
+## 3. 감성 분석
+
+### 3.1 FinBERT
+
+| 항목 | 값 |
+|---|---|
+| 모델 | `ProsusAI/finbert` |
+| 입력 | 영문 원본 텍스트 (title + summary + why_it_matters) |
+| 출력 | sentimentScore (-1.0~1.0), sentimentConfidence (0~1) |
+| 적용 대상 | 뉴스, X 시그널, 공개 뉴스 카드 |
+| 활성화 | `FINBERT_ENABLED` (기본 `true`) |
+| 모델 고정 | `FINBERT_MODEL_REVISION`으로 commit hash 고정 |
+| 임계값 | `FINBERT_BULLISH_THRESHOLD` (기본 0.3), `FINBERT_BEARISH_THRESHOLD` (기본 -0.3) |
+
+ML 의존성(`transformers`, `torch`)은 `requirements-ml.txt`에 별도 관리. 미설치 환경에서도 파이프라인 정상 동작.
+
+---
+
+## 4. Sentiment Join 파이프라인 데이터 소스
+
+`make sentiment-join`으로 실행. 브리핑 파이프라인과 독립.
+
+### 4.1 수집 소스
+
+| 데이터 | 1차 소스 | 폴백 |
+|---|---|---|
+| R2 감성 점수 | R2 버킷 (브리핑 파이프라인 산출물) | — |
+| Fear & Greed Index | `api.alternative.me/fng/` | — |
+| BTC 가격·거래량 | Binance `data-api.binance.vision` (Spot klines) | KIS → yfinance `BTC-USD` |
+| USD/KRW 종가 | KIS `inquire-daily-chartprice` (`FX@KRW`) | yfinance `KRW=X` |
+| VIX | FRED `VIXCLS` (optional, `FRED_API_KEY` 필요) | — |
+| BTC 펀딩비 | Lambda → `fapi.binance.com` | Bybit 공개 API → NaN |
+| BTC 미결제약정 | Lambda → `fapi.binance.com` | Bybit 공개 API → NaN |
+| BTC Long/Short Ratio | Lambda → `fapi.binance.com` | Bybit 공개 API → NaN |
+| BTC ETF flows | 공식 발행사 페이지 | — (429 차단 빈번) |
+
+### 4.2 선물 데이터 fallback 체인
+
+GitHub Actions(US IP)에서 `fapi.binance.com`이 HTTP 451(지역 제한)로 차단됩니다.
+
+```
+FUTURES_LAMBDA_ARN 설정 시 (GitHub Actions 권장):
+  Lambda(ap-northeast-2) → Seoul IP → fapi.binance.com
+  ↓ 실패 시
+  Bybit 공개 API (geo-restriction 없음)
+  ↓ 실패 시
+  NaN — 파이프라인 계속 진행
+
+FUTURES_LAMBDA_ARN 미설정 시 (로컬):
+  fapi.binance.com 직접 → Bybit → NaN
+```
+
+### 4.3 Lambda 인프라
+
+| 항목 | 값 |
+|---|---|
+| 함수명 | `binance-futures-fetcher` |
+| 리전 | `ap-northeast-2` (Seoul) |
+| 아키텍처 | ARM64 (Graviton2) |
+| 런타임 | Python 3.11, stdlib만 사용 |
+| 호출 권한 | `kr-pr-ses-news-v1a` → `lambda:InvokeFunction` |
+| 배포 | `bash lambda/binance_futures/deploy.sh` |
+
+### 4.4 통계 분석에 사용되는 변수
+
+| 분석 | 대상 변수 |
+|---|---|
+| ADF+KPSS 정상성 검정 | `btc_log_return`, `news_sentiment_mean`, `fng_value`, `funding_rate`, `btc_long_short_ratio`, `oi_change_pct`, `etf_net_inflow_usd`, `usdkrw_log_return`, `volume_change_pct` (9개) |
+| Granger 순방향 | 위 8개 predictor → `btc_log_return` (8쌍) + 교차 8쌍 = 16쌍 |
+| Granger 역방향 | `btc_log_return` → 5개 predictor (5쌍) |
+| Granger 총 검정 수 | (16 + 5) × 3 lag = 63 검정, BH-FDR 보정 |
+| 하이브리드 지수 (full) | `news_sentiment_mean_lag1`, `fng_value_lag1`, `funding_rate_lag1`, `btc_long_short_ratio_lag1`, `etf_net_inflow_usd_lag1`, `volume_change_pct_lag1`, `vix_lag1` (7개, VIF gate) |
+| 하이브리드 지수 (core) | `news_sentiment_mean_lag1`, `fng_value_lag1`, `funding_rate_lag1`, `volume_change_pct_lag1` (4개, 큐레이션) |
+| Alpha Validation | `news_sentiment_mean_lag1`(0), `fng_value_lag1`(50), `vix_lag1`(24,반전), `full_hybrid_index_score_lag1`(50), `core_hybrid_index_score_lag1`(50) |
+
+---
+
+## 5. 품질 판정 기준
+
+### 5.1 뉴스 품질 (`data_quality.py`)
 
 | 지표 | 임계값 |
 |---|---|
-| `news_count` | MIN 3 → 미달 시 **critical** |
+| `news_count` | MIN 3 → 미달 시 critical |
 | `preferred_news_count` | MIN 2 |
 | `tier_1_news_count` | MIN 1 |
 | `unique_news_domains` | MIN 3 |
@@ -111,110 +214,44 @@
 | `topic_coverage_count` | MIN 2 (4개 토픽 중) |
 
 ```
-ok        →  모든 기준 충족
-degraded  →  경고 1개 이상 → OpenAI web_search 백필 트리거
-critical  →  뉴스 3건 미만 또는 가격 누락률 ≥ 80% → 이메일 발송 스킵
+ok        → 모든 기준 충족
+degraded  → 경고 1개 이상 → OpenAI web_search 백필 트리거
+critical  → 뉴스 3건 미만 또는 가격 누락률 ≥ 80% → 이메일 발송 스킵
 ```
+
+### 5.2 Sentiment Join 행 수 제약
+
+| 행 수 | 가능한 분석 |
+|---|---|
+| < 10 | Lag-1 컬럼만 생성 |
+| 10~29 | PCA 하이브리드 지수 추가 |
+| 30~179 | ADF+KPSS 정상성 검정 추가 |
+| 180~359 | Granger 인과 검정 + Alpha Validation (Walk-Forward fold 1~2개) |
+| 360+ | Granger 검정력 향상, Walk-Forward fold 7~8개 (권장) |
 
 ---
 
-## 4. 재시도·공급자 정책 (`provider_runtime.py`)
+## 6. 재시도·공급자 정책
 
-- 재시도 대상: `429 / 5xx / timeout` 만. `404`, `451` 등 영구/지역 실패는 재시도 없이 즉시 포기.
+- 재시도 대상: `429 / 5xx / timeout`만. `404`, `451` 등 영구 실패는 즉시 포기.
 - 기본값: 최대 3회, 1.2초 기저 지수 백오프. `Retry-After` 헤더 우선.
 - circuit breaker: `open_circuit()` 호출 시 해당 실행 내 이후 요청 전량 스킵.
 
-| provider key | retryable statuses | max_attempts | 비고 |
+| provider | retryable statuses | max_attempts | 비고 |
 |---|---|---|---|
-| `binance_futures` | 429, 500-504 | 3 | 451(지역 차단)은 재시도 안 함 → Lambda 폴백으로 전환 |
+| `binance_futures` | 429, 500-504 | 3 | 451(지역 차단)은 재시도 안 함 → Lambda 폴백 |
 | `bybit` | 429, 500-504 | 3 | 공개 API, 인증 불필요 |
 
 ---
 
-## 5. Sentiment Join 분석 파이프라인 데이터 소스
+## 7. 폐기된 경로
 
-`scripts/build_sentiment_join.py` (`make sentiment-join`)에서 사용하는 소스 목록입니다.
-브리핑 파이프라인과 독립 실행되며, 출력은 `data/sentiment_join/master_{YYYYMMDD}.parquet`입니다.
-
-| 데이터 | 1차 소스 | 폴백 | 상태 |
-|---|---|---|---|
-| BTC 가격·거래량 | Binance `data-api.binance.vision/api/v3/klines` (공식 미러, geo-restriction 없음) | KIS → yfinance `BTC-USD` | ✅ |
-| USD/KRW 종가 | KIS `inquire-daily-chartprice` (`FX@KRW`) | yfinance `KRW=X` | ✅ |
-| Fear & Greed | `api.alternative.me/fng/` | — | ✅ |
-| BTC 펀딩비 (`funding_rate`) | Lambda(ap-northeast-2) → `fapi.binance.com/fapi/v1/fundingRate` | Bybit `api.bybit.com/v5/market/funding/history` | ✅ |
-| BTC 미결제약정 (`open_interest_usd`) | Lambda(ap-northeast-2) → `fapi.binance.com/futures/data/openInterestHist` | Bybit `api.bybit.com/v5/market/open-interest` | ✅ |
-| BTC Long/Short Ratio | Lambda(ap-northeast-2) → `fapi.binance.com/futures/data/globalLongShortAccountRatio` | Bybit `api.bybit.com/v5/market/account-ratio` | ✅ |
-| R2 감성 점수 | R2 버킷 (브리핑 파이프라인 산출물 parquet) | — | ✅ |
-| BTC ETF flows | Grayscale/공식 발행사 페이지 (`etfs.grayscale.com` 등) | — | ⚠️ 429 차단 빈번 |
-
-### 5.1 선물 데이터 fallback 체인
-
-GitHub Actions(US IP)에서 `fapi.binance.com`이 HTTP 451(지역 제한)로 차단됩니다.
-`FUTURES_LAMBDA_ARN` 환경변수로 ap-northeast-2 Lambda를 프록시로 사용합니다.
-
-```
-FUTURES_LAMBDA_ARN 설정 시 (GitHub Actions 권장):
-  1차: Lambda(ap-northeast-2) 호출 → Seoul IP → fapi.binance.com ✓
-       ↓ 실패 시
-  2차: Bybit 공개 API (geo-restriction 없음, 인증 불필요)
-       ↓ 실패 시
-  NaN 프레임 반환 — 파이프라인은 계속 진행
-
-FUTURES_LAMBDA_ARN 미설정 시 (로컬 환경 등):
-  1차: fapi.binance.com 직접 시도
-       ↓ 실패 시 (로컬 IP가 허용된 경우라면 성공)
-  2차: Bybit → NaN
-```
-
-### 5.2 Lambda 인프라
-
-| 항목 | 값 |
+| 경로 | 사유 |
 |---|---|
-| 함수명 | `binance-futures-fetcher` |
-| 리전 | `ap-northeast-2` (Seoul) |
-| ECR 이미지 | `254849613915.dkr.ecr.ap-northeast-2.amazonaws.com/news:binance-futures-fetcher` |
-| 아키텍처 | ARM64 (Graviton2) |
-| 런타임 | Python 3.11, stdlib만 사용 (외부 의존성 없음) |
-| Lambda 실행 역할 | `kr-pr-lambda-binance-futures-v1` |
-| 호출 권한 (GHA) | `kr-pr-ses-news-v1a` — `lambda:InvokeFunction` |
-| CloudWatch 로그 그룹 | `/aws/lambda/binance-futures-fetcher` |
-| 배포 방법 | 수동: `bash lambda/binance_futures/deploy.sh` |
-
-CloudWatch 정상 로그 예시:
-```
-[INFO] source=fapi.binance.com symbol=BTCUSDT range=2026-04-08~2026-04-12
-       funding_days=5(latest=-0.000118) oi_days=5(latest=7207692419) lsr_days=5(latest=0.7425)
-```
-
-### 5.3 Parquet 출력 스키마
-
-| 컬럼 | 타입 | 설명 |
-|---|---|---|
-| `date` | str | YYYY-MM-DD |
-| `news_sentiment_mean` / `_std` | float | FinBERT 뉴스 감성 평균/표준편차 |
-| `n_articles` | int | 감성 점수 부여 기사 수 |
-| `signal_sentiment_mean` / `_std` | float | X 시그널 감성 평균/표준편차 |
-| `n_signals` | int | 시그널 수 |
-| `fng_value` | int | Fear & Greed (0~100) |
-| `btc_quote_volume` | float | BTC 거래대금 (USD) |
-| `btc_log_return` / `btc_return` | float | BTC 일간 수익률 |
-| `usdkrw_log_return` / `usdkrw_return` | float | USD/KRW 일간 수익률 |
-| `funding_rate` | float | BTC 일별 합산 펀딩비 |
-| `open_interest_usd` | float | BTC 미결제약정 (USD) |
-| `btc_long_short_ratio` | float | BTC Long/Short 비율 |
-| `etf_total_btc` / `_aum_usd` / `_net_inflow_usd` | float | BTC ETF 집계 |
-| `*_lag1` | float | 전일 지연값 (2행 이상 필요) |
-| `is_outlier` | bool | Z-score 이상값 여부 |
-| `hybrid_index` | float | VIF+PCA 기반 복합 지표 (최소 행 수 필요) |
-
-**Parquet 메타데이터:**
-- `btc_source`: 가격 수집 소스 (`binance` / `kis` / `yfinance`)
-- `ffill_days`: forward-fill 적용 일수
-- `sentiment_join_stats`: ADF/Granger/PCA/VIF 진단 요약 JSON
-- `hybrid_index_diagnostics`: PCA 요약
-
-**행 수 제약:**
-- lag 컬럼: 2행 이상 필요 (부족 시 NaN)
-- ADF/Granger 검정: 30행 이상 권장
-- hybrid_index (PCA): feature 수 이상 행 필요
-- 행 수는 R2에 누적된 브리핑 실행 횟수에 비례
+| `us3m / ^IRX` | 단기금리 항목 제거 (CANONICAL_LABELS에서 삭제) |
+| `DX-Y.NYB` | 상장폐지, 0% 성공 → 하위 호환 캐시 키만 유지 |
+| `DX=F` (yfinance ICE Dollar Futures) | FRED DTWEXAFEGS로 교체, FRED 실패 시 폴백으로만 사용 |
+| BTC ETF aggregator snapshot | primary 합산 제외, reference-only 저장 |
+| Perplexity structured BTC ETF | primary 미사용, reference-only 보조 경로 |
+| `ai_bigtech_primary` X 그룹 | 빅테크 IR 계정 정보 밀도 낮아 비활성 |
+| 단일 `hybrid_index` 컬럼 | v4에서 full/core 이중 지수로 교체, 삭제됨 |

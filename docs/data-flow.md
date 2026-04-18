@@ -409,48 +409,77 @@ packet = {
 
 ## 9. Sentiment Join 분석 파이프라인
 
-브리핑 파이프라인과 독립된 분석용 배치입니다. GitHub Actions `Build Sentiment Time Join Parquet` job 또는 `make sentiment-join`으로 실행합니다.
+브리핑 파이프라인과 독립된 분석용 배치입니다. 감성·심리 지표와 BTC 수익률 간의 통계적 관계를 검증하고, 실전 예측 성능(Alpha Validation)을 정량 평가합니다.
+
+GitHub Actions `Build Sentiment Time Join Parquet` job 또는 `make sentiment-join`으로 실행합니다.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │  진입점: scripts/build_sentiment_join.py                         │
 │  GitHub Actions: run-sentiment-join job (run-brief 성공 후 실행) │
 ├──────────────────────────────────────────────────────────────────┤
-│  데이터 수집                                                      │
+│  Phase 1: 데이터 수집                                             │
+│    ├─ R2 감성 점수 (브리핑 파이프라인 산출물)                      │
+│    ├─ Fear & Greed Index (api.alternative.me/fng/)               │
 │    ├─ BTC 가격·거래량                                             │
 │    │    Binance data-api.binance.vision (Spot klines)            │
 │    │    → KIS → yfinance BTC-USD                                 │
 │    ├─ USD/KRW 종가                                               │
 │    │    KIS inquire-daily-chartprice → yfinance KRW=X           │
-│    ├─ Fear & Greed Index (api.alternative.me/fng/)               │
+│    ├─ VIX (FRED API, optional — 키 미설정 시 전 행 NaN)          │
 │    ├─ BTC 선물 지표 3종                                           │
 │    │    funding_rate / open_interest_usd / btc_long_short_ratio  │
 │    │    1차: Lambda(ap-northeast-2) → fapi.binance.com           │
 │    │    2차: Bybit 공개 API (geo-restriction 없음)                │
 │    │    3차: NaN (파이프라인 계속 진행)                            │
-│    ├─ R2 감성 점수 (브리핑 파이프라인 산출물 parquet 파일)         │
-│    └─ BTC ETF flows (Grayscale/공식 발행사 페이지)                │
+│    └─ BTC ETF flows (공식 발행사 페이지)                          │
 ├──────────────────────────────────────────────────────────────────┤
-│  데이터 변환                                                      │
+│  Phase 2: 데이터 변환                                             │
 │    ├─ 날짜 정규화 (UTC → YYYY-MM-DD)                              │
-│    ├─ forward-fill (가격 공백일 보정, 최대 3일)                    │
+│    ├─ 달력 reindex (VIX, USD/KRW 주말 공백 보정)                  │
+│    ├─ forward-fill (가격 공백일 보정, 최대 2~3일)                  │
 │    └─ 수익률 계산 (btc_log_return, btc_return, usdkrw_*)          │
 ├──────────────────────────────────────────────────────────────────┤
-│  Join 전략                                                        │
+│  Phase 3: Join + Lag 컬럼 생성                                    │
 │    R2 sentiment 보유 날짜 기준 inner join                         │
-│    → R2에 sentiment 없는 날짜는 분석 대상 제외                    │
-│    → lag-1 컬럼 계산 (funding_rate_lag1, oi_change_pct_lag1 등)  │
-│       (2행 이상 필요, 부족 시 NaN)                                │
+│    → Lag-1 컬럼 생성 (funding_rate_lag1, oi_change_pct_lag1 등)  │
+│    → 이상값 필터 (Z-score 기반, is_outlier 플래그)               │
 ├──────────────────────────────────────────────────────────────────┤
-│  통계 분석                                                        │
-│    ├─ 이상값 필터 (Z-score 기반, is_outlier 플래그)               │
-│    ├─ ADF 정상성 검정 (30행 이상 권장)                             │
-│    ├─ Granger 인과 검정                                           │
-│    └─ VIF + PCA → hybrid_index (feature 수 이상 행 필요)          │
-│       부족 시 NaN, pca_summary.status = "insufficient_rows"      │
+│  Phase 4: 통계 검정 (run_statistical_tests)                       │
+│    ├─ ADF+KPSS 공동 정상성 검정 (9개 변수, 30행 이상)             │
+│    └─ Granger 인과 검정                                           │
+│         순방향 16쌍 + 역방향 5쌍 × 3 lag = 63 검정               │
+│         Benjamini-Hochberg FDR 보정 일괄 적용                    │
+│         AIC 기반 최적 lag 선택                                    │
 ├──────────────────────────────────────────────────────────────────┤
-│  출력 및 업로드                                                    │
-│    ├─ Parquet 저장: data/sentiment_join/master_{YYYYMMDD}.parquet│
+│  Phase 5: 하이브리드 지수 (compute_hybrid_indices)                │
+│    ├─ full: 7개 feature + VIF gate(threshold=10) + PCA            │
+│    │    news_sentiment, FNG, funding_rate, long_short_ratio,     │
+│    │    etf_net_inflow, volume_change, VIX(optional)             │
+│    └─ core: 4개 feature (큐레이션, VIF 미적용) + PCA              │
+│         news_sentiment, FNG, funding_rate, volume_change         │
+│    → 0~100 min-max score 변환                                    │
+│    → fng_value_lag1 부호 앵커로 방향성 통일                       │
+├──────────────────────────────────────────────────────────────────┤
+│  Phase 6: Lag-1 Score 컬럼 생성                                   │
+│    full_hybrid_index_score → full_hybrid_index_score_lag1        │
+│    core_hybrid_index_score → core_hybrid_index_score_lag1        │
+│    (look-ahead bias 방지)                                        │
+├──────────────────────────────────────────────────────────────────┤
+│  Phase 7: Alpha Validation (run_alpha_validation)                 │
+│    ├─ Hit Rate: 5개 predictor 방향 적중률 + Confusion Matrix      │
+│    ├─ Correlation: Pearson(정상성 기반 차분) + Spearman            │
+│    │    predictor vs btc_log_return + predictor 간 다중공선성     │
+│    ├─ Backtest: 신호 기반 매수/현금 전략 vs Buy & Hold            │
+│    │    Alpha, Sharpe Ratio, Max Drawdown, 거래 비용 반영         │
+│    └─ Walk-Forward: 120일 train / 30일 test rolling window       │
+│         full + core 양쪽 out-of-sample 성능 평가                 │
+├──────────────────────────────────────────────────────────────────┤
+│  Phase 8: 스키마 검증 + 저장                                      │
+│    ├─ MASTER_SCHEMA (pandera strict=True) 검증                    │
+│    ├─ Parquet 저장 + 메타데이터 (sentiment_join_stats)            │
+│    │    ADF, Granger, hit_rates, correlations, backtest,         │
+│    │    walk_forward, hybrid_indices 진단 포함                    │
 │    ├─ R2 업로드 (R2_PUBLIC_BUCKET 설정 시)                        │
 │    └─ 로컬 파일 보관: SENTIMENT_JOIN_RETAIN_DAYS일 (기본 30)      │
 └──────────────────────────────────────────────────────────────────┘
@@ -460,22 +489,120 @@ packet = {
 
 | 환경변수 | 기본값 | 설명 |
 |---|---|---|
-| `SENTIMENT_JOIN_LOOKBACK_DAYS` | `180` | 수집 기간 (1~730일) |
+| `SENTIMENT_JOIN_LOOKBACK_DAYS` | `180` | 수집 기간 (1~730일). 360일 이상 권장 |
 | `FUTURES_LAMBDA_ARN` | `""` | Lambda 프록시 ARN. 설정 시 Binance 직접 호출 건너뜀 |
 | `SENTIMENT_JOIN_OUTPUT_DIR` | `data/sentiment_join` | 로컬 출력 경로 |
 | `SENTIMENT_JOIN_RETAIN_DAYS` | `30` | 로컬 보관 기간 |
 | `SENTIMENT_JOIN_R2_MAX_CONCURRENCY` | `10` | R2 업로드 동시성 |
+| `SENTIMENT_JOIN_BINANCE_KEY` | `""` | Binance API key (Spot klines) |
+| `KIS_APP_KEY` / `KIS_APP_SECRET` | `""` | KIS API 인증 (USD/KRW) |
+| `FRED_API_KEY` | `""` | FRED API key (VIX, optional) |
 
 R2 관련 canonical 키는 `R2_PUBLIC_BUCKET`, `R2_S3_ENDPOINT`, `R2_ACCESS_KEY_ID`,
-`R2_SECRET_ACCESS_KEY`, `NEXT_PUBLIC_R2_BASE_URL`입니다. 기존
-`R2_BUCKET_NAME`, `R2_ENDPOINT_URL`, `R2_BASE_URL`는 하위호환 alias로만 유지합니다.
+`R2_SECRET_ACCESS_KEY`입니다.
 
-### 9.2 행 수와 NaN 컬럼 관계
+### 9.2 Parquet 출력 스키마 (MASTER_SCHEMA)
 
-| 상황 | 영향 받는 컬럼 |
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| `date` | str | UTC 날짜 (YYYY-MM-DD), unique |
+| `news_sentiment_mean` | float | 일별 뉴스 감성 평균 (-1.0~1.0) |
+| `news_sentiment_std` | float | 일별 뉴스 감성 표준편차 |
+| `n_articles` | Int64 | 일별 기사 수 |
+| `fng_value` | Int64 | Fear & Greed Index (0~100) |
+| `btc_log_return` | float | BTC 로그 수익률 |
+| `btc_return` | float | BTC 단순 수익률 |
+| `btc_quote_volume` | float | BTC 거래대금 |
+| `usdkrw_log_return` | float | USD/KRW 로그 수익률 |
+| `funding_rate` | float | BTC 선물 펀딩비 |
+| `open_interest_usd` | float | BTC 선물 미결제약정 (USD) |
+| `btc_long_short_ratio` | float | BTC Long/Short Ratio |
+| `oi_change_pct` | float | 미결제약정 변화율 |
+| `volume_change_pct` | float | 거래량 변화율 |
+| `etf_total_btc` | float | BTC ETF 총 보유량 |
+| `etf_total_aum_usd` | float | BTC ETF 총 AUM |
+| `etf_net_inflow_usd` | float | BTC ETF 순유입 |
+| `vix` | float | VIX (optional) |
+| `btc_direction_label` | str | BTC 방향 라벨 (up/down/flat) |
+| `is_outlier` | bool | 이상값 플래그 |
+| `full_hybrid_index` | float | full 하이브리드 지수 (raw PC1) |
+| `full_hybrid_index_score` | float | full 하이브리드 점수 (0~100) |
+| `core_hybrid_index` | float | core 하이브리드 지수 (raw PC1) |
+| `core_hybrid_index_score` | float | core 하이브리드 점수 (0~100) |
+| `*_lag1` | float | 각 지표의 Lag-1 값 (look-ahead bias 방지) |
+
+### 9.3 Alpha Validation 상세
+
+5개 Predictor에 대해 독립적으로 분석을 수행합니다.
+
+| Predictor | Threshold | 방향 | Granger 연계 |
+|---|---|---|---|
+| `news_sentiment_mean_lag1` | 0 | 정방향 | `news_sentiment_mean` |
+| `fng_value_lag1` | 50 | 정방향 | `fng_value` |
+| `vix_lag1` | 24 | 반전 (> 24 → bearish) | — |
+| `full_hybrid_index_score_lag1` | 50 | 정방향 | — |
+| `core_hybrid_index_score_lag1` | 50 | 정방향 | — |
+
+각 Predictor에 대해 산출되는 지표:
+
+| 분석 | 지표 | 설명 |
+|---|---|---|
+| Hit Rate | hit_rate, TP/FP/TN/FN, Precision, Recall, F1 | 방향 적중률 및 분류 성능 |
+| Correlation | Pearson r/p-value, Spearman ρ/p-value | 수익률 상관 (비정상 시 Pearson 차분) |
+| Backtest | strategy_cumret, bnh_cumret, alpha, sharpe, max_drawdown | 누적 수익 백테스트 |
+| Walk-Forward | fold별 hit_rate, cumret, alpha → 평균 | out-of-sample 성능 |
+
+Granger 검정에서 유의하지 않은 Predictor에는 `granger_significant: false` 플래그가 부여됩니다.
+
+### 9.4 Parquet 메타데이터 구조 (sentiment_join_stats)
+
+```json
+{
+  "run_id": "sentiment-join-20260418",
+  "generated_at_utc": "2026-04-18T08:57:26+00:00",
+  "adf": { "btc_log_return": { "conclusion": "stationary", ... }, ... },
+  "granger_results": [ { "predictor": "...", "target": "...", "lag": 1, "pvalue_adjusted": 0.03, "significant": true, ... } ],
+  "granger_correction": { "method": "benjamini_hochberg", "n_tests": 63, ... },
+  "hybrid_indices": {
+    "full": { "pca_summary": { "status": "ok", "selected_features": [...], ... }, ... },
+    "core": { ... }
+  },
+  "hit_rates": [ { "predictor": "news_sentiment_mean_lag1", "hit_rate": 0.55, "f1": 0.59, "granger_significant": true, ... } ],
+  "correlations": [ { "col_a": "...", "col_b": "btc_log_return", "pearson_r": 0.12, "spearman_rho": 0.15, ... } ],
+  "backtest": [ { "predictor": "...", "alpha": 0.05, "sharpe_ratio": 1.2, "max_drawdown": -0.08, ... } ],
+  "walk_forward": {
+    "full": { "folds": [...], "avg_hit_rate": 0.52, "avg_alpha": 0.01, ... },
+    "core": { ... }
+  },
+  "granger_executed": true,
+  "granger_eligible_rows": 360,
+  "rows_before_outlier_filter": 360,
+  "rows_after_outlier_filter": 360
+}
+```
+
+### 9.5 행 수와 분석 가능 범위
+
+| 행 수 | 가능한 분석 |
 |---|---|
-| 행 1개 | `*_lag1` 전체 NaN, `hybrid_index` NaN |
-| 행 < 30 | ADF/Granger 검정 스킵, `hybrid_index` NaN 가능 |
-| ETF 429 차단 | `etf_total_btc`, `etf_total_aum_usd`, `etf_net_inflow_usd` NaN |
+| < 10 | Lag-1 컬럼만 생성, 나머지 전부 NaN/skip |
+| 10~29 | PCA 하이브리드 지수 생성 가능 |
+| 30~179 | ADF+KPSS 정상성 검정 추가 |
+| 180~359 | Granger 인과 검정 + Alpha Validation 추가 (Walk-Forward fold 1~2개) |
+| 360+ | Granger 검정력 향상, Walk-Forward fold 7~8개 (권장) |
 
-행 수는 R2에 누적된 브리핑 실행 횟수에 비례합니다. 매일 파이프라인이 실행될수록 데이터가 쌓입니다.
+### 9.6 Property-Based Testing
+
+Alpha Validation의 정확성은 9개 Hypothesis property-based test로 검증됩니다.
+
+| Property | 검증 내용 |
+|---|---|
+| Lag-1 shift 불변량 | lag1[i] == original[i-1], lag1[0] == NaN |
+| Hit Rate CM 일관성 | TP+FP+TN+FN == n_valid, hit_rate ∈ [0,1] |
+| 상관 계산 일관성 | scipy.stats 직접 호출과 수치적 동일 |
+| 정상성 기반 차분 | 비정상 → Pearson 차분, Spearman 항상 원본 |
+| Alpha round-trip | alpha == strategy_cumret - bnh_cumret |
+| 거래 비용 단조성 | cost ≥ 0 → strategy_return(cost) ≤ strategy_return(0) |
+| Walk-Forward 분할 | train/test 비겹침, 길이 일치 |
+| Metadata round-trip | JSON 직렬화 → 역직렬화 원본 복원 |
+| Granger 플래그 일관성 | forward significant 판정 로직 검증 |
