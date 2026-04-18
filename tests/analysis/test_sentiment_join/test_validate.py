@@ -49,6 +49,9 @@ def _valid_df() -> pd.DataFrame:
             "full_hybrid_index_score": [float("nan")],
             "core_hybrid_index": [float("nan")],
             "core_hybrid_index_score": [float("nan")],
+            # §4 v4: hybrid index score Lag-1 (alpha validation용)
+            "full_hybrid_index_score_lag1": [float("nan")],
+            "core_hybrid_index_score_lag1": [float("nan")],
             # §1: 감성·공포지수 Lag-1 (첫 행은 NaN 허용)
             "news_sentiment_mean_lag1": [float("nan")],
             "fng_value_lag1": [float("nan")],
@@ -206,3 +209,35 @@ def test_validate_master_accepts_text_schema_version_str() -> None:
     df = _valid_df()
     df["text_schema_version"] = ["title_summary"]
     validate_master(df)
+
+
+def test_validate_master_accepts_hybrid_score_lag1_nan() -> None:
+    """§4 v4: hybrid index score lag1 컬럼이 NaN(nullable float)으로 통과해야 한다."""
+    df = _valid_df()
+    validate_master(df)
+    assert pd.isna(df["full_hybrid_index_score_lag1"].iloc[0])
+    assert pd.isna(df["core_hybrid_index_score_lag1"].iloc[0])
+
+
+def test_validate_master_accepts_hybrid_score_lag1_valid_range() -> None:
+    """§4 v4: hybrid index score lag1 값이 0~100 범위이면 통과해야 한다."""
+    df = _valid_df()
+    df["full_hybrid_index_score_lag1"] = [55.0]
+    df["core_hybrid_index_score_lag1"] = [72.3]
+    validate_master(df)
+
+
+def test_validate_master_rejects_hybrid_score_lag1_out_of_range() -> None:
+    """§4 v4: hybrid index score lag1 값이 0~100 범위를 벗어나면 거부해야 한다."""
+    df = _valid_df()
+    df["full_hybrid_index_score_lag1"] = [101.0]
+    with pytest.raises(SchemaError):
+        validate_master(df)
+
+
+def test_validate_master_strict_requires_hybrid_score_lag1_columns() -> None:
+    """§4 v4: strict 모드에서 lag1 컬럼이 누락되면 거부해야 한다."""
+    for missing_col in ("full_hybrid_index_score_lag1", "core_hybrid_index_score_lag1"):
+        df = _valid_df().drop(columns=[missing_col])
+        with pytest.raises(SchemaError):
+            validate_master(df)

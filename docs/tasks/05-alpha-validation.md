@@ -7,11 +7,63 @@
 
 ## 선행 조건 (반드시 완료 후 진행)
 
-| 조건 | 사유 | 태스크 |
+| 조건 | 사유 | 태스크 | 상태 |
+|---|---|---|---|
+| Lag-1 처리 | 당일 감성 vs 당일 수익률 비교 시 look-ahead bias → 적중률이 가짜로 높게 나옴 | 01 §1 | ✅ PR #61 |
+| 백필 JSON flat 구조 | 180행 미확보 시 적중률/백테스트에 통계적 신뢰도 없음 | 02 §3 | ✅ PR #62 |
+| ADF 정상성 검증 | 비정상 시계열로 상관 분석하면 spurious correlation 위험 | 02 §1 | ✅ PR #62 (ADF+KPSS) |
+
+> **2026-04-18**: 선행 조건 모두 완료. 진행 가능.
+
+---
+
+## 코드베이스 현황 검증 (2026-04-18 20:30 KST)
+
+### Parquet 현황 (`data/sentiment_join/master_20260418.parquet`)
+
+33 컬럼. `btc_direction_label`, `btc_log_return`, `news_sentiment_mean_lag1`, `fng_value_lag1` 등 hit-rate 산출에 필요한 ground truth + predictor lag1이 이미 존재.
+
+**없는 것**: `full_hybrid_index_score_lag1`, `core_hybrid_index_score_lag1` — 아직 생성 로직 자체가 없음.
+
+### 파일별 현황
+
+| 파일 | 경로 | 현황 |
 |---|---|---|
-| Lag-1 처리 | 당일 감성 vs 당일 수익률 비교 시 look-ahead bias → 적중률이 가짜로 높게 나옴 | 01 §1 |
-| 백필 JSON flat 구조 | 180행 미확보 시 적중률/백테스트에 통계적 신뢰도 없음 | 02 §3 |
-| ADF 정상성 검증 | 비정상 시계열로 상관 분석하면 spurious correlation 위험 | 02 §1 |
+| `join.py` | `src/morning_brief/analysis/sentiment_join/join.py` | `_add_sentiment_lag_columns` (L121-147)에 `news_sentiment_mean_lag1`, `fng_value_lag1`, `usdkrw_log_return_lag1`만 생성. hybrid score lag1 없음 |
+| `hybrid_index.py` | `src/morning_brief/analysis/sentiment_join/hybrid_index.py` | `compute_hybrid_indices` (L300-324) → `_compute_single_index` (L134-297). scaler/PCA 외부 주입 불가 — 내부에서 fit+transform 일체 |
+| `pipeline.py` | `src/morning_brief/analysis/sentiment_join/pipeline.py` | hybrid index 생성 L328-349, stats metadata 조립 L355-370. lag1 생성 호출 없음 |
+| `validate.py` | `src/morning_brief/analysis/sentiment_join/validate.py` | `MASTER_SCHEMA` (L13-67) strict=True, 40 컬럼. hybrid score lag1 미등록 |
+| `statistical_tests.py` | `src/morning_brief/analysis/sentiment_join/statistical_tests.py` | `run_statistical_tests` (L344-441) → `stationarity_results`, `granger`, `granger_eligible_rows`, `granger_executed`, `power_warning` 반환. hit_rate/correlation/backtest 함수 **없음** |
+| `etf_storage.py` | `src/morning_brief/data/etf_storage.py` | `build_stats_metadata_payload` (L266-299) → `adf`, `granger_results`, `hybrid_indices`, outlier stats, `exclusion_counts`. hit_rates/correlations/backtest 필드 **없음** |
+
+### 테스트 현황
+
+- `tests/analysis/test_sentiment_join/` 16개 파일 존재
+- `test_statistical_tests.py` (31.8 KB) — Granger/ADF 테스트만 커버
+- `hit_rate`, `backtest`, `walk_forward` 관련 테스트 **전무** (전체 tests/ 검색 0건)
+
+### 핵심 gap 요약
+
+1. **hybrid score lag1 컬럼 미존재** — join.py 또는 pipeline.py에서 `compute_hybrid_indices` 호출 후 `.shift(1)` 추가 필요
+2. **alpha validation 함수 전무** — `compute_hit_rate`, `compute_correlations`, `compute_backtest`, `walk_forward_backtest` 모두 미구현
+3. **metadata payload에 결과 저장 경로 없음** — `build_stats_metadata_payload`에 `hit_rates`, `correlations`, `backtest` 필드 추가 필요
+4. **scaler/PCA 외부 주입 불가** — walk-forward validation을 위해 `_compute_single_index`에 pre-fitted scaler/PCA 주입 인터페이스 필요
+
+---
+
+### ⚠️ 태스크 04 반영으로 변경된 컬럼명
+
+태스크 04(PR #66)에서 `hybrid_index` → 이중 지수로 교체됨.
+
+| 구 컬럼 | 현 컬럼 | 비고 |
+|---|---|---|
+| `hybrid_index` | `full_hybrid_index` / `core_hybrid_index` | raw PC1 값 |
+| `hybrid_index` (0~100) | `full_hybrid_index_score` / `core_hybrid_index_score` | 0~100 스케일 — **임계값 비교에 사용** |
+| `hybrid_index_lag1` | **미존재** — 별도 생성 필요 | `join.py`에 `.shift(1)` 추가 필요 |
+
+`> 50` 임계값 비교는 `*_score` (0~100) 컬럼 기준. lag1 버전은 이 태스크에서 추가 생성.
+
+> **구현 위치 참고**: `_add_sentiment_lag_columns` (join.py L121-147)은 `merge_sources` 내에서 hybrid index 생성 **이전**에 호출됨 (L276). hybrid score lag1은 `pipeline.py` L349 이후 (`compute_hybrid_indices` 완료 후) `master_df`에 직접 `.shift(1)` 적용하는 것이 올바른 위치.
 
 ---
 
@@ -25,13 +77,14 @@
 
 마스터 테이블에 이미 존재하는 컬럼:
 
-| 컬럼 | 역할 |
-|---|---|
-| `news_sentiment_mean_lag1` | 전일 감성 점수 (predictor) |
-| `fng_value_lag1` | 전일 F&G Index (predictor) |
-| `hybrid_index` (lag1) | 전일 하이브리드 지수 (predictor) |
-| `btc_direction_label` | 당일 실제 방향 — up/down/flat (ground truth) |
-| `btc_log_return` | 당일 실제 수익률 (ground truth) |
+| 컬럼 | 역할 | 상태 |
+|---|---|---|
+| `news_sentiment_mean_lag1` | 전일 감성 점수 (predictor) | ✅ 존재 |
+| `fng_value_lag1` | 전일 F&G Index (predictor) | ✅ 존재 |
+| `full_hybrid_index_score_lag1` | 전일 full 하이브리드 지수 0~100 (predictor) | ❌ join.py에 추가 필요 |
+| `core_hybrid_index_score_lag1` | 전일 core 하이브리드 지수 0~100 (predictor) | ❌ join.py에 추가 필요 |
+| `btc_direction_label` | 당일 실제 방향 — up/down/flat (ground truth) | ✅ 존재 |
+| `btc_log_return` | 당일 실제 수익률 (ground truth) | ✅ 존재 |
 
 ### 산출 지표
 
@@ -57,16 +110,19 @@ hit_rate = hit.sum() / len(hit)
 |---|---|---|
 | `news_sentiment_mean_lag1` | > 0 → bullish | FinBERT 감성 |
 | `fng_value_lag1` | > 50 → bullish | F&G 중립 기준 |
-| `hybrid_index` (lag1) | > 50 → bullish | 0~100 스케일링 후 |
+| `full_hybrid_index_score_lag1` | > 50 → bullish | 0~100 스케일 full 지수 |
+| `core_hybrid_index_score_lag1` | > 50 → bullish | 0~100 스케일 core 지수 |
 | 랜덤 기준선 | 50% | 동전 던지기 대비 우위 확인 |
 
 ### 수정 대상
 
-| 파일 | 변경 |
-|---|---|
-| `statistical_tests.py` | `compute_hit_rate(df, predictor, threshold)` 함수 추가 |
-| `run_statistical_tests` | hit rate 결과를 `results["hit_rates"]`에 기록 |
-| `etf_storage.py` | `build_stats_metadata_payload`에 `hit_rates` 필드 추가 |
+| 파일 | 변경 | 위치 |
+|---|---|---|
+| `join.py` | `full_hybrid_index_score_lag1`, `core_hybrid_index_score_lag1` 컬럼 생성 (`_add_sentiment_lag_columns` 또는 별도 헬퍼) | L121-147 또는 pipeline.py L349 이후 |
+| `validate.py` | `MASTER_SCHEMA`에 두 lag1 컬럼 추가 | L13-67 (strict=True이므로 누락 시 실패) |
+| `statistical_tests.py` | `compute_hit_rate(df, predictor, threshold)` 함수 추가 | L441 이후 신규 |
+| `run_statistical_tests` | hit rate 결과를 `results["hit_rates"]`에 기록 | L344-441 내부 확장 |
+| `etf_storage.py` | `build_stats_metadata_payload`에 `hit_rates` 필드 추가 | L266-299 시그니처+payload 확장 |
 
 ---
 
@@ -92,11 +148,11 @@ hit_rate = hit.sum() / len(hit)
 
 ### 수정 대상
 
-| 파일 | 변경 |
-|---|---|
-| `statistical_tests.py` | `compute_correlations(df, pairs)` 함수 추가 |
-| `run_statistical_tests` | 상관 결과를 `results["correlations"]`에 기록 |
-| `etf_storage.py` | `build_stats_metadata_payload`에 `correlations` 필드 추가 |
+| 파일 | 변경 | 위치 |
+|---|---|---|
+| `statistical_tests.py` | `compute_correlations(df, pairs)` 함수 추가 | L441 이후 신규 |
+| `run_statistical_tests` | 상관 결과를 `results["correlations"]`에 기록 | L344-441 내부 확장 |
+| `etf_storage.py` | `build_stats_metadata_payload`에 `correlations` 필드 추가 | L266-299 시그니처+payload 확장 |
 
 ---
 
@@ -187,22 +243,23 @@ Alpha     = 전략 누적 수익 - 벤치마크 누적 수익
 
 | 전략 | 신호 | 비고 |
 |---|---|---|
-| Hybrid Index | `hybrid_index_lag1 > 50` | 핵심 전략 |
+| Full Hybrid Index | `full_hybrid_index_score_lag1 > 50` | full feature set 전략 |
+| Core Hybrid Index | `core_hybrid_index_score_lag1 > 50` | coverage 높은 core 전략 |
 | FinBERT Only | `news_sentiment_mean_lag1 > 0` | 단일 감성 지표 |
 | F&G Only | `fng_value_lag1 > 50` | 단일 심리 지표 |
 | Buy & Hold | 항상 매수 | 벤치마크 |
 
-→ "하이브리드 지수가 개별 지표보다 나은가"를 직접 비교할 수 있습니다.
+→ "full/core 하이브리드 지수가 개별 지표보다 나은가", "full vs core 차이는 얼마나 나는가"를 비교할 수 있습니다.
 
 ### 수정 대상
 
-| 파일 | 변경 |
-|---|---|
-| `statistical_tests.py` (또는 별도 `backtest.py`) | `compute_backtest(df, signal_col, threshold, return_col)` 함수 추가 |
-| `statistical_tests.py` (또는 별도 `backtest.py`) | `walk_forward_backtest(df, ...)` 함수 추가 — PCA train/test 분리 포함 |
-| `hybrid_index.py` | `compute_hybrid_index`에서 scaler/pca를 외부 주입 가능하도록 인터페이스 확장 (walk-forward용) |
-| `run_statistical_tests` | 백테스트 결과를 `results["backtest"]`에 기록 |
-| `etf_storage.py` | `build_stats_metadata_payload`에 `backtest` 필드 추가 |
+| 파일 | 변경 | 위치 |
+|---|---|---|
+| `statistical_tests.py` (또는 별도 `backtest.py`) | `compute_backtest(df, signal_col, threshold, return_col)` 함수 추가 | 신규 파일 또는 L441 이후 |
+| `statistical_tests.py` (또는 별도 `backtest.py`) | `walk_forward_backtest(df, ...)` 함수 추가 — PCA train/test 분리 포함 | 신규 |
+| `hybrid_index.py` | `compute_hybrid_index`에서 scaler/pca를 외부 주입 가능하도록 인터페이스 확장 (walk-forward용) | `_compute_single_index` L134-297 — 현재 내부 fit+transform 일체, 분리 필요 |
+| `run_statistical_tests` | 백테스트 결과를 `results["backtest"]`에 기록 | L344-441 내부 확장 |
+| `etf_storage.py` | `build_stats_metadata_payload`에 `backtest` 필드 추가 | L266-299 시그니처+payload 확장 |
 
 ---
 

@@ -21,7 +21,10 @@ from morning_brief.analysis.sentiment_join.sources.futures import fetch_futures_
 from morning_brief.analysis.sentiment_join.sources.r2_sentiment import fetch_r2_sentiment
 from morning_brief.analysis.sentiment_join.sources.usdkrw_prices import fetch_usdkrw_close
 from morning_brief.analysis.sentiment_join.sources.vix import fetch_vix_history
-from morning_brief.analysis.sentiment_join.statistical_tests import run_statistical_tests
+from morning_brief.analysis.sentiment_join.statistical_tests import (
+    run_alpha_validation,
+    run_statistical_tests,
+)
 from morning_brief.analysis.sentiment_join.storage import (
     cleanup_old_files,
     save_parquet,
@@ -348,6 +351,45 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
                 reason=str(exc),
             )
 
+        # §4 v4: hybrid index score Lag-1 컬럼 생성 (alpha validation용)
+        for spec_name in ("full", "core"):
+            score_col = f"{spec_name}_hybrid_index_score"
+            lag1_col = f"{score_col}_lag1"
+            master_df[lag1_col] = master_df[score_col].shift(1)
+
+        # §4 v4: Alpha Validation 실행 (실패 시 파이프라인 중단하지 않음)
+        alpha_validation_results: dict[str, object] = {}
+        try:
+            _sr = (
+                statistical_results.get("stationarity_results")
+                if isinstance(statistical_results, dict)
+                else None
+            )
+            _gr = (
+                statistical_results.get("granger")
+                if isinstance(statistical_results, dict)
+                else None
+            )
+            _ge = (
+                statistical_results.get("granger_executed", False)
+                if isinstance(statistical_results, dict)
+                else False
+            )
+            alpha_validation_results = run_alpha_validation(
+                master_df,
+                stationarity_results=_sr if isinstance(_sr, dict) else None,
+                granger_results=_gr if isinstance(_gr, list) else None,
+                granger_executed=bool(_ge),
+            )
+        except Exception as exc:
+            log_structured(
+                logger,
+                event="stats.error",
+                message="Alpha Validation 실행 중 오류가 발생했습니다.",
+                level=logging.WARNING,
+                reason=str(exc),
+            )
+
         run_date = today.strftime("%Y%m%d")
         hybrid_diagnostics = master_df.attrs.get("hybrid_index_diagnostics", {})
 
@@ -400,6 +442,26 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
                 _build_granger_correction(statistical_results)
                 if isinstance(statistical_results, dict)
                 and statistical_results.get("granger_executed")
+                else None
+            ),
+            hit_rates=(
+                alpha_validation_results.get("hit_rates")
+                if isinstance(alpha_validation_results, dict)
+                else None
+            ),
+            correlations=(
+                alpha_validation_results.get("correlations")
+                if isinstance(alpha_validation_results, dict)
+                else None
+            ),
+            backtest=(
+                alpha_validation_results.get("backtest")
+                if isinstance(alpha_validation_results, dict)
+                else None
+            ),
+            walk_forward=(
+                alpha_validation_results.get("walk_forward")
+                if isinstance(alpha_validation_results, dict)
                 else None
             ),
         )

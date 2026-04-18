@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import math
+from dataclasses import dataclass
 from typing import Any
 
 import pandas as pd
@@ -441,20 +443,748 @@ def run_statistical_tests(df: pd.DataFrame) -> dict[str, Any]:
     return results
 
 
+# ---------------------------------------------------------------------------
+# Hit Rate Calculator
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class HitRateResult:
+    """단일 Predictor의 방향 적중률 및 분류 성능 결과."""
+
+    predictor: str
+    threshold: float
+    hit_rate: float  # 0.0~1.0 또는 NaN
+    tp: int
+    fp: int
+    tn: int
+    fn: int
+    precision: float  # NaN if denominator == 0
+    recall: float
+    f1: float
+    n_valid: int
+    inverted: bool  # VIX 등 방향 반전 여부
+    granger_significant: bool | None  # Granger 연계 플래그
+
+
+def compute_hit_rate(
+    df: pd.DataFrame,
+    predictor_col: str,
+    threshold: float,
+    *,
+    inverted: bool = False,
+    granger_significant: bool | None = None,
+) -> HitRateResult:
+    """단일 Predictor의 방향 적중률 및 분류 성능을 산출한다.
+
+    - predictor > threshold → "up" (inverted=True이면 "down")
+    - btc_direction_label == "flat" 행 제외
+    - NaN 행 제외
+    - 유효 행 0건 시 모든 지표 NaN, CM 모두 0
+    """
+    work = df[[predictor_col, "btc_direction_label"]].copy()
+
+    # flat 라벨 행 제외
+    work = work[work["btc_direction_label"] != "flat"]
+
+    # NaN 행 제외 (predictor 또는 label이 NaN)
+    work = work.dropna(subset=[predictor_col, "btc_direction_label"])
+
+    n_valid = len(work)
+
+    if n_valid == 0:
+        return HitRateResult(
+            predictor=predictor_col,
+            threshold=threshold,
+            hit_rate=float("nan"),
+            tp=0,
+            fp=0,
+            tn=0,
+            fn=0,
+            precision=float("nan"),
+            recall=float("nan"),
+            f1=float("nan"),
+            n_valid=0,
+            inverted=inverted,
+            granger_significant=granger_significant,
+        )
+
+    # 예측 방향 결정
+    pred_above = work[predictor_col] > threshold
+    if inverted:
+        predicted_up = ~pred_above  # inverted: > threshold → "down", <= threshold → "up"
+    else:
+        predicted_up = pred_above  # normal: > threshold → "up"
+
+    actual_up = work["btc_direction_label"] == "up"
+
+    tp = int((predicted_up & actual_up).sum())
+    fp = int((predicted_up & ~actual_up).sum())
+    tn = int((~predicted_up & ~actual_up).sum())
+    fn = int((~predicted_up & actual_up).sum())
+
+    hit_rate = (tp + tn) / n_valid
+
+    # Precision, Recall, F1
+    precision_denom = tp + fp
+    precision = tp / precision_denom if precision_denom > 0 else float("nan")
+
+    recall_denom = tp + fn
+    recall = tp / recall_denom if recall_denom > 0 else float("nan")
+
+    if not math.isnan(precision) and not math.isnan(recall):
+        f1_denom = precision + recall
+        f1 = 2 * precision * recall / f1_denom if f1_denom > 0 else float("nan")
+    else:
+        f1 = float("nan")
+
+    return HitRateResult(
+        predictor=predictor_col,
+        threshold=threshold,
+        hit_rate=hit_rate,
+        tp=tp,
+        fp=fp,
+        tn=tn,
+        fn=fn,
+        precision=precision,
+        recall=recall,
+        f1=f1,
+        n_valid=n_valid,
+        inverted=inverted,
+        granger_significant=granger_significant,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Correlation Calculator
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CorrelationResult:
+    """Predictor-수익률 또는 Predictor 간 상관 분석 결과."""
+
+    col_a: str
+    col_b: str
+    pearson_r: float  # NaN if insufficient data
+    pearson_pvalue: float
+    spearman_rho: float
+    spearman_pvalue: float
+    n_valid: int
+    differenced: bool  # Pearson에 차분 적용 여부
+
+
+def _strip_lag1_suffix(col: str) -> str:
+    """lag1 Predictor 컬럼명에서 _lag1 접미사를 제거하여 raw 컬럼명을 반환한다."""
+    if col.endswith("_lag1"):
+        return col[: -len("_lag1")]
+    return col
+
+
+def _is_non_stationary(
+    col: str,
+    stationarity_results: dict[str, Any] | None,
+) -> bool:
+    """stationarity_results에서 해당 컬럼의 정상성 판정을 확인한다.
+
+    raw 컬럼명으로 조회. conclusion이 "stationary"가 아니면 True(비정상).
+    stationarity_results가 None이거나 컬럼이 없으면 False(정상 가정).
+    """
+    if stationarity_results is None:
+        return False
+    raw_col = _strip_lag1_suffix(col)
+    result = stationarity_results.get(raw_col)
+    if result is None:
+        return False
+    return result.get("conclusion") != "stationary"
+
+
+def compute_correlations(
+    df: pd.DataFrame,
+    pairs: list[tuple[str, str]],
+    stationarity_results: dict[str, Any] | None = None,
+) -> list[CorrelationResult]:
+    """Predictor-수익률 및 Predictor 간 상관계수를 산출한다.
+
+    - Pearson: ADF/KPSS 비정상 시 1차 차분 적용, differenced=True 플래그
+    - Spearman: 항상 원본 시계열 사용
+    - 유효 행 < 2이면 모든 값 NaN
+    """
+    from scipy.stats import pearsonr, spearmanr
+
+    results: list[CorrelationResult] = []
+
+    for col_a, col_b in pairs:
+        if col_a not in df.columns or col_b not in df.columns:
+            results.append(
+                CorrelationResult(
+                    col_a=col_a,
+                    col_b=col_b,
+                    pearson_r=float("nan"),
+                    pearson_pvalue=float("nan"),
+                    spearman_rho=float("nan"),
+                    spearman_pvalue=float("nan"),
+                    n_valid=0,
+                    differenced=False,
+                )
+            )
+            continue
+
+        # 원본 시계열에서 양쪽 모두 유효한 행 추출
+        mask = df[col_a].notna() & df[col_b].notna()
+        a_orig = df.loc[mask, col_a].astype(float)
+        b_orig = df.loc[mask, col_b].astype(float)
+
+        n_valid = len(a_orig)
+
+        if n_valid < 2:
+            results.append(
+                CorrelationResult(
+                    col_a=col_a,
+                    col_b=col_b,
+                    pearson_r=float("nan"),
+                    pearson_pvalue=float("nan"),
+                    spearman_rho=float("nan"),
+                    spearman_pvalue=float("nan"),
+                    n_valid=n_valid,
+                    differenced=False,
+                )
+            )
+            continue
+
+        # Spearman: 항상 원본 시계열 사용
+        sp_rho, sp_pvalue = spearmanr(a_orig, b_orig)
+
+        # Pearson: 정상성 판정에 따라 차분 적용 여부 결정
+        # 두 컬럼 중 하나라도 비정상이면 양쪽 모두 차분
+        need_diff = _is_non_stationary(col_a, stationarity_results) or _is_non_stationary(
+            col_b, stationarity_results
+        )
+
+        if need_diff:
+            # 1차 차분 적용 후 NaN 제거
+            a_diff = a_orig.diff().iloc[1:]
+            b_diff = b_orig.diff().iloc[1:]
+            # 차분 후 유효 행 재확인
+            diff_mask = a_diff.notna() & b_diff.notna()
+            a_pearson = a_diff[diff_mask]
+            b_pearson = b_diff[diff_mask]
+
+            if len(a_pearson) < 2:
+                pr, pp = float("nan"), float("nan")
+            else:
+                pr, pp = pearsonr(a_pearson, b_pearson)
+        else:
+            pr, pp = pearsonr(a_orig, b_orig)
+
+        results.append(
+            CorrelationResult(
+                col_a=col_a,
+                col_b=col_b,
+                pearson_r=float(pr),
+                pearson_pvalue=float(pp),
+                spearman_rho=float(sp_rho),
+                spearman_pvalue=float(sp_pvalue),
+                n_valid=n_valid,
+                differenced=need_diff,
+            )
+        )
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Backtest Engine
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class BacktestResult:
+    """단일 전략의 누적 수익 백테스트 결과."""
+
+    predictor: str
+    threshold: float
+    strategy_cumulative_return: float
+    bnh_cumulative_return: float
+    alpha: float  # strategy - bnh
+    sharpe_ratio: float  # annualized, sqrt(365)
+    max_drawdown: float  # <= 0
+    n_trades: int  # 포지션 전환 횟수
+    n_valid: int
+    transaction_cost_bps: float
+    inverted: bool
+    granger_significant: bool | None
+
+
+def compute_backtest(
+    df: pd.DataFrame,
+    signal_col: str,
+    threshold: float,
+    return_col: str = "btc_log_return",
+    *,
+    transaction_cost_bps: float = 10.0,
+    inverted: bool = False,
+    granger_significant: bool | None = None,
+) -> BacktestResult:
+    """단일 전략의 누적 수익 백테스트를 수행한다.
+
+    전략: signal > threshold → 매수(당일 수익률 적용), 이하 → 현금(0)
+    inverted: signal <= threshold → 매수, > threshold → 현금
+    거래 비용: 포지션 전환 시 편도 transaction_cost_bps / 10000 차감 (log return)
+    """
+    import numpy as np
+
+    work = df[[signal_col, return_col]].copy()
+    work = work.dropna(subset=[signal_col, return_col])
+
+    n_valid = len(work)
+
+    if n_valid == 0:
+        return BacktestResult(
+            predictor=signal_col,
+            threshold=threshold,
+            strategy_cumulative_return=float("nan"),
+            bnh_cumulative_return=float("nan"),
+            alpha=float("nan"),
+            sharpe_ratio=float("nan"),
+            max_drawdown=float("nan"),
+            n_trades=0,
+            n_valid=0,
+            transaction_cost_bps=transaction_cost_bps,
+            inverted=inverted,
+            granger_significant=granger_significant,
+        )
+
+    signal = work[signal_col].to_numpy(dtype=float)
+    returns = work[return_col].to_numpy(dtype=float)
+
+    # 포지션 결정: buy (True) or cash (False)
+    if inverted:
+        buy = signal <= threshold
+    else:
+        buy = signal > threshold
+
+    # 전략 수익률: buy → btc_log_return, cash → 0
+    strategy_returns = np.where(buy, returns, 0.0)
+
+    # 포지션 전환 횟수 및 거래 비용 적용
+    n_trades = 0
+    if n_valid > 1:
+        position_changes = buy[1:] != buy[:-1]
+        n_trades = int(position_changes.sum())
+
+        if transaction_cost_bps > 0.0 and n_trades > 0:
+            cost_per_trade = math.log(1 - transaction_cost_bps / 10000)
+            # 첫 번째 행에서 포지션 진입도 전환으로 간주하지 않음 (이전 포지션 없음)
+            cost_array = np.where(
+                np.concatenate([[False], position_changes]),
+                cost_per_trade,
+                0.0,
+            )
+            strategy_returns = strategy_returns + cost_array
+
+    # 누적 수익률 (log return 누적합)
+    strategy_cumret = float(np.sum(strategy_returns))
+    bnh_cumret = float(np.sum(returns))
+    alpha = strategy_cumret - bnh_cumret
+
+    # Sharpe Ratio: mean/std × sqrt(365)
+    std = float(np.std(strategy_returns, ddof=1)) if n_valid > 1 else 0.0
+    if std == 0.0:
+        sharpe_ratio = float("nan")
+    else:
+        sharpe_ratio = float(np.mean(strategy_returns)) / std * math.sqrt(365)
+
+    # Max Drawdown: min(cumulative_curve - running_max)
+    cumulative_curve = np.cumsum(strategy_returns)
+    running_max = np.maximum.accumulate(cumulative_curve)
+    drawdowns = cumulative_curve - running_max
+    max_drawdown = float(np.min(drawdowns))
+
+    return BacktestResult(
+        predictor=signal_col,
+        threshold=threshold,
+        strategy_cumulative_return=strategy_cumret,
+        bnh_cumulative_return=bnh_cumret,
+        alpha=alpha,
+        sharpe_ratio=sharpe_ratio,
+        max_drawdown=max_drawdown,
+        n_trades=n_trades,
+        n_valid=n_valid,
+        transaction_cost_bps=transaction_cost_bps,
+        inverted=inverted,
+        granger_significant=granger_significant,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Walk-Forward Validator
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class WalkForwardFoldResult:
+    """Walk-Forward 단일 fold 결과."""
+
+    fold: int
+    test_start: str
+    test_end: str
+    hit_rate: float
+    cumulative_return: float
+    alpha: float
+
+
+@dataclass(frozen=True)
+class WalkForwardResult:
+    """Walk-Forward Validation 전체 결과."""
+
+    folds: list[WalkForwardFoldResult]
+    avg_hit_rate: float
+    avg_cumulative_return: float
+    avg_alpha: float
+    train_days: int
+    test_days: int
+
+
+def walk_forward_validate(
+    df: pd.DataFrame,
+    train_days: int = 120,
+    test_days: int = 30,
+    index_name: str = "full",
+) -> WalkForwardResult | None:
+    """Walk-Forward Validation으로 out-of-sample 성능을 평가한다.
+
+    지정된 index_name("full" 또는 "core")의 hybrid_index_score_lag1 기준으로 각 fold에서:
+    1. train 구간으로 _compute_single_index (normal mode) → scaler/PCA/min-max 추출
+    2. test 구간에 pre-fitted mode로 _compute_single_index → test scores
+    3. test 구간에서 hit rate + 누적 수익률 산출
+
+    데이터 부족(len < train_days + test_days) 시 None 반환 + WARNING 로깅.
+    """
+    from morning_brief.analysis.sentiment_join.hybrid_index import (
+        INDEX_SPECS,
+        _compute_single_index,
+    )
+
+    n = len(df)
+    if n < train_days + test_days:
+        log_structured(
+            logger,
+            event="stats.walk_forward_insufficient_data",
+            message="Walk-Forward Validation에 필요한 데이터가 부족합니다.",
+            level=logging.WARNING,
+            rows=n,
+            min_required=train_days + test_days,
+            index=index_name,
+        )
+        return None
+
+    # index_name에 해당하는 spec 선택
+    spec_map = {s.name: s for s in INDEX_SPECS}
+    spec = spec_map.get(index_name)
+    if spec is None:
+        log_structured(
+            logger,
+            event="stats.walk_forward_invalid_index",
+            message=f"유효하지 않은 index_name: {index_name}",
+            level=logging.WARNING,
+        )
+        return None
+
+    score_lag1_col = f"{index_name}_hybrid_index_score_lag1"
+
+    fold_results: list[WalkForwardFoldResult] = []
+    fold_num = 0
+    start = 0
+
+    while start + train_days + test_days <= n:
+        train_end = start + train_days
+        test_end = train_end + test_days
+
+        train_df = df.iloc[start:train_end].copy()
+        test_df = df.iloc[train_end:test_end].copy()
+
+        # ── Train: normal mode → extract fitted objects ──
+        _, train_score_series, train_diag = _compute_single_index(train_df, spec, len(train_df))
+
+        pca_summary = train_diag.get("pca_summary", {})
+        if pca_summary.get("status") != "ok":
+            # train에서 PCA 실패 → 이 fold 건너뜀
+            start += test_days
+            fold_num += 1
+            continue
+
+        # diagnostics에서 fitted 객체 및 메타데이터 추출 (double-fit 제거)
+        selected_features = pca_summary["selected_features"]
+        pc1_min = pca_summary["pc1_min"]
+        pc1_max = pca_summary["pc1_max"]
+        scaler = train_diag["_fitted_scaler"]
+        pca_final = train_diag["_fitted_pca"]
+
+        # ── Test: pre-fitted mode ──
+        _, test_score_series, _ = _compute_single_index(
+            test_df,
+            spec,
+            len(test_df),
+            pre_fitted_scaler=scaler,
+            pre_fitted_pca=pca_final,
+            pre_fitted_pc1_min=pc1_min,
+            pre_fitted_pc1_max=pc1_max,
+            pre_fitted_features=selected_features,
+        )
+
+        # test 구간에 score를 lag1로 사용하여 hit rate + 누적 수익률 산출
+        test_eval = test_df.copy()
+        test_eval[score_lag1_col] = test_score_series.shift(1)
+
+        # hit rate (threshold=50)
+        if "btc_direction_label" in test_eval.columns and score_lag1_col in test_eval.columns:
+            hr_result = compute_hit_rate(test_eval, score_lag1_col, threshold=50.0)
+            fold_hit_rate = hr_result.hit_rate
+        else:
+            fold_hit_rate = float("nan")
+
+        # 누적 수익률 (backtest)
+        if "btc_log_return" in test_eval.columns and score_lag1_col in test_eval.columns:
+            bt_result = compute_backtest(
+                test_eval,
+                score_lag1_col,
+                threshold=50.0,
+                transaction_cost_bps=0.0,
+            )
+            fold_cumret = bt_result.strategy_cumulative_return
+            fold_alpha = bt_result.alpha
+        else:
+            fold_cumret = float("nan")
+            fold_alpha = float("nan")
+
+        # test 구간의 날짜 범위
+        if "date" in test_df.columns:
+            test_start_str = str(test_df["date"].iloc[0])
+            test_end_str = str(test_df["date"].iloc[-1])
+        else:
+            test_start_str = str(test_df.index[0])
+            test_end_str = str(test_df.index[-1])
+
+        fold_results.append(
+            WalkForwardFoldResult(
+                fold=fold_num,
+                test_start=test_start_str,
+                test_end=test_end_str,
+                hit_rate=fold_hit_rate,
+                cumulative_return=fold_cumret,
+                alpha=fold_alpha,
+            )
+        )
+
+        start += test_days
+        fold_num += 1
+
+    if not fold_results:
+        return WalkForwardResult(
+            folds=[],
+            avg_hit_rate=float("nan"),
+            avg_cumulative_return=float("nan"),
+            avg_alpha=float("nan"),
+            train_days=train_days,
+            test_days=test_days,
+        )
+
+    # 집계: NaN이 아닌 fold만 평균
+    valid_hrs = [f.hit_rate for f in fold_results if not math.isnan(f.hit_rate)]
+    valid_cumrets = [
+        f.cumulative_return for f in fold_results if not math.isnan(f.cumulative_return)
+    ]
+    valid_alphas = [f.alpha for f in fold_results if not math.isnan(f.alpha)]
+
+    avg_hr = sum(valid_hrs) / len(valid_hrs) if valid_hrs else float("nan")
+    avg_cumret = sum(valid_cumrets) / len(valid_cumrets) if valid_cumrets else float("nan")
+    avg_alpha = sum(valid_alphas) / len(valid_alphas) if valid_alphas else float("nan")
+
+    return WalkForwardResult(
+        folds=fold_results,
+        avg_hit_rate=avg_hr,
+        avg_cumulative_return=avg_cumret,
+        avg_alpha=avg_alpha,
+        train_days=train_days,
+        test_days=test_days,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Granger 신뢰도 플래그 헬퍼
+# ---------------------------------------------------------------------------
+
+# Predictor lag1 → Granger raw 컬럼 매핑
+_PREDICTOR_TO_GRANGER_RAW: dict[str, str | None] = {
+    "news_sentiment_mean_lag1": "news_sentiment_mean",
+    "fng_value_lag1": "fng_value",
+    "vix_lag1": None,
+    "full_hybrid_index_score_lag1": None,
+    "core_hybrid_index_score_lag1": None,
+}
+
+
+def _is_granger_significant(
+    granger_results: list[dict[str, Any]],
+    predictor_raw: str,
+) -> bool | None:
+    """Granger 결과에서 해당 predictor의 유의성을 판정한다.
+
+    순방향(forward) 결과 중 하나라도 significant=True이면 True.
+    해당 predictor의 forward 결과가 없으면 None.
+    """
+    forward_entries = [
+        e
+        for e in granger_results
+        if e.get("predictor") == predictor_raw and e.get("direction") == "forward"
+    ]
+    if not forward_entries:
+        return None
+    return any(e.get("significant", False) for e in forward_entries)
+
+
+# ---------------------------------------------------------------------------
+# Alpha Validation 오케스트레이션
+# ---------------------------------------------------------------------------
+
+# 5개 Predictor 설정
+_ALPHA_PREDICTOR_CONFIGS: list[dict[str, Any]] = [
+    {"col": "news_sentiment_mean_lag1", "threshold": 0, "inverted": False},
+    {"col": "fng_value_lag1", "threshold": 50, "inverted": False},
+    {"col": "vix_lag1", "threshold": 24, "inverted": True},
+    {"col": "full_hybrid_index_score_lag1", "threshold": 50, "inverted": False},
+    {"col": "core_hybrid_index_score_lag1", "threshold": 50, "inverted": False},
+]
+
+
+def _sanitize_nan(obj: Any) -> Any:
+    """float NaN을 None으로 변환하여 JSON 직렬화 안전성을 확보한다.
+
+    Python json.dumps는 NaN을 출력하지만 strict JSON 표준에서는 유효하지 않다.
+    외부 시스템(Supabase, API 등) 연동 시 파싱 실패를 방지한다.
+    """
+    if isinstance(obj, float) and math.isnan(obj):
+        return None
+    if isinstance(obj, dict):
+        return {k: _sanitize_nan(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_nan(item) for item in obj]
+    return obj
+
+
+def run_alpha_validation(
+    df: pd.DataFrame,
+    stationarity_results: dict[str, Any] | None = None,
+    granger_results: list[dict[str, Any]] | None = None,
+    granger_executed: bool = False,
+) -> dict[str, Any]:
+    """Alpha Validation을 실행한다.
+
+    pipeline.py에서 compute_hybrid_indices 완료 후, lag1 컬럼 생성 후에 호출.
+    stationarity_results와 granger_results는 run_statistical_tests의 반환값에서 추출.
+
+    Returns:
+        {"hit_rates": [...], "correlations": [...], "backtest": [...], "walk_forward": {...}}
+    """
+    import dataclasses
+
+    hit_rates: list[dict[str, Any]] = []
+    backtest_results: list[dict[str, Any]] = []
+
+    for cfg in _ALPHA_PREDICTOR_CONFIGS:
+        col = cfg["col"]
+        threshold = cfg["threshold"]
+        inverted = cfg["inverted"]
+
+        # VIX 전 행 NaN → skip
+        if col not in df.columns or df[col].isna().all():
+            continue
+
+        # Granger 신뢰도 플래그 결정
+        granger_raw = _PREDICTOR_TO_GRANGER_RAW.get(col)
+        if not granger_executed or granger_results is None or granger_raw is None:
+            granger_sig = None
+        else:
+            granger_sig = _is_granger_significant(granger_results, granger_raw)
+
+        # Hit Rate
+        hr = compute_hit_rate(
+            df, col, threshold, inverted=inverted, granger_significant=granger_sig
+        )
+        hit_rates.append(dataclasses.asdict(hr))
+
+        # Backtest
+        bt = compute_backtest(
+            df, col, threshold, inverted=inverted, granger_significant=granger_sig
+        )
+        backtest_results.append(dataclasses.asdict(bt))
+
+    # Correlations: predictor vs btc_log_return + predictor 간 상관 (Req 3.4, 3.5)
+    available_predictors: list[str] = []
+    for cfg in _ALPHA_PREDICTOR_CONFIGS:
+        col = cfg["col"]
+        if col not in df.columns or df[col].isna().all():
+            continue
+        available_predictors.append(col)
+
+    corr_pairs: list[tuple[str, str]] = []
+    # (1) predictor vs btc_log_return
+    for col in available_predictors:
+        corr_pairs.append((col, "btc_log_return"))
+    # (2) predictor 간 상관 — 다중공선성 평가용 (Req 3.5)
+    for i, col_a in enumerate(available_predictors):
+        for col_b in available_predictors[i + 1 :]:
+            corr_pairs.append((col_a, col_b))
+
+    corr_results = compute_correlations(df, corr_pairs, stationarity_results)
+    correlations = [dataclasses.asdict(c) for c in corr_results]
+
+    # Walk-Forward: full + core 양쪽 실행
+    walk_forward: dict[str, Any] = {}
+    for idx_name in ("full", "core"):
+        wf = walk_forward_validate(df, index_name=idx_name)
+        if wf is not None:
+            walk_forward[idx_name] = dataclasses.asdict(wf)
+
+    return _sanitize_nan(
+        {
+            "hit_rates": hit_rates,
+            "correlations": correlations,
+            "backtest": backtest_results,
+            "walk_forward": walk_forward,
+        }
+    )
+
+
 __all__ = [
     "ADF_TARGETS",
+    "BacktestResult",
+    "CorrelationResult",
     "GRANGER_PAIRS",
     "GRANGER_PAIRS_CROSS",
     "GRANGER_PAIRS_REVERSE",
     "GRANGER_PAIRS_TARGET",
+    "HitRateResult",
     "MIN_ROWS_FOR_ADF",
     "MIN_ROWS_FOR_GRANGER",
+    "WalkForwardFoldResult",
+    "WalkForwardResult",
+    "_ALPHA_PREDICTOR_CONFIGS",
+    "_PREDICTOR_TO_GRANGER_RAW",
     "_apply_bh_correction",
     "_calendar_span",
     "_ensure_stationary",
+    "_is_granger_significant",
     "_max_consecutive_gap",
     "_run_granger_all_lags",
     "_run_stationarity",
+    "_sanitize_nan",
     "_select_optimal_lag",
+    "compute_backtest",
+    "compute_correlations",
+    "compute_hit_rate",
+    "run_alpha_validation",
     "run_statistical_tests",
+    "walk_forward_validate",
 ]
