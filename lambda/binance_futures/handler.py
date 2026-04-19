@@ -60,17 +60,48 @@ def _day(ts_ms: int) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _fetch_funding(start_ms: int) -> list[dict]:
-    params = {"symbol": SYMBOL, "startTime": str(start_ms), "limit": "1000"}
-    try:
-        rows = _get(FUNDING_URL, params)
-        return rows if isinstance(rows, list) else []
-    except urllib.error.HTTPError as exc:
-        logger.error("funding HTTP %s: %s", exc.code, exc.reason)
-        return []
-    except Exception as exc:
-        logger.error("funding error: %s", exc)
-        return []
+def _fetch_funding(start_ms: int, end_ms: int) -> list[dict]:
+    """펀딩비 이력을 페이지네이션으로 완전 수집합니다.
+
+    단일 호출 limit=1000(≈333일) 절단 문제를 방지하기 위해
+    last fundingTime+1 커서 방식으로 end_ms까지 모든 레코드를 수집합니다.
+    """
+    all_rows: list[dict] = []
+    cursor_ms = start_ms
+
+    for _ in range(10):
+        params = {
+            "symbol": SYMBOL,
+            "startTime": str(cursor_ms),
+            "endTime": str(end_ms),
+            "limit": "1000",
+        }
+        try:
+            page = _get(FUNDING_URL, params)
+        except urllib.error.HTTPError as exc:
+            logger.error("funding HTTP %s: %s", exc.code, exc.reason)
+            break
+        except Exception as exc:
+            logger.error("funding error: %s", exc)
+            break
+
+        if not isinstance(page, list) or not page:
+            break
+
+        all_rows.extend(page)
+
+        if len(page) < 1000:
+            break
+
+        last_ts = page[-1].get("fundingTime")
+        if last_ts is None:
+            break
+        next_cursor = int(last_ts) + 1
+        if next_cursor >= end_ms:
+            break
+        cursor_ms = next_cursor
+
+    return all_rows
 
 
 def _fetch_oi(limit: int) -> list[dict]:
@@ -158,9 +189,13 @@ def lambda_handler(event: dict, context: object) -> dict:
     today = datetime.now(timezone.utc).date()
     start = today - timedelta(days=lookback_days + 1)
     start_ms = _ms(datetime(start.year, start.month, start.day, tzinfo=timezone.utc))
+    end_ms = (
+        _ms(datetime(today.year, today.month, today.day, tzinfo=timezone.utc) + timedelta(days=1))
+        - 1
+    )
     limit = lookback_days + 2
 
-    funding_rows = _fetch_funding(start_ms)
+    funding_rows = _fetch_funding(start_ms, end_ms)
     oi_rows = _fetch_oi(limit)
     lsr_rows = _fetch_lsr(limit)
 

@@ -7,10 +7,16 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
+from morning_brief.analysis.sentiment_join.quality import (
+    calculate_coverage_ratio,
+    quality_status_for_ratio,
+)
 from morning_brief.data.sources.http_client import get_json_with_retry, get_list_with_retry
 from morning_brief.logging_utils import log_structured
 
 logger = logging.getLogger(__name__)
+
+SUPABASE_FUTURES_TABLE = "btc_futures_daily"
 
 BINANCE_FUNDING_URL = "https://fapi.binance.com/fapi/v1/fundingRate"
 BINANCE_OI_URL = "https://fapi.binance.com/futures/data/openInterestHist"
@@ -33,28 +39,57 @@ def _ms_timestamp(dt: datetime) -> int:
 # ---------------------------------------------------------------------------
 
 
-def _fetch_funding_rate_history(start_ms: int) -> list[dict]:
-    try:
-        return get_list_with_retry(
-            BINANCE_FUNDING_URL,
-            params={
-                "symbol": BINANCE_SYMBOL,
-                "startTime": str(start_ms),
-                "limit": str(BINANCE_MAX_LIMIT),
-            },
-            provider="binance_futures",
-            timeout=20,
-        )
-    except Exception as exc:
-        log_structured(
-            logger,
-            event="source.failed",
-            message="Binance 펀딩비 이력 수집에 실패했습니다.",
-            level=logging.WARNING,
-            source="binance_funding",
-            reason=str(exc),
-        )
-        return []
+def _fetch_funding_rate_history(start_ms: int, end_ms: int) -> list[dict]:
+    """Binance 펀딩비 이력을 페이지네이션으로 완전 수집합니다.
+
+    단일 호출 limit=1000(≈333일)으로 잘리는 문제를 방지하기 위해
+    last fundingTime+1 커서 방식으로 end_ms까지 모든 레코드를 수집합니다.
+    730일 × 3건/일 = 2190건 → 최대 3페이지.
+    """
+    all_rows: list[dict] = []
+    cursor_ms = start_ms
+
+    for _ in range(10):
+        try:
+            page = get_list_with_retry(
+                BINANCE_FUNDING_URL,
+                params={
+                    "symbol": BINANCE_SYMBOL,
+                    "startTime": str(cursor_ms),
+                    "endTime": str(end_ms),
+                    "limit": str(BINANCE_MAX_LIMIT),
+                },
+                provider="binance_futures",
+                timeout=20,
+            )
+        except Exception as exc:
+            log_structured(
+                logger,
+                event="source.failed",
+                message="Binance 펀딩비 이력 수집에 실패했습니다.",
+                level=logging.WARNING,
+                source="binance_funding",
+                reason=str(exc),
+            )
+            break
+
+        if not isinstance(page, list) or not page:
+            break
+
+        all_rows.extend(page)
+
+        if len(page) < BINANCE_MAX_LIMIT:
+            break
+
+        last_ts = page[-1].get("fundingTime")
+        if last_ts is None:
+            break
+        next_cursor = int(last_ts) + 1
+        if next_cursor >= end_ms:
+            break
+        cursor_ms = next_cursor
+
+    return all_rows
 
 
 def _fetch_oi_history(limit_days: int) -> list[dict]:
@@ -395,6 +430,141 @@ def _empty_futures_frame(dates: list[str]) -> pd.DataFrame:
     )
 
 
+OI_LSR_SIGNAL_WINDOW = 30
+
+
+def _metric_quality(days: int, requested_days: int) -> tuple[str, list[str]]:
+    ratio = calculate_coverage_ratio(days, requested_days)
+    reasons: list[str] = []
+    if days == 0:
+        reasons.append("no_history")
+    if quality_status_for_ratio(ratio) != "ok":
+        reasons.append("coverage_below_threshold")
+    return quality_status_for_ratio(ratio), reasons
+
+
+def _recent_window_quality(
+    grid: pd.DataFrame,
+    column: str,
+    dates: list[str],
+    signal_window: int,
+) -> tuple[str, list[str], float]:
+    """최근 signal_window일 윈도우 기준 quality 판정.
+
+    Binance OI/LSR API는 최근 30일만 보존하므로, 전체 lookback 대비 coverage ratio 대신
+    '마지막 30일이 완전한가'를 기준으로 게이트를 판단합니다.
+    전체 커버리지는 oi_quality_status/lsr_quality_status에 진단용으로 별도 보관합니다.
+    """
+    if not dates:
+        return "degraded", ["no_history"], 0.0
+    recent_dates = set(dates[-signal_window:])
+    effective_window = len(recent_dates)
+    if column in grid.columns and "date" in grid.columns:
+        non_null_in_window = int(
+            grid[grid["date"].isin(recent_dates) & grid[column].notna()].shape[0]
+        )
+    else:
+        non_null_in_window = 0
+    ratio = calculate_coverage_ratio(non_null_in_window, effective_window)
+    reasons: list[str] = []
+    if non_null_in_window == 0:
+        reasons.append("no_history")
+    if quality_status_for_ratio(ratio) != "ok":
+        reasons.append("coverage_below_threshold")
+    return quality_status_for_ratio(ratio), reasons, ratio
+
+
+def _date_bounds(grid: pd.DataFrame, column: str) -> tuple[str | None, str | None]:
+    if column not in grid.columns or "date" not in grid.columns:
+        return None, None
+    non_null_dates = grid.loc[grid[column].notna(), "date"].astype(str)
+    if non_null_dates.empty:
+        return None, None
+    return non_null_dates.min(), non_null_dates.max()
+
+
+def _attach_futures_attrs(
+    grid: pd.DataFrame,
+    *,
+    dates: list[str],
+    source: str,
+    fallback_used: bool,
+) -> pd.DataFrame:
+    requested_days = len(dates)
+    funding_days = int(grid["funding_rate"].notna().sum())
+    oi_days = int(grid["open_interest_usd"].notna().sum())
+    lsr_days = int(grid["btc_long_short_ratio"].notna().sum())
+    funding_quality_status, funding_quality_reasons = _metric_quality(funding_days, requested_days)
+    # 전체 lookback 커버리지 (진단용)
+    oi_quality_status, oi_quality_reasons = _metric_quality(oi_days, requested_days)
+    lsr_quality_status, lsr_quality_reasons = _metric_quality(lsr_days, requested_days)
+    # 최근 30일 윈도우 커버리지 (게이트 판단용 — Binance API 30일 보존 제약 반영)
+    api_capped = requested_days > OI_LSR_SIGNAL_WINDOW
+    oi_recent_status, oi_recent_reasons, oi_recent_ratio = _recent_window_quality(
+        grid, "open_interest_usd", dates, OI_LSR_SIGNAL_WINDOW
+    )
+    lsr_recent_status, lsr_recent_reasons, lsr_recent_ratio = _recent_window_quality(
+        grid, "btc_long_short_ratio", dates, OI_LSR_SIGNAL_WINDOW
+    )
+
+    overall_quality_reasons = []
+    if oi_recent_status != "ok":
+        overall_quality_reasons.append("open_interest_history_incomplete")
+    if lsr_recent_status != "ok":
+        overall_quality_reasons.append("long_short_ratio_history_incomplete")
+    if funding_quality_status != "ok":
+        overall_quality_reasons.append("funding_history_incomplete")
+
+    funding_min, funding_max = _date_bounds(grid, "funding_rate")
+    oi_min, oi_max = _date_bounds(grid, "open_interest_usd")
+    lsr_min, lsr_max = _date_bounds(grid, "btc_long_short_ratio")
+
+    grid.attrs["fallback_used"] = fallback_used
+    grid.attrs["futures_source"] = source
+    grid.attrs["requested_days"] = requested_days
+    grid.attrs["requested_start_date"] = dates[0] if dates else None
+    grid.attrs["requested_end_date"] = dates[-1] if dates else None
+    grid.attrs["funding_days"] = funding_days
+    grid.attrs["oi_days"] = oi_days
+    grid.attrs["lsr_days"] = lsr_days
+    grid.attrs["funding_coverage_ratio"] = calculate_coverage_ratio(funding_days, requested_days)
+    grid.attrs["oi_coverage_ratio"] = calculate_coverage_ratio(oi_days, requested_days)
+    grid.attrs["lsr_coverage_ratio"] = calculate_coverage_ratio(lsr_days, requested_days)
+    grid.attrs["funding_quality_status"] = funding_quality_status
+    grid.attrs["funding_quality_reasons"] = funding_quality_reasons
+    # 전체 lookback 커버리지 — 진단 및 리포트용 (게이트에는 미사용)
+    grid.attrs["oi_quality_status"] = oi_quality_status
+    grid.attrs["oi_quality_reasons"] = oi_quality_reasons
+    grid.attrs["lsr_quality_status"] = lsr_quality_status
+    grid.attrs["lsr_quality_reasons"] = lsr_quality_reasons
+    # 최근 30일 윈도우 커버리지 — pipeline 게이트 판단에 사용
+    grid.attrs["oi_api_capped"] = api_capped
+    grid.attrs["lsr_api_capped"] = api_capped
+    grid.attrs["oi_recent_coverage_ratio"] = oi_recent_ratio
+    grid.attrs["lsr_recent_coverage_ratio"] = lsr_recent_ratio
+    grid.attrs["oi_recent_quality_status"] = oi_recent_status
+    grid.attrs["oi_recent_quality_reasons"] = oi_recent_reasons
+    grid.attrs["lsr_recent_quality_status"] = lsr_recent_status
+    grid.attrs["lsr_recent_quality_reasons"] = lsr_recent_reasons
+    grid.attrs["quality_status"] = (
+        "ok"
+        if funding_quality_status == "ok" and oi_recent_status == "ok" and lsr_recent_status == "ok"
+        else "degraded"
+    )
+    grid.attrs["quality_reasons"] = overall_quality_reasons
+    grid.attrs["returned_min_date"] = {
+        "funding_rate": funding_min,
+        "open_interest_usd": oi_min,
+        "btc_long_short_ratio": lsr_min,
+    }
+    grid.attrs["returned_max_date"] = {
+        "funding_rate": funding_max,
+        "open_interest_usd": oi_max,
+        "btc_long_short_ratio": lsr_max,
+    }
+    return grid
+
+
 def _build_grid(
     dates: list[str],
     daily_funding: dict[str, float],
@@ -406,6 +576,126 @@ def _build_grid(
     grid["open_interest_usd"] = [daily_oi.get(d, float("nan")) for d in dates]
     grid["btc_long_short_ratio"] = [daily_lsr.get(d, float("nan")) for d in dates]
     return grid
+
+
+# ---------------------------------------------------------------------------
+# Supabase 캐시 레이어
+# ---------------------------------------------------------------------------
+
+
+def _read_futures_from_supabase(
+    start_date: str,
+    end_date: str,
+) -> dict[str, dict[str, float | None]]:
+    """btc_futures_daily 테이블에서 캐시 데이터를 읽습니다.
+
+    SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY 미설정 시 빈 dict 반환.
+    테이블이 없거나 오류 시에도 빈 dict 반환 (파이프라인 계속 진행).
+    """
+    supabase_url = os.getenv("SUPABASE_URL", "").strip()
+    service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    if not supabase_url or not service_role_key:
+        return {}
+    try:
+        from supabase import create_client
+
+        client = create_client(supabase_url, service_role_key)
+        resp = (
+            client.table(SUPABASE_FUTURES_TABLE)
+            .select("date,funding_rate,open_interest_usd,btc_long_short_ratio")
+            .eq("symbol", BINANCE_SYMBOL)
+            .gte("date", start_date)
+            .lte("date", end_date)
+            .order("date")
+            .execute()
+        )
+        data = getattr(resp, "data", None)
+        if not isinstance(data, list):
+            return {}
+        return {
+            row["date"]: {
+                "funding_rate": row.get("funding_rate"),
+                "open_interest_usd": row.get("open_interest_usd"),
+                "btc_long_short_ratio": row.get("btc_long_short_ratio"),
+            }
+            for row in data
+            if isinstance(row, dict) and row.get("date")
+        }
+    except Exception as exc:
+        log_structured(
+            logger,
+            event="source.failed",
+            message="Supabase 선물 캐시 읽기 실패.",
+            level=logging.WARNING,
+            source="supabase_futures",
+            reason=str(exc),
+        )
+        return {}
+
+
+def _write_futures_to_supabase(grid: pd.DataFrame) -> None:
+    """선물 데이터를 btc_futures_daily 테이블에 upsert합니다.
+
+    SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY 미설정 시 무시.
+    오류 시 로그만 남기고 파이프라인 계속 진행.
+    """
+    supabase_url = os.getenv("SUPABASE_URL", "").strip()
+    service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    if not supabase_url or not service_role_key:
+        return
+    try:
+        import math
+
+        from supabase import create_client
+
+        client = create_client(supabase_url, service_role_key)
+        rows = []
+        for _, row in grid.iterrows():
+            fr = row["funding_rate"]
+            oi = row["open_interest_usd"]
+            lsr = row["btc_long_short_ratio"]
+            # 모든 지표가 null인 날은 저장하지 않음
+            if all(v is None or (isinstance(v, float) and math.isnan(v)) for v in (fr, oi, lsr)):
+                continue
+            rows.append(
+                {
+                    "date": str(row["date"]),
+                    "symbol": BINANCE_SYMBOL,
+                    "funding_rate": None
+                    if (fr is None or (isinstance(fr, float) and math.isnan(fr)))
+                    else float(fr),
+                    "open_interest_usd": None
+                    if (oi is None or (isinstance(oi, float) and math.isnan(oi)))
+                    else float(oi),
+                    "btc_long_short_ratio": None
+                    if (lsr is None or (isinstance(lsr, float) and math.isnan(lsr)))
+                    else float(lsr),
+                    "source": grid.attrs.get("futures_source", "binance"),
+                }
+            )
+        if not rows:
+            return
+        BATCH = 200
+        for i in range(0, len(rows), BATCH):
+            client.table(SUPABASE_FUTURES_TABLE).upsert(
+                rows[i : i + BATCH], on_conflict="date,symbol"
+            ).execute()
+        log_structured(
+            logger,
+            event="source.complete",
+            message="Supabase 선물 캐시 저장 완료.",
+            source="supabase_futures",
+            rows=len(rows),
+        )
+    except Exception as exc:
+        log_structured(
+            logger,
+            event="source.failed",
+            message="Supabase 선물 캐시 저장 실패.",
+            level=logging.WARNING,
+            source="supabase_futures",
+            reason=str(exc),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -486,9 +776,12 @@ def _invoke_futures_lambda(
         )
         return None
 
-    grid = _lambda_payload_to_grid(payload, dates)
-    grid.attrs["fallback_used"] = True
-    grid.attrs["futures_source"] = "lambda"
+    grid = _attach_futures_attrs(
+        _lambda_payload_to_grid(payload, dates),
+        dates=dates,
+        source="lambda",
+        fallback_used=True,
+    )
     log_structured(
         logger,
         event="source.complete",
@@ -498,6 +791,7 @@ def _invoke_futures_lambda(
         oi_days=int(grid["open_interest_usd"].notna().sum()),
         lsr_days=int(grid["btc_long_short_ratio"].notna().sum()),
     )
+    _write_futures_to_supabase(grid)
     return grid
 
 
@@ -546,13 +840,47 @@ def fetch_futures_data(lookback_days: int, futures_lambda_arn: str = "") -> pd.D
         lookback_days=lookback_days,
     )
 
+    # --- 0차: Supabase 캐시 확인 (모든 날짜가 캐시에 있으면 API 호출 생략) ---
+    cached = _read_futures_from_supabase(dates[0], dates[-1])
+    if len(cached) >= len(dates) and all(d in cached for d in dates):
+        daily_funding = {
+            d: float(val) for d, v in cached.items() if (val := v.get("funding_rate")) is not None
+        }
+        daily_oi = {
+            d: float(val)
+            for d, v in cached.items()
+            if (val := v.get("open_interest_usd")) is not None
+        }
+        daily_lsr = {
+            d: float(val)
+            for d, v in cached.items()
+            if (val := v.get("btc_long_short_ratio")) is not None
+        }
+        grid = _attach_futures_attrs(
+            _build_grid(dates, daily_funding, daily_oi, daily_lsr),
+            dates=dates,
+            source="supabase",
+            fallback_used=False,
+        )
+        log_structured(
+            logger,
+            event="source.complete",
+            message="Supabase 캐시에서 선물 데이터를 로드했습니다.",
+            source="supabase_futures",
+            cached_days=len(cached),
+            funding_days=int(grid["funding_rate"].notna().sum()),
+            oi_days=int(grid["open_interest_usd"].notna().sum()),
+            lsr_days=int(grid["btc_long_short_ratio"].notna().sum()),
+        )
+        return grid
+
     # --- 1차: 로컬이거나 Lambda ARN 없으면 Binance fapi 직접 시도 ---
     funding_rows: list[dict] = []
     oi_rows: list[dict] = []
     lsr_rows: list[dict] = []
 
     if use_binance_direct:
-        funding_rows = _fetch_funding_rate_history(start_ms)
+        funding_rows = _fetch_funding_rate_history(start_ms, end_ms)
         oi_rows = _fetch_oi_history(lookback_days + 2)
         try:
             lsr_rows = _fetch_long_short_ratio(lookback_days + 2)
@@ -612,18 +940,19 @@ def fetch_futures_data(lookback_days: int, futures_lambda_arn: str = "") -> pd.D
                 reason="all_requests_failed",
             )
             grid = _empty_futures_frame(dates)
-            grid.attrs["fallback_used"] = False
-            grid.attrs["futures_source"] = "none"
-            return grid
+            return _attach_futures_attrs(grid, dates=dates, source="none", fallback_used=False)
 
-        grid = _build_grid(
-            dates,
-            _aggregate_bybit_daily_funding(bybit_funding),
-            _extract_bybit_daily_oi(bybit_oi, bybit_closes),
-            _extract_bybit_daily_lsr(bybit_lsr),
+        grid = _attach_futures_attrs(
+            _build_grid(
+                dates,
+                _aggregate_bybit_daily_funding(bybit_funding),
+                _extract_bybit_daily_oi(bybit_oi, bybit_closes),
+                _extract_bybit_daily_lsr(bybit_lsr),
+            ),
+            dates=dates,
+            source="bybit",
+            fallback_used=True,
         )
-        grid.attrs["fallback_used"] = True
-        grid.attrs["futures_source"] = "bybit"
         log_structured(
             logger,
             event="source.complete",
@@ -632,18 +961,24 @@ def fetch_futures_data(lookback_days: int, futures_lambda_arn: str = "") -> pd.D
             funding_days=int(grid["funding_rate"].notna().sum()),
             oi_days=int(grid["open_interest_usd"].notna().sum()),
             lsr_days=int(grid["btc_long_short_ratio"].notna().sum()),
+            oi_quality_status=grid.attrs.get("oi_quality_status"),
+            lsr_quality_status=grid.attrs.get("lsr_quality_status"),
         )
+        _write_futures_to_supabase(grid)
         return grid
 
     # --- Binance 성공 경로 ---
-    grid = _build_grid(
-        dates,
-        _aggregate_daily_funding(funding_rows),
-        _extract_daily_oi(oi_rows),
-        _extract_daily_long_short_ratio(lsr_rows),
+    grid = _attach_futures_attrs(
+        _build_grid(
+            dates,
+            _aggregate_daily_funding(funding_rows),
+            _extract_daily_oi(oi_rows),
+            _extract_daily_long_short_ratio(lsr_rows),
+        ),
+        dates=dates,
+        source="binance",
+        fallback_used=False,
     )
-    grid.attrs["fallback_used"] = False
-    grid.attrs["futures_source"] = "binance"
 
     log_structured(
         logger,
@@ -653,7 +988,10 @@ def fetch_futures_data(lookback_days: int, futures_lambda_arn: str = "") -> pd.D
         funding_days=int(grid["funding_rate"].notna().sum()),
         oi_days=int(grid["open_interest_usd"].notna().sum()),
         lsr_days=int(grid["btc_long_short_ratio"].notna().sum()),
+        oi_quality_status=grid.attrs.get("oi_quality_status"),
+        lsr_quality_status=grid.attrs.get("lsr_quality_status"),
     )
+    _write_futures_to_supabase(grid)
     return grid
 
 

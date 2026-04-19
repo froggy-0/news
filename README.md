@@ -97,6 +97,7 @@
 
 - fng_value_lag1을 부호 앵커로 사용하여 두 지수의 방향성 통일
 - 모든 feature는 Lag-1 값을 사용하여 look-ahead bias 방지
+- `full`은 항상 저장되지만, ETF history가 `btc_etf_gold`에서 충분히 확보되지 않거나 futures OI/LSR coverage가 낮으면 일부 feature를 제외한 채 `degraded` 상태로 기록됩니다.
 
 ### Alpha Validation
 
@@ -112,6 +113,7 @@
 5개 Predictor: `news_sentiment_mean_lag1`(0), `fng_value_lag1`(50), `vix_lag1`(24, 반전), `full_hybrid_index_score_lag1`(50), `core_hybrid_index_score_lag1`(50)
 
 모든 결과는 Parquet 메타데이터(`sentiment_join_stats`)에 JSON으로 저장됩니다.
+`structured_sources`에는 `btc_etf`와 `futures`의 source mode, coverage, quality status가 함께 저장됩니다.
 
 ### 실행
 
@@ -132,6 +134,18 @@ python scripts/inspect_sentiment_join_parquet.py data/sentiment_join/
 # 과거 뉴스 감성 데이터 수집 (CoinDesk + Alpaca, 최대 460일)
 python scripts/backfill_news_sentiment.py --start 2025-01-01 --end 2026-04-18
 ```
+
+### BTC 선물 OI/LSR 백필
+
+```bash
+# 로컬 전용: Coinalyze daily history로 OI/LSR 백필
+python scripts/backfill_btc_futures.py --provider coinalyze --start 2025-04-24 --end 2026-04-18
+```
+
+- `COINALYZE_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` 환경변수가 필요합니다.
+- Coinalyze OI는 기존 Binance daily 계약과 맞추기 위해 `date + 1일`로 저장합니다.
+- ETF history는 `btc_etf_gold`에 의존하며, 최신 스냅샷 fallback은 historical backfill로 취급하지 않습니다.
+- futures는 funding / OI / LSR를 분리 평가하며, OI/LSR coverage 미달 시 분석 입력에서 제외됩니다.
 
 ## 프론트엔드
 

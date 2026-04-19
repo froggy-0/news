@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -104,3 +105,49 @@ def test_print_rich_report_includes_filename_and_metadata(tmp_path: Path) -> Non
     assert path.name in output
     assert "Metadata" in output
     assert "Column Summary" in output
+
+
+def test_render_report_includes_structured_source_summary(tmp_path: Path) -> None:
+    df = pd.DataFrame(
+        {
+            "date": ["2026-04-10"],
+            "news_sentiment_mean": [0.1],
+            "n_articles": pd.array([3], dtype="Int64"),
+            "is_outlier": [False],
+        }
+    )
+    path = save_parquet(
+        df,
+        tmp_path,
+        "20260410",
+        stats_metadata=json.dumps(
+            {
+                "run_id": "sentiment-join-20260410",
+                "granger_executed": False,
+                "granger_results": [],
+                "outlier_filtered_count": 0,
+                "outlier_filtered_ratio": 0.0,
+                "hybrid_indices": {},
+                "structured_sources": {
+                    "btc_etf": {
+                        "mode": "latest_snapshot_fallback",
+                        "quality_status": "degraded",
+                        "coverage": {"ratio": 0.1},
+                    },
+                    "futures": {
+                        "mode": "binance",
+                        "quality_status": "degraded",
+                        "oi_quality_status": "degraded",
+                        "lsr_quality_status": "degraded",
+                        "coverage": {"oi_ratio": 0.1, "lsr_ratio": 0.0},
+                    },
+                },
+            }
+        ).encode(),
+    )
+
+    report = render_report([inspect_parquet(path)])
+
+    assert "btc_etf_mode" in report
+    assert "latest_snapshot_fallback" in report
+    assert "futures_oi_quality_status" in report

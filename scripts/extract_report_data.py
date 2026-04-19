@@ -38,9 +38,12 @@ def _render_hybrid_block(index_name: str, entry: dict[str, Any]) -> None:
     pca = entry.get("pca_summary", {}) or {}
     vif = entry.get("vif_diagnostics", []) or []
     coverage = entry.get("coverage", {}) or {}
+    excluded = entry.get("excluded_features", []) or []
 
     print(f"\n[{index_name.upper()} hybrid index]")
     print(f"  status: {pca.get('status')}")
+    print(f"  quality_status: {entry.get('quality_status')}")
+    print(f"  quality_reasons: {entry.get('quality_reasons')}")
     print(f"  selected_features: {pca.get('selected_features')}")
     print(f"  n_components: {pca.get('n_components')}")
     print(f"  explained_variance: {pca.get('explained_variance')}")
@@ -54,10 +57,33 @@ def _render_hybrid_block(index_name: str, entry: dict[str, Any]) -> None:
         f"ratio={coverage.get('ratio')}"
     )
     print(f"  signal_label: {entry.get('signal_label')} (z={entry.get('signal_zscore')})")
+    if excluded:
+        print(f"  excluded_features: {excluded}")
     if vif:
         print("  VIF:")
         for v in vif:
             print(f"    {v.get('feature')}: {v.get('vif', v.get('VIF', 'N/A'))}")
+
+
+def _render_structured_source_block(source_name: str, entry: dict[str, Any]) -> None:
+    coverage = entry.get("coverage", {}) or {}
+
+    print(f"\n[{source_name}]")
+    print(f"  mode: {entry.get('mode')}")
+    print(f"  quality_status: {entry.get('quality_status')}")
+    print(f"  quality_reasons: {entry.get('quality_reasons')}")
+    print(f"  coverage: {coverage}")
+    for key in (
+        "funding_quality_status",
+        "oi_quality_status",
+        "lsr_quality_status",
+        "requested_start_date",
+        "requested_end_date",
+        "returned_min_date",
+        "returned_max_date",
+    ):
+        if key in entry:
+            print(f"  {key}: {entry.get(key)}")
 
 
 def main() -> None:
@@ -89,6 +115,18 @@ def main() -> None:
         print("Granger 검정 미실행 (행 수 부족 또는 오류)")
     print(f"  granger_eligible_rows: {stats.get('granger_eligible_rows')}")
     print(f"  granger_executed: {stats.get('granger_executed')}")
+
+    print(f"\n{'=' * 60}")
+    print("1.5 Structured Source Coverage")
+    print("=" * 60)
+    structured_sources = stats.get("structured_sources", {})
+    if isinstance(structured_sources, dict) and structured_sources:
+        for source_name in ("btc_etf", "futures"):
+            entry = structured_sources.get(source_name)
+            if isinstance(entry, dict):
+                _render_structured_source_block(source_name, entry)
+    else:
+        print("structured_sources 메타데이터 없음")
 
     print(f"\n{'=' * 60}")
     print("2. 시계열 데이터 미리보기 (차트 입력)")

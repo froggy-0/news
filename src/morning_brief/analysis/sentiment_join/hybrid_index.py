@@ -7,6 +7,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from morning_brief.analysis.sentiment_join.quality import quality_status_for_ratio
 from morning_brief.logging_utils import log_structured
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,13 @@ VIF_THRESHOLD_FULL = 10.0
 MIN_PCA_FEATURES = 2
 MIN_PCA_ROWS = 10
 TARGET_EXPLAINED_VARIANCE = 0.80
+FULL_EXPANSION_FEATURES = frozenset(
+    {
+        "btc_long_short_ratio_lag1",
+        "etf_net_inflow_usd_lag1",
+        "vix_lag1",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -116,7 +124,47 @@ def _empty_diagnostics(status: str, **extra: Any) -> dict[str, Any]:
         "vif_diagnostics": [],
         "pca_summary": {"status": status, **extra},
         "coverage": extra.get("coverage", {}),
+        "excluded_features": extra.get("excluded_features", []),
+        "quality_status": extra.get("quality_status", "degraded"),
+        "quality_reasons": extra.get("quality_reasons", []),
     }
+
+
+def _candidate_exclusions(
+    df: pd.DataFrame,
+    candidates: list[str],
+    feature_exclusion_reasons: dict[str, str] | None,
+) -> list[dict[str, str]]:
+    exclusions: list[dict[str, str]] = []
+    for feature in candidates:
+        if feature_exclusion_reasons and feature in feature_exclusion_reasons:
+            exclusions.append({"feature": feature, "reason": feature_exclusion_reasons[feature]})
+            continue
+        if feature not in df.columns:
+            exclusions.append({"feature": feature, "reason": "missing_column"})
+            continue
+        if not pd.to_numeric(df[feature], errors="coerce").notna().any():
+            exclusions.append({"feature": feature, "reason": "all_nan_or_missing"})
+    return exclusions
+
+
+def _quality_summary(
+    *,
+    spec: IndexSpec,
+    pca_status: str,
+    coverage_ratio: float,
+    selected_features: list[str],
+) -> tuple[str, list[str]]:
+    reasons: list[str] = []
+    if pca_status not in {"ok", "ok_pre_fitted"}:
+        reasons.append(f"pca_status:{pca_status}")
+    if quality_status_for_ratio(coverage_ratio) != "ok":
+        reasons.append("coverage_below_threshold")
+    if spec.name == "full" and not any(
+        feature in selected_features for feature in FULL_EXPANSION_FEATURES
+    ):
+        reasons.append("missing_full_expansion_features")
+    return ("ok" if not reasons else "degraded"), reasons
 
 
 def _minmax_score(values: np.ndarray) -> tuple[np.ndarray, float, float]:
@@ -136,6 +184,7 @@ def _compute_single_index(
     spec: IndexSpec,
     total_rows: int,
     *,
+    feature_exclusion_reasons: dict[str, str] | None = None,
     pre_fitted_scaler: Any | None = None,
     pre_fitted_pca: Any | None = None,
     pre_fitted_pc1_min: float | None = None,
@@ -167,7 +216,14 @@ def _compute_single_index(
     if _pre_fitted:
         # ── pre-fitted 모드: train에서 선택된 feature 목록 사용, fit 건너뜀 ──
         selected = [f for f in pre_fitted_features if f in df.columns]  # type: ignore[union-attr]
+        excluded_features = _candidate_exclusions(df, spec.candidates, feature_exclusion_reasons)
         if len(selected) < MIN_PCA_FEATURES:
+            quality_status, quality_reasons = _quality_summary(
+                spec=spec,
+                pca_status="insufficient_features",
+                coverage_ratio=0.0,
+                selected_features=selected,
+            )
             return (
                 raw_series,
                 score_series,
@@ -175,6 +231,9 @@ def _compute_single_index(
                     "insufficient_features",
                     available_features=selected,
                     coverage={"rows_total": total_rows, "rows_used": 0, "ratio": 0.0},
+                    excluded_features=excluded_features,
+                    quality_status=quality_status,
+                    quality_reasons=quality_reasons,
                 ),
             )
 
@@ -185,6 +244,12 @@ def _compute_single_index(
         df_clean = work.loc[clean_idx]
 
         if len(df_clean) == 0:
+            quality_status, quality_reasons = _quality_summary(
+                spec=spec,
+                pca_status="insufficient_rows",
+                coverage_ratio=0.0,
+                selected_features=selected,
+            )
             return (
                 raw_series,
                 score_series,
@@ -192,6 +257,9 @@ def _compute_single_index(
                     "insufficient_rows",
                     rows=0,
                     coverage={"rows_total": total_rows, "rows_used": 0, "ratio": 0.0},
+                    excluded_features=excluded_features,
+                    quality_status=quality_status,
+                    quality_reasons=quality_reasons,
                 ),
             )
 
@@ -217,6 +285,13 @@ def _compute_single_index(
         raw_series.loc[clean_idx] = raw_pc1
         score_series.loc[clean_idx] = score_arr
 
+        coverage_ratio = round(len(df_clean) / total_rows, 4) if total_rows else 0.0
+        quality_status, quality_reasons = _quality_summary(
+            spec=spec,
+            pca_status="ok_pre_fitted",
+            coverage_ratio=coverage_ratio,
+            selected_features=selected,
+        )
         diagnostics: dict[str, Any] = {
             "vif_diagnostics": [],
             "pca_summary": {
@@ -229,8 +304,11 @@ def _compute_single_index(
             "coverage": {
                 "rows_total": total_rows,
                 "rows_used": len(df_clean),
-                "ratio": round(len(df_clean) / total_rows, 4) if total_rows else 0.0,
+                "ratio": coverage_ratio,
             },
+            "excluded_features": excluded_features,
+            "quality_status": quality_status,
+            "quality_reasons": quality_reasons,
         }
         return raw_series, score_series, diagnostics
 
@@ -243,6 +321,7 @@ def _compute_single_index(
         for col in spec.candidates
         if col in df.columns and pd.to_numeric(df[col], errors="coerce").notna().any()
     ]
+    excluded_features = _candidate_exclusions(df, spec.candidates, feature_exclusion_reasons)
     if len(available) < MIN_PCA_FEATURES:
         log_structured(
             logger,
@@ -252,6 +331,12 @@ def _compute_single_index(
             index=spec.name,
             available_features=available,
         )
+        quality_status, quality_reasons = _quality_summary(
+            spec=spec,
+            pca_status="insufficient_features",
+            coverage_ratio=0.0,
+            selected_features=available,
+        )
         return (
             raw_series,
             score_series,
@@ -259,6 +344,9 @@ def _compute_single_index(
                 "insufficient_features",
                 available_features=available,
                 coverage={"rows_total": total_rows, "rows_used": 0, "ratio": 0.0},
+                excluded_features=excluded_features,
+                quality_status=quality_status,
+                quality_reasons=quality_reasons,
             ),
         )
 
@@ -278,6 +366,13 @@ def _compute_single_index(
             rows=len(df_clean),
             min_required=MIN_PCA_ROWS,
         )
+        coverage_ratio = round(len(df_clean) / total_rows, 4) if total_rows else 0.0
+        quality_status, quality_reasons = _quality_summary(
+            spec=spec,
+            pca_status="insufficient_rows",
+            coverage_ratio=coverage_ratio,
+            selected_features=available,
+        )
         return (
             raw_series,
             score_series,
@@ -287,14 +382,23 @@ def _compute_single_index(
                 coverage={
                     "rows_total": total_rows,
                     "rows_used": len(df_clean),
-                    "ratio": round(len(df_clean) / total_rows, 4) if total_rows else 0.0,
+                    "ratio": coverage_ratio,
                 },
+                excluded_features=excluded_features,
+                quality_status=quality_status,
+                quality_reasons=quality_reasons,
             ),
         )
 
     selected, vif_diagnostics = _select_low_vif_features(
         df_clean, available, spec.vif_threshold, spec.name
     )
+    removed_by_vif = [
+        {"feature": feature, "reason": "vif_threshold"}
+        for feature in available
+        if feature not in selected
+    ]
+    excluded_features = excluded_features + removed_by_vif
     if len(selected) < MIN_PCA_FEATURES:
         log_structured(
             logger,
@@ -303,6 +407,12 @@ def _compute_single_index(
             level=logging.WARNING,
             index=spec.name,
             remaining_features=selected,
+        )
+        quality_status, quality_reasons = _quality_summary(
+            spec=spec,
+            pca_status="insufficient_features_after_vif",
+            coverage_ratio=0.0,
+            selected_features=selected,
         )
         return (
             raw_series,
@@ -318,6 +428,9 @@ def _compute_single_index(
                     "rows_used": 0,
                     "ratio": 0.0,
                 },
+                "excluded_features": excluded_features,
+                "quality_status": quality_status,
+                "quality_reasons": quality_reasons,
             },
         )
 
@@ -351,6 +464,13 @@ def _compute_single_index(
     score_series.loc[clean_idx] = score
 
     explained_variance = float(cumvar[n_components - 1])
+    coverage_ratio = round(len(df_clean) / total_rows, 4) if total_rows else 0.0
+    quality_status, quality_reasons = _quality_summary(
+        spec=spec,
+        pca_status="ok",
+        coverage_ratio=coverage_ratio,
+        selected_features=selected,
+    )
 
     log_structured(
         logger,
@@ -381,8 +501,11 @@ def _compute_single_index(
         "coverage": {
             "rows_total": total_rows,
             "rows_used": len(df_clean),
-            "ratio": round(len(df_clean) / total_rows, 4) if total_rows else 0.0,
+            "ratio": coverage_ratio,
         },
+        "excluded_features": excluded_features,
+        "quality_status": quality_status,
+        "quality_reasons": quality_reasons,
         # Walk-Forward에서 재사용할 fitted 객체 (JSON 직렬화 대상 아님)
         "_fitted_scaler": scaler,
         "_fitted_pca": pca_final,
@@ -390,7 +513,11 @@ def _compute_single_index(
     return raw_series, score_series, diagnostics
 
 
-def compute_hybrid_indices(df: pd.DataFrame) -> pd.DataFrame:
+def compute_hybrid_indices(
+    df: pd.DataFrame,
+    *,
+    feature_exclusion_reasons: dict[str, str] | None = None,
+) -> pd.DataFrame:
     """full / core 두 세트의 하이브리드 지수와 0~100 score를 계산합니다.
 
     생성 컬럼:
@@ -408,7 +535,12 @@ def compute_hybrid_indices(df: pd.DataFrame) -> pd.DataFrame:
     diagnostics: dict[str, dict[str, Any]] = {}
 
     for spec in INDEX_SPECS:
-        raw_series, score_series, index_diag = _compute_single_index(df, spec, total_rows)
+        raw_series, score_series, index_diag = _compute_single_index(
+            df,
+            spec,
+            total_rows,
+            feature_exclusion_reasons=feature_exclusion_reasons,
+        )
         result[f"{spec.name}_hybrid_index"] = raw_series
         result[f"{spec.name}_hybrid_index_score"] = score_series
         diagnostics[spec.name] = index_diag
