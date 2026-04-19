@@ -49,6 +49,12 @@ MASTER_SCHEMA = pa.DataFrameSchema(
         "vix_lag1": pa.Column(float, nullable=True),
         # Req 8: BTC 방향 라벨
         "btc_direction_label": pa.Column(nullable=True),
+        # Multi-horizon forward targets (last k rows are NaN by design — lookahead 차단)
+        "btc_fwd_ret_1d": pa.Column(float, nullable=True),
+        "btc_fwd_ret_3d": pa.Column(float, nullable=True),
+        "btc_fwd_ret_7d": pa.Column(float, nullable=True),
+        "btc_fwd_vol_5d": pa.Column(float, pa.Check.ge(0), nullable=True),
+        "btc_large_move_3d": pa.Column("Int64", pa.Check.isin([0, 1]), nullable=True),
         # §4 v4: full / core 이중 하이브리드 지수 + 0~100 score.
         # 이전 단일 `hybrid_index` 컬럼은 v4에서 삭제되었습니다.
         "full_hybrid_index": pa.Column(float, nullable=True),
@@ -75,7 +81,7 @@ MASTER_SCHEMA = pa.DataFrameSchema(
 
 def validate_master(df: pd.DataFrame) -> None:
     try:
-        for column in ("n_articles", "fng_value"):
+        for column in ("n_articles", "fng_value", "btc_large_move_3d"):
             if str(df[column].dtype) != "Int64":
                 raise SchemaError(
                     schema=MASTER_SCHEMA,

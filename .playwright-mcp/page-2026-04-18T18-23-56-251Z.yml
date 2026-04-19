@@ -1,0 +1,16 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - tablist [ref=e4]:
+      - tab "Balances" [selected] [ref=e5] [cursor=pointer]
+      - tab "Historical" [disabled]
+      - tab "Ripcord" [disabled]
+      - tab "FAQ" [disabled]
+    - tabpanel "Balances" [ref=e7]:
+      - generic [ref=e9]:
+        - button [disabled]
+    - contentinfo [ref=e14]:
+      - text: POWERED BY
+      - link "The Network Firm" [ref=e15] [cursor=pointer]:
+        - /url: https://www.thenetworkfirm.com
+        - img "The Network Firm" [ref=e16]
+  - alert [ref=e17]

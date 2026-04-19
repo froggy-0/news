@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -11,6 +11,24 @@ from morning_brief.analysis.sentiment_join.quality import quality_status_for_rat
 from morning_brief.logging_utils import log_structured
 
 logger = logging.getLogger(__name__)
+
+ScalerKind = Literal["standard", "robust"]
+
+
+def make_scaler(kind: ScalerKind) -> Any:
+    """PCA 전처리 스케일러 팩토리.
+
+    - "standard": 기존 파이프라인. 평균 0, 분산 1로 정규화 (0-mean, unit-variance).
+    - "robust": median · IQR 기반. 극단값에 둔감해 winsorize/mask 의존도를 낮춤.
+    """
+    from sklearn.preprocessing import RobustScaler, StandardScaler
+
+    if kind == "standard":
+        return StandardScaler()
+    if kind == "robust":
+        return RobustScaler()
+    raise ValueError(f"Unknown scaler kind: {kind!r}")
+
 
 # §4: PCA 하이브리드 지수는 full / core 두 세트로 운영합니다.
 # - full: 기존 확장 feature set + VIF gate로 공선성 자동 제거
@@ -51,11 +69,16 @@ FULL_EXPANSION_FEATURES = frozenset(
 
 @dataclass(frozen=True)
 class IndexSpec:
-    """하이브리드 지수 설정. full/core를 동일 코드 경로로 처리하기 위한 파라미터."""
+    """하이브리드 지수 설정. full/core를 동일 코드 경로로 처리하기 위한 파라미터.
+
+    scaler_kind 는 PCA 입력 스케일러를 선택한다. 기본 "standard" 는 기존 동작과 동등.
+    실험 플랫폼에서 "robust" 로 교체해 outlier 영향도를 비교할 수 있다.
+    """
 
     name: str  # "full" | "core"
     candidates: list[str]
     vif_threshold: float | None  # None이면 VIF gate skip
+    scaler_kind: ScalerKind = "standard"
 
 
 INDEX_SPECS: tuple[IndexSpec, ...] = (
@@ -199,7 +222,6 @@ def _compute_single_index(
     반환: (raw_pc1_series, score_series, diagnostics) — 두 Series 모두 df.index 기준.
     """
     from sklearn.decomposition import PCA
-    from sklearn.preprocessing import StandardScaler
 
     raw_series = pd.Series(np.nan, index=df.index, dtype=float)
     score_series = pd.Series(np.nan, index=df.index, dtype=float)
@@ -434,7 +456,7 @@ def _compute_single_index(
             },
         )
 
-    scaler = StandardScaler()
+    scaler = make_scaler(spec.scaler_kind)
     scaled = scaler.fit_transform(df_clean[selected].values)
 
     pca_full = PCA()
@@ -517,6 +539,7 @@ def compute_hybrid_indices(
     df: pd.DataFrame,
     *,
     feature_exclusion_reasons: dict[str, str] | None = None,
+    specs: tuple[IndexSpec, ...] | None = None,
 ) -> pd.DataFrame:
     """full / core 두 세트의 하이브리드 지수와 0~100 score를 계산합니다.
 
@@ -528,13 +551,18 @@ def compute_hybrid_indices(
         "full": {vif_diagnostics, pca_summary, coverage},
         "core": {...},
     }
+
+    Args:
+        specs: 커스텀 IndexSpec 튜플(예: scaler_kind="robust" 주입용). None 이면 기본 INDEX_SPECS.
     """
+    active_specs = specs if specs is not None else INDEX_SPECS
+
     result = df.copy()
     result.attrs = dict(df.attrs)
     total_rows = len(df)
     diagnostics: dict[str, dict[str, Any]] = {}
 
-    for spec in INDEX_SPECS:
+    for spec in active_specs:
         raw_series, score_series, index_diag = _compute_single_index(
             df,
             spec,
@@ -562,6 +590,8 @@ __all__ = [
     "HYBRID_SIGN_ANCHOR",
     "INDEX_SPECS",
     "IndexSpec",
+    "ScalerKind",
     "_compute_single_index",
     "compute_hybrid_indices",
+    "make_scaler",
 ]

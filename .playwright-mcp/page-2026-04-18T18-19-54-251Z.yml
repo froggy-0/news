@@ -1,0 +1,430 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - navigation "Main" [ref=e3]:
+      - generic [ref=e5]:
+        - button [ref=e7] [cursor=pointer]:
+          - img [ref=e8]
+        - list [ref=e12]:
+          - listitem [ref=e13]:
+            - link "Materials" [ref=e14] [cursor=pointer]:
+              - /url: /materials
+          - listitem [ref=e15]:
+            - link "About Bitwise" [ref=e16] [cursor=pointer]:
+              - /url: /about
+          - listitem [ref=e17]:
+            - link "Press" [ref=e18] [cursor=pointer]:
+              - /url: /press
+          - listitem [ref=e19]:
+            - link "Funding Bitcoin" [ref=e20] [cursor=pointer]:
+              - /url: /funding-bitcoin
+          - listitem [ref=e21]:
+            - link "Contact Us" [ref=e22] [cursor=pointer]:
+              - /url: /contact-us
+              - button "Contact Us" [ref=e23]
+    - banner [ref=e24]:
+      - img [ref=e26]
+      - generic [ref=e28]:
+        - heading "BITB" [level=1] [ref=e29]
+        - heading "Bitwise Bitcoin ETF" [level=2] [ref=e30]
+        - paragraph [ref=e32]: BITB provides low-cost access to bitcoin through a professionally managed fund. Backed by Bitwise’s specialist expertise, deep research, and seven-year track record managing crypto assets for leading institutional investors, the fund invests directly in bitcoin and is easily accessible from a brokerage account. Search “BITB” or talk to your financial advisor.
+        - link "Contact Us" [ref=e33] [cursor=pointer]:
+          - /url: /contact-us
+    - list [ref=e36]:
+      - listitem [ref=e37]:
+        - generic [ref=e38] [cursor=pointer]: Why BITB
+      - listitem [ref=e39]:
+        - generic [ref=e40] [cursor=pointer]: Fund Summary
+      - listitem [ref=e41]:
+        - generic [ref=e42] [cursor=pointer]: Fund Materials
+      - listitem [ref=e43]:
+        - generic [ref=e44] [cursor=pointer]: Fund Holdings
+    - generic [ref=e47]:
+      - generic [ref=e49]:
+        - heading "Why invest in BITB?" [level=2] [ref=e50]
+        - generic [ref=e51]:
+          - paragraph [ref=e52]: Gain exposure to bitcoin, the world's largest* and oldest crypto asset, through one of the world's leading crypto experts.
+          - paragraph [ref=e53]:
+            - emphasis [ref=e54]: BITB is not suitable for all investors. An investment in BITB is subject to a high degree of risk, has the potential for significant volatility, and could result in significant or complete loss of investment. BITB is not an investment company registered under the Investment Company Act of 1940 (the “1940 Act”) and is not afforded its protections. Please see additional risks and important information below.
+          - heading "* By market capitalization as of December 31, 2024." [level=6] [ref=e55]
+        - link "Learn More" [ref=e56] [cursor=pointer]:
+          - /url: /materials
+      - generic [ref=e58]:
+        - heading "A Seven-Year Track Record Managing Crypto Assets" [level=5] [ref=e59]:
+          - strong [ref=e60]: A Seven-Year Track Record Managing Crypto Assets
+        - paragraph [ref=e61]: Since our founding, Bitwise has helped a wide range of investors access crypto’s opportunities and manage its risks. We manage your investment using systems built for institutions, from custody and trading to regulation and compliance.
+        - heading "Partner With a Crypto Specialist" [level=5] [ref=e62]:
+          - strong [ref=e63]: Partner With a Crypto Specialist
+        - paragraph [ref=e64]: Bitwise’s team of nearly 200 dedicated professionals focuses solely on crypto, as we have from the beginning. In choosing BITB, investors gain exposure not only to bitcoin but a nationwide team of crypto experts with the tools, insights, and specialized experience to help them navigate the space with confidence.
+        - heading "Invest in the Future of Bitcoin" [level=5] [ref=e65]:
+          - strong [ref=e66]: Invest in the Future of Bitcoin
+        - paragraph [ref=e67]: Bitcoin is a disruptive technology that aims to fundamentally change how we transact and store value. By investing directly in bitcoin, BITB provides a convenient solution to the complexities of bitcoin ownership.
+    - generic [ref=e70]:
+      - generic [ref=e71]:
+        - generic [ref=e72]:
+          - heading "Fund Summary" [level=6] [ref=e73]
+          - heading "About the BITB Fund" [level=2] [ref=e74]
+        - generic [ref=e76]:
+          - generic [ref=e77]:
+            - heading "Fund Details" [level=4] [ref=e78]
+            - paragraph [ref=e79]: Data as of 04/16/2026
+          - generic [ref=e80]:
+            - generic [ref=e81]:
+              - heading "Ticker" [level=4] [ref=e82]
+              - paragraph [ref=e83]: BITB
+            - generic [ref=e84]:
+              - heading "Number of Holdings" [level=4] [ref=e85]
+              - paragraph [ref=e86]: "1"
+            - generic [ref=e87]:
+              - heading "Administrator" [level=4] [ref=e88]
+              - paragraph [ref=e89]: Bank of New York Mellon
+            - generic [ref=e90]:
+              - heading "Fund Type" [level=4] [ref=e91]
+              - paragraph [ref=e92]: ETP
+            - generic [ref=e93]:
+              - heading "Shares Outstanding" [level=4] [ref=e94]
+              - paragraph [ref=e95]: 71,020,000
+            - generic [ref=e96]:
+              - heading "Marketing Agent" [level=4] [ref=e97]
+              - paragraph [ref=e98]: Foreside Fund Services, LLC
+            - generic [ref=e99]:
+              - heading "CUSIP" [level=4] [ref=e100]
+              - paragraph [ref=e101]: 09174C104
+            - generic [ref=e102]:
+              - heading "Sponsor Fee" [level=4] [ref=e103]
+              - paragraph [ref=e104]: 0.20%
+            - generic [ref=e105]:
+              - heading "Legal Counsel" [level=4] [ref=e106]
+              - paragraph [ref=e107]: Mintz, Levin, Cohn, Ferris, Glovsky and Popeo, P.C.
+            - generic [ref=e108]:
+              - heading "ISIN" [level=4] [ref=e109]
+              - paragraph [ref=e110]: US09174C1045
+            - generic [ref=e111]:
+              - heading "Inception Date" [level=4] [ref=e112]
+              - paragraph [ref=e113]: January 10, 2024
+            - generic [ref=e114]:
+              - heading "Auditor" [level=4] [ref=e115]
+              - paragraph [ref=e116]: KPMG
+            - generic [ref=e117]:
+              - heading "Exchange" [level=4] [ref=e118]
+              - paragraph [ref=e119]: NYSE Arca
+            - generic [ref=e120]:
+              - heading "Sponsor" [level=4] [ref=e121]
+              - paragraph [ref=e122]: Bitwise Investment Advisers, LLC
+            - generic [ref=e123]:
+              - heading "Trust Custodian" [level=4] [ref=e124]
+              - paragraph [ref=e125]: Bank of New York Mellon
+            - generic [ref=e126]:
+              - heading "Net Assets (AUM)" [level=4] [ref=e127]
+              - paragraph [ref=e128]: $2,982,500,546
+            - generic [ref=e129]:
+              - heading "Daily Volume (Shares)*" [level=4] [ref=e130]
+              - paragraph [ref=e131]: 1,703,996
+            - generic [ref=e132]:
+              - heading "Digital Asset Custodian" [level=4] [ref=e133]
+              - paragraph [ref=e134]: Coinbase Custody Trust Co., LLC
+          - generic [ref=e135]: "* Data as of 04/15/2026"
+      - generic [ref=e137]:
+        - heading "Fund Materials" [level=4] [ref=e139]
+        - generic [ref=e140]:
+          - generic [ref=e141]:
+            - generic [ref=e142]:
+              - heading "PDF" [level=6] [ref=e143]
+              - heading "Fact Sheet" [level=3] [ref=e144]
+            - link "View" [ref=e145] [cursor=pointer]:
+              - /url: https://bitwise-materials.s3.us-east-1.amazonaws.com/public/fact-sheets/etp_bitb.pdf
+          - generic [ref=e146]:
+            - generic [ref=e147]:
+              - heading "PDF" [level=6] [ref=e148]
+              - heading "Investment Case" [level=3] [ref=e149]
+            - link "View" [ref=e150] [cursor=pointer]:
+              - /url: https://s3.amazonaws.com/static.bitwiseinvestments.com/BITB/BITB-Bitwise-Bitcoin-ETF-Investment-Case.pdf
+          - generic [ref=e151]:
+            - generic [ref=e152]:
+              - heading "PDF" [level=6] [ref=e153]
+              - heading "Prospectus" [level=3] [ref=e154]
+            - link "View" [ref=e155] [cursor=pointer]:
+              - /url: https://s3.amazonaws.com/static.bitwiseinvestments.com/BITB/BITB-Bitwise-Bitcoin-ETF-Prospectus.pdf
+          - generic [ref=e156]:
+            - generic [ref=e157]:
+              - heading "PDF" [level=6] [ref=e158]
+              - heading "Bitwise Regional Contacts" [level=3] [ref=e159]
+            - link "View" [ref=e160] [cursor=pointer]:
+              - /url: https://static.bitwiseinvestments.com/Bitwise-Sales-Map.pdf
+          - generic [ref=e161]:
+            - generic [ref=e162]:
+              - heading "Link" [level=6] [ref=e163]
+              - heading "SEC Filings" [level=3] [ref=e164]
+            - link "View" [ref=e165] [cursor=pointer]:
+              - /url: https://www.sec.gov/cgi-bin/browse-edgar?CIK=0001763415&owner=exclude
+      - generic [ref=e166]:
+        - generic [ref=e168]:
+          - generic [ref=e169]:
+            - heading "Fund Holdings" [level=4] [ref=e170]
+            - paragraph [ref=e171]: Data as of 04/16/2026
+          - generic [ref=e172]:
+            - generic [ref=e173]:
+              - generic [ref=e174]: Name
+              - generic [ref=e175]: Bitcoin in Trust
+              - generic [ref=e176]: Market Value
+              - generic [ref=e177]: Bitcoin per Share
+              - generic [ref=e178]: Weight
+            - generic [ref=e179]:
+              - generic [ref=e181]: BITCOIN
+              - generic [ref=e183]: 38,571.47
+              - generic [ref=e185]: $2,982,799,636.22
+              - generic [ref=e187]: "0.000543"
+              - generic [ref=e189]: 100%
+          - paragraph [ref=e190]: Holdings are subject to change. Current and future holdings are subject to risk.
+        - generic [ref=e192]:
+          - generic [ref=e193]:
+            - heading "Proof of Reserves Transparency" [level=4] [ref=e194]
+            - paragraph [ref=e195]: Data as of 04/17/2026
+          - generic [ref=e196]:
+            - generic [ref=e197]:
+              - generic [ref=e198]:
+                - generic [ref=e199]: Trust Net Assets
+                - generic [ref=e200]: 38,074 BTC
+              - generic [ref=e201]:
+                - generic [ref=e202]: Bitcoin Reserve
+                - generic [ref=e203]: 38,077 BTC
+            - button "More Information" [ref=e204] [cursor=pointer]:
+              - text: More Information
+              - img [ref=e205]
+          - generic [ref=e207]:
+            - heading "Daily Independent Examinations" [level=5] [ref=e208]
+            - generic [ref=e209]:
+              - generic [ref=e210]:
+                - generic [ref=e211]: Report Date
+                - generic [ref=e212]: 04/17/2026
+              - generic [ref=e213]:
+                - generic [ref=e214]: Assessment Scope
+                - generic [ref=e215]: Spot
+              - button "View Report" [ref=e217] [cursor=pointer]
+          - paragraph [ref=e218]: Please “View Report” above to download the most recent daily examination report conducted in accordance with AICPA standards. The balance data presented above is for informational purposes only.
+          - paragraph [ref=e219]: Balances displayed here and within the examination report reflect final settlement on a T+1 basis, resulting in a one business day reporting delay.
+          - paragraph [ref=e220]: “Bitcoin Reserve” reflects the total amount of Bitcoin held in wallets controlled by the Trust. It may be higher than “Trust Net Assets” because it does not account for management fees, which are accrued daily and paid monthly.
+          - paragraph [ref=e221]:
+            - text: Proof of Reserve Examinations are executed by
+            - link "The Network Firm LLP" [ref=e222] [cursor=pointer]:
+              - /url: https://thenetworkfirm.com
+            - text: ", an independent Certified Public Accounting Firm. View"
+            - link "Terms of Use" [ref=e223] [cursor=pointer]:
+              - /url: https://www.thenetworkfirm.com/terms-of-use
+            - text: here.
+      - generic [ref=e225]:
+        - generic [ref=e226]:
+          - heading "Premium / Discount" [level=4] [ref=e227]
+          - paragraph [ref=e228]: Data as of 04/15/2026
+        - generic [ref=e229]:
+          - img [ref=e234]:
+            - generic [ref=e242]: Premium or Discount (bps)
+            - generic [ref=e247]:
+              - generic [ref=e248]: Jul 01, 2024
+              - generic [ref=e249]: Jan 01, 2025
+              - generic [ref=e250]: Jul 01, 2025
+              - generic [ref=e251]: Jan 01, 2026
+            - generic [ref=e252]:
+              - generic [ref=e253]: "-250"
+              - generic [ref=e254]: "-200"
+              - generic [ref=e255]: "-150"
+              - generic [ref=e256]: "-100"
+              - generic [ref=e257]: "-50"
+              - generic [ref=e258]: "0"
+              - generic [ref=e259]: "50"
+              - generic [ref=e260]: "100"
+              - generic [ref=e261]: "150"
+              - generic [ref=e262]: "200"
+              - generic [ref=e263]: "250"
+          - generic [ref=e264]:
+            - generic [ref=e265]:
+              - generic [ref=e266]:
+                - generic [ref=e267]: NAV
+                - generic [ref=e268]: Market Price
+                - generic [ref=e269]: Difference
+                - generic [ref=e270]: Premium/ Discount
+              - generic [ref=e272]:
+                - generic [ref=e273]: $42.00
+                - generic [ref=e274]: $40.94
+                - generic [ref=e275]: $0.16
+                - generic [ref=e276]: 0.40%
+            - generic [ref=e277]:
+              - generic [ref=e278]:
+                - generic [ref=e280]: "2025"
+                - generic [ref=e281]: Q1 2026
+                - generic [ref=e282]: Q2 2026
+                - generic [ref=e283]: "2026"
+              - generic [ref=e284]:
+                - generic [ref=e285]:
+                  - generic [ref=e286]: Days Traded at NAV
+                  - generic [ref=e288]: "5"
+                  - generic [ref=e290]: "1"
+                  - generic [ref=e292]: "2"
+                  - generic [ref=e294]: "3"
+                - generic [ref=e295]:
+                  - generic [ref=e296]: Days Traded at Premium
+                  - generic [ref=e298]: "87"
+                  - generic [ref=e300]: "29"
+                  - generic [ref=e302]: "8"
+                  - generic [ref=e304]: "37"
+                - generic [ref=e305]:
+                  - generic [ref=e306]: Days Traded at Discount
+                  - generic [ref=e308]: "92"
+                  - generic [ref=e310]: "31"
+                  - generic [ref=e312]: "1"
+                  - generic [ref=e314]: "32"
+      - generic [ref=e315]:
+        - generic [ref=e317]:
+          - generic [ref=e318]:
+            - heading "Net Asset Value (NAV) and Market Price" [level=4] [ref=e319]
+            - paragraph [ref=e320]: Data as of 04/15/2026
+          - generic [ref=e321]:
+            - generic [ref=e322]:
+              - generic [ref=e323]:
+                - generic [ref=e324]: "NAV: $42.00"
+                - generic [ref=e325]: "Market Price: $40.94"
+              - generic [ref=e326]:
+                - generic [ref=e327]:
+                  - text: "NAV Change:"
+                  - generic [ref=e328]: $0.13 / 0.31%
+                - generic [ref=e329]:
+                  - text: "Market Price Change:"
+                  - generic [ref=e330]: $0.19 / 0.47%
+              - generic [ref=e332]: "Median Bid-Ask Spread (30-Day): 0.03%"
+            - generic [ref=e333]:
+              - generic [ref=e334]:
+                - group [ref=e337]:
+                  - radio "7 days" [ref=e339] [cursor=pointer]: 7d
+                  - radio "1 month" [ref=e340] [cursor=pointer]: 1m
+                  - radio "3 months" [ref=e341] [cursor=pointer]: 3m
+                  - radio "1 year" [ref=e342] [cursor=pointer]: 1y
+                  - radio "year to date" [ref=e343] [cursor=pointer]: YTD
+                  - radio "all data" [checked] [ref=e344] [cursor=pointer]: ALL
+                - generic [ref=e345]:
+                  - button "January 12 2024" [ref=e346] [cursor=pointer]:
+                    - img [ref=e347]
+                    - text: January 12 2024
+                  - heading "To" [level=6] [ref=e349]
+                  - button "April 18 2026" [ref=e350] [cursor=pointer]:
+                    - img [ref=e351]
+                    - text: April 18 2026
+              - img [ref=e356]:
+                - generic [ref=e370]:
+                  - generic [ref=e371]: Jul 01, 2024
+                  - generic [ref=e372]: Jan 01, 2025
+                  - generic [ref=e373]: Jul 01, 2025
+                  - generic [ref=e374]: Jan 01, 2026
+                - generic [ref=e375]:
+                  - generic [ref=e376]: $0
+                  - generic [ref=e377]: $10
+                  - generic [ref=e378]: $20
+                  - generic [ref=e379]: $30
+                  - generic [ref=e380]: $40
+                  - generic [ref=e381]: $50
+                  - generic [ref=e382]: $60
+                  - generic [ref=e383]: $70
+                  - generic [ref=e384]: $80
+            - paragraph [ref=e385]: "30 Day Median Bid-Ask Spread: The spread is calculated from (i) sampling the ETF's NBBO as of the end of each 10-second interval during each trading day of the last 30 calendar days; (ii) dividing the difference between each such bid and offer by the midpoint of the NBBO; and (iii) identifying the median of those values."
+        - generic [ref=e387]:
+          - generic [ref=e388]:
+            - heading "BITB Quarter-End Performance" [level=4] [ref=e389]
+            - paragraph [ref=e390]: Data as of 03/30/2026
+          - generic [ref=e392]:
+            - generic [ref=e393]:
+              - generic [ref=e394]: 3 Months
+              - generic [ref=e395]: YTD
+              - generic [ref=e396]: 1 Year
+              - generic [ref=e397]: 3 Year
+              - generic [ref=e398]: Since Inception
+            - generic [ref=e399]:
+              - generic [ref=e400]:
+                - generic [ref=e401]: NAV
+                - generic [ref=e403]: "-22.35%"
+                - generic [ref=e405]: "-22.35%"
+                - generic [ref=e407]: "-18.42%"
+                - generic [ref=e409]: —
+                - generic [ref=e411]: 47.36%
+              - generic [ref=e412]:
+                - generic [ref=e413]: Market Price
+                - generic [ref=e415]: "-22.59%"
+                - generic [ref=e417]: "-22.59%"
+                - generic [ref=e419]: "-17.91%"
+                - generic [ref=e421]: —
+                - generic [ref=e423]: 47.24%
+          - paragraph [ref=e424]:
+            - text: Performance data quoted represents past performance and is no guarantee of future results. Short-term performance, in particular, is not a good indication of the fund's future performance, and an investment should not be made based solely on returns. Investment return and principal value of an investment will fluctuate so that an investor's shares, when redeemed, may be worth more or less than the original cost. Current performance may be lower or higher than the original cost. Returns for periods of one year or less are not annualized. For the most recent month-end performance, please call 1-415-707-3663.
+            - text: Performance of one year or less is not annualized. NAV performance is calculated based on the official closing values as of 4:00 p.m. ET. Market Price performance reflects the midpoint of the bid-ask spread as of 4:00 p.m. ET, and does not represent the returns an investor would receive if shares were traded at other times. Fund returns are calculated net of expenses. Shares are subject to a 0.20% management fee that includes the custody charges for holding the fund’s assets charged by the custodian, as well as customary fees and expenses of the fund administrator and auditor. For a six-month period commencing on the day the Shares are initially listed on the Exchange, the Sponsor has agreed to waive the entire Sponsor Fee on the first $1 billion of Trust assets.
+    - generic [ref=e426]:
+      - heading "Learn more about the Bitwise Bitcoin ETF (BITB) today." [level=2] [ref=e427]
+      - link "Contact Us" [ref=e428] [cursor=pointer]:
+        - /url: /contact-us
+    - generic [ref=e431]:
+      - heading "Sign up to receive the latest crypto trends, insights, and company news." [level=2] [ref=e433]
+      - generic [ref=e436]:
+        - textbox "Email*" [ref=e439]:
+          - /placeholder: Email Address
+        - button "Submit" [ref=e440] [cursor=pointer]
+    - contentinfo [ref=e441]:
+      - generic [ref=e442]:
+        - navigation "Main" [ref=e443]:
+          - img [ref=e444]
+          - list [ref=e448]:
+            - listitem [ref=e449]:
+              - link "Materials" [ref=e450] [cursor=pointer]:
+                - /url: /materials
+            - listitem [ref=e451]:
+              - link "About Bitwise" [ref=e452] [cursor=pointer]:
+                - /url: /about
+            - listitem [ref=e453]:
+              - link "Press" [ref=e454] [cursor=pointer]:
+                - /url: /press
+            - listitem [ref=e455]:
+              - link "Funding Bitcoin" [ref=e456] [cursor=pointer]:
+                - /url: /funding-bitcoin
+            - listitem [ref=e457]:
+              - link "Contact Us" [ref=e458] [cursor=pointer]:
+                - /url: /contact-us
+                - button "Contact Us" [ref=e459]
+        - list [ref=e460]:
+          - listitem [ref=e461]:
+            - paragraph [ref=e462]: 1-415-707-3663
+            - paragraph [ref=e463]:
+              - link "investors@bitwiseinvestments.com" [ref=e464] [cursor=pointer]:
+                - /url: mailto:investors@bitwiseinvestments.com
+          - listitem [ref=e465]:
+            - paragraph [ref=e466]: Media Inquires
+            - paragraph [ref=e467]:
+              - link "pr@bitwiseinvestments.com" [ref=e468] [cursor=pointer]:
+                - /url: mailto:pr@bitwiseinvestments.com
+        - generic [ref=e469]:
+          - paragraph [ref=e470]:
+            - strong [ref=e472]: RISKS AND IMPORTANT INFORMATION
+          - paragraph [ref=e473]:
+            - strong [ref=e475]:
+              - text: This material must be preceded or accompanied by a prospectus. Please read the prospectus carefully before investing. To obtain a current prospectus visit
+              - link "BITBetf.com/prospectus" [ref=e476] [cursor=pointer]:
+                - /url: https://bitbetf.com/prospectus
+              - text: .
+          - paragraph [ref=e477]:
+            - generic [ref=e478]:
+              - text: The Bitwise Bitcoin ETF ("BITB" or the "Fund") is not an investment company registered under the Investment Company Act of 1940 (the “1940 Act”) and is not subject to regulation under the Commodity Exchange Act of 1936 (the “CEA”). As a result, shareholders of BITB do not have the protections associated with ownership of shares in an investment company registered under the 1940 Act or the protections afforded by the CEA.
+              - text: Shares of ETFs are bought and sold at market price (not NAV) and are not individually redeemed from the Fund. Brokerage commissions will reduce returns. The NAV may not always correspond to the market price of bitcoin and, as a result, Creation Units may be created or redeemed at a value that is different from the market price of the Shares. Authorized Participants’ buying and selling activity associated with the creation and redemption of Creation Units may adversely affect an investment in the Shares.
+              - text: The amount of bitcoin represented by a Share will continue to be reduced during the life of the Fund due to the transfer of the Fund’s bitcoin to pay for the Sponsor’s management fee, and to pay for litigation expenses or other extraordinary expenses. This dynamic will occur irrespective of whether the trading price of the Shares rises or falls in response to changes in the price of bitcoin.
+              - text: There is no guarantee or assurance that the Fund’s methodology will result in the Fund achieving positive investment returns or outperforming other investment products.
+              - text: Investors may choose to use the Fund as a means of investing indirectly in bitcoin. Because the value of the Shares is correlated with the value of the bitcoin held by the Fund, it is important to understand the investment attributes of, and the market for, bitcoin.
+              - text: Bitcoin Risk. There are significant risks and hazards inherent in the bitcoin market that may cause the price of bitcoin to fluctuate widely. The Fund’s bitcoin may be subject to loss, damage, theft or restriction on access. Investors considering a purchase of Shares should carefully consider how much of their total assets should be exposed to the bitcoin market, and should fully understand, be willing to assume, and have the financial resources necessary to withstand the risks involved in the Fund’s investment strategy.
+              - text: Liquidity Risk. The market for bitcoin is still developing and may be subject to periods of illiquidity. During such times it may be difficult or impossible to buy or sell a position at the desired price. Possible illiquid markets may exacerbate losses or increase the variability between the Fund’s NAV and its market price. The lack of active trading markets for the Shares may result in losses on investors’ investments at the time of disposition of Shares.
+              - text: Regulatory Risk. Future and current regulations by a U.S. or foreign government or quasi-governmental agency could have an adverse effect on an investment in the Fund.
+              - text: Blockchain Technology Risk. Certain of the Fund’s investments may be subject to the risks associated with investing in blockchain technology. The risks associated with blockchain technology may not fully emerge until the technology is widely used. Blockchain systems could be vulnerable to fraud, particularly if a significant minority of participants colluded to defraud the rest. Because blockchain technology systems may operate across many national boundaries and regulatory jurisdictions, it is possible that blockchain technology may be subject to widespread and inconsistent regulation.
+              - text: Nondiversification Risk. The Fund is nondiversified and may hold a smaller number of portfolio securities than many other products. To the extent the Fund invests in a relatively small number of issuers, a decline in the market value of a particular security held by the Fund may affect its value more than if it invested in a larger number of issuers.
+              - text: Recency Risk. The Fund is recently organized, giving prospective investors a limited track record on which to base their investment decision. If the Fund is not profitable, the Fund may terminate and liquidate at a time that is disadvantageous to Shareholders.
+              - text: Bitwise Investment Advisers, LLC serves as the sponsor of the Fund. Foreside Fund Services, LLC serves as the Marketing Agent for BITB, and is not affiliated with Bitwise Investment Advisers, LLC, Bitwise, or any of its affiliates.
+  - alert [ref=e479]
+  - dialog "We value your privacy" [ref=e481]:
+    - generic [ref=e482]:
+      - generic [ref=e483]: We value your privacy
+      - generic [ref=e484]: This site uses cookies to improve your browsing experience, analyze site traffic, and show personalized content.
+    - generic [ref=e485]:
+      - generic [ref=e486]:
+        - button "Reject All" [active] [ref=e487] [cursor=pointer]
+        - button "Accept All" [ref=e488] [cursor=pointer]
+      - button "Customize" [ref=e489] [cursor=pointer]
