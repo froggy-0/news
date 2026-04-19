@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import pytest
+
 from morning_brief.analysis.sentiment_join.sources.etf_flows import (
     ETF_HISTORY_LOOKBACK_BUFFER_DAYS,
     _history_query_window,
     _rows_to_totals,
+    fetch_etf_flow_features,
 )
 
 
@@ -73,3 +76,68 @@ def test_history_query_window_adds_lookback_buffer() -> None:
     assert query_start == "2026-03-18"
     assert query_end == "2026-04-30"
     assert ETF_HISTORY_LOOKBACK_BUFFER_DAYS == 30
+
+
+def test_fetch_etf_flow_features_marks_latest_snapshot_fallback_as_degraded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "morning_brief.analysis.sentiment_join.sources.etf_flows._query_gold_history",
+        lambda *args, **kwargs: [],
+    )
+    monkeypatch.setattr(
+        "morning_brief.analysis.sentiment_join.sources.etf_flows._fallback_latest_snapshot",
+        lambda *args, **kwargs: [
+            {
+                "ticker": "IBIT",
+                "as_of_date": "2026-04-18",
+                "total_btc": 10.0,
+                "aum_usd": 100.0,
+                "source_type": "official_html",
+                "quality_status": "ok",
+            }
+        ],
+    )
+
+    df = fetch_etf_flow_features("2026-04-16", "2026-04-18")
+
+    assert df.attrs["source_mode"] == "latest_snapshot_fallback"
+    assert df.attrs["history_non_null_days"] == 1
+    assert df.attrs["requested_days"] == 3
+    assert df.attrs["history_coverage_ratio"] == 0.3333
+    assert df.attrs["history_quality_status"] == "degraded"
+
+
+def test_fetch_etf_flow_features_marks_gold_history_as_ok(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "morning_brief.analysis.sentiment_join.sources.etf_flows._query_gold_history",
+        lambda *args, **kwargs: [
+            {
+                "ticker": "IBIT",
+                "as_of_date": "2026-04-16",
+                "total_btc": 10.0,
+                "aum_usd": 100.0,
+                "source_type": "official_html",
+                "quality_status": "ok",
+            },
+            {
+                "ticker": "IBIT",
+                "as_of_date": "2026-04-17",
+                "total_btc": 11.0,
+                "aum_usd": 110.0,
+                "source_type": "official_html",
+                "quality_status": "ok",
+            },
+        ],
+    )
+    monkeypatch.setattr(
+        "morning_brief.analysis.sentiment_join.sources.etf_flows._fallback_latest_snapshot",
+        lambda *args, **kwargs: [],
+    )
+
+    df = fetch_etf_flow_features("2026-04-16", "2026-04-18")
+
+    assert df.attrs["source_mode"] == "gold_history"
+    assert df.attrs["history_non_null_days"] == 3
+    assert df.attrs["history_coverage_ratio"] == 1.0
+    assert df.attrs["history_quality_status"] == "ok"

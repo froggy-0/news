@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -13,6 +14,7 @@ from morning_brief.analysis.sentiment_join.hybrid_index import (
     compute_hybrid_indices,
 )
 from morning_brief.analysis.sentiment_join.join import merge_sources
+from morning_brief.analysis.sentiment_join.quality import STRUCTURED_SOURCE_MIN_COVERAGE_RATIO
 from morning_brief.analysis.sentiment_join.signals import hybrid_signal_label
 from morning_brief.analysis.sentiment_join.sources.binance import fetch_btc_close_binance
 from morning_brief.analysis.sentiment_join.sources.etf_flows import fetch_etf_flow_features
@@ -96,6 +98,112 @@ def _has_any_data(df: pd.DataFrame, cols: list[str]) -> bool:
     return any(col in df.columns and df[col].notna().any() for col in cols)
 
 
+def _structured_sources_metadata(
+    *,
+    futures_attrs: dict[str, object],
+    etf_attrs: dict[str, object],
+) -> dict[str, dict[str, object]]:
+    return {
+        "btc_etf": {
+            "mode": etf_attrs.get("source_mode", "empty"),
+            "coverage": {
+                "non_null_days": etf_attrs.get("history_non_null_days", 0),
+                "requested_days": etf_attrs.get("requested_days", 0),
+                "ratio": etf_attrs.get("history_coverage_ratio", 0.0),
+            },
+            "quality_status": etf_attrs.get("history_quality_status", "degraded"),
+            "quality_reasons": etf_attrs.get("history_quality_reasons", []),
+        },
+        "futures": {
+            "mode": futures_attrs.get("futures_source", "none"),
+            "coverage": {
+                "requested_days": futures_attrs.get("requested_days", 0),
+                "funding_days": futures_attrs.get("funding_days", 0),
+                "oi_days": futures_attrs.get("oi_days", 0),
+                "lsr_days": futures_attrs.get("lsr_days", 0),
+                "funding_ratio": futures_attrs.get("funding_coverage_ratio", 0.0),
+                "oi_ratio": futures_attrs.get("oi_coverage_ratio", 0.0),
+                "lsr_ratio": futures_attrs.get("lsr_coverage_ratio", 0.0),
+            },
+            "quality_status": futures_attrs.get("quality_status", "degraded"),
+            "quality_reasons": futures_attrs.get("quality_reasons", []),
+            "funding_quality_status": futures_attrs.get("funding_quality_status", "degraded"),
+            "funding_quality_reasons": futures_attrs.get("funding_quality_reasons", []),
+            "oi_quality_status": futures_attrs.get("oi_quality_status", "degraded"),
+            "oi_quality_reasons": futures_attrs.get("oi_quality_reasons", []),
+            "oi_recent_quality_status": futures_attrs.get("oi_recent_quality_status", "degraded"),
+            "oi_recent_quality_reasons": futures_attrs.get("oi_recent_quality_reasons", []),
+            "oi_api_capped": futures_attrs.get("oi_api_capped", False),
+            "lsr_quality_status": futures_attrs.get("lsr_quality_status", "degraded"),
+            "lsr_quality_reasons": futures_attrs.get("lsr_quality_reasons", []),
+            "lsr_recent_quality_status": futures_attrs.get("lsr_recent_quality_status", "degraded"),
+            "lsr_recent_quality_reasons": futures_attrs.get("lsr_recent_quality_reasons", []),
+            "lsr_api_capped": futures_attrs.get("lsr_api_capped", False),
+            "requested_start_date": futures_attrs.get("requested_start_date"),
+            "requested_end_date": futures_attrs.get("requested_end_date"),
+            "returned_min_date": futures_attrs.get("returned_min_date", {}),
+            "returned_max_date": futures_attrs.get("returned_max_date", {}),
+        },
+    }
+
+
+def _apply_structured_source_gates(
+    df: pd.DataFrame,
+    *,
+    futures_attrs: dict[str, object],
+    etf_attrs: dict[str, object],
+) -> tuple[pd.DataFrame, dict[str, str]]:
+    gated = df.copy()
+    feature_exclusion_reasons: dict[str, str] = {}
+
+    etf_history_ok = (
+        etf_attrs.get("source_mode") == "gold_history"
+        and etf_attrs.get("history_quality_status") == "ok"
+    )
+    if not etf_history_ok:
+        for column in ("etf_net_inflow_usd", "etf_net_inflow_usd_lag1"):
+            if column in gated.columns:
+                gated[column] = np.nan
+                feature_exclusion_reasons[column] = "btc_etf_history_unavailable"
+
+    # OI/LSR 게이트: Binance API 30일 보존 제약을 고려해 최근 30일 윈도우 coverage로 판단.
+    # oi_quality_status(전체 lookback 기준)가 아닌 oi_recent_quality_status를 우선 사용.
+    oi_gate_status = futures_attrs.get("oi_recent_quality_status") or futures_attrs.get(
+        "oi_quality_status", "degraded"
+    )
+    if oi_gate_status != "ok":
+        for column in ("open_interest_usd", "oi_change_pct", "oi_change_pct_lag1"):
+            if column in gated.columns:
+                gated[column] = np.nan
+                feature_exclusion_reasons[column] = "futures_oi_incomplete"
+
+    lsr_gate_status = futures_attrs.get("lsr_recent_quality_status") or futures_attrs.get(
+        "lsr_quality_status", "degraded"
+    )
+    if lsr_gate_status != "ok":
+        for column in ("btc_long_short_ratio", "btc_long_short_ratio_lag1"):
+            if column in gated.columns:
+                gated[column] = np.nan
+                feature_exclusion_reasons[column] = "futures_lsr_incomplete"
+
+    if futures_attrs.get("funding_quality_status") != "ok":
+        for column in ("funding_rate", "funding_rate_lag1"):
+            if column in gated.columns:
+                gated[column] = np.nan
+                feature_exclusion_reasons[column] = "futures_funding_incomplete"
+
+    if feature_exclusion_reasons:
+        log_structured(
+            logger,
+            event="quality_gate.structured_sources",
+            message="Structured source coverage gate를 적용했습니다.",
+            threshold=STRUCTURED_SOURCE_MIN_COVERAGE_RATIO,
+            excluded_features=feature_exclusion_reasons,
+        )
+
+    return gated, feature_exclusion_reasons
+
+
 def _build_granger_correction(statistical_results: dict[str, object]) -> dict[str, object]:
     """BH-FDR 보정 메타데이터 생성 (pipeline.py → build_stats_metadata_payload 전달용)."""
     granger = statistical_results.get("granger")
@@ -165,6 +273,7 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
 
         # Req 11: 선물 지표 수집 (실패 시 빈 DataFrame — merge_sources에서 NaN 컬럼으로 처리)
         futures_df = fetch_futures_data(settings.lookback_days, settings.futures_lambda_arn)
+        futures_source_attrs = dict(futures_df.attrs)
         _log_source_complete(
             "futures",
             futures_df,
@@ -175,7 +284,12 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             end_date,
             cache_dir=Path(".cache").resolve(),
         )
+        etf_source_attrs = dict(etf_df.attrs)
         _log_source_complete("btc_etf", etf_df, fallback_used=False)
+        structured_sources = _structured_sources_metadata(
+            futures_attrs=futures_source_attrs,
+            etf_attrs=etf_source_attrs,
+        )
 
         sentiment_df = normalize_dates(sentiment_df)
         fng_df = normalize_dates(fng_df)
@@ -292,6 +406,11 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
         analysis_df = master_df.copy()
         _mask_cols = [c for c in analysis_df.columns if c not in _NON_MASK_COLS]
         analysis_df.loc[analysis_df["is_outlier"], _mask_cols] = np.nan
+        analysis_df, feature_exclusion_reasons = _apply_structured_source_gates(
+            analysis_df,
+            futures_attrs=futures_source_attrs,
+            etf_attrs=etf_source_attrs,
+        )
         masked_count = int(analysis_df["is_outlier"].sum())
         masked_ratio = round(masked_count / len(analysis_df), 4) if len(analysis_df) else 0.0
         log_structured(
@@ -334,8 +453,14 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
         ]
         for col in hybrid_column_names:
             master_df[col] = float("nan")
+        analysis_with_hybrid = analysis_df.copy()
+        for col in hybrid_column_names:
+            analysis_with_hybrid[col] = float("nan")
         try:
-            analysis_with_hybrid = compute_hybrid_indices(analysis_df)
+            analysis_with_hybrid = compute_hybrid_indices(
+                analysis_df,
+                feature_exclusion_reasons=feature_exclusion_reasons,
+            )
             for col in hybrid_column_names:
                 hybrid_map = analysis_with_hybrid.set_index("date")[col].to_dict()
                 master_df[col] = master_df["date"].map(hybrid_map)
@@ -356,6 +481,7 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             score_col = f"{spec_name}_hybrid_index_score"
             lag1_col = f"{score_col}_lag1"
             master_df[lag1_col] = master_df[score_col].shift(1)
+            analysis_with_hybrid[lag1_col] = analysis_with_hybrid[score_col].shift(1)
 
         # §4 v4: Alpha Validation 실행 (실패 시 파이프라인 중단하지 않음)
         alpha_validation_results: dict[str, object] = {}
@@ -376,7 +502,7 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
                 else False
             )
             alpha_validation_results = run_alpha_validation(
-                master_df,
+                analysis_with_hybrid,
                 stationarity_results=_sr if isinstance(_sr, dict) else None,
                 granger_results=_gr if isinstance(_gr, list) else None,
                 granger_executed=bool(_ge),
@@ -407,36 +533,79 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
                 else [],
                 "pca_summary": diag.get("pca_summary", {}) if isinstance(diag, dict) else {},
                 "coverage": diag.get("coverage", {}) if isinstance(diag, dict) else {},
+                "excluded_features": diag.get("excluded_features", [])
+                if isinstance(diag, dict)
+                else [],
+                "quality_status": diag.get("quality_status", "degraded")
+                if isinstance(diag, dict)
+                else "degraded",
+                "quality_reasons": diag.get("quality_reasons", [])
+                if isinstance(diag, dict)
+                else [],
                 "signal_label": label,
                 "signal_zscore": zscore,
             }
 
+        stats_adf = (
+            cast(dict[str, Any], statistical_results.get("stationarity_results"))
+            if isinstance(statistical_results, dict)
+            and isinstance(statistical_results.get("stationarity_results"), dict)
+            else None
+        )
+        stats_granger_results = (
+            cast(list[dict[str, Any]], statistical_results.get("granger", []))
+            if isinstance(statistical_results, dict)
+            and isinstance(statistical_results.get("granger", []), list)
+            else []
+        )
+        stats_granger_eligible_rows = (
+            cast(int, statistical_results.get("granger_eligible_rows"))
+            if isinstance(statistical_results, dict)
+            and isinstance(statistical_results.get("granger_eligible_rows"), int)
+            else None
+        )
+        stats_granger_executed = (
+            bool(statistical_results.get("granger_executed"))
+            if isinstance(statistical_results, dict)
+            else False
+        )
+        alpha_hit_rates = (
+            cast(list[dict[str, Any]], alpha_validation_results.get("hit_rates"))
+            if isinstance(alpha_validation_results, dict)
+            and isinstance(alpha_validation_results.get("hit_rates"), list)
+            else None
+        )
+        alpha_correlations = (
+            cast(list[dict[str, Any]], alpha_validation_results.get("correlations"))
+            if isinstance(alpha_validation_results, dict)
+            and isinstance(alpha_validation_results.get("correlations"), list)
+            else None
+        )
+        alpha_backtest = (
+            cast(list[dict[str, Any]], alpha_validation_results.get("backtest"))
+            if isinstance(alpha_validation_results, dict)
+            and isinstance(alpha_validation_results.get("backtest"), list)
+            else None
+        )
+        alpha_walk_forward = (
+            cast(dict[str, Any], alpha_validation_results.get("walk_forward"))
+            if isinstance(alpha_validation_results, dict)
+            and isinstance(alpha_validation_results.get("walk_forward"), dict)
+            else None
+        )
+
         stats_metadata = build_stats_metadata_payload(
             run_id=f"sentiment-join-{run_date}",
             generated_at_utc=datetime.now(timezone.utc).isoformat(),
-            adf=statistical_results.get("stationarity_results")
-            if isinstance(statistical_results, dict)
-            else None,
-            granger_results=(
-                statistical_results.get("granger", [])
-                if isinstance(statistical_results, dict)
-                else []
-            ),
+            adf=stats_adf,
+            granger_results=stats_granger_results,
             hybrid_indices=hybrid_indices_meta,
             rows_before_outlier_filter=len(master_df),
             rows_after_outlier_filter=len(analysis_df),
             outlier_filtered_count=masked_count,
             outlier_filtered_ratio=masked_ratio,
-            granger_eligible_rows=(
-                statistical_results.get("granger_eligible_rows")
-                if isinstance(statistical_results, dict)
-                else None
-            ),
-            granger_executed=(
-                statistical_results.get("granger_executed")
-                if isinstance(statistical_results, dict)
-                else False
-            ),
+            granger_eligible_rows=stats_granger_eligible_rows,
+            granger_executed=stats_granger_executed,
             exclusion_counts=exclusion_counts if exclusion_counts else None,
             granger_correction=(
                 _build_granger_correction(statistical_results)
@@ -444,26 +613,11 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
                 and statistical_results.get("granger_executed")
                 else None
             ),
-            hit_rates=(
-                alpha_validation_results.get("hit_rates")
-                if isinstance(alpha_validation_results, dict)
-                else None
-            ),
-            correlations=(
-                alpha_validation_results.get("correlations")
-                if isinstance(alpha_validation_results, dict)
-                else None
-            ),
-            backtest=(
-                alpha_validation_results.get("backtest")
-                if isinstance(alpha_validation_results, dict)
-                else None
-            ),
-            walk_forward=(
-                alpha_validation_results.get("walk_forward")
-                if isinstance(alpha_validation_results, dict)
-                else None
-            ),
+            hit_rates=alpha_hit_rates,
+            correlations=alpha_correlations,
+            backtest=alpha_backtest,
+            walk_forward=alpha_walk_forward,
+            structured_sources=structured_sources,
         )
 
         validate_master(master_df)

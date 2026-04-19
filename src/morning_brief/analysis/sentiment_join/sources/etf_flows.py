@@ -9,6 +9,11 @@ from typing import Any
 import pandas as pd
 from supabase import create_client
 
+from morning_brief.analysis.sentiment_join.quality import (
+    STRUCTURED_SOURCE_MIN_COVERAGE_RATIO,
+    calculate_coverage_ratio,
+    quality_status_for_ratio,
+)
 from morning_brief.data.etf_storage import DEFAULT_ETF_GOLD_TABLE
 from morning_brief.data.sources.btc_etf_official import fetch_official_btc_etf_snapshots
 from morning_brief.logging_utils import log_structured
@@ -36,6 +41,34 @@ def _empty_etf_frame(start_date: str, end_date: str) -> pd.DataFrame:
             "etf_total_aum_usd": [float("nan")] * len(dates),
         }
     )
+
+
+def _set_history_attrs(
+    frame: pd.DataFrame,
+    *,
+    source_mode: str,
+    history_non_null_days: int,
+    requested_days: int,
+) -> pd.DataFrame:
+    history_coverage_ratio = calculate_coverage_ratio(history_non_null_days, requested_days)
+    history_quality_reasons: list[str] = []
+    if source_mode != "gold_history":
+        history_quality_reasons.append(f"source_mode:{source_mode}")
+    if history_coverage_ratio < STRUCTURED_SOURCE_MIN_COVERAGE_RATIO:
+        history_quality_reasons.append("history_coverage_below_threshold")
+
+    frame.attrs["source_mode"] = source_mode
+    frame.attrs["history_non_null_days"] = history_non_null_days
+    frame.attrs["requested_days"] = requested_days
+    frame.attrs["history_coverage_ratio"] = history_coverage_ratio
+    frame.attrs["history_quality_status"] = (
+        "ok"
+        if source_mode == "gold_history"
+        and quality_status_for_ratio(history_coverage_ratio) == "ok"
+        else "degraded"
+    )
+    frame.attrs["history_quality_reasons"] = history_quality_reasons
+    return frame
 
 
 def _coerce_float(value: object) -> float | None:
@@ -162,10 +195,18 @@ def fetch_etf_flow_features(
     del cache_dir  # historical source is Supabase gold table; cache_dir reserved for future use
 
     dates = _date_strings(start_date, end_date)
-    frame = _empty_etf_frame(start_date, end_date)
+    frame = _set_history_attrs(
+        _empty_etf_frame(start_date, end_date),
+        source_mode="empty",
+        history_non_null_days=0,
+        requested_days=len(dates),
+    )
+    source_mode = "empty"
 
     try:
         rows = _query_gold_history(start_date, end_date)
+        if rows:
+            source_mode = "gold_history"
     except Exception as exc:
         log_structured(
             logger,
@@ -180,6 +221,7 @@ def fetch_etf_flow_features(
     if not rows:
         try:
             rows = _fallback_latest_snapshot(end_date)
+            source_mode = "latest_snapshot_fallback" if rows else "empty"
         except Exception as exc:
             log_structured(
                 logger,
@@ -193,12 +235,25 @@ def fetch_etf_flow_features(
 
     totals_by_date = _rows_to_totals(rows, dates=dates)
     if not totals_by_date:
+        _set_history_attrs(
+            frame,
+            source_mode=source_mode,
+            history_non_null_days=0,
+            requested_days=len(dates),
+        )
         return frame
 
     frame["etf_total_btc"] = [totals_by_date.get(d, {}).get("etf_total_btc") for d in dates]
     frame["etf_total_aum_usd"] = [totals_by_date.get(d, {}).get("etf_total_aum_usd") for d in dates]
     frame["etf_total_btc"] = pd.to_numeric(frame["etf_total_btc"], errors="coerce").ffill()
     frame["etf_total_aum_usd"] = pd.to_numeric(frame["etf_total_aum_usd"], errors="coerce").ffill()
+    history_non_null_days = int(frame["etf_total_btc"].notna().sum())
+    _set_history_attrs(
+        frame,
+        source_mode=source_mode,
+        history_non_null_days=history_non_null_days,
+        requested_days=len(dates),
+    )
 
     log_structured(
         logger,
@@ -206,7 +261,10 @@ def fetch_etf_flow_features(
         message="ETF 공식 보유량 분석용 피처를 준비했습니다.",
         source="btc_etf_gold",
         rows=len(frame),
-        non_null_days=int(frame["etf_total_btc"].notna().sum()),
+        source_mode=source_mode,
+        non_null_days=history_non_null_days,
+        history_coverage_ratio=frame.attrs.get("history_coverage_ratio"),
+        history_quality_status=frame.attrs.get("history_quality_status"),
     )
     return frame
 

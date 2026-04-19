@@ -92,13 +92,75 @@ def _btc_close_df(
 
 def _etf_df(main_dates: list[str]) -> pd.DataFrame:
     totals = [1000.0 + idx * 10.0 for idx in range(len(main_dates))]
-    return pd.DataFrame(
+    df = pd.DataFrame(
         {
             "date": main_dates,
             "etf_total_btc": totals,
             "etf_total_aum_usd": [value * 85000 for value in totals],
         }
     )
+    df.attrs["source_mode"] = "gold_history"
+    df.attrs["history_non_null_days"] = len(main_dates)
+    df.attrs["requested_days"] = len(main_dates)
+    df.attrs["history_coverage_ratio"] = 1.0
+    df.attrs["history_quality_status"] = "ok"
+    df.attrs["history_quality_reasons"] = []
+    return df
+
+
+def _futures_df(
+    main_dates: list[str],
+    *,
+    funding_quality: str = "ok",
+    oi_quality: str = "ok",
+    lsr_quality: str = "ok",
+) -> pd.DataFrame:
+    df = pd.DataFrame(
+        {
+            "date": main_dates,
+            "funding_rate": [0.001] * len(main_dates),
+            "open_interest_usd": [1000.0 + idx for idx in range(len(main_dates))],
+            "btc_long_short_ratio": [1.0 + idx * 0.01 for idx in range(len(main_dates))],
+        }
+    )
+    df.attrs["fallback_used"] = False
+    df.attrs["futures_source"] = "binance"
+    df.attrs["requested_days"] = len(main_dates)
+    df.attrs["requested_start_date"] = main_dates[0]
+    df.attrs["requested_end_date"] = main_dates[-1]
+    df.attrs["funding_days"] = len(main_dates) if funding_quality == "ok" else 1
+    df.attrs["oi_days"] = len(main_dates) if oi_quality == "ok" else 1
+    df.attrs["lsr_days"] = len(main_dates) if lsr_quality == "ok" else 1
+    df.attrs["funding_coverage_ratio"] = (
+        1.0 if funding_quality == "ok" else round(1 / len(main_dates), 4)
+    )
+    df.attrs["oi_coverage_ratio"] = 1.0 if oi_quality == "ok" else round(1 / len(main_dates), 4)
+    df.attrs["lsr_coverage_ratio"] = 1.0 if lsr_quality == "ok" else round(1 / len(main_dates), 4)
+    df.attrs["funding_quality_status"] = funding_quality
+    df.attrs["funding_quality_reasons"] = (
+        [] if funding_quality == "ok" else ["coverage_below_threshold"]
+    )
+    df.attrs["oi_quality_status"] = oi_quality
+    df.attrs["oi_quality_reasons"] = [] if oi_quality == "ok" else ["coverage_below_threshold"]
+    df.attrs["lsr_quality_status"] = lsr_quality
+    df.attrs["lsr_quality_reasons"] = [] if lsr_quality == "ok" else ["coverage_below_threshold"]
+    df.attrs["quality_status"] = (
+        "ok"
+        if funding_quality == "ok" and oi_quality == "ok" and lsr_quality == "ok"
+        else "degraded"
+    )
+    df.attrs["quality_reasons"] = []
+    df.attrs["returned_min_date"] = {
+        "funding_rate": main_dates[0],
+        "open_interest_usd": main_dates[0],
+        "btc_long_short_ratio": main_dates[0],
+    }
+    df.attrs["returned_max_date"] = {
+        "funding_rate": main_dates[-1],
+        "open_interest_usd": main_dates[-1] if oi_quality == "ok" else main_dates[0],
+        "btc_long_short_ratio": main_dates[-1] if lsr_quality == "ok" else main_dates[0],
+    }
+    return df
 
 
 def test_run_sentiment_join_success_creates_parquet(
@@ -479,3 +541,137 @@ def test_run_sentiment_join_creates_hybrid_score_lag1_columns(
         pd.testing.assert_series_equal(
             saved[lag1_col], expected, check_names=False, check_dtype=False
         )
+
+
+def test_run_sentiment_join_records_structured_sources_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _settings(tmp_path)
+    _, _, _, main_dates, btc_dates = _core_dates(settings)
+
+    monkeypatch.setattr(
+        pipeline, "fetch_r2_sentiment", lambda *args, **kwargs: _sentiment_df(main_dates)
+    )
+    monkeypatch.setattr(pipeline, "fetch_fng", lambda *args, **kwargs: _fng_df(main_dates))
+    monkeypatch.setattr(
+        pipeline,
+        "fetch_btc_close_binance",
+        lambda *args, **kwargs: _btc_close_df(btc_dates, base=100.0),
+    )
+    monkeypatch.setattr(
+        pipeline, "fetch_usdkrw_close", lambda *args, **kwargs: _close_df(btc_dates, base=1300.0)
+    )
+    monkeypatch.setattr(
+        pipeline, "fetch_futures_data", lambda *args, **kwargs: _futures_df(main_dates)
+    )
+    monkeypatch.setattr(
+        pipeline, "fetch_etf_flow_features", lambda *args, **kwargs: _etf_df(main_dates)
+    )
+
+    assert pipeline.run_sentiment_join(settings) == 0
+
+    file_path = next(tmp_path.glob("master_*.parquet"))
+    stats = json.loads(pq.read_metadata(file_path).metadata[b"sentiment_join_stats"].decode())
+
+    assert stats["structured_sources"]["btc_etf"]["mode"] == "gold_history"
+    assert stats["structured_sources"]["btc_etf"]["quality_status"] == "ok"
+    assert stats["structured_sources"]["futures"]["mode"] == "binance"
+    assert stats["structured_sources"]["futures"]["oi_quality_status"] == "ok"
+    assert stats["structured_sources"]["futures"]["lsr_quality_status"] == "ok"
+
+
+def test_run_sentiment_join_gates_degraded_structured_features_from_analysis(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _settings(tmp_path)
+    _, _, _, main_dates, btc_dates = _core_dates(settings)
+
+    degraded_etf = _etf_df(main_dates)
+    degraded_etf.attrs["source_mode"] = "latest_snapshot_fallback"
+    degraded_etf.attrs["history_non_null_days"] = 1
+    degraded_etf.attrs["history_coverage_ratio"] = round(1 / len(main_dates), 4)
+    degraded_etf.attrs["history_quality_status"] = "degraded"
+    degraded_etf.attrs["history_quality_reasons"] = [
+        "source_mode:latest_snapshot_fallback",
+        "history_coverage_below_threshold",
+    ]
+    degraded_futures = _futures_df(main_dates, oi_quality="degraded", lsr_quality="degraded")
+
+    monkeypatch.setattr(
+        pipeline, "fetch_r2_sentiment", lambda *args, **kwargs: _sentiment_df(main_dates)
+    )
+    monkeypatch.setattr(pipeline, "fetch_fng", lambda *args, **kwargs: _fng_df(main_dates))
+    monkeypatch.setattr(
+        pipeline,
+        "fetch_btc_close_binance",
+        lambda *args, **kwargs: _btc_close_df(btc_dates, base=100.0),
+    )
+    monkeypatch.setattr(
+        pipeline, "fetch_usdkrw_close", lambda *args, **kwargs: _close_df(btc_dates, base=1300.0)
+    )
+    monkeypatch.setattr(pipeline, "fetch_futures_data", lambda *args, **kwargs: degraded_futures)
+    monkeypatch.setattr(pipeline, "fetch_etf_flow_features", lambda *args, **kwargs: degraded_etf)
+
+    assert pipeline.run_sentiment_join(settings) == 0
+
+    file_path = next(tmp_path.glob("master_*.parquet"))
+    saved = pd.read_parquet(file_path)
+    stats = json.loads(pq.read_metadata(file_path).metadata[b"sentiment_join_stats"].decode())
+    excluded = stats["hybrid_indices"]["full"]["excluded_features"]
+
+    assert saved["etf_net_inflow_usd"].notna().any()
+    assert saved["btc_long_short_ratio"].notna().any()
+    assert {
+        "feature": "etf_net_inflow_usd_lag1",
+        "reason": "btc_etf_history_unavailable",
+    } in excluded
+    assert {"feature": "btc_long_short_ratio_lag1", "reason": "futures_lsr_incomplete"} in excluded
+    assert stats["structured_sources"]["btc_etf"]["quality_status"] == "degraded"
+    assert stats["structured_sources"]["futures"]["oi_quality_status"] == "degraded"
+    assert stats["structured_sources"]["futures"]["lsr_quality_status"] == "degraded"
+
+
+def test_run_sentiment_join_gates_degraded_funding_from_analysis(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _settings(tmp_path)
+    _, _, _, main_dates, btc_dates = _core_dates(settings)
+
+    degraded_futures = _futures_df(main_dates, funding_quality="degraded")
+
+    monkeypatch.setattr(
+        pipeline, "fetch_r2_sentiment", lambda *args, **kwargs: _sentiment_df(main_dates)
+    )
+    monkeypatch.setattr(pipeline, "fetch_fng", lambda *args, **kwargs: _fng_df(main_dates))
+    monkeypatch.setattr(
+        pipeline,
+        "fetch_btc_close_binance",
+        lambda *args, **kwargs: _btc_close_df(btc_dates, base=100.0),
+    )
+    monkeypatch.setattr(
+        pipeline, "fetch_usdkrw_close", lambda *args, **kwargs: _close_df(btc_dates, base=1300.0)
+    )
+    monkeypatch.setattr(pipeline, "fetch_futures_data", lambda *args, **kwargs: degraded_futures)
+    monkeypatch.setattr(
+        pipeline, "fetch_etf_flow_features", lambda *args, **kwargs: _etf_df(main_dates)
+    )
+
+    assert pipeline.run_sentiment_join(settings) == 0
+
+    file_path = next(tmp_path.glob("master_*.parquet"))
+    saved = pd.read_parquet(file_path)
+    stats = json.loads(pq.read_metadata(file_path).metadata[b"sentiment_join_stats"].decode())
+
+    assert saved["funding_rate"].notna().any()  # master_df는 원본 보존
+    assert {
+        "feature": "funding_rate_lag1",
+        "reason": "futures_funding_incomplete",
+    } in stats["hybrid_indices"]["full"]["excluded_features"]
+    assert {
+        "feature": "funding_rate_lag1",
+        "reason": "futures_funding_incomplete",
+    } in stats["hybrid_indices"]["core"]["excluded_features"]
+    assert stats["structured_sources"]["futures"]["funding_quality_status"] == "degraded"

@@ -223,6 +223,7 @@ def _extract_stats_summary(metadata: dict[str, str]) -> dict[str, str]:
 
     stats = json.loads(raw)
     hybrid_indices = stats.get("hybrid_indices") or {}
+    structured_sources = stats.get("structured_sources") or {}
     summary: dict[str, str] = {
         "run_id": str(stats.get("run_id", "<missing>")),
         "granger_executed": str(stats.get("granger_executed", "<missing>")),
@@ -230,6 +231,25 @@ def _extract_stats_summary(metadata: dict[str, str]) -> dict[str, str]:
         "outlier_filtered_count": str(stats.get("outlier_filtered_count", "<missing>")),
         "outlier_filtered_ratio": str(stats.get("outlier_filtered_ratio", "<missing>")),
     }
+    btc_etf = structured_sources.get("btc_etf") if isinstance(structured_sources, dict) else None
+    futures = structured_sources.get("futures") if isinstance(structured_sources, dict) else None
+    if isinstance(btc_etf, dict):
+        coverage = btc_etf.get("coverage") or {}
+        summary["btc_etf_mode"] = str(btc_etf.get("mode", "<missing>"))
+        summary["btc_etf_quality_status"] = str(btc_etf.get("quality_status", "<missing>"))
+        summary["btc_etf_coverage_ratio"] = str(coverage.get("ratio", "<missing>"))
+    if isinstance(futures, dict):
+        coverage = futures.get("coverage") or {}
+        summary["futures_mode"] = str(futures.get("mode", "<missing>"))
+        summary["futures_quality_status"] = str(futures.get("quality_status", "<missing>"))
+        summary["futures_funding_quality_status"] = str(
+            futures.get("funding_quality_status", "<missing>")
+        )
+        summary["futures_oi_quality_status"] = str(futures.get("oi_quality_status", "<missing>"))
+        summary["futures_lsr_quality_status"] = str(futures.get("lsr_quality_status", "<missing>"))
+        summary["futures_funding_ratio"] = str(coverage.get("funding_ratio", "<missing>"))
+        summary["futures_oi_ratio"] = str(coverage.get("oi_ratio", "<missing>"))
+        summary["futures_lsr_ratio"] = str(coverage.get("lsr_ratio", "<missing>"))
     for name in ("full", "core"):
         entry = hybrid_indices.get(name) if isinstance(hybrid_indices, dict) else None
         if not isinstance(entry, dict):
@@ -240,6 +260,7 @@ def _extract_stats_summary(metadata: dict[str, str]) -> dict[str, str]:
         summary[f"{name}_pca_status"] = str(pca.get("status", "<missing>"))
         summary[f"{name}_explained_variance"] = str(pca.get("explained_variance", "<missing>"))
         summary[f"{name}_coverage_ratio"] = str(coverage.get("ratio", "<missing>"))
+        summary[f"{name}_quality_status"] = str(entry.get("quality_status", "<missing>"))
     return summary
 
 
@@ -306,6 +327,7 @@ def _render_compare_section(inspections: list[ParquetInspection]) -> str:
 def render_report(inspections: list[ParquetInspection]) -> str:
     sections: list[str] = []
     for inspection in inspections:
+        stats_summary = _extract_stats_summary(inspection.schema_metadata)
         sections.extend(
             [
                 "=" * 80,
@@ -317,6 +339,11 @@ def render_report(inspections: list[ParquetInspection]) -> str:
                 f"{inspection.date_max or '<missing>'}",
                 f"duplicate_dates={inspection.duplicate_date_count if inspection.duplicate_date_count is not None else '<no date column>'}",
                 f"schema_metadata={json.dumps(inspection.schema_metadata, ensure_ascii=True, sort_keys=True)}",
+                "",
+                "[stats_summary]",
+                json.dumps(stats_summary, ensure_ascii=True, sort_keys=True)
+                if stats_summary
+                else "<none>",
                 "",
                 "[column_summary]",
                 _render_column_summaries(inspection.column_summaries),

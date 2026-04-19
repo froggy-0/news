@@ -282,6 +282,7 @@ def build_stats_metadata_payload(
     correlations: list[dict[str, Any]] | None = None,
     backtest: list[dict[str, Any]] | None = None,
     walk_forward: dict[str, Any] | None = None,
+    structured_sources: dict[str, Any] | None = None,
 ) -> bytes:
     # §4 v4: 이전 단일 `pca_summary` / `vif_diagnostics` / `hybrid_signal_label`는
     # `hybrid_indices` 하위의 full / core 지수별 블록으로 대체됩니다.
@@ -303,6 +304,7 @@ def build_stats_metadata_payload(
         "correlations": correlations or [],
         "backtest": backtest or [],
         "walk_forward": walk_forward or {},
+        "structured_sources": structured_sources or {},
     }
     return json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
 

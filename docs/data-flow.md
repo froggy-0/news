@@ -433,6 +433,8 @@ GitHub Actions `Build Sentiment Time Join Parquet` job 또는 `make sentiment-jo
 │    │    2차: Bybit 공개 API (geo-restriction 없음)                │
 │    │    3차: NaN (파이프라인 계속 진행)                            │
 │    └─ BTC ETF flows (공식 발행사 페이지)                          │
+│         gold history 미존재 시 latest snapshot fallback 가능       │
+│         단, fallback은 historical coverage로 승격하지 않음         │
 ├──────────────────────────────────────────────────────────────────┤
 │  Phase 2: 데이터 변환                                             │
 │    ├─ 날짜 정규화 (UTC → YYYY-MM-DD)                              │
@@ -458,6 +460,8 @@ GitHub Actions `Build Sentiment Time Join Parquet` job 또는 `make sentiment-jo
 │    │    etf_net_inflow, volume_change, VIX(optional)             │
 │    └─ core: 4개 feature (큐레이션, VIF 미적용) + PCA              │
 │         news_sentiment, FNG, funding_rate, volume_change         │
+│    structured source coverage가 낮으면 ETF/OI/LSR feature는       │
+│    Parquet에는 저장되지만 통계/PCA 입력에서는 gate-out            │
 │    → 0~100 min-max score 변환                                    │
 │    → fng_value_lag1 부호 앵커로 방향성 통일                       │
 ├──────────────────────────────────────────────────────────────────┤
@@ -479,7 +483,7 @@ GitHub Actions `Build Sentiment Time Join Parquet` job 또는 `make sentiment-jo
 │    ├─ MASTER_SCHEMA (pandera strict=True) 검증                    │
 │    ├─ Parquet 저장 + 메타데이터 (sentiment_join_stats)            │
 │    │    ADF, Granger, hit_rates, correlations, backtest,         │
-│    │    walk_forward, hybrid_indices 진단 포함                    │
+│    │    walk_forward, hybrid_indices, structured_sources 포함     │
 │    ├─ R2 업로드 (R2_PUBLIC_BUCKET 설정 시)                        │
 │    └─ 로컬 파일 보관: SENTIMENT_JOIN_RETAIN_DAYS일 (기본 30)      │
 └──────────────────────────────────────────────────────────────────┘
@@ -554,6 +558,12 @@ R2 관련 canonical 키는 `R2_PUBLIC_BUCKET`, `R2_S3_ENDPOINT`, `R2_ACCESS_KEY_
 
 Granger 검정에서 유의하지 않은 Predictor에는 `granger_significant: false` 플래그가 부여됩니다.
 
+명시적 백필 스크립트는 뉴스 감성과 BTC 선물 OI/LSR를 지원합니다. BTC 선물 OI/LSR는
+로컬에서 `scripts/backfill_btc_futures.py --provider coinalyze`로 `btc_futures_daily`에 적재합니다.
+Coinalyze OI는 기존 Binance daily 계약과 맞추기 위해 `date + 1일`로 저장하고, LSR는 같은 UTC 날짜로 저장합니다.
+ETF는 `btc_etf_gold` history를 우선 사용하고 최신 스냅샷 fallback은 historical backfill로 보지 않습니다.
+futures는 funding과 OI/LSR를 분리 평가하며, OI/LSR coverage 미달 시 raw 컬럼은 저장하되 분석 입력에서는 제외합니다.
+
 ### 9.4 Parquet 메타데이터 구조 (sentiment_join_stats)
 
 ```json
@@ -564,8 +574,17 @@ Granger 검정에서 유의하지 않은 Predictor에는 `granger_significant: f
   "granger_results": [ { "predictor": "...", "target": "...", "lag": 1, "pvalue_adjusted": 0.03, "significant": true, ... } ],
   "granger_correction": { "method": "benjamini_hochberg", "n_tests": 63, ... },
   "hybrid_indices": {
-    "full": { "pca_summary": { "status": "ok", "selected_features": [...], ... }, ... },
+    "full": {
+      "pca_summary": { "status": "ok", "selected_features": [...], ... },
+      "excluded_features": [ { "feature": "etf_net_inflow_usd_lag1", "reason": "btc_etf_history_unavailable" } ],
+      "quality_status": "degraded",
+      ...
+    },
     "core": { ... }
+  },
+  "structured_sources": {
+    "btc_etf": { "mode": "gold_history", "coverage": { "ratio": 0.92 }, "quality_status": "ok" },
+    "futures": { "mode": "binance", "oi_quality_status": "degraded", "lsr_quality_status": "ok", ... }
   },
   "hit_rates": [ { "predictor": "news_sentiment_mean_lag1", "hit_rate": 0.55, "f1": 0.59, "granger_significant": true, ... } ],
   "correlations": [ { "col_a": "...", "col_b": "btc_log_return", "pearson_r": 0.12, "spearman_rho": 0.15, ... } ],

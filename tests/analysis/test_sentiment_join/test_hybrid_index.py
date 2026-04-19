@@ -158,3 +158,31 @@ def test_compute_hybrid_indices_coverage_included() -> None:
         assert coverage["rows_total"] == len(_frame())
         assert "rows_used" in coverage
         assert "ratio" in coverage
+
+
+def test_compute_hybrid_indices_records_excluded_features_from_pipeline_gate() -> None:
+    result = compute_hybrid_indices(
+        _frame(),
+        feature_exclusion_reasons={
+            "etf_net_inflow_usd_lag1": "btc_etf_history_unavailable",
+        },
+    )
+
+    excluded = result.attrs["hybrid_index_diagnostics"]["full"]["excluded_features"]
+    assert {
+        "feature": "etf_net_inflow_usd_lag1",
+        "reason": "btc_etf_history_unavailable",
+    } in excluded
+
+
+def test_compute_hybrid_indices_marks_full_degraded_without_expansion_features() -> None:
+    df = _frame().copy()
+    df["btc_long_short_ratio_lag1"] = float("nan")
+    df["etf_net_inflow_usd_lag1"] = float("nan")
+    df["vix_lag1"] = float("nan")
+
+    result = compute_hybrid_indices(df)
+
+    diagnostics = result.attrs["hybrid_index_diagnostics"]["full"]
+    assert diagnostics["quality_status"] == "degraded"
+    assert "missing_full_expansion_features" in diagnostics["quality_reasons"]

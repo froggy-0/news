@@ -134,12 +134,17 @@ def test_build_stats_metadata_payload_serializes_contract_fields() -> None:
         rows_after_outlier_filter=40,
         outlier_filtered_count=2,
         outlier_filtered_ratio=0.0476,
+        structured_sources={
+            "btc_etf": {"mode": "gold_history", "quality_status": "ok"},
+            "futures": {"mode": "binance", "quality_status": "degraded"},
+        },
     )
 
     decoded = payload.decode("utf-8")
     assert '"run_id": "sentiment-join-20260412"' in decoded
     assert '"granger_results"' in decoded
     assert '"hybrid_indices"' in decoded
+    assert '"structured_sources"' in decoded
     assert '"full"' in decoded
     assert '"core"' in decoded
 
@@ -241,3 +246,4 @@ def test_build_stats_metadata_payload_defaults_empty_when_none() -> None:
     assert decoded["correlations"] == []
     assert decoded["backtest"] == []
     assert decoded["walk_forward"] == {}
+    assert decoded["structured_sources"] == {}
