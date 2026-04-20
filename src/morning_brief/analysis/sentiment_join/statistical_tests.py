@@ -844,6 +844,40 @@ class WalkForwardResult:
     avg_alpha: float
     train_days: int
     test_days: int
+    # Horizon-aware 확장 (Phase 2) — 기본값은 기존 T+1 동작
+    return_col: str = "btc_log_return"
+    direction_label_col: str = "btc_direction_label"
+    horizon_days: int = 1
+    embargo_days: int = 0
+    stability: float = float("nan")
+
+
+def _fold_stability(values: list[float]) -> float:
+    """1 - stdev/|mean| — fold 간 지표 안정성. 값이 2개 미만이면 NaN."""
+    valid = [v for v in values if not math.isnan(v)]
+    if len(valid) < 2:
+        return float("nan")
+    mean = sum(valid) / len(valid)
+    if abs(mean) < 1e-12:
+        return float("nan")
+    var = sum((v - mean) ** 2 for v in valid) / (len(valid) - 1)
+    std = math.sqrt(var)
+    return 1.0 - std / abs(mean)
+
+
+def _derive_direction_label(series: pd.Series) -> pd.Series:
+    """sign(ret) → up/down/flat/None. NaN 은 None 으로 유지한다."""
+
+    def _lbl(val: float) -> str | None:
+        if pd.isna(val):
+            return None
+        if val > 0:
+            return "up"
+        if val < 0:
+            return "down"
+        return "flat"
+
+    return series.apply(_lbl)
 
 
 def walk_forward_validate(
@@ -851,31 +885,52 @@ def walk_forward_validate(
     train_days: int = 120,
     test_days: int = 30,
     index_name: str = "full",
+    *,
+    return_col: str = "btc_log_return",
+    direction_label_col: str | None = None,
+    horizon_days: int = 1,
+    embargo_days: int | None = None,
 ) -> WalkForwardResult | None:
     """Walk-Forward Validation으로 out-of-sample 성능을 평가한다.
 
     지정된 index_name("full" 또는 "core")의 hybrid_index_score_lag1 기준으로 각 fold에서:
     1. train 구간으로 _compute_single_index (normal mode) → scaler/PCA/min-max 추출
-    2. test 구간에 pre-fitted mode로 _compute_single_index → test scores
-    3. test 구간에서 hit rate + 누적 수익률 산출
+    2. train → test 사이에 embargo_days 만큼 gap 삽입(forward-leak 차단)
+    3. test 구간에 pre-fitted mode로 _compute_single_index → test scores
+    4. test 구간에서 hit rate + 누적 수익률 산출
 
-    데이터 부족(len < train_days + test_days) 시 None 반환 + WARNING 로깅.
+    Horizon-aware 확장(Phase 2):
+    - return_col: 백테스트에 사용할 수익률 컬럼 (기본 btc_log_return, 선택 btc_fwd_ret_Nd)
+    - direction_label_col: hit-rate용 라벨 컬럼. None 이면 return_col 부호로 동적 생성.
+    - horizon_days: 예측 지평. embargo_days 가 None 이면 max(horizon_days, 5) 로 설정.
+
+    데이터 부족(len < train_days + test_days + embargo) 시 None 반환 + WARNING 로깅.
     """
     from morning_brief.analysis.sentiment_join.hybrid_index import (
         INDEX_SPECS,
         _compute_single_index,
     )
 
+    effective_embargo = (
+        embargo_days
+        if embargo_days is not None
+        else max(horizon_days, 5)
+        if horizon_days > 1
+        else 0
+    )
+
     n = len(df)
-    if n < train_days + test_days:
+    if n < train_days + test_days + effective_embargo:
         log_structured(
             logger,
             event="stats.walk_forward_insufficient_data",
             message="Walk-Forward Validation에 필요한 데이터가 부족합니다.",
             level=logging.WARNING,
             rows=n,
-            min_required=train_days + test_days,
+            min_required=train_days + test_days + effective_embargo,
             index=index_name,
+            horizon_days=horizon_days,
+            embargo_days=effective_embargo,
         )
         return None
 
@@ -897,12 +952,13 @@ def walk_forward_validate(
     fold_num = 0
     start = 0
 
-    while start + train_days + test_days <= n:
+    while start + train_days + effective_embargo + test_days <= n:
         train_end = start + train_days
-        test_end = train_end + test_days
+        test_start = train_end + effective_embargo
+        test_end = test_start + test_days
 
         train_df = df.iloc[start:train_end].copy()
-        test_df = df.iloc[train_end:test_end].copy()
+        test_df = df.iloc[test_start:test_end].copy()
 
         # ── Train: normal mode → extract fitted objects ──
         _, train_score_series, train_diag = _compute_single_index(train_df, spec, len(train_df))
@@ -937,19 +993,33 @@ def walk_forward_validate(
         test_eval = test_df.copy()
         test_eval[score_lag1_col] = test_score_series.shift(1)
 
-        # hit rate (threshold=50)
-        if "btc_direction_label" in test_eval.columns and score_lag1_col in test_eval.columns:
-            hr_result = compute_hit_rate(test_eval, score_lag1_col, threshold=50.0)
+        # hit-rate 용 direction label 결정
+        if direction_label_col is not None:
+            hit_label_col = direction_label_col
+        elif return_col == "btc_log_return":
+            hit_label_col = "btc_direction_label"
+        else:
+            # return_col 부호로 동적 라벨 생성 (fwd_ret_Nd 지원)
+            hit_label_col = f"_derived_direction_{return_col}"
+            if return_col in test_eval.columns:
+                test_eval[hit_label_col] = _derive_direction_label(test_eval[return_col])
+
+        # compute_hit_rate 는 'btc_direction_label' 컬럼 이름에 의존 → alias 주입
+        if hit_label_col in test_eval.columns and score_lag1_col in test_eval.columns:
+            hr_input = test_eval.copy()
+            hr_input["btc_direction_label"] = hr_input[hit_label_col]
+            hr_result = compute_hit_rate(hr_input, score_lag1_col, threshold=50.0)
             fold_hit_rate = hr_result.hit_rate
         else:
             fold_hit_rate = float("nan")
 
-        # 누적 수익률 (backtest)
-        if "btc_log_return" in test_eval.columns and score_lag1_col in test_eval.columns:
+        # 누적 수익률 (backtest) — return_col 파라미터화
+        if return_col in test_eval.columns and score_lag1_col in test_eval.columns:
             bt_result = compute_backtest(
                 test_eval,
                 score_lag1_col,
                 threshold=50.0,
+                return_col=return_col,
                 transaction_cost_bps=0.0,
             )
             fold_cumret = bt_result.strategy_cumulative_return
@@ -988,14 +1058,22 @@ def walk_forward_validate(
             avg_alpha=float("nan"),
             train_days=train_days,
             test_days=test_days,
+            return_col=return_col,
+            direction_label_col=(
+                direction_label_col if direction_label_col is not None else "btc_direction_label"
+            ),
+            horizon_days=horizon_days,
+            embargo_days=effective_embargo,
+            stability=float("nan"),
         )
 
     # 집계: NaN이 아닌 fold만 평균
-    valid_hrs = [f.hit_rate for f in fold_results if not math.isnan(f.hit_rate)]
-    valid_cumrets = [
-        f.cumulative_return for f in fold_results if not math.isnan(f.cumulative_return)
-    ]
-    valid_alphas = [f.alpha for f in fold_results if not math.isnan(f.alpha)]
+    hit_rates = [f.hit_rate for f in fold_results]
+    cumrets = [f.cumulative_return for f in fold_results]
+    alphas = [f.alpha for f in fold_results]
+    valid_hrs = [v for v in hit_rates if not math.isnan(v)]
+    valid_cumrets = [v for v in cumrets if not math.isnan(v)]
+    valid_alphas = [v for v in alphas if not math.isnan(v)]
 
     avg_hr = sum(valid_hrs) / len(valid_hrs) if valid_hrs else float("nan")
     avg_cumret = sum(valid_cumrets) / len(valid_cumrets) if valid_cumrets else float("nan")
@@ -1008,6 +1086,13 @@ def walk_forward_validate(
         avg_alpha=avg_alpha,
         train_days=train_days,
         test_days=test_days,
+        return_col=return_col,
+        direction_label_col=(
+            direction_label_col if direction_label_col is not None else "btc_direction_label"
+        ),
+        horizon_days=horizon_days,
+        embargo_days=effective_embargo,
+        stability=_fold_stability(hit_rates),
     )
 
 

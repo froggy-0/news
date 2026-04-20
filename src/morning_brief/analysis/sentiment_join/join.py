@@ -230,6 +230,72 @@ def _add_btc_direction_label(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+FWD_LARGE_MOVE_3D_THRESHOLD: float = 0.03
+"""|btc_fwd_ret_3d| > 3% 를 'large move' 로 라벨링한다 (≈ 3-day log return 3%)."""
+
+FORWARD_TARGET_COLUMNS: tuple[str, ...] = (
+    "btc_fwd_ret_1d",
+    "btc_fwd_ret_3d",
+    "btc_fwd_ret_7d",
+    "btc_fwd_vol_5d",
+    "btc_large_move_3d",
+)
+
+
+def _add_forward_target_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """멀티 호라이즌 예측 타겟 5종을 부착한다.
+
+    모든 타겟은 T+1 이후 값만 사용해 lookahead 를 차단한다. 마지막 k개 행은 NaN 으로 남는다.
+
+    - btc_fwd_ret_1d: 1일 forward log return (= btc_log_return.shift(-1))
+    - btc_fwd_ret_3d: T+1..T+3 누적 log return
+    - btc_fwd_ret_7d: T+1..T+7 누적 log return
+    - btc_fwd_vol_5d: T+1..T+5 의 log return 표준편차
+    - btc_large_move_3d: |fwd_ret_3d| > FWD_LARGE_MOVE_3D_THRESHOLD 이진 (Int64, NaN 허용)
+    """
+    result = df.copy()
+
+    if "btc_log_return" not in result.columns:
+        for col in FORWARD_TARGET_COLUMNS:
+            if col == "btc_large_move_3d":
+                result[col] = pd.array([pd.NA] * len(result), dtype="Int64")
+            else:
+                result[col] = float("nan")
+        return result
+
+    ret = pd.to_numeric(result["btc_log_return"], errors="coerce")
+
+    # 1-day forward
+    result["btc_fwd_ret_1d"] = ret.shift(-1)
+
+    # k-day cumulative forward log return: cumsum(t+k) - cumsum(t)
+    cumret = ret.cumsum()
+    for k in (3, 7):
+        result[f"btc_fwd_ret_{k}d"] = cumret.shift(-k) - cumret
+
+    # 5-day forward volatility: std(ret[t+1..t+5]).
+    # skipna=False 로 5개 중 하나라도 NaN 이면 결과도 NaN 으로 엄격 처리한다.
+    fwd_frame = pd.concat(
+        [ret.shift(-i).rename(f"_f{i}") for i in range(1, 6)],
+        axis=1,
+    )
+    result["btc_fwd_vol_5d"] = fwd_frame.std(axis=1, ddof=1, skipna=False)
+
+    # Binary large-move label (T+3 window)
+    fwd_3d = result["btc_fwd_ret_3d"]
+    large_move = pd.array(
+        [pd.NA] * len(result),
+        dtype="Int64",
+    )
+    valid = fwd_3d.notna()
+    large_move[valid.to_numpy()] = (
+        (fwd_3d[valid].abs() > FWD_LARGE_MOVE_3D_THRESHOLD).astype(int).to_numpy()
+    )
+    result["btc_large_move_3d"] = large_move
+
+    return result
+
+
 def merge_sources(
     sentiment_df: pd.DataFrame,
     fng_df: pd.DataFrame,
@@ -275,6 +341,7 @@ def merge_sources(
     merged = _add_futures_lag_columns(merged)
     merged = _add_sentiment_lag_columns(merged)
     merged = _add_btc_direction_label(merged)
+    merged = _add_forward_target_columns(merged)
 
     # §2: text_schema_version — R2 페이로드에서 전달되지 않은 경우 None으로 채움
     if "text_schema_version" not in merged.columns:
@@ -337,5 +404,8 @@ __all__ = [
     "_add_futures_lag_columns",
     "_add_sentiment_lag_columns",
     "_add_btc_direction_label",
+    "_add_forward_target_columns",
     "_apply_sentiment_quality_gate",
+    "FORWARD_TARGET_COLUMNS",
+    "FWD_LARGE_MOVE_3D_THRESHOLD",
 ]

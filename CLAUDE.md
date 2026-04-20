@@ -95,8 +95,27 @@ npm run deploy:production   # Cloudflare production 배포
   - `SENTIMENT_JOIN_R2_MAX_CONCURRENCY`
   - `SENTIMENT_JOIN_RETAIN_DAYS`
   - `FUTURES_LAMBDA_ARN` — ap-northeast-2 Lambda ARN (설정 시 Binance fapi 직접 호출 건너뜀)
+  - `SENTIMENT_JOIN_OUTLIER_POLICY` — `row`(기본) / `column` / `winsorize` / `none`
+  - `SENTIMENT_JOIN_SCALER_KIND` — `standard`(기본) / `robust`
 - 선물 데이터 fallback 체인: Lambda(ap-northeast-2) → Bybit 공개 API → NaN 프레임
 - Lambda 인프라: `lambda/binance_futures/` (ARM64, Python 3.11, stdlib만 사용, 수동 배포)
+
+### Ablation & Variance Decomposition
+
+이상치 정책·스케일러·호라이즌 조합의 팩토리얼 실험 플랫폼입니다.
+
+```bash
+# Ablation 실행 (기본 2×4×3×2 = 48 cell)
+make sentiment-ablation ABLATION_ARGS="--master data/sentiment_join/master_YYYYMMDD.parquet"
+
+# Variance report 생성
+make sentiment-variance-report RUN_ID=data/sentiment_join/experiments/{run_id}
+```
+
+- 진입점: `scripts/run_outlier_ablation.py` / `scripts/variance_report.py`
+- 결과물: `data/sentiment_join/experiments/{run_id}/folds.parquet`, `report.md`, `waterfall.md`, `anova.json`
+- 승격 게이트: `hit_rate Δ≥+2pp AND Sharpe Δ≥+0.10 AND masked≤10% AND q<0.10 AND stability≥0.5`
+- 구현: `src/morning_brief/analysis/sentiment_join/experiments.py`, `variance.py`
 - 분석 의존성: `requirements-analysis.txt` (`pandera`, `pyarrow`, `pandas`, `numpy`)
 
 ### Frontend

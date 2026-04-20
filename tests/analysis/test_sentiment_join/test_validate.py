@@ -44,6 +44,12 @@ def _valid_df() -> pd.DataFrame:
             "volume_change_pct_lag1": [float("nan")],
             # Req 8: BTC 방향 라벨
             "btc_direction_label": ["up"],
+            # Multi-horizon forward targets (마지막 k개 행은 NaN — lookahead 차단)
+            "btc_fwd_ret_1d": [float("nan")],
+            "btc_fwd_ret_3d": [float("nan")],
+            "btc_fwd_ret_7d": [float("nan")],
+            "btc_fwd_vol_5d": [float("nan")],
+            "btc_large_move_3d": pd.array([pd.NA], dtype="Int64"),
             # §4 v4: full / core 하이브리드 지수 + 0~100 score (NaN 허용)
             "full_hybrid_index": [float("nan")],
             "full_hybrid_index_score": [float("nan")],
