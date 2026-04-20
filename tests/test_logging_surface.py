@@ -9,6 +9,7 @@ EXPECTED_LOGGER_CALL_FILES: set[str] = {
     "src/morning_brief/data/finbert_sentiment.py",
 }
 EXPECTED_GET_LOGGER_FILES = {
+    "src/morning_brief/analysis/sentiment_join/experiments.py",
     "src/morning_brief/analysis/sentiment_join/hybrid_index.py",
     "src/morning_brief/analysis/sentiment_join/intelligence.py",
     "src/morning_brief/analysis/sentiment_join/join.py",

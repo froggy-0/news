@@ -5,7 +5,7 @@ MYPY := $(PYTHON) -m mypy
 PRE_COMMIT := $(PYTHON) -m pre_commit
 PRE_COMMIT_HOME ?= .cache/pre-commit
 
-.PHONY: install-dev fmt lint test typecheck check validate-pre-commit sentiment-join
+.PHONY: install-dev fmt lint test typecheck check validate-pre-commit sentiment-join sentiment-ablation sentiment-variance-report
 
 install-dev:
 	$(PYTHON) -m pip install --disable-pip-version-check -r requirements-dev.txt
@@ -31,3 +31,9 @@ validate-pre-commit:
 
 sentiment-join:
 	$(PYTHON) scripts/build_sentiment_join.py
+
+sentiment-ablation:
+	$(PYTHON) scripts/run_outlier_ablation.py $(ABLATION_ARGS)
+
+sentiment-variance-report:
+	$(PYTHON) scripts/variance_report.py --run-dir $(RUN_ID)
