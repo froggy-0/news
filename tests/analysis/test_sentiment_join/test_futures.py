@@ -7,6 +7,12 @@ import pytest
 from morning_brief.analysis.sentiment_join.sources import futures
 
 
+@pytest.fixture(autouse=True)
+def _isolate_futures_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(futures, "_read_futures_from_supabase", lambda *args, **kwargs: {})
+    monkeypatch.setattr(futures, "_write_futures_to_supabase", lambda *args, **kwargs: None)
+
+
 def _ms(year: int, month: int, day: int, hour: int = 0) -> int:
     return int(datetime(year, month, day, hour, tzinfo=timezone.utc).timestamp() * 1000)
 

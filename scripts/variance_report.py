@@ -61,6 +61,36 @@ def _cell_means(folds: Any) -> Any:
     )
 
 
+def _approach_label(spec_id: str, index_name: str) -> str:
+    lower = f"{spec_id} {index_name}".lower()
+    if any(
+        token in lower for token in ("always_up", "contrarian", "momo", "vol_regime", "baseline")
+    ):
+        return "baseline"
+    if any(token in lower for token in ("logistic", "elastic", "lightgbm", "lgbm", "model")):
+        return "model"
+    return "hybrid"
+
+
+def _lineage_summary(run_dir: Path) -> dict[str, list[str]]:
+    candidates = (run_dir / "tracking.json", run_dir / "backfill_manifest.json")
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        lineage = payload.get("lineage") or payload.get("column_lineage") or {}
+        if isinstance(lineage, dict):
+            return {
+                str(key): sorted(str(v) for v in values)
+                for key, values in lineage.items()
+                if isinstance(values, list)
+            }
+    return {}
+
+
 def _build_anova_json(folds: Any) -> dict:
     from morning_brief.analysis.sentiment_join.variance import (
         bh_correct,
@@ -216,6 +246,23 @@ def _build_report_md(
         )
     lines.append("")
 
+    power = _build_power_summary(cell_means, baseline_id)
+    if power:
+        lines.append("## Sample Size / Power")
+        lines.append("")
+        lines.append("| spec_id | effect size | folds | achieved power | min n @80% |")
+        lines.append("|---|---:|---:|---:|---:|")
+        for row in power[:10]:
+            lines.append(
+                f"| {row['spec_id']} | {row['effect_size']:+.4f} | "
+                f"{row['n_obs']} | {row['achieved_power']:.3f} | {row['min_sample_size']} |"
+            )
+        lines.append("")
+
+    lines.extend(_build_index_family_section(cell_means))
+    lines.extend(_build_approach_section(cell_means))
+    lines.extend(_build_lineage_section(run_dir))
+
     # ANOVA 요약
     lines.append("## ANOVA Effect Sizes (η²)")
     lines.append("")
@@ -235,6 +282,102 @@ def _build_report_md(
     lines.append("")
 
     return "\n".join(lines)
+
+
+def _build_index_family_section(cell_means: Any) -> list[str]:
+    if "index_name" not in cell_means.columns or cell_means.empty:
+        return []
+    grouped = (
+        cell_means.groupby("index_name")
+        .agg(
+            cells=("spec_id", "count"),
+            hit_rate=("hit_rate", "mean"),
+            sharpe=("sharpe", "mean"),
+            coverage=("coverage", "mean"),
+        )
+        .reset_index()
+        .sort_values("hit_rate", ascending=False)
+    )
+    lines = ["## Index Family Comparison", ""]
+    lines.append("| index | cells | hit_rate | sharpe | coverage |")
+    lines.append("|---|---:|---:|---:|---:|")
+    for _, row in grouped.iterrows():
+        lines.append(
+            f"| {row['index_name']} | {int(row['cells'])} | {row['hit_rate']:.4f} | "
+            f"{row['sharpe']:.4f} | {row['coverage']:.4f} |"
+        )
+    lines.append("")
+    return lines
+
+
+def _build_approach_section(cell_means: Any) -> list[str]:
+    if cell_means.empty:
+        return []
+    work = cell_means.copy()
+    work["approach"] = [
+        _approach_label(str(row["spec_id"]), str(row.get("index_name", "")))
+        for _, row in work.iterrows()
+    ]
+    grouped = (
+        work.groupby("approach")
+        .agg(
+            cells=("spec_id", "count"),
+            hit_rate=("hit_rate", "mean"),
+            sharpe=("sharpe", "mean"),
+            stability=("stability", "mean"),
+        )
+        .reset_index()
+        .sort_values("hit_rate", ascending=False)
+    )
+    lines = ["## Baseline / Model Comparison", ""]
+    lines.append("| approach | cells | hit_rate | sharpe | stability |")
+    lines.append("|---|---:|---:|---:|---:|")
+    for _, row in grouped.iterrows():
+        lines.append(
+            f"| {row['approach']} | {int(row['cells'])} | {row['hit_rate']:.4f} | "
+            f"{row['sharpe']:.4f} | {row['stability']:.4f} |"
+        )
+    lines.append("")
+    return lines
+
+
+def _build_lineage_section(run_dir: Path) -> list[str]:
+    lineage = _lineage_summary(run_dir)
+    if not lineage:
+        return []
+    lines = ["## Lineage Summary", ""]
+    lines.append("| column | sources |")
+    lines.append("|---|---|")
+    for column, sources in sorted(lineage.items()):
+        lines.append(f"| {column} | {', '.join(sources)} |")
+    lines.append("")
+    return lines
+
+
+def _build_power_summary(cell_means: Any, baseline_id: str) -> list[dict]:
+    from morning_brief.analysis.sentiment_join.variance import power_analysis
+
+    baseline = cell_means[cell_means["spec_id"] == baseline_id]
+    if baseline.empty:
+        return []
+    base_hit = float(baseline["hit_rate"].iloc[0])
+    rows = []
+    for _, row in cell_means.iterrows():
+        sid = str(row["spec_id"])
+        if sid == baseline_id:
+            continue
+        effect = float(row["hit_rate"]) - base_hit
+        result = power_analysis(effect_size=effect, n_obs=int(row["n_folds"]))
+        rows.append(
+            {
+                "spec_id": sid,
+                "effect_size": effect,
+                "n_obs": result.n_obs,
+                "achieved_power": result.achieved_power,
+                "min_sample_size": result.min_sample_size,
+            }
+        )
+    return sorted(rows, key=lambda r: -abs(r["effect_size"]))
 
 
 def _build_waterfall_md(

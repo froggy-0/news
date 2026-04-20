@@ -31,6 +31,7 @@ from morning_brief.analysis.sentiment_join.storage import (
     cleanup_old_files,
     save_parquet,
     upload_to_r2,
+    write_backfill_manifest,
 )
 from morning_brief.analysis.sentiment_join.transform import (
     compute_returns,
@@ -628,6 +629,19 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             ffill_days=total_ffill_days,
             stats_metadata=stats_metadata,
             btc_source=btc_source,
+        )
+        write_backfill_manifest(
+            settings.output_dir,
+            {
+                "run_id": f"sentiment-join-{run_date}",
+                "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+                "structured_sources": structured_sources,
+                "column_lineage": {
+                    col: sorted(str(v) for v in master_df[col].dropna().unique())
+                    for col in master_df.columns
+                    if col.endswith("_source")
+                },
+            },
         )
         cleanup_old_files(settings.output_dir, settings.retain_days)
         upload_to_r2(

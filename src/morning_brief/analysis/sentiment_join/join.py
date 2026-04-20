@@ -304,6 +304,8 @@ def merge_sources(
     futures_df: pd.DataFrame | None = None,
     etf_df: pd.DataFrame | None = None,
     vix_df: pd.DataFrame | None = None,
+    *,
+    record_source_lineage: bool = True,
 ) -> pd.DataFrame:
     filtered_sentiment, exclusion_counts = _apply_sentiment_quality_gate(sentiment_df)
 
@@ -333,6 +335,28 @@ def merge_sources(
         merged = merged.merge(vix_df[["date"] + vix_cols], on="date", how="left")
     else:
         merged["vix"] = float("nan")
+
+    if record_source_lineage:
+        futures_source = (
+            str(futures_df.attrs.get("futures_source", "unknown"))
+            if futures_df is not None and not futures_df.empty
+            else "empty"
+        )
+        etf_source = (
+            str(etf_df.attrs.get("source_mode", "unknown"))
+            if etf_df is not None and not etf_df.empty
+            else "empty"
+        )
+        vix_source = (
+            str(vix_df.attrs.get("source_mode", "fred"))
+            if vix_df is not None and not vix_df.empty
+            else "empty"
+        )
+        merged["funding_source"] = futures_source
+        merged["oi_source"] = futures_source
+        merged["lsr_source"] = futures_source
+        merged["etf_source"] = etf_source
+        merged["vix_source"] = vix_source
 
     # §7: btc_quote_volume 누락 방어 — _empty_return_frame fallback 경로에서 컬럼이 없을 수 있음
     if "btc_quote_volume" not in merged.columns:

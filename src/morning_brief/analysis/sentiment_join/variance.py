@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import math
+import sys
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -72,6 +73,16 @@ class PromotionGateResult:
     hit_rate_ci_lower: float
 
 
+@dataclass
+class PowerAnalysisResult:
+    effect_size: float
+    n_obs: int
+    alpha: float
+    target_power: float
+    achieved_power: float
+    min_sample_size: int
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Utility
 # ─────────────────────────────────────────────────────────────────────────────
@@ -101,6 +112,52 @@ def bh_correct(p_values: list[float]) -> list[float]:
     for rank_0, orig_idx in enumerate(order):
         result[orig_idx] = adj[rank_0]
     return result
+
+
+def estimate_min_sample_size(
+    effect_size: float,
+    *,
+    alpha: float = 0.05,
+    target_power: float = 0.80,
+) -> int:
+    """Normal-approx minimum n for detecting standardized mean difference."""
+    from scipy.stats import norm
+
+    effect = abs(effect_size)
+    if effect <= 0:
+        return sys.maxsize
+    z_alpha = float(norm.ppf(1 - alpha / 2))
+    z_power = float(norm.ppf(target_power))
+    return int(math.ceil(((z_alpha + z_power) / effect) ** 2))
+
+
+def power_analysis(
+    *,
+    effect_size: float,
+    n_obs: int,
+    alpha: float = 0.05,
+    target_power: float = 0.80,
+) -> PowerAnalysisResult:
+    from scipy.stats import norm
+
+    effect = abs(effect_size)
+    if effect <= 0 or n_obs <= 0:
+        achieved = 0.0
+    else:
+        z_alpha = float(norm.ppf(1 - alpha / 2))
+        achieved = float(norm.cdf(math.sqrt(n_obs) * effect - z_alpha))
+    return PowerAnalysisResult(
+        effect_size=effect_size,
+        n_obs=n_obs,
+        alpha=alpha,
+        target_power=target_power,
+        achieved_power=achieved,
+        min_sample_size=estimate_min_sample_size(
+            effect_size,
+            alpha=alpha,
+            target_power=target_power,
+        ),
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -351,6 +408,7 @@ __all__ = [
     "AnovaResult",
     "BootstrapCI",
     "PromotionGateResult",
+    "PowerAnalysisResult",
     "GATE_HIT_RATE_DELTA_PP",
     "GATE_SHARPE_DELTA",
     "GATE_MAX_MASKED_RATIO",
@@ -361,6 +419,8 @@ __all__ = [
     "bootstrap_ci",
     "evaluate_promotion_gate",
     "fisher_z",
+    "estimate_min_sample_size",
+    "power_analysis",
     "run_anova",
     "run_horizon_anova",
 ]

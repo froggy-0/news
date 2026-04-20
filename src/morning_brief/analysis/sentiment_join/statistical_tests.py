@@ -142,6 +142,64 @@ def _run_stationarity(series: pd.Series) -> dict[str, Any]:
     }
 
 
+def stationarity_check(series: pd.Series) -> dict[str, Any]:
+    """Public stationarity check wrapper used by advanced feature experiments."""
+    s = pd.to_numeric(series, errors="coerce").dropna()
+    if len(s) < MIN_ROWS_FOR_ADF:
+        return {
+            "stationary": False,
+            "conclusion": "insufficient_rows",
+            "rows": int(len(s)),
+            "min_required": MIN_ROWS_FOR_ADF,
+        }
+    return _run_stationarity(s)
+
+
+class TransferEntropy:
+    """Discrete lagged-dependence estimator for non-linear signal screening."""
+
+    def __init__(self, *, max_lag: int = 3, bins: int = 3, min_rows: int = 30) -> None:
+        self.max_lag = max_lag
+        self.bins = bins
+        self.min_rows = min_rows
+
+    def fit(self, df: pd.DataFrame, predictor: str, target: str) -> list[dict[str, Any]]:
+        from sklearn.metrics import mutual_info_score
+
+        if predictor not in df.columns or target not in df.columns:
+            return []
+        rows: list[dict[str, Any]] = []
+        for lag in range(1, self.max_lag + 1):
+            work = pd.DataFrame(
+                {
+                    "x": pd.to_numeric(df[predictor], errors="coerce").shift(lag),
+                    "y": pd.to_numeric(df[target], errors="coerce"),
+                }
+            ).dropna()
+            if len(work) < self.min_rows:
+                continue
+            try:
+                x_bins = pd.qcut(work["x"], q=self.bins, labels=False, duplicates="drop")
+                y_bins = pd.qcut(work["y"], q=self.bins, labels=False, duplicates="drop")
+                valid = pd.DataFrame({"x": x_bins, "y": y_bins}).dropna()
+                if len(valid) < self.min_rows:
+                    continue
+                score = float(mutual_info_score(valid["x"].astype(int), valid["y"].astype(int)))
+            except Exception:
+                continue
+            rows.append(
+                {
+                    "predictor": predictor,
+                    "target": target,
+                    "lag": lag,
+                    "transfer_entropy": score,
+                    "rows": int(len(valid)),
+                    "warning": None,
+                }
+            )
+        return rows
+
+
 def _ensure_stationary(
     series: pd.Series,
 ) -> tuple[pd.Series, bool, bool]:
@@ -832,6 +890,8 @@ class WalkForwardFoldResult:
     hit_rate: float
     cumulative_return: float
     alpha: float
+    train_start: str = ""
+    train_end: str = ""
 
 
 @dataclass(frozen=True)
@@ -849,6 +909,8 @@ class WalkForwardResult:
     direction_label_col: str = "btc_direction_label"
     horizon_days: int = 1
     embargo_days: int = 0
+    purged_kfold: bool = False
+    expanding_window: bool = False
     stability: float = float("nan")
 
 
@@ -890,6 +952,8 @@ def walk_forward_validate(
     direction_label_col: str | None = None,
     horizon_days: int = 1,
     embargo_days: int | None = None,
+    purged_kfold: bool = False,
+    expanding_window: bool = False,
 ) -> WalkForwardResult | None:
     """Walk-Forward Validation으로 out-of-sample 성능을 평가한다.
 
@@ -902,7 +966,8 @@ def walk_forward_validate(
     Horizon-aware 확장(Phase 2):
     - return_col: 백테스트에 사용할 수익률 컬럼 (기본 btc_log_return, 선택 btc_fwd_ret_Nd)
     - direction_label_col: hit-rate용 라벨 컬럼. None 이면 return_col 부호로 동적 생성.
-    - horizon_days: 예측 지평. embargo_days 가 None 이면 max(horizon_days, 5) 로 설정.
+    - horizon_days: 예측 지평. multi-horizon 또는 purged split에서
+      embargo_days 가 None 이면 max(horizon_days, 5) 로 설정.
 
     데이터 부족(len < train_days + test_days + embargo) 시 None 반환 + WARNING 로깅.
     """
@@ -911,13 +976,12 @@ def walk_forward_validate(
         _compute_single_index,
     )
 
-    effective_embargo = (
-        embargo_days
-        if embargo_days is not None
-        else max(horizon_days, 5)
-        if horizon_days > 1
-        else 0
-    )
+    if embargo_days is not None:
+        effective_embargo = embargo_days
+    elif horizon_days > 1 or purged_kfold:
+        effective_embargo = max(horizon_days, 5)
+    else:
+        effective_embargo = 0
 
     n = len(df)
     if n < train_days + test_days + effective_embargo:
@@ -957,7 +1021,8 @@ def walk_forward_validate(
         test_start = train_end + effective_embargo
         test_end = test_start + test_days
 
-        train_df = df.iloc[start:train_end].copy()
+        train_start = 0 if expanding_window else start
+        train_df = df.iloc[train_start:train_end].copy()
         test_df = df.iloc[test_start:test_end].copy()
 
         # ── Train: normal mode → extract fitted objects ──
@@ -1035,6 +1100,12 @@ def walk_forward_validate(
         else:
             test_start_str = str(test_df.index[0])
             test_end_str = str(test_df.index[-1])
+        if "date" in train_df.columns:
+            train_start_str = str(train_df["date"].iloc[0])
+            train_end_str = str(train_df["date"].iloc[-1])
+        else:
+            train_start_str = str(train_df.index[0])
+            train_end_str = str(train_df.index[-1])
 
         fold_results.append(
             WalkForwardFoldResult(
@@ -1044,6 +1115,8 @@ def walk_forward_validate(
                 hit_rate=fold_hit_rate,
                 cumulative_return=fold_cumret,
                 alpha=fold_alpha,
+                train_start=train_start_str,
+                train_end=train_end_str,
             )
         )
 
@@ -1064,6 +1137,8 @@ def walk_forward_validate(
             ),
             horizon_days=horizon_days,
             embargo_days=effective_embargo,
+            purged_kfold=purged_kfold,
+            expanding_window=expanding_window,
             stability=float("nan"),
         )
 
@@ -1092,6 +1167,8 @@ def walk_forward_validate(
         ),
         horizon_days=horizon_days,
         embargo_days=effective_embargo,
+        purged_kfold=purged_kfold,
+        expanding_window=expanding_window,
         stability=_fold_stability(hit_rates),
     )
 
@@ -1253,6 +1330,7 @@ __all__ = [
     "HitRateResult",
     "MIN_ROWS_FOR_ADF",
     "MIN_ROWS_FOR_GRANGER",
+    "TransferEntropy",
     "WalkForwardFoldResult",
     "WalkForwardResult",
     "_ALPHA_PREDICTOR_CONFIGS",
@@ -1271,5 +1349,6 @@ __all__ = [
     "compute_hit_rate",
     "run_alpha_validation",
     "run_statistical_tests",
+    "stationarity_check",
     "walk_forward_validate",
 ]

@@ -66,6 +66,11 @@ def _valid_df() -> pd.DataFrame:
             # §4 3-4: VIX optional (수집 실패 시 NaN)
             "vix": [float("nan")],
             "vix_lag1": [float("nan")],
+            "funding_source": ["empty"],
+            "oi_source": ["empty"],
+            "lsr_source": ["empty"],
+            "etf_source": ["empty"],
+            "vix_source": ["empty"],
         }
     )
 
@@ -188,6 +193,11 @@ def test_validate_master_strict_requires_all_new_columns() -> None:
         "volume_change_pct",
         "usdkrw_log_return_lag1",
         "volume_change_pct_lag1",
+        "funding_source",
+        "oi_source",
+        "lsr_source",
+        "etf_source",
+        "vix_source",
     ):
         df = _valid_df().drop(columns=[missing_col])
         with pytest.raises(SchemaError):

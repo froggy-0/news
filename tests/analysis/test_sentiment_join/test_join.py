@@ -330,6 +330,22 @@ def test_merge_sources_exclusion_counts_in_attrs() -> None:
     assert "missing_backfill_marker" in counts
 
 
+def test_merge_sources_adds_source_lineage_columns() -> None:
+    futures = _futures_df(35)
+    futures.attrs["futures_source"] = "binance"
+    etf = _etf_df(35)
+    etf.attrs["source_mode"] = "gold_history"
+
+    merged = merge_sources(
+        _sentiment_df(35), _fng_df(35), _btc_df(35), _usdkrw_df(35), futures, etf
+    )
+
+    assert merged["funding_source"].unique().tolist() == ["binance"]
+    assert merged["oi_source"].unique().tolist() == ["binance"]
+    assert merged["lsr_source"].unique().tolist() == ["binance"]
+    assert merged["etf_source"].unique().tolist() == ["gold_history"]
+
+
 # ── §1: 감성·공포지수 Lag-1 테스트 ──
 
 

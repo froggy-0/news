@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import pytest
 
 from morning_brief.analysis.sentiment_join import statistical_tests
 from morning_brief.analysis.sentiment_join.statistical_tests import (
+    TransferEntropy,
     _apply_bh_correction,
     _run_granger_all_lags,
+    stationarity_check,
+    walk_forward_validate,
 )
 
 
@@ -184,6 +188,71 @@ def test_adf_and_granger_thresholds_are_independent() -> None:
     """ADF 기준(30)과 Granger 기준(180)이 독립적인지 확인."""
     assert statistical_tests.MIN_ROWS_FOR_ADF == 30
     assert statistical_tests.MIN_ROWS_FOR_GRANGER == 180
+
+
+def test_stationarity_check_reports_insufficient_rows() -> None:
+    result = stationarity_check(pd.Series([0.1] * 3))
+
+    assert result["conclusion"] == "insufficient_rows"
+    assert result["stationary"] is False
+
+
+def test_transfer_entropy_returns_warning_free_rows() -> None:
+    rows = 60
+    df = pd.DataFrame(
+        {
+            "x": np.sin(np.arange(rows) / 4),
+            "y": np.sin((np.arange(rows) - 1) / 4),
+        }
+    )
+
+    result = TransferEntropy(max_lag=2, bins=3, min_rows=20).fit(df, "x", "y")
+
+    assert result
+    assert all(row["warning"] is None for row in result)
+
+
+def test_walk_forward_validate_expanding_window_metadata() -> None:
+    rows = 220
+    idx = np.arange(rows)
+    df = pd.DataFrame(
+        {
+            "date": pd.date_range("2026-01-01", periods=rows, freq="D").strftime("%Y-%m-%d"),
+            "news_sentiment_mean_lag1": np.sin(idx / 5),
+            "fng_value_lag1": 50 + np.cos(idx / 4) * 20,
+            "funding_rate_lag1": np.sin(idx / 7) * 0.001,
+            "btc_long_short_ratio_lag1": 0.9 + np.cos(idx / 6) * 0.1,
+            "etf_net_inflow_usd_lag1": np.sin(idx / 8) * 100000.0,
+            "volume_change_pct_lag1": np.cos(idx / 9) * 0.05,
+            "vix_lag1": 18 + np.sin(idx / 10) * 3,
+            "btc_log_return": np.sin(idx / 6) * 0.01,
+            "btc_direction_label": ["up" if v > 0 else "down" for v in np.sin(idx / 6)],
+        }
+    )
+
+    result = walk_forward_validate(
+        df,
+        train_days=80,
+        test_days=20,
+        horizon_days=3,
+        purged_kfold=True,
+        expanding_window=True,
+    )
+
+    assert result is not None
+    assert result.embargo_days == 5
+    assert result.purged_kfold is True
+    assert result.expanding_window is True
+
+    purged_t1 = walk_forward_validate(
+        df,
+        train_days=80,
+        test_days=20,
+        horizon_days=1,
+        purged_kfold=True,
+    )
+    assert purged_t1 is not None
+    assert purged_t1.embargo_days == 5
 
 
 # ── §4.2: BH 다중검정 보정 테스트 ──

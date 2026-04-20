@@ -46,6 +46,7 @@ def main() -> int:
     from morning_brief.analysis.sentiment_join.experiments import (
         ExperimentRunner,
         default_grid,
+        write_tracking_artifact,
     )
     from morning_brief.logging_utils import setup_logging
 
@@ -151,9 +152,39 @@ def main() -> int:
     summary = _build_summary(folds_df)
     (run_dir / "summary.md").write_text(summary, encoding="utf-8")
     print(f"  - summary.md: {run_dir / 'summary.md'}")
+    tracking_path = write_tracking_artifact(
+        run_dir,
+        run_id=run_id,
+        spec=spec_payload,
+        metrics=_tracking_metrics(folds_df),
+        lineage=_lineage_from(raw),
+    )
+    print(f"  - tracking.json: {tracking_path}")
 
     print(f"\n✅ 완료: {run_dir}")
     return 0
+
+
+def _tracking_metrics(folds_df):  # type: ignore[no-untyped-def]
+    if folds_df.empty:
+        return {"rows": 0, "specs": 0}
+    numeric = folds_df[["hit_rate", "sharpe", "coverage", "masked_ratio", "stability"]]
+    return {
+        "rows": int(len(folds_df)),
+        "specs": int(folds_df["spec_id"].nunique()),
+        "means": {
+            col: None if numeric[col].dropna().empty else float(numeric[col].mean())
+            for col in numeric.columns
+        },
+    }
+
+
+def _lineage_from(df):  # type: ignore[no-untyped-def]
+    return {
+        col: sorted(str(v) for v in df[col].dropna().unique())
+        for col in df.columns
+        if col.endswith("_source")
+    }
 
 
 def _build_summary(folds_df):  # type: ignore[no-untyped-def]
