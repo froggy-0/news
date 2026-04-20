@@ -28,6 +28,7 @@ from morning_brief.analysis.sentiment_join.variance import (
     bootstrap_ci,
     evaluate_promotion_gate,
     fisher_z,
+    power_analysis,
     run_anova,
     run_horizon_anova,
 )
@@ -227,6 +228,14 @@ def test_bootstrap_ci_spec_ids_match() -> None:
     cis = bootstrap_ci(folds, "hit_rate", n_bootstrap=100)
     actual_ids = {ci.spec_id for ci in cis}
     assert actual_ids == expected_ids
+
+
+def test_power_analysis_min_sample_decreases_with_larger_effect() -> None:
+    small = power_analysis(effect_size=0.05, n_obs=8)
+    large = power_analysis(effect_size=0.20, n_obs=8)
+
+    assert large.min_sample_size < small.min_sample_size
+    assert large.achieved_power > small.achieved_power
 
 
 # ─────────────────────────────────────────────────────────────────────────────

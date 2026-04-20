@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import re
 from datetime import datetime, timedelta, timezone
@@ -35,6 +36,20 @@ def save_parquet(
         metadata[b"sentiment_join_stats"] = stats_metadata
     table = table.replace_schema_metadata(metadata)
     pq.write_table(table, path, compression="snappy")
+    return path
+
+
+def write_backfill_manifest(
+    output_dir: Path,
+    manifest: dict[str, object],
+    *,
+    filename: str = "backfill_manifest.json",
+) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / filename
+    path.write_text(
+        json.dumps(manifest, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
+    )
     return path
 
 
@@ -99,4 +114,4 @@ def upload_to_r2(
         )
 
 
-__all__ = ["cleanup_old_files", "save_parquet", "upload_to_r2"]
+__all__ = ["cleanup_old_files", "save_parquet", "upload_to_r2", "write_backfill_manifest"]

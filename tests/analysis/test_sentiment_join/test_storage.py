@@ -10,6 +10,7 @@ from morning_brief.analysis.sentiment_join.storage import (
     cleanup_old_files,
     save_parquet,
     upload_to_r2,
+    write_backfill_manifest,
 )
 
 
@@ -156,6 +157,13 @@ def test_save_parquet_defaults_btc_source_to_unknown(tmp_path: Path) -> None:
 
     metadata = pq.read_metadata(path)
     assert metadata.metadata[b"btc_source"].decode() == "unknown"
+
+
+def test_write_backfill_manifest(tmp_path: Path) -> None:
+    path = write_backfill_manifest(tmp_path, {"run_id": "x", "column_lineage": {}})
+
+    assert path.name == "backfill_manifest.json"
+    assert '"run_id": "x"' in path.read_text(encoding="utf-8")
 
 
 def test_upload_to_r2_swallows_exception(tmp_path: Path) -> None:

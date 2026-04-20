@@ -47,6 +47,11 @@ MASTER_SCHEMA = pa.DataFrameSchema(
         # §4 3-4: VIX optional feature. 수집 실패/키 미설정 시 전 행 NaN.
         "vix": pa.Column(float, nullable=True),
         "vix_lag1": pa.Column(float, nullable=True),
+        "funding_source": pa.Column(str, nullable=True),
+        "oi_source": pa.Column(str, nullable=True),
+        "lsr_source": pa.Column(str, nullable=True),
+        "etf_source": pa.Column(str, nullable=True),
+        "vix_source": pa.Column(str, nullable=True),
         # Req 8: BTC 방향 라벨
         "btc_direction_label": pa.Column(nullable=True),
         # Multi-horizon forward targets (last k rows are NaN by design — lookahead 차단)

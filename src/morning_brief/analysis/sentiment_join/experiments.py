@@ -6,9 +6,11 @@ fold-level 지표를 수집한다. `statistical_tests.walk_forward_validate` 를
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -78,6 +80,47 @@ class ExperimentSpec:
         if self.horizon_days == 1:
             return "btc_log_return"
         return f"btc_fwd_ret_{self.horizon_days}d"
+
+
+@dataclass(frozen=True)
+class ExperimentArtifact:
+    run_id: str
+    spec: dict[str, Any]
+    metrics: dict[str, Any]
+    lineage: dict[str, Any]
+
+
+def write_tracking_artifact(
+    run_dir: Path,
+    *,
+    run_id: str,
+    spec: dict[str, Any],
+    metrics: dict[str, Any],
+    lineage: dict[str, Any] | None = None,
+) -> Path:
+    artifact = ExperimentArtifact(
+        run_id=run_id,
+        spec=spec,
+        metrics=metrics,
+        lineage=lineage or {},
+    )
+    run_dir.mkdir(parents=True, exist_ok=True)
+    path = run_dir / "tracking.json"
+    path.write_text(
+        json.dumps(
+            {
+                "run_id": artifact.run_id,
+                "spec": artifact.spec,
+                "metrics": artifact.metrics,
+                "lineage": artifact.lineage,
+            },
+            indent=2,
+            ensure_ascii=False,
+            default=str,
+        ),
+        encoding="utf-8",
+    )
+    return path
 
 
 def default_grid(
@@ -291,6 +334,8 @@ def _empty_fold_frame(spec: ExperimentSpec | None) -> pd.DataFrame:
 __all__ = [
     "ExperimentRunner",
     "ExperimentSpec",
+    "ExperimentArtifact",
     "FOLDS_SCHEMA_COLUMNS",
     "default_grid",
+    "write_tracking_artifact",
 ]
