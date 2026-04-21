@@ -652,6 +652,37 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             r2_secret_access_key=settings.r2_secret_access_key,
             r2_public_bucket=settings.r2_public_bucket,
         )
+
+        # §5: 프론트엔드 소비용 아티팩트 추출 및 R2 업로드
+        # 통계 로직 수정 없이 이미 만들어진 stats_metadata bytes에서 필드만 필터링한다.
+        if stats_metadata is not None:
+            from .frontend_artifact import (
+                build_frontend_artifact,
+                should_skip_artifact,
+                write_frontend_artifact,
+            )
+
+            fe_artifact = build_frontend_artifact(
+                stats_metadata_bytes=stats_metadata,
+                reference_date=today.strftime("%Y-%m-%d"),
+            )
+            if not should_skip_artifact(fe_artifact):
+                latest_path, dated_path = write_frontend_artifact(
+                    settings.output_dir, fe_artifact, run_date
+                )
+                for local_path, r2_key in (
+                    (latest_path, "analysis/sentiment/latest.json"),
+                    (dated_path, f"analysis/sentiment/{run_date}.json"),
+                ):
+                    upload_to_r2(
+                        local_path,
+                        r2_key,
+                        r2_s3_endpoint=settings.r2_s3_endpoint,
+                        r2_access_key_id=settings.r2_access_key_id,
+                        r2_secret_access_key=settings.r2_secret_access_key,
+                        r2_public_bucket=settings.r2_public_bucket,
+                    )
+
         return 0
     except Exception as exc:
         log_structured(

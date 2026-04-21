@@ -1,0 +1,211 @@
+{
+  "generatedAtUtc": "2026-04-21T08:00:00+00:00",
+  "referenceDate": "2026-04-21",
+  "runId": "sentiment-join-20260421",
+  "granger": {
+    "executed": true,
+    "correction": {
+      "method": "fdr_bh",
+      "nTests": 63
+    },
+    "results": [
+      {
+        "predictor": "news_sentiment_mean",
+        "target": "fng_value",
+        "direction": "forward",
+        "lag": 1,
+        "pvalue": 0.021,
+        "pvalueAdjusted": 0.038,
+        "significant": true,
+        "optimalLag": true
+      },
+      {
+        "predictor": "news_sentiment_mean",
+        "target": "fng_value",
+        "direction": "forward",
+        "lag": 2,
+        "pvalue": 0.068,
+        "pvalueAdjusted": 0.091,
+        "significant": false,
+        "optimalLag": false
+      },
+      {
+        "predictor": "news_sentiment_mean",
+        "target": "fng_value",
+        "direction": "forward",
+        "lag": 3,
+        "pvalue": 0.112,
+        "pvalueAdjusted": 0.134,
+        "significant": false,
+        "optimalLag": false
+      },
+      {
+        "predictor": "news_sentiment_mean",
+        "target": "btc_log_return",
+        "direction": "forward",
+        "lag": 1,
+        "pvalue": 0.044,
+        "pvalueAdjusted": 0.067,
+        "significant": true,
+        "optimalLag": true
+      },
+      {
+        "predictor": "news_sentiment_mean",
+        "target": "btc_log_return",
+        "direction": "forward",
+        "lag": 2,
+        "pvalue": 0.098,
+        "pvalueAdjusted": 0.118,
+        "significant": false,
+        "optimalLag": false
+      },
+      {
+        "predictor": "news_sentiment_mean",
+        "target": "btc_log_return",
+        "direction": "forward",
+        "lag": 3,
+        "pvalue": 0.201,
+        "pvalueAdjusted": 0.223,
+        "significant": false,
+        "optimalLag": false
+      },
+      {
+        "predictor": "fng_value",
+        "target": "btc_log_return",
+        "direction": "forward",
+        "lag": 1,
+        "pvalue": 0.156,
+        "pvalueAdjusted": 0.189,
+        "significant": false,
+        "optimalLag": true
+      },
+      {
+        "predictor": "fng_value",
+        "target": "btc_log_return",
+        "direction": "forward",
+        "lag": 2,
+        "pvalue": 0.302,
+        "pvalueAdjusted": 0.341,
+        "significant": false,
+        "optimalLag": false
+      },
+      {
+        "predictor": "fng_value",
+        "target": "btc_log_return",
+        "direction": "forward",
+        "lag": 3,
+        "pvalue": 0.445,
+        "pvalueAdjusted": 0.478,
+        "significant": false,
+        "optimalLag": false
+      },
+      {
+        "predictor": "btc_log_return",
+        "target": "news_sentiment_mean",
+        "direction": "reverse",
+        "lag": 1,
+        "pvalue": 0.018,
+        "pvalueAdjusted": 0.034,
+        "significant": true,
+        "optimalLag": true
+      },
+      {
+        "predictor": "btc_log_return",
+        "target": "news_sentiment_mean",
+        "direction": "reverse",
+        "lag": 2,
+        "pvalue": 0.142,
+        "pvalueAdjusted": 0.178,
+        "significant": false,
+        "optimalLag": false
+      },
+      {
+        "predictor": "btc_log_return",
+        "target": "news_sentiment_mean",
+        "direction": "reverse",
+        "lag": 3,
+        "pvalue": 0.289,
+        "pvalueAdjusted": 0.321,
+        "significant": false,
+        "optimalLag": false
+      },
+      {
+        "predictor": "btc_log_return",
+        "target": "fng_value",
+        "direction": "reverse",
+        "lag": 1,
+        "pvalue": 0.033,
+        "pvalueAdjusted": 0.056,
+        "significant": true,
+        "optimalLag": true
+      },
+      {
+        "predictor": "btc_log_return",
+        "target": "fng_value",
+        "direction": "reverse",
+        "lag": 2,
+        "pvalue": 0.211,
+        "pvalueAdjusted": 0.245,
+        "significant": false,
+        "optimalLag": false
+      },
+      {
+        "predictor": "btc_log_return",
+        "target": "fng_value",
+        "direction": "reverse",
+        "lag": 3,
+        "pvalue": 0.378,
+        "pvalueAdjusted": 0.412,
+        "significant": false,
+        "optimalLag": false
+      }
+    ]
+  },
+  "pca": {
+    "full": {
+      "status": "ok",
+      "selectedFeatures": [
+        "news_sentiment_mean_lag1",
+        "fng_value_lag1",
+        "btc_log_return_lag1",
+        "funding_rate_lag1"
+      ],
+      "nComponents": 1,
+      "explainedVariance": 0.802,
+      "loadings": {
+        "news_sentiment_mean_lag1": 0.528,
+        "fng_value_lag1": 0.491,
+        "btc_log_return_lag1": -0.342,
+        "funding_rate_lag1": -0.218
+      },
+      "excludedFeatures": [
+        { "feature": "volume_change_pct_lag1", "reason": "vif>10" },
+        { "feature": "btc_long_short_ratio_lag1", "reason": "vif>10" }
+      ],
+      "coverageRatio": 0.91,
+      "qualityStatus": "ok",
+      "qualityReasons": []
+    },
+    "core": {
+      "status": "ok",
+      "selectedFeatures": [
+        "news_sentiment_mean_lag1",
+        "fng_value_lag1",
+        "btc_log_return_lag1",
+        "funding_rate_lag1"
+      ],
+      "nComponents": 1,
+      "explainedVariance": 0.751,
+      "loadings": {
+        "news_sentiment_mean_lag1": 0.542,
+        "fng_value_lag1": 0.478,
+        "btc_log_return_lag1": -0.328,
+        "funding_rate_lag1": -0.201
+      },
+      "excludedFeatures": [],
+      "coverageRatio": 0.95,
+      "qualityStatus": "ok",
+      "qualityReasons": []
+    }
+  }
+}
