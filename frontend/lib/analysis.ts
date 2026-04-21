@@ -6,7 +6,7 @@ import type { SentimentInsightArtifact } from "@schema/analysis.types";
 import { parseSentimentInsight } from "./analysis-schema";
 import { resolvePublicR2BaseUrl, requireAbsoluteHttpUrl, PUBLIC_R2_BASE_URL_ENV } from "./public-r2-env";
 
-const ANALYSIS_R2_PATH = "analysis/sentiment/latest.json";
+const ANALYSIS_R2_PATH = "analytics/sentiment/latest.json";
 const FIXTURE_NAME = "sentiment-insight.json";
 
 function useFixtureData(): boolean {

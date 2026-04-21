@@ -671,8 +671,8 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
                     settings.output_dir, fe_artifact, run_date
                 )
                 for local_path, r2_key in (
-                    (latest_path, "analysis/sentiment/latest.json"),
-                    (dated_path, f"analysis/sentiment/{run_date}.json"),
+                    (latest_path, "analytics/sentiment/latest.json"),
+                    (dated_path, f"analytics/sentiment/{run_date}.json"),
                 ):
                     upload_to_r2(
                         local_path,
