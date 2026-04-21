@@ -46,7 +46,7 @@ Python 추출 모듈 → pipeline 연결 → 프론트 타입·lib → 페이지
 - [x] 3. Python: `pipeline.py` 연결 지점 삽입
   - [x] 3.1 `save_parquet(...)` 직후에 artifact 생성·저장·업로드 블록 추가
     - `build_frontend_artifact` 호출 → `should_skip_artifact` 분기 → `write_frontend_artifact` → `upload_to_r2` × 2
-    - R2 key: `analysis/sentiment/latest.json`, `analysis/sentiment/{run_date}.json`
+    - R2 key: `analytics/sentiment/latest.json`, `analytics/sentiment/{run_date}.json`
     - `upload_to_r2` 기존 함수 재사용 (실패 시 WARNING, 파이프라인 미중단)
     - _Requirements: 1.1, 1.4, 1.5_
   - [ ] 3.2 테스트: `tests/analysis/test_frontend_artifact_pipeline.py` 작성
@@ -70,7 +70,7 @@ Python 추출 모듈 → pipeline 연결 → 프론트 타입·lib → 페이지
     - 필수 필드 누락 시 `Error` throw
     - _Requirements: 4.3_
   - [x] 5.3 `frontend/lib/analysis.ts` 작성
-    - `fetchSentimentInsight()`: R2 `analysis/sentiment/latest.json` fetch
+    - `fetchSentimentInsight()`: R2 `analytics/sentiment/latest.json` fetch
     - fixture 모드: `BRIEF_DATA_SOURCE=fixture` 시 `fixtures/sentiment-insight.json` 로컬 파일 읽기
     - 실패 시 throw (페이지가 catch)
     - `isStaleReferenceDate(referenceDate, now)`: KST 기준 2일 이상 경과 시 true

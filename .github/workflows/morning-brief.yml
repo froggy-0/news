@@ -343,9 +343,11 @@ jobs:
           if-no-files-found: warn
 
   deploy-frontend:
-    name: Deploy Frontend After Successful Sovereign Briefing Run
-    needs: run-brief
-    if: ${{ needs.run-brief.result == 'success' }}
+    name: Deploy Frontend After Successful Analysis Artifact Upload
+    needs:
+      - run-brief
+      - run-sentiment-join
+    if: ${{ needs.run-brief.result == 'success' && needs.run-sentiment-join.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

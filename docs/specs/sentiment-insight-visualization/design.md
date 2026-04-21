@@ -16,7 +16,7 @@ flowchart LR
     A[run_sentiment_join] --> B[save_parquet master_*.parquet]
     B --> C[build_frontend_artifact]
     C --> D[write_frontend_artifact<br/>latest.json + YYYYMMDD.json]
-    D --> E[upload_to_r2 analysis/sentiment/*]
+    D --> E[upload_to_r2 analytics/sentiment/*]
     E --> F[R2 public bucket]
     F -.SSG fetch.-> G[Next.js /analysis page]
     G --> H1[GrangerSymmetric]
@@ -77,8 +77,8 @@ if not should_skip_artifact(artifact):
         settings.output_dir, artifact, run_date
     )
     for local_path, r2_key in (
-        (latest_path, "analysis/sentiment/latest.json"),
-        (dated_path, f"analysis/sentiment/{run_date}.json"),
+        (latest_path, "analytics/sentiment/latest.json"),
+        (dated_path, f"analytics/sentiment/{run_date}.json"),
     ):
         upload_to_r2(
             local_path,
@@ -92,7 +92,7 @@ if not should_skip_artifact(artifact):
 
 **설계 결정**:
 - **Skip 조건 (Req 1-4 대응)**: `should_skip_artifact`는 full·core **둘 다 `qualityStatus == "critical"`**일 때만 True. 한쪽이라도 ok·degraded면 저장한다 (Req 4-4가 '한쪽만 표시'를 허용하므로).
-- **R2 key 네임스페이스 = `analysis/sentiment/`**. 기존 `sentiment_join/{master_*.parquet}` 네임스페이스와 명확히 구분해, 같은 도메인(sentiment)이지만 **프론트 소비용**임을 경로만으로 드러낸다.
+- **R2 key 네임스페이스 = `analytics/sentiment/`**. 기존 `analytics/btc/`와 같은 analytics 네임스페이스 아래 두되, 프론트 소비용 분석 아티팩트임을 `sentiment/` 경로로 구분한다.
 - `upload_to_r2`는 이미 실패 시 WARNING 로깅만 하고 비파괴적이므로 그대로 재사용.
 - 호출부는 **예외를 삼키지 않는다** — pipeline 최상위 `try/except`에서 처리되며, artifact 생성 실패가 파이프라인 전체 실패로 이어지지 않도록 기존 에러 전파 구조 그대로 사용.
 
@@ -204,7 +204,7 @@ export type SentimentInsightArtifact = {
 // frontend/lib/analysis.ts
 import { cache } from "react";
 
-const ANALYSIS_LATEST_KEY = "analysis/sentiment/latest.json";
+const ANALYSIS_LATEST_KEY = "analytics/sentiment/latest.json";
 
 export const fetchSentimentInsight = cache(
   async (): Promise<SentimentInsightArtifact> => { ... }
