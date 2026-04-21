@@ -5,13 +5,15 @@ import { AnalysisMasthead } from "@/components/analysis/AnalysisMasthead";
 import { GrangerSymmetric } from "@/components/analysis/GrangerSymmetric";
 import { PcaTabs } from "@/components/analysis/PcaTabs";
 import { AnalysisUnavailable } from "@/components/analysis/AnalysisUnavailable";
+import { AnalysisSignalField } from "@/components/analysis/AnalysisSignalField";
 import { fetchSentimentInsight, isStaleReferenceDate } from "@/lib/analysis";
+import { deriveAnalysisSummary } from "@/lib/analysis-derive";
 
 export const dynamic = "force-static";
 
 export const metadata: Metadata = {
-  title: "Sentiment Insight — SOVEREIGN BRIEF",
-  description: "Granger 인과 검정과 PCA 로딩 기반 감성–시장 연관 분석",
+  title: "감성-시장 흐름 — SOVEREIGN BRIEF",
+  description: "뉴스 감성과 시장 지표의 시간 순서 기반 관계 분석",
 };
 
 export default async function AnalysisPage() {
@@ -20,26 +22,34 @@ export default async function AnalysisPage() {
   try {
     const artifact = await fetchSentimentInsight();
     const staleWarning = isStaleReferenceDate(artifact.referenceDate);
+    const summary = deriveAnalysisSummary(artifact);
 
     content = (
       <>
+        <AnalysisSignalField
+          seedInput={`${artifact.runId}:${artifact.referenceDate}`}
+          significantCount={summary.significantCount}
+          topLoading={summary.topPcaDriver?.loading ?? 0}
+          qualityStatus={summary.qualityStatus}
+        />
         <AnalysisMasthead
           referenceDate={artifact.referenceDate}
           generatedAtUtc={artifact.generatedAtUtc}
           correction={artifact.granger.correction}
           staleWarning={staleWarning}
+          summary={summary}
         />
 
         <div className="mx-auto w-full max-w-6xl space-y-16 px-6 py-14">
           {/* Granger */}
           <section>
             <SectionHeader
-              title="Granger 인과성 검정"
-              badge={`${artifact.granger.correction.nTests}쌍 × lag 1-3 · FDR-BH 보정`}
-              plain="한 변수의 과거 값이 다른 변수의 미래를 예측하는지 통계적으로 검사합니다."
-              detail={`"forward"는 감성이 시장 지표를 앞서는 방향, "reverse"는 시장이 감성을 먼저 움직이는 방향입니다. 막대가 길수록 통계 신호가 강하며, 밝은 색(유의)은 p-value가 다중검정 보정 후에도 유의한 쌍입니다.`}
+              title="누가 먼저 움직였나"
+              badge={`${artifact.granger.correction.nTests}개 관계 · 1-3일 전 데이터 검정`}
+              plain="뉴스 분위기가 시장을 먼저 움직였는지, 시장 움직임이 뉴스 분위기를 먼저 바꿨는지 봅니다."
+              detail="밝은 표시는 여러 관계를 동시에 검정한 뒤에도 우연일 가능성이 낮은 결과입니다. 링은 같은 관계 안에서 가장 설명력이 좋았던 날짜 간격입니다."
             />
-            <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.02] p-6 md:p-8">
+            <div className="analysis-depth-panel mt-8 p-5 md:p-8">
               <GrangerSymmetric granger={artifact.granger} />
             </div>
           </section>
@@ -47,12 +57,12 @@ export default async function AnalysisPage() {
           {/* PCA */}
           <section>
             <SectionHeader
-              title="PCA 주성분 로딩"
-              badge="FULL · CORE 피처셋 · PC1 기여도"
-              plain="여러 시장 지표를 하나의 '종합 신호'로 압축할 때 각 지표가 얼마나 기여하는지 보여줍니다."
-              detail={`양수(+) 막대는 지표가 신호 상승 방향에 기여, 음수(-) 막대는 반대 방향입니다. FULL은 모든 피처를, CORE는 다중공선성(VIF)을 제거한 핵심 피처만 사용합니다. 설명분산이 높을수록 압축이 잘 된 것입니다.`}
+              title="종합 신호를 만든 지표들"
+              badge="확장 지표 · 핵심 지표 · 기여도"
+              plain="여러 시장 지표를 하나의 종합 신호로 압축했을 때, 어떤 지표가 방향을 가장 많이 밀었는지 봅니다."
+              detail="중앙선 오른쪽은 종합 신호를 올리는 방향, 왼쪽은 낮추는 방향입니다. 설명력이 높을수록 여러 지표의 흐름을 하나의 신호로 잘 요약했다는 뜻입니다."
             />
-            <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.02] p-6 md:p-8">
+            <div className="analysis-depth-panel mt-8 p-5 md:p-8">
               <PcaTabs pca={artifact.pca} />
             </div>
           </section>
@@ -65,7 +75,7 @@ export default async function AnalysisPage() {
   }
 
   return (
-    <main className="pb-16">
+    <main className="relative overflow-hidden pb-16">
       <SiteHeader historyEntries={[]} />
       {content}
     </main>

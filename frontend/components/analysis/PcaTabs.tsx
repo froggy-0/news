@@ -1,47 +1,86 @@
 "use client";
 
-import { useState } from "react";
+import React from "react";
+import { useMemo, useState } from "react";
 
 import type { PcaIndex, PcaSection } from "@schema/analysis.types";
+import {
+  formatFeatureLabel,
+  formatQualityReason,
+  formatQualityStatus,
+  topPcaDriver,
+} from "@/lib/analysis-derive";
 
 type TabId = "full" | "core";
+
+const TAB_LABELS: Record<TabId, string> = {
+  full: "확장",
+  core: "핵심",
+};
 
 export function PcaTabs({ pca }: { pca: PcaSection }) {
   const [active, setActive] = useState<TabId>("full");
   const data = pca[active];
+  const driver = topPcaDriver(data);
 
   return (
-    <div>
-      {/* 탭 헤더 */}
-      <div className="mb-6 flex items-end gap-0 border-b border-white/10">
-        {(["full", "core"] as TabId[]).map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => setActive(tab)}
-            className={`relative px-5 pb-3 font-mono text-[0.72rem] uppercase tracking-[0.18em] transition-colors ${
-              active === tab ? "text-white" : "text-white/32 hover:text-white/60"
-            }`}
-          >
-            {tab}
-            <span
-              className="absolute inset-x-0 bottom-0 h-px origin-left bg-[var(--accent-primary)] transition-transform duration-300"
-              style={{ transform: active === tab ? "scaleX(1)" : "scaleX(0)" }}
-            />
-          </button>
-        ))}
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-[var(--accent-primary)]/80">
+            지표 기여도
+          </p>
+          <p className="mt-2 max-w-2xl text-[0.82rem] leading-6 text-white/46">
+            중앙선을 기준으로 오른쪽은 종합 신호를 높이는 지표, 왼쪽은 낮추는 지표입니다.
+            막대가 길수록 전체 신호를 더 많이 움직입니다.
+          </p>
+        </div>
+        <div className="inline-flex w-fit overflow-hidden rounded-full border border-white/10 bg-black/24 p-1">
+          {(["full", "core"] as TabId[]).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActive(tab)}
+              className={`rounded-full px-4 py-2 font-mono text-[0.68rem] uppercase tracking-[0.14em] transition ${
+                active === tab
+                  ? "bg-white/12 text-white shadow-[0_0_22px_rgba(0,255,255,0.12)]"
+                  : "text-white/34 hover:text-white/66"
+              }`}
+              aria-pressed={active === tab}
+            >
+              {TAB_LABELS[tab]}
+            </button>
+          ))}
+        </div>
       </div>
 
       {data.status !== "ok" ? (
         <EmptyState status={data.status} />
       ) : (
         <>
-          <p className="mb-5 max-w-2xl text-[0.78rem] leading-6 text-white/35">
-            <span className="text-white/50">읽는 법: </span>
-            오른쪽으로 뻗은 막대(+)는 이 지표가 높을수록 종합 신호가 올라가는 관계,
-            왼쪽(−)은 반대입니다. 막대가 길수록 이 지표가 신호에 더 많이 기여합니다.
-            막대에 마우스를 올리면 정확한 수치를 확인할 수 있습니다.
-          </p>
+          <div className="grid gap-2 md:grid-cols-5">
+            <MetricChip label="압축 축" value={`${data.nComponents}개`} />
+            <MetricChip label="설명력" value={`${(data.explainedVariance * 100).toFixed(1)}%`} />
+            <MetricChip label="데이터 확보율" value={`${(data.coverageRatio * 100).toFixed(1)}%`} />
+            <MetricChip label="사용 지표" value={`${data.selectedFeatures.length}개`} />
+            <MetricChip label="제외 지표" value={`${data.excludedFeatures.length}개`} />
+          </div>
+
+          <QualityNotice data={data} />
+
+          {driver && (
+            <div className="rounded-2xl border border-white/10 bg-black/22 p-4">
+              <p className="font-mono text-[0.64rem] uppercase tracking-[0.16em] text-white/34">
+                가장 큰 기여 지표
+              </p>
+              <p className="mt-2 text-[1rem] font-semibold text-white/86">{driver.label}</p>
+              <p className="mt-1 font-mono text-[0.68rem] text-white/40">
+                {driver.loading >= 0 ? "+" : ""}
+                {driver.loading.toFixed(3)} · {driver.direction === "positive" ? "종합 신호를 높이는 방향" : "종합 신호를 낮추는 방향"}
+              </p>
+            </div>
+          )}
+
           <PcaIndexView data={data} />
         </>
       )}
@@ -50,137 +89,112 @@ export function PcaTabs({ pca }: { pca: PcaSection }) {
 }
 
 function PcaIndexView({ data }: { data: PcaIndex }) {
-  const [showReasons, setShowReasons] = useState(false);
-  const [hoveredFeature, setHoveredFeature] = useState<string | null>(null);
-
-  const entries = Object.entries(data.loadings).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
-  const maxAbs = Math.max(...entries.map(([, v]) => Math.abs(v)), 0.001);
-  const totalAbsSum = entries.reduce((acc, [, v]) => acc + Math.abs(v), 0);
+  const [activeFeature, setActiveFeature] = useState<string | null>(null);
+  const entries = useMemo(
+    () => Object.entries(data.loadings).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])),
+    [data.loadings],
+  );
+  const maxAbs = Math.max(...entries.map(([, value]) => Math.abs(value)), 0.001);
+  const totalAbs = entries.reduce((sum, [, value]) => sum + Math.abs(value), 0);
 
   return (
-    <div className="space-y-6">
-      {/* 메타 pills */}
-      <div className="flex flex-wrap gap-2">
-        <MetaPill label="PC" value={`${data.nComponents}`} />
-        <MetaPill label="설명분산" value={`${(data.explainedVariance * 100).toFixed(1)}%`} />
-        <MetaPill label="커버리지" value={`${(data.coverageRatio * 100).toFixed(1)}%`} />
-        <QualityPill
-          status={data.qualityStatus}
-          reasons={data.qualityReasons}
-          showReasons={showReasons}
-          onToggle={() => setShowReasons((v) => !v)}
-        />
+    <div className="space-y-4">
+      <div className="hidden grid-cols-[minmax(120px,0.9fr)_minmax(220px,2fr)_84px] gap-4 px-3 font-mono text-[0.62rem] uppercase tracking-[0.14em] text-white/28 md:grid">
+        <span>지표</span>
+        <span className="text-center">낮추는 방향 / 높이는 방향</span>
+        <span className="text-right">비중</span>
       </div>
-
-      {/* qualityReasons expand */}
-      {showReasons && data.qualityReasons.length > 0 && (
-        <div className="rounded-xl border border-[var(--accent-warning)]/20 bg-[var(--accent-warning)]/5 p-4">
-          <ul className="space-y-1">
-            {data.qualityReasons.map((r, i) => (
-              <li key={i} className="font-mono text-[0.72rem] text-[var(--accent-warning)]/80">
-                — {r}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* 로딩 막대 차트 */}
       <div className="space-y-2.5">
-        {entries.map(([feature, loading], i) => {
-          const pct = (Math.abs(loading) / maxAbs) * 100;
-          const absSharePct = totalAbsSum > 0 ? (Math.abs(loading) / totalAbsSum) * 100 : 0;
-          const isPos = loading >= 0;
-          const delayMs = i * 50;
-          const shortName = feature.replace(/_lag\d+$/, "").replace(/_/g, " ");
-          const isHovered = hoveredFeature === feature;
-
+        {entries.map(([feature, loading], index) => {
+          const abs = Math.abs(loading);
+          const share = totalAbs > 0 ? (abs / totalAbs) * 100 : 0;
+          const pct = (abs / maxAbs) * 50;
+          const positive = loading >= 0;
+          const active = activeFeature === feature;
           return (
-            <div
+            <article
               key={feature}
-              className="group relative flex items-center gap-3"
-              onMouseEnter={() => setHoveredFeature(feature)}
-              onMouseLeave={() => setHoveredFeature(null)}
+              className={`grid gap-3 rounded-2xl border p-3 transition md:grid-cols-[minmax(120px,0.9fr)_minmax(220px,2fr)_84px] md:items-center ${
+                active
+                  ? "border-white/22 bg-white/[0.06]"
+                  : "border-white/8 bg-white/[0.025] hover:border-white/16 hover:bg-white/[0.04]"
+              }`}
+              onMouseEnter={() => setActiveFeature(feature)}
+              onMouseLeave={() => setActiveFeature(null)}
+              onFocus={() => setActiveFeature(feature)}
+              onBlur={() => setActiveFeature(null)}
+              tabIndex={0}
+              style={{ animation: `compassRow 420ms ease-out ${index * 45}ms both` }}
             >
-              {/* Feature label */}
-              <span
-                className={`w-[160px] shrink-0 font-mono text-[0.65rem] leading-tight tracking-[0.03em] transition-colors ${
-                  isHovered ? "text-white/90" : "text-white/55"
-                }`}
-              >
-                {shortName}
-              </span>
-
-              {/* Bi-directional bar */}
-              <div className="relative flex h-[8px] flex-1 items-center">
-                <div className="absolute left-1/2 h-full w-px -translate-x-1/2 bg-white/15" />
-                <div
-                  className="absolute h-full rounded-full transition-opacity duration-150"
-                  style={{
-                    width: `${pct / 2}%`,
-                    ...(isPos
-                      ? { left: "50%", background: isHovered ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.72)" }
-                      : { right: "50%", background: isHovered ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.32)" }),
-                    transformOrigin: isPos ? "left" : "right",
-                    animation: `barReveal 0.4s ease-out ${delayMs}ms both`,
-                  }}
-                />
+              <style>{`
+                @keyframes compassRow {
+                  from { opacity: 0; transform: translateY(8px); }
+                  to { opacity: 1; transform: translateY(0); }
+                }
+              `}</style>
+              <div>
+                <p className="text-[0.88rem] font-semibold leading-5 text-white/82">
+                  {formatFeatureLabel(feature)}
+                </p>
+                <p className="mt-1 font-mono text-[0.63rem] text-white/32">영향력 {index + 1}위</p>
               </div>
 
-              {/* Loading value — 항상 표시 */}
-              <span
-                className={`w-[52px] shrink-0 text-right font-mono text-[0.68rem] tabular-nums transition-colors ${
-                  isHovered ? (isPos ? "text-white" : "text-white/60") : isPos ? "text-white/70" : "text-white/40"
-                }`}
-              >
-                {loading >= 0 ? "+" : ""}
-                {loading.toFixed(3)}
-              </span>
-
-              {/* 호버 툴팁 */}
-              {isHovered && (
-                <div className="pointer-events-none absolute left-[170px] top-[calc(100%+6px)] z-20 min-w-[220px] rounded-lg border border-white/12 bg-[#0a0a0a]/95 px-3 py-2.5 shadow-xl">
-                  <p className="mb-2 font-mono text-[0.62rem] uppercase tracking-[0.1em] text-white/30">
-                    {shortName}
-                  </p>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                    <TipRow label="로딩값" value={(loading >= 0 ? "+" : "") + loading.toFixed(4)} highlight={isPos} hint="PC1에 대한 기여 방향과 크기" />
-                    <TipRow label="|로딩|" value={Math.abs(loading).toFixed(4)} hint="절댓값 — 방향 무시한 영향력" />
-                    <TipRow label="기여 비중" value={`${absSharePct.toFixed(1)}%`} hint="전체 피처 중 이 변수의 비율" />
-                    <TipRow label="정규화 막대" value={`${pct.toFixed(1)}%`} hint="최대 로딩 대비 상대적 크기" />
-                    <TipRow label="방향" value={isPos ? "양(+): 상승 기여" : "음(−): 하락 기여"} highlight={isPos} />
-                    <TipRow label="순위" value={`#${i + 1} / ${entries.length}`} hint="절댓값 기준 영향력 순위" />
-                  </div>
-                  <p className="mt-2 border-t border-white/8 pt-1.5 font-mono text-[0.6rem] leading-relaxed text-white/25">
-                    {isPos
-                      ? "이 지표가 높을수록 종합 신호(PC1)가 상승하는 방향"
-                      : "이 지표가 높을수록 종합 신호(PC1)가 낮아지는 방향"}
-                  </p>
+              <div className="relative min-h-[42px]">
+                <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-white/16" />
+                <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-white/8" />
+                <div
+                  className="absolute top-1/2 h-3 -translate-y-1/2 rounded-full transition-all duration-300"
+                  style={{
+                    width: `${Math.max(8, pct)}%`,
+                    ...(positive
+                      ? { left: "50%", background: "rgba(0,255,102,0.72)" }
+                      : { right: "50%", background: "rgba(255,107,107,0.62)" }),
+                    boxShadow: active
+                      ? positive
+                        ? "0 0 24px rgba(0,255,102,0.22)"
+                        : "0 0 24px rgba(255,107,107,0.22)"
+                      : "none",
+                  }}
+                />
+                <div className="absolute inset-x-0 bottom-0 flex justify-between font-mono text-[0.58rem] uppercase tracking-[0.1em] text-white/22">
+                  <span>낮춤</span>
+                  <span>높임</span>
                 </div>
-              )}
-            </div>
+              </div>
+
+              <div className="md:text-right">
+                <p className="font-mono text-[0.75rem] tabular-nums text-white/78">
+                  {loading >= 0 ? "+" : ""}
+                  {loading.toFixed(3)}
+                </p>
+                <p className="mt-1 font-mono text-[0.64rem] text-white/34">{share.toFixed(1)}%</p>
+                <p
+                  className={`mt-1 text-[0.68rem] leading-5 ${
+                    positive ? "text-[var(--accent-green)]/72" : "text-[var(--accent-down)]/72"
+                  }`}
+                >
+                  {positive ? "높이는 방향" : "낮추는 방향"}
+                </p>
+              </div>
+            </article>
           );
         })}
       </div>
 
-      {/* 제외된 피처 테이블 */}
       {data.excludedFeatures.length > 0 && (
-        <div className="border-t border-white/8 pt-4">
-          <p className="mb-2 font-mono text-[0.65rem] uppercase tracking-[0.12em] text-white/28">
-            VIF 제거 변수
+        <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+          <p className="font-mono text-[0.64rem] uppercase tracking-[0.16em] text-white/30">
+            함께 쓰기 어려워 제외한 지표
           </p>
-          <div className="space-y-1">
-            {data.excludedFeatures.map((ef, i) => (
-              <div key={i} className="flex items-baseline gap-3">
-                <span className="font-mono text-[0.68rem] text-white/42">
-                  {ef.feature.replace(/_/g, " ")}
-                </span>
-                {ef.reason && (
-                  <span className="font-mono text-[0.62rem] text-[var(--accent-down)]/60">
-                    {ef.reason}
-                  </span>
-                )}
-              </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {data.excludedFeatures.map((feature, index) => (
+              <span
+                key={`${feature.feature}-${index}`}
+                className="rounded-full border border-[var(--accent-down)]/18 bg-[var(--accent-down)]/8 px-3 py-1 font-mono text-[0.65rem] text-[var(--accent-down)]/74"
+              >
+                {formatFeatureLabel(feature.feature)}
+                {feature.reason ? ` · ${formatQualityReason(feature.reason)}` : ""}
+              </span>
             ))}
           </div>
         </div>
@@ -189,88 +203,63 @@ function PcaIndexView({ data }: { data: PcaIndex }) {
   );
 }
 
-function TipRow({
-  label,
-  value,
-  highlight,
-  hint,
-}: {
-  label: string;
-  value: string;
-  highlight?: boolean;
-  hint?: string;
-}) {
-  return (
-    <>
-      <span className="font-mono text-[0.62rem] leading-tight text-white/36">
-        {label}
-        {hint && <span className="block text-[0.55rem] text-white/20">{hint}</span>}
-      </span>
-      <span
-        className={`font-mono text-[0.68rem] tabular-nums ${
-          highlight ? "text-white/90" : "text-white/70"
-        }`}
-      >
-        {value}
-      </span>
-    </>
-  );
-}
+function QualityNotice({ data }: { data: PcaIndex }) {
+  const [open, setOpen] = useState(false);
+  const degraded = data.qualityStatus === "degraded" || data.qualityStatus === "critical";
+  if (!degraded) {
+    return (
+      <div className="rounded-2xl border border-[var(--accent-green)]/16 bg-[var(--accent-green)]/5 px-4 py-3">
+        <p className="font-mono text-[0.68rem] uppercase tracking-[0.12em] text-[var(--accent-green)]/80">
+          데이터 상태 양호 · 사용 가능한 지표로 종합 신호를 계산했습니다
+        </p>
+      </div>
+    );
+  }
 
-function MetaPill({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1">
-      <span className="font-mono text-[0.62rem] uppercase tracking-[0.12em] text-white/32">
-        {label}
-      </span>
-      <span className="font-mono text-[0.72rem] text-white/70">{value}</span>
+    <div className="rounded-2xl border border-[var(--accent-warning)]/22 bg-[var(--accent-warning)]/7 p-4">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full items-center justify-between gap-4 text-left"
+        aria-expanded={open}
+      >
+        <span className="font-mono text-[0.68rem] uppercase tracking-[0.12em] text-[var(--accent-warning)]">
+          데이터 상태 {formatQualityStatus(data.qualityStatus)} · 확보율 {(data.coverageRatio * 100).toFixed(1)}%
+        </span>
+        <span className="font-mono text-[0.68rem] text-white/36">{open ? "닫기" : "이유 보기"}</span>
+      </button>
+      {open && (
+        <ul className="mt-3 space-y-1 border-t border-white/8 pt-3">
+          {(data.qualityReasons.length > 0 ? data.qualityReasons : ["데이터 품질이 낮아 참고가 필요합니다"]).map(
+            (reason, index) => (
+              <li key={`${reason}-${index}`} className="font-mono text-[0.7rem] text-white/46">
+                {formatQualityReason(reason)}
+              </li>
+            ),
+          )}
+        </ul>
+      )}
     </div>
   );
 }
 
-function QualityPill({
-  status,
-  reasons,
-  showReasons,
-  onToggle,
-}: {
-  status: string;
-  reasons: string[];
-  showReasons: boolean;
-  onToggle: () => void;
-}) {
-  const isDegraded = status === "degraded";
-  const isCritical = status === "critical";
-  const color = isCritical
-    ? "var(--accent-down)"
-    : isDegraded
-      ? "var(--accent-warning)"
-      : "var(--accent-green)";
-  const hasReasons = reasons.length > 0 && (isDegraded || isCritical);
-
+function MetricChip({ label, value }: { label: string; value: string }) {
   return (
-    <button
-      type="button"
-      onClick={hasReasons ? onToggle : undefined}
-      className={`flex items-center gap-1.5 rounded-full border px-3 py-1 font-mono text-[0.62rem] uppercase tracking-[0.12em] transition-colors ${
-        hasReasons ? "cursor-pointer hover:bg-white/5" : "cursor-default"
-      }`}
-      style={{ borderColor: `color-mix(in srgb, ${color} 30%, transparent)` }}
-    >
-      <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
-      <span style={{ color }}>{status}</span>
-      {hasReasons && <span className="text-white/28">{showReasons ? "▲" : "▼"}</span>}
-    </button>
+    <div className="rounded-2xl border border-white/10 bg-black/24 px-3 py-3">
+      <p className="font-mono text-[0.58rem] uppercase tracking-[0.14em] text-white/28">{label}</p>
+      <p className="mt-1 font-mono text-[0.78rem] tabular-nums text-white/76">{value}</p>
+    </div>
   );
 }
 
 function EmptyState({ status }: { status: string }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 py-14">
-      <p className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-[var(--text-muted)]">
-        PCA 미수행
+    <div className="flex min-h-[260px] flex-col items-center justify-center gap-3 rounded-2xl border border-white/8 bg-black/20">
+      <p className="font-mono text-[0.72rem] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+        종합 신호 계산 미수행
       </p>
-      <p className="font-mono text-[0.65rem] text-white/28">status: {status}</p>
+      <p className="font-mono text-[0.66rem] text-white/34">데이터 상태: {formatQualityStatus(status)}</p>
     </div>
   );
 }
