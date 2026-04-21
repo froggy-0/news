@@ -19,6 +19,7 @@ output/
 .agents/
 .hypothesis/
 .playwright-cli/
+.playwright-mcp/
 .superset/
 .wrangler/
 
