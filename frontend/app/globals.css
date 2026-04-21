@@ -179,6 +179,39 @@ section[id] {
   backdrop-filter: blur(18px);
 }
 
+.analysis-depth-panel {
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.018)),
+    radial-gradient(circle at 20% 0%, rgba(0, 255, 255, 0.08), transparent 36%);
+  box-shadow:
+    0 28px 70px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transform-style: preserve-3d;
+  backdrop-filter: blur(18px);
+}
+
+.analysis-depth-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.46;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.026) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(180deg, black, transparent 82%);
+}
+
+.analysis-depth-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
 .section-title {
   margin: 0;
   font-family: var(--meta-type);

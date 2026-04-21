@@ -1,340 +1,319 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import React from "react";
+import { useMemo, useState } from "react";
 
-import type { GrangerResult, GrangerSection } from "@schema/analysis.types";
+import type { GrangerDirection, GrangerResult, GrangerSection } from "@schema/analysis.types";
+import { formatAdjustedPValue, formatFeatureLabel, negLog10 } from "@/lib/analysis-derive";
 
 type GroupKey = string;
-
-function groupKey(r: GrangerResult): GroupKey {
-  return `${r.predictor}||${r.target}||${r.direction}`;
-}
-
-function formatLabel(predictor: string, target: string): string {
-  const shorten = (s: string) =>
-    s.replace(/_lag\d+$/, "").replace(/_mean$/, "").replace(/_/g, " ");
-  return `${shorten(predictor)} → ${shorten(target)}`;
-}
-
-function negLog10(p: number | null): number {
-  if (p === null || p <= 0) return 0;
-  return -Math.log10(Math.min(p, 1));
-}
-
-function fmtP(v: number | null): string {
-  if (v === null) return "—";
-  if (v < 0.001) return "<0.001";
-  return v.toFixed(3);
-}
 
 type RowGroup = {
   key: GroupKey;
   predictor: string;
   target: string;
-  direction: "forward" | "reverse";
+  direction: GrangerDirection;
   label: string;
   optimal: GrangerResult;
   allLags: GrangerResult[];
 };
 
-export function GrangerSymmetric({ granger }: { granger: GrangerSection }) {
-  const [expanded, setExpanded] = useState<GroupKey | null>(null);
-  // 각 lag 행에 대한 호버 상태: "groupKey|lag"
-  const [hoveredLag, setHoveredLag] = useState<string | null>(null);
+function groupKey(result: GrangerResult): GroupKey {
+  return `${result.predictor}||${result.target}||${result.direction}`;
+}
 
-  const groups: RowGroup[] = useMemo(() => {
-    const map = new Map<GroupKey, GrangerResult[]>();
-    for (const r of granger.results) {
-      const k = groupKey(r);
-      const arr = map.get(k) ?? [];
-      arr.push(r);
-      map.set(k, arr);
-    }
-    const rows: RowGroup[] = [];
-    for (const [k, lags] of map.entries()) {
-      const sorted = [...lags].sort((a, b) => a.lag - b.lag);
-      const optimal = sorted.find((r) => r.optimalLag) ?? sorted[0];
-      rows.push({
-        key: k,
+function formatPairLabel(result: Pick<GrangerResult, "predictor" | "target">): string {
+  return `${formatFeatureLabel(result.predictor)} -> ${formatFeatureLabel(result.target)}`;
+}
+
+function fmtP(value: number | null): string {
+  if (value === null) return "n/a";
+  if (value < 0.001) return "<0.001";
+  return value.toFixed(3);
+}
+
+function formatLag(value: number): string {
+  return `${value}일 전`;
+}
+
+function buildGroups(results: GrangerResult[]): RowGroup[] {
+  const map = new Map<GroupKey, GrangerResult[]>();
+  for (const result of results) {
+    const key = groupKey(result);
+    map.set(key, [...(map.get(key) ?? []), result]);
+  }
+
+  return [...map.entries()]
+    .map(([key, lags]) => {
+      const allLags = [...lags].sort((a, b) => a.lag - b.lag);
+      const optimal =
+        allLags.find((result) => result.optimalLag) ??
+        [...allLags].sort((a, b) => (a.pvalueAdjusted ?? 1) - (b.pvalueAdjusted ?? 1))[0];
+
+      return {
+        key,
         predictor: optimal.predictor,
         target: optimal.target,
         direction: optimal.direction,
-        label: formatLabel(optimal.predictor, optimal.target),
+        label: formatPairLabel(optimal),
         optimal,
-        allLags: sorted,
-      });
-    }
-    return rows.sort((a, b) => {
+        allLags,
+      };
+    })
+    .sort((a, b) => {
       if (a.direction !== b.direction) return a.direction === "forward" ? -1 : 1;
+      if (a.optimal.significant !== b.optimal.significant) {
+        return a.optimal.significant ? -1 : 1;
+      }
       return (a.optimal.pvalueAdjusted ?? 1) - (b.optimal.pvalueAdjusted ?? 1);
     });
-  }, [granger.results]);
+}
 
+export function GrangerSymmetric({ granger }: { granger: GrangerSection }) {
+  const [activeLag, setActiveLag] = useState<string | null>(null);
+  const [pinnedLag, setPinnedLag] = useState<string | null>(null);
+
+  const groups = useMemo(() => buildGroups(granger.results), [granger.results]);
   const maxScore = useMemo(() => {
-    const all = granger.results.map((r) => negLog10(r.pvalueAdjusted));
-    all.sort((a, b) => a - b);
-    return all[Math.floor(all.length * 0.95)] || 1;
+    const scores = granger.results.map((result) => negLog10(result.pvalueAdjusted)).sort((a, b) => a - b);
+    return scores[Math.floor(scores.length * 0.95)] || 1;
   }, [granger.results]);
 
-  const forward = groups.filter((g) => g.direction === "forward");
-  const reverse = groups.filter((g) => g.direction === "reverse");
-  const maxRows = Math.max(forward.length, reverse.length);
+  const forward = groups.filter((group) => group.direction === "forward");
+  const reverse = groups.filter((group) => group.direction === "reverse");
 
   if (!granger.executed) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <p className="font-mono text-[0.8rem] tracking-[0.08em] text-[var(--text-muted)]">
-          Granger 검정 미수행
-        </p>
+      <div className="flex min-h-[280px] items-center justify-center">
+        <div className="text-center">
+          <p className="font-mono text-[0.72rem] uppercase tracking-[0.18em] text-[var(--text-muted)]">
+            시간 순서 검정 미수행
+          </p>
+          <p className="mt-2 text-[0.82rem] text-white/38">
+            충분한 데이터가 쌓이면 며칠 전 지표가 오늘의 변화를 설명하는지 표시합니다.
+          </p>
+        </div>
       </div>
     );
   }
 
-  const rowsToShow = (g: RowGroup) =>
-    expanded === g.key ? g.allLags : [g.optimal];
-
   return (
-    <div className="relative">
-      {/* 주의 문구 */}
-      <div className="absolute right-0 top-0 hidden md:block">
-        <p className="font-mono text-[0.65rem] tracking-[0.06em] text-white/28">
-          Granger causality ≠ causation
-        </p>
-      </div>
-
-      {/* 헤더 */}
-      <div className="mb-4 grid grid-cols-[1fr_2px_1fr] items-center gap-0">
-        <p className="pr-4 text-right font-mono text-[0.7rem] uppercase tracking-[0.14em] text-[var(--text-muted)]">
-          forward
-          <span className="ml-2 text-white/28">감성 → 시장</span>
-        </p>
-        <div />
-        <p className="pl-4 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-[var(--text-muted)]">
-          reverse
-          <span className="ml-2 text-white/28">시장 → 감성</span>
-        </p>
-      </div>
-
-      {/* 중앙축 + 행 */}
-      <div className="relative">
-        <div
-          className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-white/20"
-          style={{ transformOrigin: "top center", animation: "axisDraw 0.6s ease-out forwards" }}
-        />
-
-        <style>{`
-          @keyframes axisDraw {
-            from { transform: translateX(-50%) scaleY(0); }
-            to   { transform: translateX(-50%) scaleY(1); }
-          }
-          @keyframes barReveal {
-            from { transform: scaleX(0); opacity: 0; }
-            to   { transform: scaleX(1); opacity: 1; }
-          }
-        `}</style>
-
-        {Array.from({ length: maxRows }).map((_, rowIdx) => {
-          const fwdGroup = forward[rowIdx];
-          const revGroup = reverse[rowIdx];
-          const isExpFwd = fwdGroup && expanded === fwdGroup.key;
-          const isExpRev = revGroup && expanded === revGroup.key;
-          const dimmed = expanded !== null;
-
-          return (
-            <div key={rowIdx} className="grid grid-cols-[1fr_2px_1fr] items-start gap-0">
-              <div className={`py-1 pr-3 transition-opacity duration-200 ${dimmed && !isExpFwd ? "opacity-35" : "opacity-100"}`}>
-                {fwdGroup ? (
-                  <BarSide
-                    group={fwdGroup}
-                    rows={rowsToShow(fwdGroup)}
-                    maxScore={maxScore}
-                    align="right"
-                    rowIndex={rowIdx}
-                    onClick={() => setExpanded(isExpFwd ? null : fwdGroup.key)}
-                    expanded={!!isExpFwd}
-                    hoveredLag={hoveredLag}
-                    onHoverLag={setHoveredLag}
-                  />
-                ) : (
-                  <div className="h-8" />
-                )}
-              </div>
-
-              <div />
-
-              <div className={`py-1 pl-3 transition-opacity duration-200 ${dimmed && !isExpRev ? "opacity-35" : "opacity-100"}`}>
-                {revGroup ? (
-                  <BarSide
-                    group={revGroup}
-                    rows={rowsToShow(revGroup)}
-                    maxScore={maxScore}
-                    align="left"
-                    rowIndex={rowIdx}
-                    onClick={() => setExpanded(isExpRev ? null : revGroup.key)}
-                    expanded={!!isExpRev}
-                    hoveredLag={hoveredLag}
-                    onHoverLag={setHoveredLag}
-                  />
-                ) : (
-                  <div className="h-8" />
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* 범례 + 읽는 법 */}
-      <div className="mt-6 space-y-3 border-t border-white/8 pt-4">
-        <div className="flex flex-wrap items-center gap-5">
-          <LegendDot color="var(--accent-primary)" label="유의 (q<0.05)" />
-          <LegendDot color="rgba(255,255,255,0.18)" label="비유의" />
-          <span className="font-mono text-[0.65rem] text-white/28">
-            행 클릭 → lag 1/2/3 펼침 · 막대 호버 → p/q 수치
+    <div className="space-y-6">
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-[var(--accent-primary)]/80">
+            먼저 움직인 신호
+          </p>
+          <p className="mt-2 max-w-2xl text-[0.82rem] leading-6 text-white/46">
+            각 카드는 하나의 관계를 뜻합니다. 1일 전, 2일 전, 3일 전 중 어떤 간격에서
+            설명력이 가장 좋았는지 비교합니다.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 font-mono text-[0.64rem] uppercase tracking-[0.12em]">
+          <span className="rounded-full border border-[var(--accent-primary)]/24 bg-[var(--accent-primary)]/8 px-3 py-1 text-[var(--accent-primary)]">
+            보정 p&lt;0.05
+          </span>
+          <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-white/36">
+            시간 순서 기반 예측 관계
           </span>
         </div>
-        <p className="max-w-2xl text-[0.75rem] leading-6 text-white/30">
-          <span className="text-white/45">읽는 법: </span>
-          왼쪽(forward)은 감성 지표가 시장을 며칠 앞서 예측하는 관계, 오른쪽(reverse)은 반대입니다.
-          막대가 밝을수록 통계적으로 의미 있는 신호이며, lag는 며칠 전 데이터를 사용했는지를 나타냅니다.
-          인과성 검정은 상관관계와 다르게 시간 순서를 고려하므로 더 신뢰할 수 있습니다.
-        </p>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <SignalColumn
+          title="감성이 먼저"
+          subtitle="뉴스 분위기 -> 시장"
+          groups={forward}
+          maxScore={maxScore}
+          activeLag={activeLag}
+          pinnedLag={pinnedLag}
+          onHover={setActiveLag}
+          onPin={(id) => setPinnedLag((current) => (current === id ? null : id))}
+        />
+        <SignalColumn
+          title="시장이 먼저"
+          subtitle="시장 -> 뉴스 분위기"
+          groups={reverse}
+          maxScore={maxScore}
+          activeLag={activeLag}
+          pinnedLag={pinnedLag}
+          onHover={setActiveLag}
+          onPin={(id) => setPinnedLag((current) => (current === id ? null : id))}
+        />
       </div>
     </div>
   );
 }
 
-function BarSide({
-  group,
-  rows,
+function SignalColumn({
+  title,
+  subtitle,
+  groups,
   maxScore,
-  align,
-  rowIndex,
-  onClick,
-  expanded,
-  hoveredLag,
-  onHoverLag,
+  activeLag,
+  pinnedLag,
+  onHover,
+  onPin,
 }: {
-  group: RowGroup;
-  rows: GrangerResult[];
+  title: string;
+  subtitle: string;
+  groups: RowGroup[];
   maxScore: number;
-  align: "left" | "right";
-  rowIndex: number;
-  onClick: () => void;
-  expanded: boolean;
-  hoveredLag: string | null;
-  onHoverLag: (key: string | null) => void;
+  activeLag: string | null;
+  pinnedLag: string | null;
+  onHover: (id: string | null) => void;
+  onPin: (id: string) => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full cursor-pointer rounded-lg py-1 text-left transition-colors hover:bg-white/[0.03]"
-      aria-expanded={expanded}
-    >
-      {rows.map((r, i) => {
-        const score = negLog10(r.pvalueAdjusted);
-        const pct = Math.min((score / maxScore) * 100, 100);
-        const isOptimal = r.optimalLag;
-        const isSig = r.significant;
-        const delayMs = rowIndex * 60 + i * 30;
-        const lagId = `${group.key}|${r.lag}`;
-        const isHovered = hoveredLag === lagId;
-
-        return (
-          <div
-            key={r.lag}
-            className="relative mb-1 flex items-center gap-2"
-            style={{ flexDirection: align === "right" ? "row-reverse" : "row" }}
-            onMouseEnter={() => onHoverLag(lagId)}
-            onMouseLeave={() => onHoverLag(null)}
-          >
-            {/* Label */}
-            {i === 0 ? (
-              <span
-                className={`w-[90px] shrink-0 font-mono text-[0.65rem] leading-tight tracking-[0.03em] ${
-                  isSig ? "text-white/80" : "text-white/32"
-                } ${align === "right" ? "text-right" : "text-left"}`}
-              >
-                {group.label}
-              </span>
-            ) : (
-              <span className="w-[90px] shrink-0" />
-            )}
-
-            {/* Lag pill */}
-            <span className={`font-mono text-[0.6rem] transition-colors ${isOptimal ? "text-white/50" : "text-white/22"}`}>
-              L{r.lag}
-            </span>
-
-            {/* Bar + 호버 툴팁 */}
-            <div className="relative flex-1">
-              <div
-                className="relative h-[6px] overflow-hidden rounded-full bg-white/8"
-                style={{ transformOrigin: align === "right" ? "right" : "left" }}
-              >
-                <div
-                  className="absolute inset-y-0 rounded-full transition-opacity duration-150"
-                  style={{
-                    width: `${pct}%`,
-                    background: isSig ? "var(--accent-primary)" : "rgba(255,255,255,0.18)",
-                    opacity: isHovered ? 1 : isOptimal ? 0.85 : 0.45,
-                    [align === "right" ? "right" : "left"]: 0,
-                    transformOrigin: align === "right" ? "right" : "left",
-                    animation: `barReveal 0.45s ease-out ${delayMs}ms both`,
-                  }}
-                />
-              </div>
-
-              {/* 호버 시 p/q 수치 툴팁 */}
-              {isHovered && (
-                <div
-                  className="pointer-events-none absolute z-20 whitespace-nowrap rounded-lg border border-white/12 bg-[#0a0a0a]/95 px-3 py-2 shadow-xl"
-                  style={{
-                    top: "calc(100% + 6px)",
-                    ...(align === "right" ? { right: 0 } : { left: 0 }),
-                  }}
-                >
-                  <div className="mb-1 font-mono text-[0.62rem] uppercase tracking-[0.1em] text-white/30">
-                    {group.label} · lag {r.lag}
-                    {isOptimal && (
-                      <span className="ml-1.5 text-[var(--accent-primary)]">optimal</span>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
-                    <TooltipRow label="p-value" value={fmtP(r.pvalue)} hint="원시 유의확률" />
-                    <TooltipRow
-                      label="q (보정 후)"
-                      value={fmtP(r.pvalueAdjusted)}
-                      highlight={isSig}
-                      hint="다중검정 보정값 — 이 기준으로 판단"
-                    />
-                    <TooltipRow label="−log₁₀(q)" value={score > 0 ? score.toFixed(2) : "—"} hint="막대 길이 기준 (클수록 강한 신호)" />
-                    <TooltipRow
-                      label="유의 (q<0.05)"
-                      value={isSig ? "✓ yes" : "no"}
-                      highlight={isSig}
-                    />
-                  </div>
-                  <p className="mt-2 border-t border-white/8 pt-1.5 font-mono text-[0.6rem] leading-relaxed text-white/25">
-                    lag {r.lag} = {r.lag}일 전 값으로 현재를 예측
-                    {isOptimal ? " · 이 lag가 가장 강한 신호" : ""}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Significant dot */}
-            {isSig && isOptimal && (
-              <span
-                className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent-primary)]"
-                style={{ boxShadow: "0 0 6px rgba(0,255,255,0.6)" }}
-              />
-            )}
+    <section className="rounded-2xl border border-white/10 bg-black/20 p-4">
+      <div className="mb-4 flex items-baseline justify-between gap-3">
+        <h3 className="font-mono text-[0.72rem] uppercase tracking-[0.16em] text-white/72">
+          {title}
+        </h3>
+        <span className="font-mono text-[0.65rem] tracking-[0.1em] text-white/28">{subtitle}</span>
+      </div>
+      <div className="space-y-3">
+        {groups.length > 0 ? (
+          groups.map((group, index) => (
+            <SignalCard
+              key={group.key}
+              group={group}
+              maxScore={maxScore}
+              index={index}
+              activeLag={activeLag}
+              pinnedLag={pinnedLag}
+              onHover={onHover}
+              onPin={onPin}
+            />
+          ))
+        ) : (
+          <div className="rounded-xl border border-white/8 bg-white/[0.025] p-5">
+            <p className="font-mono text-[0.72rem] text-white/38">뚜렷한 관계가 없습니다.</p>
           </div>
-        );
-      })}
-    </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function SignalCard({
+  group,
+  maxScore,
+  index,
+  activeLag,
+  pinnedLag,
+  onHover,
+  onPin,
+}: {
+  group: RowGroup;
+  maxScore: number;
+  index: number;
+  activeLag: string | null;
+  pinnedLag: string | null;
+  onHover: (id: string | null) => void;
+  onPin: (id: string) => void;
+}) {
+  const bestScore = negLog10(group.optimal.pvalueAdjusted);
+  const strength = Math.min(bestScore / maxScore, 1);
+
+  return (
+    <article
+      className="relative rounded-xl border border-white/10 bg-white/[0.025] p-4 transition duration-300 hover:-translate-y-0.5 hover:border-white/18 hover:bg-white/[0.04]"
+      style={{ animation: `fadeLift 420ms ease-out ${index * 45}ms both` }}
+    >
+      <style>{`
+        @keyframes fadeLift {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
+          <p className="truncate text-[0.92rem] font-semibold text-white/86">{group.label}</p>
+          <p className="mt-1 font-mono text-[0.65rem] text-white/32">
+            가장 강함: {formatLag(group.optimal.lag)} · {formatAdjustedPValue(group.optimal.pvalueAdjusted)}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 font-mono text-[0.62rem] uppercase tracking-[0.12em]">
+          <span
+            className={`rounded-full px-2.5 py-1 ${
+              group.optimal.significant
+                ? "border border-[var(--accent-primary)]/30 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]"
+                : "border border-white/10 bg-white/[0.03] text-white/34"
+            }`}
+          >
+            {group.optimal.significant ? "의미 있음" : "관찰"}
+          </span>
+          <span className="text-white/28">{Math.round(strength * 100)}%</span>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 gap-2" role="list" aria-label={`${group.label} 날짜 간격`}>
+        {group.allLags.map((lag) => {
+          const id = `${group.key}|${lag.lag}`;
+          const score = negLog10(lag.pvalueAdjusted);
+          const pct = Math.min((score / maxScore) * 100, 100);
+          const active = activeLag === id || pinnedLag === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              className={`relative rounded-lg border px-2 py-3 text-left transition ${
+                active
+                  ? "border-white/28 bg-white/[0.08]"
+                  : "border-white/8 bg-black/20 hover:border-white/18 hover:bg-white/[0.05]"
+              }`}
+              onMouseEnter={() => onHover(id)}
+              onMouseLeave={() => onHover(null)}
+              onFocus={() => onHover(id)}
+              onBlur={() => onHover(null)}
+              onClick={() => onPin(id)}
+              aria-pressed={pinnedLag === id}
+            >
+              <span className="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-white/36">
+                {lag.lag}일 전
+              </span>
+              <span
+                className={`mt-2 block h-2 rounded-full border ${
+                  lag.optimalLag ? "border-white/75" : "border-transparent"
+                }`}
+                style={{
+                  background: lag.significant
+                    ? "var(--accent-primary)"
+                    : "rgba(255,255,255,0.18)",
+                  boxShadow: lag.significant ? "0 0 18px rgba(0,255,255,0.28)" : "none",
+                  width: `${Math.max(16, pct)}%`,
+                }}
+              />
+              <span className="mt-2 block font-mono text-[0.64rem] text-white/44">
+                {formatAdjustedPValue(lag.pvalueAdjusted)}
+              </span>
+              {active && <LagTooltip result={lag} group={group} />}
+            </button>
+          );
+        })}
+      </div>
+    </article>
+  );
+}
+
+function LagTooltip({ result, group }: { result: GrangerResult; group: RowGroup }) {
+  return (
+    <div className="pointer-events-none absolute left-0 top-[calc(100%+8px)] z-30 min-w-[240px] rounded-xl border border-white/12 bg-[#050505]/95 p-3 shadow-2xl">
+      <p className="font-mono text-[0.62rem] uppercase tracking-[0.12em] text-white/34">
+        {group.label} · {formatLag(result.lag)}
+      </p>
+      <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
+        <TooltipRow label="원래 p-value" value={fmtP(result.pvalue)} />
+        <TooltipRow label="보정 p-value" value={fmtP(result.pvalueAdjusted)} highlight={result.significant} />
+        <TooltipRow label="표시 강도" value={negLog10(result.pvalueAdjusted).toFixed(2)} />
+        <TooltipRow label="판정" value={result.significant ? "의미 있음" : "약함"} highlight={result.significant} />
+      </div>
+      <p className="mt-2 border-t border-white/8 pt-2 text-[0.68rem] leading-5 text-white/32">
+        {formatLag(result.lag)} 값으로 오늘의 변화를 설명해 본 결과입니다.
+        {result.optimalLag ? " 이 관계에서 가장 설명력이 좋은 간격입니다." : ""}
+      </p>
+    </div>
   );
 }
 
@@ -342,35 +321,21 @@ function TooltipRow({
   label,
   value,
   highlight,
-  hint,
 }: {
   label: string;
   value: string;
   highlight?: boolean;
-  hint?: string;
 }) {
   return (
     <>
-      <span className="font-mono text-[0.62rem] leading-tight text-white/36">
-        {label}
-        {hint && <span className="block text-[0.55rem] text-white/20">{hint}</span>}
-      </span>
+      <span className="font-mono text-[0.62rem] text-white/34">{label}</span>
       <span
         className={`font-mono text-[0.68rem] tabular-nums ${
-          highlight ? "text-[var(--accent-primary)]" : "text-white/80"
+          highlight ? "text-[var(--accent-primary)]" : "text-white/72"
         }`}
       >
         {value}
       </span>
     </>
-  );
-}
-
-function LegendDot({ color, label }: { color: string; label: string }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="h-2 w-2 rounded-full" style={{ background: color }} />
-      <span className="font-mono text-[0.65rem] text-white/42">{label}</span>
-    </div>
   );
 }
