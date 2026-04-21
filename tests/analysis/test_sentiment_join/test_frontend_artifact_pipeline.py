@@ -4,6 +4,7 @@ pipeline.py의 artifact 생성·skip 분기를 검증한다.
 실제 파이프라인 전체를 실행하지 않고,
 build_frontend_artifact + should_skip_artifact + write_frontend_artifact 호출 흐름만 검증한다.
 """
+
 from __future__ import annotations
 
 import json

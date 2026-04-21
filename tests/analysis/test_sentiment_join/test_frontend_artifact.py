@@ -1,4 +1,5 @@
 """frontend_artifact 모듈 단위 테스트."""
+
 from __future__ import annotations
 
 import json
@@ -11,6 +12,7 @@ from morning_brief.analysis.sentiment_join.frontend_artifact import (
 )
 
 # ─── 헬퍼 ────────────────────────────────────────────────────────────────────
+
 
 def _make_stats_bytes(
     *,
@@ -91,9 +93,7 @@ def _make_stats_bytes(
                     },
                 },
                 "coverage": {"ratio": 0.91},
-                "excluded_features": [
-                    {"feature": "volume_change_pct_lag1", "reason": "vif>10"}
-                ],
+                "excluded_features": [{"feature": "volume_change_pct_lag1", "reason": "vif>10"}],
             },
             "core": {
                 "quality_status": core_quality,
@@ -124,13 +124,15 @@ def _make_stats_bytes(
 
 # ─── direction 매핑 ───────────────────────────────────────────────────────────
 
+
 def test_direction_forward():
     artifact = build_frontend_artifact(
         stats_metadata_bytes=_make_stats_bytes(),
         reference_date="2026-04-21",
     )
     forward_results = [
-        r for r in artifact["granger"]["results"]
+        r
+        for r in artifact["granger"]["results"]
         if r["predictor"] == "news_sentiment_mean" and r["target"] == "fng_value"
     ]
     assert all(r["direction"] == "forward" for r in forward_results)
@@ -142,13 +144,15 @@ def test_direction_reverse():
         reference_date="2026-04-21",
     )
     reverse_results = [
-        r for r in artifact["granger"]["results"]
+        r
+        for r in artifact["granger"]["results"]
         if r["predictor"] == "btc_log_return" and r["target"] == "news_sentiment_mean"
     ]
     assert all(r["direction"] == "reverse" for r in reverse_results)
 
 
 # ─── optimalLag 선정 ─────────────────────────────────────────────────────────
+
 
 def test_optimal_lag_selects_lowest_pvalue_adj():
     """lag=1이 pvalue_adjusted 최솟값이므로 optimalLag=True여야 한다."""
@@ -157,7 +161,8 @@ def test_optimal_lag_selects_lowest_pvalue_adj():
         reference_date="2026-04-21",
     )
     fng_results = [
-        r for r in artifact["granger"]["results"]
+        r
+        for r in artifact["granger"]["results"]
         if r["predictor"] == "news_sentiment_mean" and r["target"] == "fng_value"
     ]
     optimal = [r for r in fng_results if r["optimalLag"]]
@@ -168,10 +173,22 @@ def test_optimal_lag_selects_lowest_pvalue_adj():
 def test_optimal_lag_tie_break_smaller_lag():
     """동률 pvalue_adjusted에서 작은 lag가 optimalLag=True여야 한다."""
     tie_results = [
-        {"predictor": "news_sentiment_mean", "target": "fng_value", "lag": 1,
-         "pvalue": 0.05, "pvalue_adjusted": 0.08, "significant": False},
-        {"predictor": "news_sentiment_mean", "target": "fng_value", "lag": 2,
-         "pvalue": 0.05, "pvalue_adjusted": 0.08, "significant": False},
+        {
+            "predictor": "news_sentiment_mean",
+            "target": "fng_value",
+            "lag": 1,
+            "pvalue": 0.05,
+            "pvalue_adjusted": 0.08,
+            "significant": False,
+        },
+        {
+            "predictor": "news_sentiment_mean",
+            "target": "fng_value",
+            "lag": 2,
+            "pvalue": 0.05,
+            "pvalue_adjusted": 0.08,
+            "significant": False,
+        },
     ]
     artifact = build_frontend_artifact(
         stats_metadata_bytes=_make_stats_bytes(granger_results=tie_results),
@@ -189,6 +206,7 @@ def test_per_group_at_most_one_optimal_lag():
         reference_date="2026-04-21",
     )
     from collections import Counter
+
     group_counts: Counter[tuple[str, str, str]] = Counter()
     for r in artifact["granger"]["results"]:
         if r["optimalLag"]:
@@ -198,9 +216,18 @@ def test_per_group_at_most_one_optimal_lag():
 
 # ─── 화이트리스트 검증 ─────────────────────────────────────────────────────────
 
-DISALLOWED_TOP_KEYS = {"walk_forward", "correlations", "backtest", "adf", "structured_sources",
-                       "exclusion_counts", "outlier_filtered_count", "outlier_filtered_ratio",
-                       "rows_before_outlier_filter", "rows_after_outlier_filter"}
+DISALLOWED_TOP_KEYS = {
+    "walk_forward",
+    "correlations",
+    "backtest",
+    "adf",
+    "structured_sources",
+    "exclusion_counts",
+    "outlier_filtered_count",
+    "outlier_filtered_ratio",
+    "rows_before_outlier_filter",
+    "rows_after_outlier_filter",
+}
 
 
 def test_disallowed_keys_not_in_artifact():
@@ -213,6 +240,7 @@ def test_disallowed_keys_not_in_artifact():
 
 
 # ─── loadings 키 == selectedFeatures ─────────────────────────────────────────
+
 
 def test_loadings_keys_match_selected_features():
     artifact = build_frontend_artifact(
@@ -227,6 +255,7 @@ def test_loadings_keys_match_selected_features():
 
 
 # ─── should_skip_artifact ─────────────────────────────────────────────────────
+
 
 def test_skip_both_critical():
     artifact = build_frontend_artifact(
@@ -254,6 +283,7 @@ def test_no_skip_both_ok():
 
 # ─── granger_executed=False 케이스 ────────────────────────────────────────────
 
+
 def test_granger_not_executed_empty_results():
     artifact = build_frontend_artifact(
         stats_metadata_bytes=_make_stats_bytes(granger_executed=False),
@@ -264,6 +294,7 @@ def test_granger_not_executed_empty_results():
 
 
 # ─── write_frontend_artifact ─────────────────────────────────────────────────
+
 
 def test_write_creates_two_files(tmp_path: Path):
     artifact = build_frontend_artifact(
