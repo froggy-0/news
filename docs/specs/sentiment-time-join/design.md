@@ -114,7 +114,7 @@ def fetch_fng(lookback_days: int) -> pd.DataFrame:
     """
 ```
 
-**설계 결정:** `get_json_with_retry` 재사용 (`DEFAULT_RETRIES=3`, `DEFAULT_BACKOFF=1.2`). `404` 재시도 없음, `429/5xx/timeout` 지수 백오프 3회 — 기존 프로젝트 정책 준수(CLAUDE.md).
+**설계 결정:** `get_json_with_retry` 재사용 (`DEFAULT_RETRIES=3`, `DEFAULT_BACKOFF=1.2`). `404` 재시도 없음, `429/5xx/timeout` 지수 백오프 3회 — 기존 프로젝트 정책 준수(로컬 Claude 지침).
 
 > **FNG `value` 타입 변환:** Alternative.me 응답의 `value` 필드는 `"75"` 형태의 **string**으로 수신된다. `fng_value` 컬럼 저장 전 `int()` 변환 필요. 변환 실패 시 해당 날짜를 NaN으로 처리한다.
 

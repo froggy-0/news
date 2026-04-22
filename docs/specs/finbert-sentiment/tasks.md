@@ -265,7 +265,7 @@ Req 12의 Phase 정의에 따라 Phase A → B → C 순서로 구현한다. 각
     - 두 필드는 동일한 의미(`bullish/bearish/neutral`)이나, 소스가 다름 (Grok LLM vs FinBERT)
     - 기존 호환성을 위해 필드명 통일하지 않는 이유 문서화
     - _Requirements: 2.5_
-  - [x] 22.2 모델 버전 업데이트 시 score drift 검증 절차를 `docs/specs/finbert-sentiment/` 또는 `CLAUDE.md`에 문서화
+  - [x] 22.2 모델 버전 업데이트 시 score drift 검증 절차를 `docs/specs/finbert-sentiment/` 또는 로컬 Claude 지침에 문서화
     - 기존 데이터 샘플 최소 50건으로 score drift 검증
     - 평균 절대 편차 ≥ 0.05이면 변경 사유·영향 문서화
     - _Requirements: 11.5_

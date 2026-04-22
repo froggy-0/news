@@ -160,8 +160,7 @@ python scripts/backfill_btc_futures.py --provider coinalyze --start 2025-04-24 -
 ### 환경 설정
 
 ```bash
-cp .env.example .env
-# .env에 필수 키 설정: OPENAI_API_KEY, PERPLEXITY_API_KEY, KIS_APP_KEY/SECRET 등
+# 로컬 .env에 필수 키 설정: OPENAI_API_KEY, PERPLEXITY_API_KEY, KIS_APP_KEY/SECRET 등
 ```
 
 ### 브리핑 파이프라인

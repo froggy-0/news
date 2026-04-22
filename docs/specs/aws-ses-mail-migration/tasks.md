@@ -160,7 +160,7 @@
     - 수정 파일 후보:
       - `docs/subscriptions-ops.md`
       - `README.md`
-      - 필요 시 `CLAUDE.md`
+      - 필요 시 로컬 Claude 지침
     - 작업 내용:
       - `GMAIL_SENDER`, `CONFIRMATION_GMAIL_*`, OAuth token 파일, Gmail API 설명을 제거한다.
       - Cloudflare secret 목록을 `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `CONFIRMATION_SES_SENDER`로 교체한다.

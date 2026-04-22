@@ -160,7 +160,7 @@ make sentiment-variance-report RUN_ID=<phase3 run_id>
 - [ ] 결정과 근거를 `data/sentiment_join/experiments/{run_id}/decision.md`로 저장
 
 ### 16. README / 운영 문서 갱신
-- [x] `CLAUDE.md` — Sentiment Join Analysis Pipeline 섹션에 신규 환경변수 반영
+- [x] 로컬 Claude 지침 — Sentiment Join Analysis Pipeline 섹션에 신규 환경변수 반영
   - `SENTIMENT_JOIN_OUTLIER_POLICY` (row/column/winsorize/none)
   - `SENTIMENT_JOIN_SCALER_KIND` (standard/robust)
 - [x] Ablation & Variance Decomposition 섹션 신규 추가 (make 명령어, 출력물, 승격 게이트)

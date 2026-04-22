@@ -1,6 +1,6 @@
 # Codex Ops Setup
 
-이 문서는 SOVEREIGN BRIEF 저장소에서 Codex의 project config, subagent, repo skill을 어떻게 쓰는지 정리합니다. 기준은 OpenAI 공식 문서의 project `.codex/config.toml`, `AGENTS.md`, subagent, Apps SDK 운영 모델입니다.
+이 문서는 SOVEREIGN BRIEF 저장소에서 Codex의 project config, subagent, repo skill을 어떻게 쓰는지 정리합니다. 기준은 OpenAI 공식 문서의 project `.codex/config.toml`, 로컬 에이전트 지침, subagent, Apps SDK 운영 모델입니다.
 
 참고:
 - <https://developers.openai.com/codex/config-basic>
@@ -15,7 +15,7 @@
 - 메인 모델은 `gpt-5.4`, read-heavy helper는 `gpt-5.4-mini`로 나눕니다.
 - 이 저장소는 write 충돌을 줄이기 위해 `max_threads = 4`, `max_depth = 1`을 기본으로 둡니다.
 - `Context7` MCP는 project config에 remote HTTP server로 등록했습니다. 첫 사용 시 OAuth 로그인이 필요할 수 있습니다.
-- 공통 탐색은 repo root `AGENTS.md`와 `docs/development-standards.md`를 먼저 따릅니다.
+- 공통 탐색은 로컬 에이전트 지침과 `docs/development-standards.md`를 먼저 따릅니다.
 
 ## 2. Custom subagents
 
