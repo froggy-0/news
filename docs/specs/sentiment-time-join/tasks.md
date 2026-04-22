@@ -427,14 +427,14 @@
     ```
   - _Requirements: 1.1, 1.2_
 
-- [x] 21. `CLAUDE.md` 및 `Makefile` 문서 갱신
-  - [x] 21.1 `CLAUDE.md` Architecture 표에 Sentiment Join 파이프라인 항목 추가
+- [x] 21. 로컬 Claude 지침 및 `Makefile` 문서 갱신
+  - [x] 21.1 로컬 Claude 지침 Architecture 표에 Sentiment Join 파이프라인 항목 추가
     - `scripts/build_sentiment_join.py` 실행법 (`make sentiment-join`)
     - 환경변수 목록: `SENTIMENT_JOIN_LOOKBACK_DAYS`, `SENTIMENT_JOIN_OUTPUT_DIR`, `SENTIMENT_JOIN_R2_MAX_CONCURRENCY`, `SENTIMENT_JOIN_RETAIN_DAYS`
     - 출력물: `data/sentiment_join/master_{YYYYMMDD}.parquet`
     - 의존성: `requirements-analysis.txt` (`pandera`)
   - [x] 21.2 `Makefile` `sentiment-join` 타겟 추가 (Task 1.4에서 선행 추가했으면 확인만)
-  - _Requirements: 전체 (CLAUDE.md 정책: 동작·설정 변경 시 문서 갱신)_
+  - _Requirements: 전체 (로컬 Claude 지침 정책: 동작·설정 변경 시 문서 갱신)_
 
 ---
 

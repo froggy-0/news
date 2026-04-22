@@ -226,7 +226,7 @@
   - [ ] 7.1 Supabase schema/migration 파일을 추가한다
     - 신규 파일 후보:
       - `infra/supabase/subscriptions.sql`
-      - 또는 `supabase/migrations/<timestamp>_newsletter_subscriptions.sql`
+      - 또는 로컬 Supabase migration 파일
     - 작업 내용:
       - `subscriptions`
       - `subscription_tokens`

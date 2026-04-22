@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .DS_Store
 .env
+.env.example
 credentials.json
 token.json
 outputs/
@@ -23,6 +24,9 @@ agents/
 .playwright-mcp/
 .superset/
 .wrangler/
+
+# Local database migrations
+supabase/migrations/
 
 # Misc
 log.txt
