@@ -22,4 +22,4 @@
 
 - 프론트는 stale ETF snapshot 기반 추정치를 노출하지 않습니다.
 - 핵심 블록은 값이 없더라도 상태 문구를 유지합니다.
-- `schema/brief.types.ts` 변경 시 `docs/specs/design.md`, fixture, validation 로직을 함께 갱신해야 합니다.
+- `schema/brief.types.ts` 변경 시 `docs/specs/public-brief-frontend/design.md`, fixture, validation 로직을 함께 갱신해야 합니다.

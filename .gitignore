@@ -17,6 +17,7 @@ output/
 .codex/*
 .kiro/
 .agents/
+agents/
 .hypothesis/
 .playwright-cli/
 .playwright-mcp/
