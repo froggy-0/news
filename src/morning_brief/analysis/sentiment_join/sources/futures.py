@@ -666,7 +666,36 @@ def _read_futures_from_supabase(
         )
         data = getattr(resp, "data", None)
         if not isinstance(data, list):
+            log_structured(
+                logger,
+                event="supabase.futures_cache.unexpected_response",
+                message="Supabase 선물 캐시 응답이 list가 아닙니다.",
+                level=logging.WARNING,
+                response_type=type(data).__name__,
+                start_date=start_date,
+                end_date=end_date,
+            )
             return {}
+        oi_count = sum(
+            1 for r in data if isinstance(r, dict) and r.get("open_interest_usd") is not None
+        )
+        lsr_count = sum(
+            1 for r in data if isinstance(r, dict) and r.get("btc_long_short_ratio") is not None
+        )
+        funding_count = sum(
+            1 for r in data if isinstance(r, dict) and r.get("funding_rate") is not None
+        )
+        log_structured(
+            logger,
+            event="supabase.futures_cache.read",
+            message="Supabase 선물 캐시 읽기 완료.",
+            rows_returned=len(data),
+            funding_rows=funding_count,
+            oi_rows=oi_count,
+            lsr_rows=lsr_count,
+            requested_start=start_date,
+            requested_end=end_date,
+        )
         return {
             row["date"]: {
                 "funding_rate": row.get("funding_rate"),
@@ -880,6 +909,23 @@ def fetch_futures_data(lookback_days: int, futures_lambda_arn: str = "") -> pd.D
 
     # --- 0차: Supabase 캐시 확인 ---
     cached = _read_futures_from_supabase(dates[0], dates[-1])
+
+    _cached_oi_total = sum(1 for v in cached.values() if v.get("open_interest_usd") is not None)
+    _cached_lsr_total = sum(1 for v in cached.values() if v.get("btc_long_short_ratio") is not None)
+    _cached_funding_total = sum(1 for v in cached.values() if v.get("funding_rate") is not None)
+    log_structured(
+        logger,
+        event="supabase.futures_cache.summary",
+        message="Supabase 캐시 로드 요약.",
+        cached_dates=len(cached),
+        requested_dates=len(dates),
+        requested_start=dates[0] if dates else None,
+        requested_end=dates[-1] if dates else None,
+        cached_funding=_cached_funding_total,
+        cached_oi=_cached_oi_total,
+        cached_lsr=_cached_lsr_total,
+        cache_complete=_is_cache_complete(cached, dates),
+    )
 
     if _is_cache_complete(cached, dates):
         # 완전 캐시 히트: API 호출 생략
