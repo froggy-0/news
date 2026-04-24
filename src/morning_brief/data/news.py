@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from morning_brief.config import Settings
 from morning_brief.data import data_quality, news_policy, news_selection
@@ -20,6 +21,7 @@ from morning_brief.data.news_rollout import (
     record_news_rollout_run,
     should_reduce_legacy_broad_fallback,
 )
+from morning_brief.data.sources.coindesk_news import fetch_coindesk_news
 from morning_brief.data.sources.gemini_grounding import fetch_gemini_grounding
 from morning_brief.data.sources.google_news_rss import fetch_news_from_google_rss
 from morning_brief.data.sources.grok_official_signals import fetch_official_x_signals
@@ -174,6 +176,48 @@ def _collect_official_signal_items(
             kept_count=len(items),
         )
     return items
+
+
+def _coindesk_lookback_hours(settings: Settings) -> int:
+    now_utc = datetime.now(timezone.utc)
+    if now_utc.weekday() in {0, 5, 6}:
+        return settings.coindesk_news_weekend_lookback_hours
+    return settings.coindesk_news_lookback_hours
+
+
+def _collect_coindesk_items(
+    settings: Settings,
+    *,
+    observer: PipelineObserver | None = None,
+) -> list[NewsItem]:
+    if not settings.coindesk_news_enabled:
+        return []
+
+    try:
+        return fetch_coindesk_news(
+            max_items=settings.coindesk_news_max_items,
+            lookback_hours=_coindesk_lookback_hours(settings),
+            categories=settings.coindesk_news_categories,
+            observer=observer,
+        )
+    except Exception as exc:
+        log_structured(
+            logger,
+            event="error.raised",
+            message="CoinDesk API에서 뉴스를 가져오지 못해 보조 소스로 이어갈게요.",
+            level=logging.WARNING,
+            provider="coindesk",
+            reason=str(exc),
+            error_type=type(exc).__name__,
+        )
+        if observer is not None:
+            observer.log_event(
+                "coindesk_news_degraded",
+                level=logging.WARNING,
+                reason=str(exc),
+                error_type=type(exc).__name__,
+            )
+        return []
 
 
 def _collect_sonar_summaries(
@@ -431,11 +475,12 @@ def build_news_packet(
     """
     items: list[NewsItem] = []
     legacy_items: list[NewsItem] = []
+    coindesk_items = _collect_coindesk_items(settings, observer=observer)
     official_signal_items = _collect_official_signal_items(settings, observer=observer)
     allow_broad_fallback = True
     fallback_review: dict | None = None
 
-    # --- 신규: Sonar 요약 + Grok X 키워드 + Grok Web Search ---
+    # --- 신규: CoinDesk 우선 + Sonar 요약 + 조건부 Grok 보강 ---
     topic_summaries, sonar_news = _collect_sonar_summaries(settings, observer=observer)
 
     # 티어드 수집: 커버리지 계산 → Skip 토픽 결정
@@ -445,39 +490,26 @@ def build_news_packet(
         settings.grok_keyword_min_official_to_skip,
     )
 
-    # Keyword 호출 (커버리지 계산 이후로 이동)
-    x_signals, x_news, grok_keywords = _collect_x_keyword_signals(
-        settings,
-        observer=observer,
-        skip_topics=skip_topics,
-        topic_coverage=topic_coverage,
-    )
-    grok_web_news = _collect_grok_web_news(settings, observer=observer)
-
-    # official signals와 keyword signals 간 source_handle 기반 dedup
-    if x_news and official_signal_items:
-        official_handles = {it.source.lstrip("@") for it in official_signal_items}
-        x_news = [n for n in x_news if n.source.lstrip("@") not in official_handles]
-
-    # Grok 키워드를 Perplexity 쿼리 키워드에 합산
-    if grok_keywords:
-        if keywords_by_topic is None:
-            keywords_by_topic = {}
-        for sector, kws in grok_keywords.items():
-            keywords_by_topic.setdefault(sector, []).extend(kws)
+    x_signals: list[XSignal] = []
+    x_news: list[NewsItem] = []
+    grok_keywords: dict[str, list[str]] = {}
+    grok_web_news: list[NewsItem] = []
 
     public_merge_limit = max(PUBLIC_ALL_NEWS_ITEMS * 2, settings.max_news_items * 2)
     public_fetch_limit = max(PUBLIC_ALL_NEWS_ITEMS, settings.max_news_items)
 
     if settings.research_provider == "perplexity":
-        items = fetch_news_from_perplexity(
+        items = list(coindesk_items)
+        perplexity_items = fetch_news_from_perplexity(
             max_items=public_fetch_limit,
             api_key=settings.perplexity_api_key,
             observer=observer,
             keywords_by_topic=keywords_by_topic,
         )
-        if not items and settings.perplexity_use_sonar and sonar_news:
-            items = sonar_news
+        if perplexity_items:
+            items = _merge_rank(items, perplexity_items, max_items=public_merge_limit)
+        if not perplexity_items and settings.perplexity_use_sonar and sonar_news:
+            items = _merge_rank(items, sonar_news, max_items=public_merge_limit)
             log_structured(
                 logger,
                 event="fallback.used",
@@ -492,23 +524,23 @@ def build_news_packet(
                     reason="search_empty",
                     count=len(sonar_news),
                 )
-        elif items and settings.perplexity_use_sonar and sonar_news:
+        elif perplexity_items and settings.perplexity_use_sonar and sonar_news:
             log_structured(
                 logger,
                 event="selection.complete",
                 message="Sonar 요약은 맥락 보강에만 쓰고 실제 뉴스 본문은 Perplexity Search 결과를 우선 사용할게요.",
                 provider="perplexity",
                 candidate_count=len(sonar_news),
-                kept_count=len(items),
+                kept_count=len(perplexity_items),
             )
-        if not items and observer is not None:
+        if not perplexity_items and not coindesk_items and observer is not None:
             observer.log_event(
                 "perplexity_degraded",
                 reason="Perplexity 결과가 비어 있어 legacy 뉴스와 Grok 보조 모드로 전환했어요.",
             )
 
         # Perplexity 0건 시 Gemini fallback
-        if not items and settings.gemini_api_key:
+        if not perplexity_items and not coindesk_items and settings.gemini_api_key:
             gemini_items = fetch_gemini_grounding(
                 api_key=settings.gemini_api_key,
                 model=settings.gemini_model,
@@ -525,12 +557,6 @@ def build_news_packet(
                     provider="gemini",
                     kept_count=len(gemini_items),
                 )
-
-        # Grok X 키워드 + Web Search 결과 병합
-        if x_news:
-            items = _merge_rank(items, x_news, max_items=public_merge_limit)
-        if grok_web_news:
-            items = _merge_rank(items, grok_web_news, max_items=public_merge_limit)
 
         if official_signal_items:
             items = _merge_rank(items, official_signal_items, max_items=public_merge_limit)
@@ -555,6 +581,55 @@ def build_news_packet(
                 kept_count=publish_candidate_audit["kept_count"],
                 dropped=publish_candidate_audit["dropped"],
             )
+
+        if needs_legacy_fallback:
+            x_signals, x_news, grok_keywords = _collect_x_keyword_signals(
+                settings,
+                observer=observer,
+                skip_topics=skip_topics,
+                topic_coverage=topic_coverage,
+            )
+            grok_web_news = _collect_grok_web_news(settings, observer=observer)
+            if x_news and official_signal_items:
+                official_handles = {it.source.lstrip("@") for it in official_signal_items}
+                x_news = [n for n in x_news if n.source.lstrip("@") not in official_handles]
+            if x_news:
+                items = _merge_rank(items, x_news, max_items=public_merge_limit)
+            if grok_web_news:
+                items = _merge_rank(items, grok_web_news, max_items=public_merge_limit)
+            if observer is not None:
+                observer.log_event(
+                    "grok_keyword_conditional_used",
+                    reason="news_coverage_gap",
+                    x_news_count=len(x_news),
+                    grok_web_news_count=len(grok_web_news),
+                )
+            if x_news or grok_web_news:
+                public_candidate_items, publish_candidate_audit = filter_publish_news_candidates(
+                    items
+                )
+                packet, _ = _packet_summary(public_candidate_items)
+                fallback_review = assess_perplexity_fallback_need(packet)
+                needs_legacy_fallback = bool(fallback_review.get("needs_legacy_fallback", False))
+                fallback_reasons = [
+                    str(reason).strip()
+                    for reason in fallback_review.get("reasons", [])
+                    if str(reason).strip()
+                ]
+        elif observer is not None:
+            observer.log_event(
+                "grok_keyword_skipped",
+                reason="coindesk_and_perplexity_coverage_sufficient",
+                coindesk_count=len(coindesk_items),
+                official_signal_count=len(official_signal_items),
+            )
+
+        if grok_keywords:
+            if keywords_by_topic is None:
+                keywords_by_topic = {}
+            for sector, kws in grok_keywords.items():
+                keywords_by_topic.setdefault(sector, []).extend(kws)
+
         if needs_legacy_fallback and settings.enable_legacy_news_fallback:
             reduce_broad_fallback = should_reduce_legacy_broad_fallback(settings.cache_dir)
             allow_broad_fallback = not (
@@ -605,7 +680,15 @@ def build_news_packet(
             max_items=PUBLIC_ALL_NEWS_ITEMS,
             newsapi_key=settings.newsapi_key,
         )
-        items = _merge_rank(legacy_items, official_signal_items, max_items=public_merge_limit)
+        items = _merge_rank(coindesk_items, legacy_items, max_items=public_merge_limit)
+        items = _merge_rank(items, official_signal_items, max_items=public_merge_limit)
+        x_signals, x_news, grok_keywords = _collect_x_keyword_signals(
+            settings,
+            observer=observer,
+            skip_topics=skip_topics,
+            topic_coverage=topic_coverage,
+        )
+        grok_web_news = _collect_grok_web_news(settings, observer=observer)
         # Grok 결과도 legacy 모드에서 병합
         if x_news:
             items = _merge_rank(items, x_news, max_items=public_merge_limit)

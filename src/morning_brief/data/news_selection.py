@@ -21,6 +21,8 @@ from morning_brief.models import NewsItem
 
 _PERPLEXITY_PROVIDERS = providers.PERPLEXITY_PROVIDERS
 _GROK_PROVIDERS = providers.GROK_PROVIDERS
+_COINDESK_PROVIDERS = providers.COINDESK_PROVIDERS
+COINDESK_MAX_ITEMS_PER_DOMAIN = 4
 _PUBLISH_PLACEHOLDER_TITLE_RE = re.compile(
     r"^(weak source item|example|sample|test item|placeholder)\b",
     re.IGNORECASE,
@@ -258,6 +260,8 @@ def _normalize_url(url: str) -> str:
 
 def _item_score(item: NewsItem) -> float:
     provider_bonus = 4.2 if item.provider == providers.GROK_OFFICIAL_X else 0.0
+    if item.provider in _COINDESK_PROVIDERS:
+        provider_bonus += 1.0
     return (
         domain_score(item.url)
         + recency_score(item.published_at)
@@ -288,7 +292,12 @@ def _apply_domain_diversity_limit(items: list[NewsItem], max_items: int) -> list
             else extract_domain(item.url)
         )
         count = per_domain.get(domain, 0)
-        if count >= MAX_ITEMS_PER_DOMAIN:
+        domain_limit = (
+            COINDESK_MAX_ITEMS_PER_DOMAIN
+            if item.provider in _COINDESK_PROVIDERS
+            else MAX_ITEMS_PER_DOMAIN
+        )
+        if count >= domain_limit:
             continue
         selected.append(item)
         per_domain[domain] = count + 1

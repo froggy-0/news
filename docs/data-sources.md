@@ -78,14 +78,15 @@ BTC ETF는 Bronze/Silver/Gold 계층으로 저장됩니다. 공식 issuer source
 
 | 순서 | 소스 | 방식 | 발동 조건 |
 |---|---|---|---|
-| 1 | Grok 공식 X 시그널 | `xai_sdk` x_search, allowlist 계정 최근 48h | 항상 |
-| 2 | Perplexity Sonar | `perplexity` SDK, 4개 토픽별 구조화 요약 | 항상 |
-| 3 | Grok X 키워드 검색 | `xai_sdk` x_search, 시장 키워드 24h | 항상 |
-| 4 | Grok Web Search | `xai_sdk` web search | 선택적 (`GROK_WEB_SEARCH_ENABLED`) |
-| 5 | Perplexity Search | `perplexity` SDK 직접 검색 | Sonar 미사용 시 |
-| 6 | Gemini Grounding | `google.genai` + GoogleSearch, `gemini-2.0-flash` | Perplexity 0건 시 |
-| 7 | Google News RSS | `feedparser` + `news.google.com/rss/search` | 품질 미달 시 |
-| 8 | NewsAPI | `newsapi.org/v2/everything` | 품질 미달 시 |
+| 1 | CoinDesk API | `data-api.coindesk.com/news/v1/article/list`, `to_ts` 역방향 페이지네이션 | 기본 (`COINDESK_NEWS_ENABLED`) |
+| 2 | Grok 공식 X 시그널 | `xai_sdk` x_search, allowlist 계정 최근 48h | 기본, 소량 |
+| 3 | Perplexity Sonar | `perplexity` SDK, 4개 토픽별 구조화 요약 | 기본 |
+| 4 | Perplexity Search | `perplexity` SDK 직접 검색 | CoinDesk가 약한 macro/us_equity 보강 |
+| 5 | Grok X 키워드 검색 | `xai_sdk` x_search, 시장 키워드 24h | CoinDesk+Perplexity 품질 미달 시 |
+| 6 | Grok Web Search | `xai_sdk` web search | 선택적 (`GROK_WEB_SEARCH_ENABLED`) + 품질 미달 시 |
+| 7 | Gemini Grounding | `google.genai` + GoogleSearch, `gemini-2.0-flash` | CoinDesk/Perplexity 0건 시 |
+| 8 | Google News RSS | `feedparser` + `news.google.com/rss/search` | 품질 미달 시 |
+| 9 | NewsAPI | `newsapi.org/v2/everything` | 품질 미달 시 |
 
 ### 2.2 Grok 공식 X allowlist 그룹
 

@@ -73,6 +73,11 @@ def test_kis_token_cache_path_custom(monkeypatch, tmp_path):
 
 def test_perplexity_settings_loaded(monkeypatch):
     monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
+    monkeypatch.setenv("COINDESK_NEWS_ENABLED", "true")
+    monkeypatch.setenv("COINDESK_NEWS_LOOKBACK_HOURS", "48")
+    monkeypatch.setenv("COINDESK_NEWS_WEEKEND_LOOKBACK_HOURS", "96")
+    monkeypatch.setenv("COINDESK_NEWS_MAX_ITEMS", "18")
+    monkeypatch.setenv("COINDESK_NEWS_CATEGORIES", "BTC,ETH")
     monkeypatch.setenv("GROK_API_KEY", "grok-test-key")
     monkeypatch.setenv("GROK_MODEL", "grok-test-model")
     monkeypatch.setenv("RESEARCH_PROVIDER", "legacy")
@@ -82,6 +87,11 @@ def test_perplexity_settings_loaded(monkeypatch):
     monkeypatch.setenv("OFFICIAL_X_MAX_ITEMS", "2")
     settings = load_settings()
     assert settings.perplexity_api_key == "pplx-test-key"
+    assert settings.coindesk_news_enabled is True
+    assert settings.coindesk_news_lookback_hours == 48
+    assert settings.coindesk_news_weekend_lookback_hours == 96
+    assert settings.coindesk_news_max_items == 18
+    assert settings.coindesk_news_categories == "BTC,ETH"
     assert settings.grok_api_key == "grok-test-key"
     assert settings.grok_model == "grok-test-model"
     assert settings.research_provider == "legacy"

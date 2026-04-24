@@ -1086,6 +1086,75 @@ def test_build_news_packet_omits_grok_signals_when_grok_fails(monkeypatch):
     assert {item["topic"] for item in packet} == {"macro"}
 
 
+def test_build_news_packet_uses_coindesk_first_and_skips_grok_when_coverage_is_enough(
+    monkeypatch,
+):
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("COINDESK_NEWS_ENABLED", "true")
+    monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")
+    monkeypatch.setenv("ENABLE_OFFICIAL_X_SIGNALS", "false")
+    monkeypatch.setenv("ENABLE_LEGACY_NEWS_FALLBACK", "true")
+    monkeypatch.setenv("PERPLEXITY_USE_SONAR_SUMMARY", "false")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
+    monkeypatch.setenv("GROK_API_KEY", "grok-test-key")
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_coindesk_news",
+        lambda **_: [
+            NewsItem(
+                title="Bitcoin ETFs keep drawing demand",
+                url="https://www.coindesk.com/markets/2026/03/13/bitcoin-etfs-keep-drawing-demand",
+                source="CoinDesk",
+                published_at=now,
+                topic="bitcoin",
+                provider="coindesk_api",
+                why_it_matters="비트코인 자금 흐름을 읽는 데 도움이 돼요.",
+                citations=[
+                    "https://www.coindesk.com/markets/2026/03/13/bitcoin-etfs-keep-drawing-demand"
+                ],
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news_from_perplexity",
+        lambda **_: [
+            NewsItem(
+                title="Fed tone stays steady",
+                url="https://www.reuters.com/world/us/fed-tone-stays-steady",
+                source="Reuters",
+                published_at=now - timedelta(hours=1),
+                topic="macro",
+                provider="perplexity_search",
+                why_it_matters="금리 흐름을 읽는 데 도움이 돼요.",
+                citations=["https://www.reuters.com/world/us/fed-tone-stays-steady"],
+            ),
+            NewsItem(
+                title="Nasdaq closes firmer",
+                url="https://www.bloomberg.com/news/nasdaq-closes-firmer",
+                source="Bloomberg",
+                published_at=now - timedelta(hours=2),
+                topic="us_equity",
+                provider="perplexity_search",
+                why_it_matters="미국 증시 흐름을 읽는 데 도움이 돼요.",
+                citations=["https://www.bloomberg.com/news/nasdaq-closes-firmer"],
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_x_keyword_signals",
+        lambda **_: (_ for _ in ()).throw(AssertionError("grok keyword should not run")),
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news",
+        lambda **_: (_ for _ in ()).throw(AssertionError("legacy fetch should not run")),
+    )
+
+    packet, _, _, _ = news.build_news_packet(settings=load_settings())
+
+    providers = {item["provider"] for item in packet}
+    assert "coindesk_api" in providers
+    assert providers == {"coindesk_api", "perplexity_search"}
+
+
 def test_build_news_packet_uses_legacy_when_perplexity_topics_are_too_narrow(monkeypatch):
     now = datetime.now(timezone.utc)
     monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")

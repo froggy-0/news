@@ -505,7 +505,7 @@ def test_pipeline_observability_serializes_null_provider_token_usage(tmp_path):
     assert summary["total_cost_usd"] is None
     assert (
         summary["provider_usage_line"]
-        == "perplexity[requests=1, input=null, output=null, cached=null, reasoning=null, sources=1, parse_failures=1, cost_usd=null]"
+        == "perplexity[requests=1, input=null, output=null, cached=null, reasoning=null, cost_ticks=null, sources_used=null, sources=1, parse_failures=1, cost_usd=null]"
     )
 
 
@@ -530,6 +530,8 @@ def test_pipeline_observability_writes_provider_usage_summary_event(tmp_path):
         output_tokens=30,
         cached_input_tokens=8,
         reasoning_tokens=0,
+        cost_in_usd_ticks=730000,
+        num_sources_used=2,
     )
     observer.record_provider_usage(
         "openai",
@@ -553,15 +555,16 @@ def test_pipeline_observability_writes_provider_usage_summary_event(tmp_path):
     )
 
     assert summary["provider_usage_line"] == (
-        "openai[requests=3, input=900, output=150, cached=40, reasoning=12, sources=0, parse_failures=0, cost_usd=0.000516] | "
-        "perplexity[requests=2, input=null, output=null, cached=null, reasoning=null, sources=10, parse_failures=2, cost_usd=null] | "
-        "grok_official[requests=1, input=120, output=30, cached=8, reasoning=0, sources=0, parse_failures=0, cost_usd=3.8e-05]"
+        "openai[requests=3, input=900, output=150, cached=40, reasoning=12, cost_ticks=null, sources_used=null, sources=0, parse_failures=0, cost_usd=0.000516] | "
+        "perplexity[requests=2, input=null, output=null, cached=null, reasoning=null, cost_ticks=null, sources_used=null, sources=10, parse_failures=2, cost_usd=null] | "
+        "grok_official[requests=1, input=120, output=30, cached=8, reasoning=0, cost_ticks=730000, sources_used=2, sources=0, parse_failures=0, cost_usd=7.3e-05]"
     )
     assert summary_event["line"] == summary["provider_usage_line"]
     assert summary_event["providers"]["openai"]["input_tokens"] == 900
     assert summary_event["providers"]["perplexity"]["input_tokens"] is None
     assert summary_event["providers"]["openai"]["cost_usd"] == 0.000516
-    assert summary["total_cost_usd"] == 0.000554
+    assert summary_event["providers"]["grok_official"]["cost_usd"] == 0.000073
+    assert summary["total_cost_usd"] == 0.000589
     assert final_summary["status"] == "ok"
     assert final_summary["total_cost_usd"] == summary["total_cost_usd"]
     assert final_summary["pipeline_run_path"].endswith(".json")
