@@ -649,6 +649,14 @@ def _read_futures_from_supabase(
     supabase_url = os.getenv("SUPABASE_URL", "").strip()
     service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
     if not supabase_url or not service_role_key:
+        log_structured(
+            logger,
+            event="supabase.futures_cache.skipped",
+            message="SUPABASE_URL 또는 SUPABASE_SERVICE_ROLE_KEY 미설정 — 캐시를 건너뜁니다.",
+            level=logging.WARNING,
+            has_url=bool(supabase_url),
+            has_key=bool(service_role_key),
+        )
         return {}
     try:
         from supabase import create_client
