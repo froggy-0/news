@@ -11,6 +11,7 @@ from morning_brief.analysis.sentiment_join.sources.etf_flows import (
 
 
 def test_rows_to_totals_forward_fills_each_ticker_before_aggregation() -> None:
+    # BITB는 ETF_ANALYSIS_TICKERS에서 제거됐으므로 IBIT 두 날짜로 ffill 테스트
     dates = ["2026-04-16", "2026-04-17"]
     rows = [
         {
@@ -22,9 +23,30 @@ def test_rows_to_totals_forward_fills_each_ticker_before_aggregation() -> None:
             "quality_status": "degraded",
         },
         {
+            "ticker": "IBIT",
+            "as_of_date": "2026-04-17",
+            "total_btc": 800_000.0,
+            "aum_usd": 60_000_000_000.0,
+            "source_type": "official_html",
+            "quality_status": "ok",
+        },
+    ]
+
+    totals_by_date = _rows_to_totals(rows, dates=dates)
+
+    assert totals_by_date["2026-04-16"]["etf_total_btc"] == 798_006.67
+    assert totals_by_date["2026-04-17"]["etf_total_btc"] == 800_000.0
+    assert totals_by_date["2026-04-17"]["etf_total_aum_usd"] == 60_000_000_000.0
+
+
+def test_rows_to_totals_skips_bitb_rows() -> None:
+    # BITB는 ETF_ANALYSIS_TICKERS에 없으므로 입력에 있어도 무시됨
+    dates = ["2026-04-17"]
+    rows = [
+        {
             "ticker": "BITB",
             "as_of_date": "2026-04-17",
-            "total_btc": 38_077.30003518,
+            "total_btc": 38_077.3,
             "aum_usd": 2_858_880_289.73,
             "source_type": "official_json",
             "quality_status": "ok",
@@ -33,9 +55,7 @@ def test_rows_to_totals_forward_fills_each_ticker_before_aggregation() -> None:
 
     totals_by_date = _rows_to_totals(rows, dates=dates)
 
-    assert totals_by_date["2026-04-16"]["etf_total_btc"] == 798_006.67
-    assert totals_by_date["2026-04-17"]["etf_total_btc"] == 836_083.97003518
-    assert totals_by_date["2026-04-17"]["etf_total_aum_usd"] == 62_778_056_127.73
+    assert totals_by_date == {}
 
 
 def test_rows_to_totals_skips_critical_and_aggregator_rows() -> None:
@@ -106,6 +126,13 @@ def test_fetch_etf_flow_features_marks_latest_snapshot_fallback_as_degraded(
     assert df.attrs["requested_days"] == 3
     assert df.attrs["history_coverage_ratio"] == 0.3333
     assert df.attrs["history_quality_status"] == "degraded"
+
+
+def test_etf_analysis_tickers_does_not_include_bitb() -> None:
+    """BITB는 히스토리 백필 소스 없으므로 분석 티커에서 의도적으로 제외됨 (회귀 방지)."""
+    from morning_brief.analysis.sentiment_join.sources.etf_flows import ETF_ANALYSIS_TICKERS
+
+    assert "BITB" not in ETF_ANALYSIS_TICKERS
 
 
 def test_fetch_etf_flow_features_marks_gold_history_as_ok(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -14,6 +14,7 @@ from morning_brief.analysis.sentiment_join.hybrid_index import (
     compute_hybrid_indices,
 )
 from morning_brief.analysis.sentiment_join.join import merge_sources
+from morning_brief.analysis.sentiment_join.outlier_policy import OutlierPolicyFactory
 from morning_brief.analysis.sentiment_join.quality import STRUCTURED_SOURCE_MIN_COVERAGE_RATIO
 from morning_brief.analysis.sentiment_join.signals import hybrid_signal_label
 from morning_brief.analysis.sentiment_join.sources.binance import fetch_btc_close_binance
@@ -391,10 +392,14 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             )
             return 1
 
-        # §8-A: 이상치 행은 제거하지 않고 수치 컬럼만 NaN으로 마스킹.
+        # §8-A: column 정책 — 이상치 셀만 NaN 마스킹, 행 전체는 보존.
+        # regime_stress(BTC 급락 등 시장 스트레스일)는 마스킹하지 않고 사유만 기록.
         # 달력 연속성을 유지해 Granger 검정의 time-index gap 문제를 방지합니다.
-        _NON_MASK_COLS = frozenset(
-            {
+        _outlier_mask_cols = [
+            c
+            for c in master_df.columns
+            if c
+            not in {
                 "date",
                 "is_outlier",
                 "sentiment_status",
@@ -403,24 +408,24 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
                 "btc_direction_label",
                 "text_schema_version",
             }
-        )
-        analysis_df = master_df.copy()
-        _mask_cols = [c for c in analysis_df.columns if c not in _NON_MASK_COLS]
-        analysis_df.loc[analysis_df["is_outlier"], _mask_cols] = np.nan
+        ]
+        _outlier_result = OutlierPolicyFactory.create("column").apply(master_df, _outlier_mask_cols)
+        analysis_df = _outlier_result.df
         analysis_df, feature_exclusion_reasons = _apply_structured_source_gates(
             analysis_df,
             futures_attrs=futures_source_attrs,
             etf_attrs=etf_source_attrs,
         )
-        masked_count = int(analysis_df["is_outlier"].sum())
-        masked_ratio = round(masked_count / len(analysis_df), 4) if len(analysis_df) else 0.0
+        masked_count = int(_outlier_result.stats.get("masked_cells", 0))
+        masked_ratio = round(masked_count / max(len(analysis_df), 1), 4)
         log_structured(
             logger,
             event="stats.outlier_filter_applied",
             message="통계 분석용 이상값을 NaN으로 마스킹했습니다. (행은 유지)",
             total_rows=len(analysis_df),
-            masked_count=masked_count,
+            masked_cells=masked_count,
             masked_ratio=masked_ratio,
+            regime_stress_rows=int(_outlier_result.stats.get("regime_stress_rows", 0)),
         )
 
         # Req 12: ADF·Granger 통계 검정 (로그만 남기고 파이프라인을 중단하지 않음)

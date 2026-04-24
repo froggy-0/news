@@ -20,7 +20,7 @@ from morning_brief.logging_utils import log_structured
 
 logger = logging.getLogger(__name__)
 
-ETF_ANALYSIS_TICKERS = ("IBIT", "BITB", "GBTC")
+ETF_ANALYSIS_TICKERS = ("IBIT", "GBTC")
 ETF_HISTORY_LOOKBACK_BUFFER_DAYS = 30
 
 

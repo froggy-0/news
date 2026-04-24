@@ -257,6 +257,115 @@ def test_fetch_funding_rate_history_paginates_until_end(
     assert calls[1]["endTime"] == str(end_ms)
 
 
+def test_is_cache_complete_returns_false_when_oi_values_are_null() -> None:
+    """행이 존재해도 OI/LSR 값이 None이면 완전 히트 아님."""
+    today = datetime.now(timezone.utc).date()
+    dates = [(today - timedelta(days=i)).isoformat() for i in range(29, -1, -1)]
+    cached = {
+        d: {"funding_rate": 0.001, "open_interest_usd": None, "btc_long_short_ratio": None}
+        for d in dates
+    }
+    assert futures._is_cache_complete(cached, dates) is False
+
+
+def test_is_cache_complete_returns_true_when_recent_window_filled() -> None:
+    """최근 30일 OI/LSR이 채워지고 펀딩비 60% 이상이면 True."""
+    today = datetime.now(timezone.utc).date()
+    dates = [(today - timedelta(days=i)).isoformat() for i in range(179, -1, -1)]
+    cached: dict = {}
+    for d in dates:
+        cached[d] = {
+            "funding_rate": 0.001,
+            "open_interest_usd": None,
+            "btc_long_short_ratio": None,
+        }
+    # 최근 30일만 OI/LSR 채움
+    for d in dates[-30:]:
+        cached[d]["open_interest_usd"] = 1000.0
+        cached[d]["btc_long_short_ratio"] = 1.1
+    assert futures._is_cache_complete(cached, dates) is True
+
+
+def test_merge_with_cache_api_overwrites_stale_cache() -> None:
+    """동일 날짜에 대해 API 값이 캐시보다 우선."""
+    merged_f, merged_oi, merged_lsr = futures._merge_with_cache(
+        {"2026-04-10": 0.002},
+        {"2026-04-10": 2000.0},
+        {"2026-04-10": 1.2},
+        {"2026-04-10": 0.001, "2026-04-09": 0.0005},
+        {"2026-04-10": 999.0, "2026-04-09": 800.0},
+        {"2026-04-10": 0.9, "2026-04-09": 1.0},
+    )
+    assert merged_f["2026-04-10"] == 0.002  # API wins
+    assert merged_f["2026-04-09"] == 0.0005  # cache 보완
+    assert merged_oi["2026-04-10"] == 2000.0
+    assert merged_oi["2026-04-09"] == 800.0
+    assert merged_lsr["2026-04-10"] == 1.2
+
+
+def test_fetch_futures_data_partial_cache_merged_with_binance_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """부분 캐시 히트: Supabase에 과거 OI가 있고 Binance가 최근 OI를 반환하면 전체가 채워짐."""
+    today = datetime.now(timezone.utc).date()
+    monkeypatch.setenv("GITHUB_ACTIONS", "")
+
+    old_day = today - timedelta(days=5)
+    recent_day = today - timedelta(days=1)
+
+    # Supabase 캐시: old_day OI만 있음 (최근 30일 미충족 → _is_cache_complete = False)
+    monkeypatch.setattr(
+        futures,
+        "_read_futures_from_supabase",
+        lambda *a, **kw: {
+            old_day.isoformat(): {
+                "funding_rate": 0.001,
+                "open_interest_usd": 500.0,
+                "btc_long_short_ratio": 1.0,
+            }
+        },
+    )
+    # Binance: recent_day OI만 반환
+    monkeypatch.setattr(
+        futures,
+        "_fetch_funding_rate_history",
+        lambda s, e: [
+            {
+                "fundingTime": int(
+                    datetime(
+                        recent_day.year, recent_day.month, recent_day.day, tzinfo=timezone.utc
+                    ).timestamp()
+                    * 1000
+                ),
+                "fundingRate": "0.002",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        futures,
+        "_fetch_oi_history",
+        lambda _: [
+            {
+                "timestamp": int(
+                    datetime(
+                        recent_day.year, recent_day.month, recent_day.day, tzinfo=timezone.utc
+                    ).timestamp()
+                    * 1000
+                ),
+                "sumOpenInterestValue": "1000.0",
+            }
+        ],
+    )
+    monkeypatch.setattr(futures, "_fetch_long_short_ratio", lambda _: [])
+
+    df = futures.fetch_futures_data(lookback_days=6)
+
+    old_row = df[df["date"] == old_day.isoformat()]
+    recent_row = df[df["date"] == recent_day.isoformat()]
+    assert old_row["open_interest_usd"].notna().any()
+    assert recent_row["open_interest_usd"].notna().any()
+
+
 def test_fetch_funding_rate_history_stops_when_page_is_partial(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
