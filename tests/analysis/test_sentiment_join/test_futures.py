@@ -344,7 +344,7 @@ def test_fetch_futures_data_partial_cache_merged_with_binance_result(
     monkeypatch.setattr(
         futures,
         "_fetch_oi_history",
-        lambda l: [
+        lambda _: [
             {
                 "timestamp": int(
                     datetime(
@@ -356,7 +356,7 @@ def test_fetch_futures_data_partial_cache_merged_with_binance_result(
             }
         ],
     )
-    monkeypatch.setattr(futures, "_fetch_long_short_ratio", lambda l: [])
+    monkeypatch.setattr(futures, "_fetch_long_short_ratio", lambda _: [])
 
     df = futures.fetch_futures_data(lookback_days=6)
 
