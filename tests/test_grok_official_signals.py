@@ -276,6 +276,8 @@ def test_fetch_official_x_signals_records_usage(monkeypatch, tmp_path):
                 "prompt_tokens": 88,
                 "completion_tokens": 16,
                 "prompt_tokens_details": {"cached_tokens": 11},
+                "cost_in_usd_ticks": 910000,
+                "num_sources_used": 2,
             },
         )
     ]
@@ -302,6 +304,8 @@ def test_fetch_official_x_signals_records_usage(monkeypatch, tmp_path):
     assert usage.input_tokens == 88
     assert usage.output_tokens == 16
     assert usage.cached_input_tokens == 11
+    assert usage.cost_in_usd_ticks == 910000
+    assert usage.num_sources_used == 2
     events = [event for event in observer.events if event["event"] == "grok_signals_collected"]
     assert len(events) == 1
     assert events[0]["count"] == 1

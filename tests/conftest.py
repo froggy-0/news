@@ -15,9 +15,10 @@ if str(SCRIPTS) not in sys.path:
 
 
 @pytest.fixture(autouse=True)
-def reset_provider_runtime_state():
+def reset_provider_runtime_state(monkeypatch):
     from morning_brief.data.sources.provider_runtime import reset_provider_runtime_state
 
+    monkeypatch.setenv("COINDESK_NEWS_ENABLED", "false")
     reset_provider_runtime_state()
     yield
     reset_provider_runtime_state()

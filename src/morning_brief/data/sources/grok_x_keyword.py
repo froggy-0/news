@@ -181,6 +181,8 @@ def _usage_snapshot(response: object) -> dict[str, int | None]:
             ("output_tokens_details", "reasoning_tokens"),
             ("reasoning_tokens",),
         ),
+        "cost_in_usd_ticks": _usage_int(usage, "cost_in_usd_ticks"),
+        "num_sources_used": _usage_int(usage, "num_sources_used"),
     }
 
 
@@ -304,6 +306,8 @@ def _record_usage(
         output_tokens=usage["output_tokens"],
         cached_input_tokens=usage["cached_input_tokens"],
         reasoning_tokens=usage["reasoning_tokens"],
+        cost_in_usd_ticks=usage["cost_in_usd_ticks"],
+        num_sources_used=usage["num_sources_used"],
         usage_parse_failures=failures,
     )
 

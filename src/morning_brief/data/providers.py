@@ -20,6 +20,7 @@ PERPLEXITY_SONAR = "perplexity_sonar"
 GROK_OFFICIAL_X = "grok_official_x"
 GROK_X_KEYWORD = "grok_x_keyword"
 GROK_WEB_SEARCH = "grok_web_search"
+COINDESK_API = "coindesk_api"
 
 # ---------------------------------------------------------------------------
 # Runtime circuit breaker constants
@@ -37,3 +38,4 @@ RUNTIME_GROK_KEYWORD = "grok_keyword"
 
 PERPLEXITY_PROVIDERS: frozenset[str] = frozenset({PERPLEXITY_SEARCH, PERPLEXITY_SONAR})
 GROK_PROVIDERS: frozenset[str] = frozenset({GROK_OFFICIAL_X, GROK_X_KEYWORD, GROK_WEB_SEARCH})
+COINDESK_PROVIDERS: frozenset[str] = frozenset({COINDESK_API})

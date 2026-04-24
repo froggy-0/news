@@ -71,6 +71,12 @@ PROVIDER_POLICIES = {
         max_backoff_seconds=8.0,
     ),
     "newsapi": ProviderPolicy(name="newsapi", min_interval_seconds=0.35, base_backoff_seconds=1.0),
+    "coindesk": ProviderPolicy(
+        name="coindesk",
+        min_interval_seconds=0.35,
+        base_backoff_seconds=1.0,
+        max_backoff_seconds=8.0,
+    ),
     "yfinance": ProviderPolicy(
         name="yfinance", min_interval_seconds=0.35, base_backoff_seconds=1.0
     ),

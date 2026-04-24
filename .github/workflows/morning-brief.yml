@@ -145,14 +145,20 @@ jobs:
           KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET || '' }}
           KIS_TOKEN_CACHE_PATH: .cache/kis_token/token.json
           PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          COINDESK_NEWS_ENABLED: ${{ vars.COINDESK_NEWS_ENABLED || 'true' }}
+          COINDESK_NEWS_LOOKBACK_HOURS: ${{ vars.COINDESK_NEWS_LOOKBACK_HOURS || '36' }}
+          COINDESK_NEWS_WEEKEND_LOOKBACK_HOURS: ${{ vars.COINDESK_NEWS_WEEKEND_LOOKBACK_HOURS || '72' }}
+          COINDESK_NEWS_MAX_ITEMS: ${{ vars.COINDESK_NEWS_MAX_ITEMS || '12' }}
+          COINDESK_NEWS_CATEGORIES: ${{ vars.COINDESK_NEWS_CATEGORIES || 'BTC' }}
           GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
           GROK_MODEL: ${{ vars.GROK_MODEL || 'grok-4.20-beta-latest-non-reasoning' }}
           GROK_X_KEYWORD_SEARCH_ENABLED: ${{ vars.GROK_X_KEYWORD_SEARCH_ENABLED || 'true' }}
+          GROK_X_SEARCH_MAX_ITEMS: ${{ vars.GROK_X_SEARCH_MAX_ITEMS || '2' }}
           RESEARCH_PROVIDER: ${{ vars.RESEARCH_PROVIDER || 'perplexity' }}
           ENABLE_LEGACY_NEWS_FALLBACK: ${{ vars.ENABLE_LEGACY_NEWS_FALLBACK || 'true' }}
           ENABLE_OFFICIAL_X_SIGNALS: ${{ vars.ENABLE_OFFICIAL_X_SIGNALS || 'true' }}
           OFFICIAL_X_LOOKBACK_HOURS: ${{ vars.OFFICIAL_X_LOOKBACK_HOURS || '48' }}
-          OFFICIAL_X_MAX_ITEMS: ${{ vars.OFFICIAL_X_MAX_ITEMS || '4' }}
+          OFFICIAL_X_MAX_ITEMS: ${{ vars.OFFICIAL_X_MAX_ITEMS || '2' }}
           PERPLEXITY_USE_SONAR_SUMMARY: ${{ vars.PERPLEXITY_USE_SONAR_SUMMARY || 'true' }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.0-flash' }}

@@ -27,6 +27,7 @@ PREFERRED_PROVIDER_ORDER = (
     "perplexity",
     "grok_official",
     "grok_keyword",
+    "grok_web_search",
     "gemini",
 )
 COLLECTED_ITEM_LOG_LIMIT = 20
@@ -55,6 +56,12 @@ LLM_PRICING_USD_PER_1M: dict[str, dict[str, float | None]] = {
         "cached_input": 0.050,
         "reasoning": None,
     },
+    "grok_web_search": {
+        "input": 0.200,
+        "output": 0.500,
+        "cached_input": 0.050,
+        "reasoning": None,
+    },
     "gemini": {
         "input": 0.100,
         "output": 0.400,
@@ -74,6 +81,8 @@ class ProviderUsageTotals:
     output_tokens: int | None = None
     cached_input_tokens: int | None = None
     reasoning_tokens: int | None = None
+    cost_in_usd_ticks: int | None = None
+    num_sources_used: int | None = None
     usage_parse_failures: int = 0
 
 
@@ -90,7 +99,11 @@ def _provider_cost_usd(
     output_tokens: int | None,
     cached_input_tokens: int | None,
     reasoning_tokens: int | None,
+    cost_in_usd_ticks: int | None = None,
 ) -> float | None:
+    if cost_in_usd_ticks is not None:
+        return round(cost_in_usd_ticks / 10_000_000_000, 6)
+
     pricing = LLM_PRICING_USD_PER_1M.get(provider)
     if not pricing:
         return None
@@ -462,6 +475,7 @@ class PipelineObserver:
                 output_tokens=totals.output_tokens,
                 cached_input_tokens=totals.cached_input_tokens,
                 reasoning_tokens=totals.reasoning_tokens,
+                cost_in_usd_ticks=totals.cost_in_usd_ticks,
             )
             payload[provider] = {
                 "requests": totals.requests,
@@ -469,6 +483,8 @@ class PipelineObserver:
                 "output_tokens": totals.output_tokens,
                 "cached_input_tokens": totals.cached_input_tokens,
                 "reasoning_tokens": totals.reasoning_tokens,
+                "cost_in_usd_ticks": totals.cost_in_usd_ticks,
+                "num_sources_used": totals.num_sources_used,
                 "response_sources": totals.response_sources,
                 "usage_parse_failures": totals.usage_parse_failures,
                 "cost_usd": cost_usd,
@@ -503,6 +519,8 @@ class PipelineObserver:
                     f"output={fmt(metrics['output_tokens'])}, "
                     f"cached={fmt(metrics['cached_input_tokens'])}, "
                     f"reasoning={fmt(metrics['reasoning_tokens'])}, "
+                    f"cost_ticks={fmt(metrics['cost_in_usd_ticks'])}, "
+                    f"sources_used={fmt(metrics['num_sources_used'])}, "
                     f"sources={fmt(metrics['response_sources'])}, "
                     f"parse_failures={fmt(metrics['usage_parse_failures'])}, "
                     f"cost_usd={fmt(metrics['cost_usd'])}]"

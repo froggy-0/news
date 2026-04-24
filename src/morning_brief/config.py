@@ -46,6 +46,11 @@ class Settings:
     perplexity_use_sonar: bool
     perplexity_sonar_model: str
     perplexity_sonar_max_tokens: int
+    coindesk_news_enabled: bool
+    coindesk_news_lookback_hours: int
+    coindesk_news_weekend_lookback_hours: int
+    coindesk_news_max_items: int
+    coindesk_news_categories: str
     grok_api_key: str
     grok_model: str
     grok_x_keyword_search_enabled: bool
@@ -186,6 +191,17 @@ def load_settings() -> Settings:
         perplexity_sonar_max_tokens=_env_bounded_int(
             "PERPLEXITY_SONAR_MAX_TOKENS", default=1500, minimum=500, maximum=4000
         ),
+        coindesk_news_enabled=_env_bool("COINDESK_NEWS_ENABLED", True),
+        coindesk_news_lookback_hours=_env_bounded_int(
+            "COINDESK_NEWS_LOOKBACK_HOURS", default=36, minimum=6, maximum=168
+        ),
+        coindesk_news_weekend_lookback_hours=_env_bounded_int(
+            "COINDESK_NEWS_WEEKEND_LOOKBACK_HOURS", default=72, minimum=24, maximum=168
+        ),
+        coindesk_news_max_items=_env_bounded_int(
+            "COINDESK_NEWS_MAX_ITEMS", default=12, minimum=1, maximum=30
+        ),
+        coindesk_news_categories=os.getenv("COINDESK_NEWS_CATEGORIES", "BTC").strip() or "BTC",
         grok_api_key=os.getenv("GROK_API_KEY", "").strip(),
         grok_model=os.getenv("GROK_MODEL", "grok-4-1-fast-non-reasoning").strip(),
         grok_x_keyword_search_enabled=_env_bool("GROK_X_KEYWORD_SEARCH_ENABLED", True),
