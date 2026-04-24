@@ -74,7 +74,7 @@ MASTER_SCHEMA = pa.DataFrameSchema(
             float, pa.Check.between(0.0, 100.0), nullable=True
         ),
         # §1: 감성·공포지수 Lag-1 — look-ahead bias 제거용 (첫 행은 NaN)
-        "news_sentiment_mean_lag1": pa.Column(float, pa.Check.between(-2.0, 2.0), nullable=True),
+        "news_sentiment_mean_lag1": pa.Column(float, pa.Check.between(-1.0, 1.0), nullable=True),
         "fng_value_lag1": pa.Column(float, pa.Check.between(0.0, 100.0), nullable=True),
         # §2: 텍스트 스키마 버전 — 백필/실시간 감성 텍스트 입력 차이 추적용
         # None 허용을 위해 타입 미지정 (ingest_validation_reason와 동일 패턴)

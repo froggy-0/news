@@ -408,8 +408,8 @@ def _record_grok_usage(
         output_tokens=usage["output_tokens"],
         cached_input_tokens=usage["cached_input_tokens"],
         reasoning_tokens=usage["reasoning_tokens"],
-        cost_in_usd_ticks=usage["cost_in_usd_ticks"],
-        num_sources_used=usage["num_sources_used"],
+        cost_in_usd_ticks=usage.get("cost_in_usd_ticks"),
+        num_sources_used=usage.get("num_sources_used"),
         usage_parse_failures=usage_parse_failures,
     )
     if usage_parse_failures:
