@@ -296,8 +296,8 @@ def test_merge_with_cache_api_overwrites_stale_cache() -> None:
         {"2026-04-10": 999.0, "2026-04-09": 800.0},
         {"2026-04-10": 0.9, "2026-04-09": 1.0},
     )
-    assert merged_f["2026-04-10"] == 0.002    # API wins
-    assert merged_f["2026-04-09"] == 0.0005   # cache 보완
+    assert merged_f["2026-04-10"] == 0.002  # API wins
+    assert merged_f["2026-04-09"] == 0.0005  # cache 보완
     assert merged_oi["2026-04-10"] == 2000.0
     assert merged_oi["2026-04-09"] == 800.0
     assert merged_lsr["2026-04-10"] == 1.2

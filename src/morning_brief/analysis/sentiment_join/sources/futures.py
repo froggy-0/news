@@ -600,14 +600,10 @@ def _is_cache_complete(
     recent_dates = set(dates[-effective_window:])
 
     oi_count = sum(
-        1
-        for d in recent_dates
-        if d in cached and cached[d].get("open_interest_usd") is not None
+        1 for d in recent_dates if d in cached and cached[d].get("open_interest_usd") is not None
     )
     lsr_count = sum(
-        1
-        for d in recent_dates
-        if d in cached and cached[d].get("btc_long_short_ratio") is not None
+        1 for d in recent_dates if d in cached and cached[d].get("btc_long_short_ratio") is not None
     )
     funding_required = int(len(dates) * STRUCTURED_SOURCE_MIN_COVERAGE_RATIO)
     funding_count = sum(
@@ -922,9 +918,7 @@ def fetch_futures_data(lookback_days: int, futures_lambda_arn: str = "") -> pd.D
         d: float(val) for d, v in cached.items() if (val := v.get("funding_rate")) is not None
     }
     _cached_oi: dict[str, float] = {
-        d: float(val)
-        for d, v in cached.items()
-        if (val := v.get("open_interest_usd")) is not None
+        d: float(val) for d, v in cached.items() if (val := v.get("open_interest_usd")) is not None
     }
     _cached_lsr: dict[str, float] = {
         d: float(val)
@@ -991,8 +985,12 @@ def fetch_futures_data(lookback_days: int, futures_lambda_arn: str = "") -> pd.D
                     if pd.notna(v)
                 }
                 merged_f, merged_oi, merged_lsr = _merge_with_cache(
-                    lam_funding, lam_oi, lam_lsr,
-                    _cached_funding, _cached_oi, _cached_lsr,
+                    lam_funding,
+                    lam_oi,
+                    lam_lsr,
+                    _cached_funding,
+                    _cached_oi,
+                    _cached_lsr,
                 )
                 grid = _attach_futures_attrs(
                     _build_grid(dates, merged_f, merged_oi, merged_lsr),
@@ -1070,8 +1068,12 @@ def fetch_futures_data(lookback_days: int, futures_lambda_arn: str = "") -> pd.D
     _api_oi = _extract_daily_oi(oi_rows)
     _api_lsr = _extract_daily_long_short_ratio(lsr_rows)
     merged_funding, merged_oi, merged_lsr = _merge_with_cache(
-        _api_funding, _api_oi, _api_lsr,
-        _cached_funding, _cached_oi, _cached_lsr,
+        _api_funding,
+        _api_oi,
+        _api_lsr,
+        _cached_funding,
+        _cached_oi,
+        _cached_lsr,
     )
     grid = _attach_futures_attrs(
         _build_grid(dates, merged_funding, merged_oi, merged_lsr),
