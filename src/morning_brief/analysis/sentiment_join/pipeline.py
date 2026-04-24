@@ -394,22 +394,21 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
 
         # §8-A: column 정책 — 이상치 셀만 NaN 마스킹, 행 전체는 보존.
         # regime_stress(BTC 급락 등 시장 스트레스일)는 마스킹하지 않고 사유만 기록.
-        # 달력 연속성을 유지해 Granger 검정의 time-index gap 문제를 방지합니다.
-        _outlier_mask_cols = [
+        # IQR 적용 대상은 join.py detect_outliers_rolling_iqr 와 동일한 변화율·수익률 6개 컬럼.
+        # level/bounded 컬럼(fng_value, news_sentiment_mean 등)은 false positive가 많아 제외.
+        _OUTLIER_IQR_COLS = [
             c
-            for c in master_df.columns
-            if c
-            not in {
-                "date",
-                "is_outlier",
-                "sentiment_status",
-                "is_backfill_valid",
-                "ingest_validation_reason",
-                "btc_direction_label",
-                "text_schema_version",
-            }
+            for c in [
+                "btc_return",
+                "usdkrw_return",
+                "funding_rate",
+                "oi_change_pct",
+                "volume_change_pct",
+                "etf_net_inflow_usd",
+            ]
+            if c in master_df.columns
         ]
-        _outlier_result = OutlierPolicyFactory.create("column").apply(master_df, _outlier_mask_cols)
+        _outlier_result = OutlierPolicyFactory.create("column").apply(master_df, _OUTLIER_IQR_COLS)
         analysis_df = _outlier_result.df
         analysis_df, feature_exclusion_reasons = _apply_structured_source_gates(
             analysis_df,
