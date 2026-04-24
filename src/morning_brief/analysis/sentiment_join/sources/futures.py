@@ -661,6 +661,7 @@ def _read_futures_from_supabase(
             .gte("date", start_date)
             .lte("date", end_date)
             .order("date")
+            .limit(2000)
             .execute()
         )
         data = getattr(resp, "data", None)
