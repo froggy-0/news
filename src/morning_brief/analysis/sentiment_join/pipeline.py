@@ -409,9 +409,7 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
                 "text_schema_version",
             }
         ]
-        _outlier_result = OutlierPolicyFactory.create("column").apply(
-            master_df, _outlier_mask_cols
-        )
+        _outlier_result = OutlierPolicyFactory.create("column").apply(master_df, _outlier_mask_cols)
         analysis_df = _outlier_result.df
         analysis_df, feature_exclusion_reasons = _apply_structured_source_gates(
             analysis_df,
