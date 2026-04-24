@@ -124,13 +124,14 @@ def _add_sentiment_lag_columns(df: pd.DataFrame) -> pd.DataFrame:
     §0: PCA·correlation용 lag1 컬럼. Granger 검정에는 raw 컬럼을 사용한다(double-lag 방지).
     lag1 = T-1 시점 값 (.shift(1)).
 
-    - news_sentiment_mean_lag1: 순수 .shift(1) (원본과 동일한 스케일)
+    - news_sentiment_mean_lag1: 1차 차분 .diff(1) — 비정상(non-stationary) 시계열 정상화,
+      다중공선성(fng_value와 r=0.79) 제거 목적. 값 범위 [-2, 2].
     - fng_value_lag1: Int64 → float 변환 후 .shift(1)
     - usdkrw_log_return_lag1: PCA·correlation용. Granger에는 raw usdkrw_log_return 사용.
     """
     result = df.copy()
     if "news_sentiment_mean" in result.columns:
-        result["news_sentiment_mean_lag1"] = result["news_sentiment_mean"].shift(1)
+        result["news_sentiment_mean_lag1"] = result["news_sentiment_mean"].diff(1)
     else:
         result["news_sentiment_mean_lag1"] = float("nan")
     if "fng_value" in result.columns:
