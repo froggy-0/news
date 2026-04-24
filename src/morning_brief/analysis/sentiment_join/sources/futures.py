@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 
 from morning_brief.analysis.sentiment_join.quality import (
+    STRUCTURED_SOURCE_MIN_COVERAGE_RATIO,
     calculate_coverage_ratio,
     quality_status_for_ratio,
 )
@@ -578,6 +579,63 @@ def _build_grid(
     return grid
 
 
+def _is_cache_complete(
+    cached: dict[str, dict[str, float | None]],
+    dates: list[str],
+) -> bool:
+    """캐시가 파이프라인 가동에 충분한지 판정합니다.
+
+    - OI/LSR: 최근 OI_LSR_SIGNAL_WINDOW(30)일 중 non-NULL 날짜 >= WINDOW * MIN_COVERAGE(0.60)
+    - Funding: 전체 날짜 중 non-NULL 날짜 >= len(dates) * MIN_COVERAGE
+    기존 "날짜 행 존재 여부"만 보는 조건을 교체합니다.
+    """
+    if not dates:
+        return False
+    # 가장 최근 날짜가 캐시에 없으면 항상 미스 — 최신 데이터를 API로 갱신
+    if dates[-1] not in cached:
+        return False
+
+    effective_window = min(len(dates), OI_LSR_SIGNAL_WINDOW)
+    min_recent = int(effective_window * STRUCTURED_SOURCE_MIN_COVERAGE_RATIO)
+    recent_dates = set(dates[-effective_window:])
+
+    oi_count = sum(
+        1
+        for d in recent_dates
+        if d in cached and cached[d].get("open_interest_usd") is not None
+    )
+    lsr_count = sum(
+        1
+        for d in recent_dates
+        if d in cached and cached[d].get("btc_long_short_ratio") is not None
+    )
+    funding_required = int(len(dates) * STRUCTURED_SOURCE_MIN_COVERAGE_RATIO)
+    funding_count = sum(
+        1 for d in dates if d in cached and cached[d].get("funding_rate") is not None
+    )
+    return oi_count >= min_recent and lsr_count >= min_recent and funding_count >= funding_required
+
+
+def _merge_with_cache(
+    api_funding: dict[str, float],
+    api_oi: dict[str, float],
+    api_lsr: dict[str, float],
+    cached_funding: dict[str, float],
+    cached_oi: dict[str, float],
+    cached_lsr: dict[str, float],
+) -> tuple[dict[str, float], dict[str, float], dict[str, float]]:
+    """API 결과(우선) + Supabase 캐시(보완)를 병합합니다.
+
+    API 결과가 캐시보다 우선합니다 (최신 데이터 우위).
+    캐시는 API가 반환하지 않은 과거 날짜를 보완하는 역할입니다.
+    """
+    return (
+        {**cached_funding, **api_funding},
+        {**cached_oi, **api_oi},
+        {**cached_lsr, **api_lsr},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Supabase 캐시 레이어
 # ---------------------------------------------------------------------------
@@ -718,11 +776,10 @@ def _lambda_payload_to_grid(payload: dict, dates: list[str]) -> pd.DataFrame:
 def _invoke_futures_lambda(
     arn: str,
     lookback_days: int,
-    dates: list[str],
-) -> pd.DataFrame | None:
+) -> dict | None:
     """ap-northeast-2 Lambda를 호출해 Binance 선물 데이터를 가져옵니다.
 
-    성공 시 grid DataFrame 반환.
+    성공 시 raw payload dict 반환.
     실패(네트워크·FunctionError·payload error) 시 None 반환 → Bybit으로 계속.
     """
     try:
@@ -776,23 +833,7 @@ def _invoke_futures_lambda(
         )
         return None
 
-    grid = _attach_futures_attrs(
-        _lambda_payload_to_grid(payload, dates),
-        dates=dates,
-        source="lambda",
-        fallback_used=True,
-    )
-    log_structured(
-        logger,
-        event="source.complete",
-        message="Lambda 프록시를 통해 Binance 선물 데이터를 수집했습니다.",
-        source="lambda_binance_futures",
-        funding_days=int(grid["funding_rate"].notna().sum()),
-        oi_days=int(grid["open_interest_usd"].notna().sum()),
-        lsr_days=int(grid["btc_long_short_ratio"].notna().sum()),
-    )
-    _write_futures_to_supabase(grid)
-    return grid
+    return payload
 
 
 # ---------------------------------------------------------------------------
@@ -840,9 +881,11 @@ def fetch_futures_data(lookback_days: int, futures_lambda_arn: str = "") -> pd.D
         lookback_days=lookback_days,
     )
 
-    # --- 0차: Supabase 캐시 확인 (모든 날짜가 캐시에 있으면 API 호출 생략) ---
+    # --- 0차: Supabase 캐시 확인 ---
     cached = _read_futures_from_supabase(dates[0], dates[-1])
-    if len(cached) >= len(dates) and all(d in cached for d in dates):
+
+    if _is_cache_complete(cached, dates):
+        # 완전 캐시 히트: API 호출 생략
         daily_funding = {
             d: float(val) for d, v in cached.items() if (val := v.get("funding_rate")) is not None
         }
@@ -873,6 +916,21 @@ def fetch_futures_data(lookback_days: int, futures_lambda_arn: str = "") -> pd.D
             lsr_days=int(grid["btc_long_short_ratio"].notna().sum()),
         )
         return grid
+
+    # 부분 히트: Supabase 캐시에서 가져올 수 있는 것만 준비 (API 결과와 병합용)
+    _cached_funding: dict[str, float] = {
+        d: float(val) for d, v in cached.items() if (val := v.get("funding_rate")) is not None
+    }
+    _cached_oi: dict[str, float] = {
+        d: float(val)
+        for d, v in cached.items()
+        if (val := v.get("open_interest_usd")) is not None
+    }
+    _cached_lsr: dict[str, float] = {
+        d: float(val)
+        for d, v in cached.items()
+        if (val := v.get("btc_long_short_ratio")) is not None
+    }
 
     # --- 1차: 로컬이거나 Lambda ARN 없으면 Binance fapi 직접 시도 ---
     funding_rows: list[dict] = []
@@ -913,9 +971,46 @@ def fetch_futures_data(lookback_days: int, futures_lambda_arn: str = "") -> pd.D
                 message="Lambda 프록시로 Binance 선물 데이터를 수집합니다.",
                 level=logging.WARNING,
             )
-            lambda_result = _invoke_futures_lambda(lambda_arn, lookback_days, dates)
-            if lambda_result is not None:
-                return lambda_result
+            lambda_payload = _invoke_futures_lambda(lambda_arn, lookback_days)
+            if lambda_payload is not None:
+                # Lambda payload → daily dict로 변환 후 Supabase 부분 캐시와 병합
+                lam_raw = _lambda_payload_to_grid(lambda_payload, dates)
+                lam_funding = {
+                    str(d): float(v)
+                    for d, v in zip(lam_raw["date"], lam_raw["funding_rate"])
+                    if pd.notna(v)
+                }
+                lam_oi = {
+                    str(d): float(v)
+                    for d, v in zip(lam_raw["date"], lam_raw["open_interest_usd"])
+                    if pd.notna(v)
+                }
+                lam_lsr = {
+                    str(d): float(v)
+                    for d, v in zip(lam_raw["date"], lam_raw["btc_long_short_ratio"])
+                    if pd.notna(v)
+                }
+                merged_f, merged_oi, merged_lsr = _merge_with_cache(
+                    lam_funding, lam_oi, lam_lsr,
+                    _cached_funding, _cached_oi, _cached_lsr,
+                )
+                grid = _attach_futures_attrs(
+                    _build_grid(dates, merged_f, merged_oi, merged_lsr),
+                    dates=dates,
+                    source="lambda",
+                    fallback_used=True,
+                )
+                log_structured(
+                    logger,
+                    event="source.complete",
+                    message="Lambda 프록시를 통해 Binance 선물 데이터를 수집했습니다.",
+                    source="lambda_binance_futures",
+                    funding_days=int(grid["funding_rate"].notna().sum()),
+                    oi_days=int(grid["open_interest_usd"].notna().sum()),
+                    lsr_days=int(grid["btc_long_short_ratio"].notna().sum()),
+                )
+                _write_futures_to_supabase(grid)
+                return grid
 
         # --- 3차: Bybit 폴백 ---
         log_structured(
@@ -942,13 +1037,16 @@ def fetch_futures_data(lookback_days: int, futures_lambda_arn: str = "") -> pd.D
             grid = _empty_futures_frame(dates)
             return _attach_futures_attrs(grid, dates=dates, source="none", fallback_used=False)
 
+        _bybit_funding, _bybit_oi, _bybit_lsr = _merge_with_cache(
+            _aggregate_bybit_daily_funding(bybit_funding),
+            _extract_bybit_daily_oi(bybit_oi, bybit_closes),
+            _extract_bybit_daily_lsr(bybit_lsr),
+            _cached_funding,
+            _cached_oi,
+            _cached_lsr,
+        )
         grid = _attach_futures_attrs(
-            _build_grid(
-                dates,
-                _aggregate_bybit_daily_funding(bybit_funding),
-                _extract_bybit_daily_oi(bybit_oi, bybit_closes),
-                _extract_bybit_daily_lsr(bybit_lsr),
-            ),
+            _build_grid(dates, _bybit_funding, _bybit_oi, _bybit_lsr),
             dates=dates,
             source="bybit",
             fallback_used=True,
@@ -968,13 +1066,15 @@ def fetch_futures_data(lookback_days: int, futures_lambda_arn: str = "") -> pd.D
         return grid
 
     # --- Binance 성공 경로 ---
+    _api_funding = _aggregate_daily_funding(funding_rows)
+    _api_oi = _extract_daily_oi(oi_rows)
+    _api_lsr = _extract_daily_long_short_ratio(lsr_rows)
+    merged_funding, merged_oi, merged_lsr = _merge_with_cache(
+        _api_funding, _api_oi, _api_lsr,
+        _cached_funding, _cached_oi, _cached_lsr,
+    )
     grid = _attach_futures_attrs(
-        _build_grid(
-            dates,
-            _aggregate_daily_funding(funding_rows),
-            _extract_daily_oi(oi_rows),
-            _extract_daily_long_short_ratio(lsr_rows),
-        ),
+        _build_grid(dates, merged_funding, merged_oi, merged_lsr),
         dates=dates,
         source="binance",
         fallback_used=False,
@@ -995,4 +1095,8 @@ def fetch_futures_data(lookback_days: int, futures_lambda_arn: str = "") -> pd.D
     return grid
 
 
-__all__ = ["fetch_futures_data"]
+__all__ = [
+    "fetch_futures_data",
+    "_is_cache_complete",
+    "_merge_with_cache",
+]
