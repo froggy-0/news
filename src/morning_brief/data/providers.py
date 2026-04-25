@@ -21,6 +21,7 @@ GROK_OFFICIAL_X = "grok_official_x"
 GROK_X_KEYWORD = "grok_x_keyword"
 GROK_WEB_SEARCH = "grok_web_search"
 COINDESK_API = "coindesk_api"
+THENEWSAPI = "thenewsapi"
 
 # ---------------------------------------------------------------------------
 # Runtime circuit breaker constants

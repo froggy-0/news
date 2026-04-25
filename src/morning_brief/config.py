@@ -46,6 +46,13 @@ class Settings:
     perplexity_use_sonar: bool
     perplexity_sonar_model: str
     perplexity_sonar_max_tokens: int
+    thenewsapi_key: str
+    thenewsapi_enabled: bool
+    thenewsapi_max_items: int
+    thenewsapi_lookback_hours: int
+    thenewsapi_langs: str
+    thenewsapi_categories: str
+    thenewsapi_query: str
     coindesk_news_enabled: bool
     coindesk_news_lookback_hours: int
     coindesk_news_weekend_lookback_hours: int
@@ -191,6 +198,25 @@ def load_settings() -> Settings:
         perplexity_sonar_max_tokens=_env_bounded_int(
             "PERPLEXITY_SONAR_MAX_TOKENS", default=1500, minimum=500, maximum=4000
         ),
+        thenewsapi_key=os.getenv("THENEWSAPI_KEY", "").strip(),
+        thenewsapi_enabled=_env_bool("THENEWSAPI_ENABLED", True),
+        thenewsapi_max_items=_env_bounded_int(
+            "THENEWSAPI_MAX_ITEMS", default=6, minimum=1, maximum=20
+        ),
+        thenewsapi_lookback_hours=_env_bounded_int(
+            "THENEWSAPI_LOOKBACK_HOURS", default=36, minimum=12, maximum=168
+        ),
+        thenewsapi_langs=os.getenv("THENEWSAPI_LANGS", "en").strip() or "en",
+        thenewsapi_categories=os.getenv(
+            "THENEWSAPI_CATEGORIES",
+            "markets,policy,business,technology,blockchain,stablecoins,ai,defi,security,legal,finance,news",
+        ).strip()
+        or "markets,policy,business,technology,blockchain,stablecoins,ai,defi,security,legal,finance,news",
+        thenewsapi_query=os.getenv(
+            "THENEWSAPI_QUERY",
+            "(bitcoin OR btc OR ethereum OR eth OR crypto OR stablecoin OR 'bitcoin etf') AND NOT scam",
+        ).strip()
+        or "(bitcoin OR btc OR ethereum OR eth OR crypto OR stablecoin OR 'bitcoin etf') AND NOT scam",
         coindesk_news_enabled=_env_bool("COINDESK_NEWS_ENABLED", True),
         coindesk_news_lookback_hours=_env_bounded_int(
             "COINDESK_NEWS_LOOKBACK_HOURS", default=36, minimum=6, maximum=168
