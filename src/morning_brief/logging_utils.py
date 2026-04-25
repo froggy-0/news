@@ -106,7 +106,7 @@ _PROVIDER_HINTS = {
     "grok_official": "grok_official",
     "grok_x_keyword": "grok_keyword",
     "grok_keyword": "grok_keyword",
-    "grok_web_search": "grok_keyword",
+    "grok_web_search": "grok_web_search",
     "gemini": "gemini",
     "fred": "fred",
     "ses": "ses",

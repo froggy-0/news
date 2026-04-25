@@ -229,17 +229,29 @@ def test_ses_settings_default_to_operating_values(monkeypatch):
 
 
 def test_grok_x_search_max_items_default(monkeypatch):
-    """Property 7: grok_x_search_max_items 기본값이 4."""
+    """Property 7: grok_x_search_max_items 기본값이 3."""
     monkeypatch.delenv("GROK_X_SEARCH_MAX_ITEMS", raising=False)
     settings = load_settings()
-    assert settings.grok_x_search_max_items == 4
+    assert settings.grok_x_search_max_items == 3
+
+
+def test_grok_x_keyword_search_disabled_by_default(monkeypatch):
+    monkeypatch.delenv("GROK_X_KEYWORD_SEARCH_ENABLED", raising=False)
+    settings = load_settings()
+    assert settings.grok_x_keyword_search_enabled is False
+
+
+def test_official_x_lookback_hours_default(monkeypatch):
+    monkeypatch.delenv("OFFICIAL_X_LOOKBACK_HOURS", raising=False)
+    settings = load_settings()
+    assert settings.official_x_lookback_hours == 12
 
 
 def test_official_x_max_items_default(monkeypatch):
-    """Property 8: official_x_max_items 기본값이 3."""
+    """Property 8: official_x_max_items 기본값이 1."""
     monkeypatch.delenv("OFFICIAL_X_MAX_ITEMS", raising=False)
     settings = load_settings()
-    assert settings.official_x_max_items == 3
+    assert settings.official_x_max_items == 1
 
 
 def test_grok_x_search_max_items_upper_clamp(monkeypatch):

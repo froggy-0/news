@@ -56,6 +56,12 @@ PROVIDER_POLICIES = {
         base_backoff_seconds=1.5,
         max_backoff_seconds=10.0,
     ),
+    "grok_web_search": ProviderPolicy(
+        name="grok_web_search",
+        min_interval_seconds=0.5,
+        base_backoff_seconds=1.5,
+        max_backoff_seconds=10.0,
+    ),
     "gemini": ProviderPolicy(
         name="gemini",
         min_interval_seconds=0.5,

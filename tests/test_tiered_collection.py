@@ -184,7 +184,7 @@ class TestSettingsGrokKeyword:
     def test_settings_grok_keyword_min_official_to_skip_default(self, monkeypatch) -> None:
         monkeypatch.delenv("GROK_KEYWORD_MIN_OFFICIAL_TO_SKIP", raising=False)
         s = load_settings()
-        assert s.grok_keyword_min_official_to_skip == 2
+        assert s.grok_keyword_min_official_to_skip == 1
 
     def test_settings_grok_keyword_min_official_to_skip_clamp(self, monkeypatch) -> None:
         # Below minimum → clamped to 0

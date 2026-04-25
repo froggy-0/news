@@ -15,7 +15,7 @@ from xai_sdk import Client
 from xai_sdk.chat import user
 from xai_sdk.tools import web_search
 
-from morning_brief.data.sources.grok_official_signals import GROK_PROVIDER
+from morning_brief.data import providers
 from morning_brief.data.sources.http_client import HttpFetchError
 from morning_brief.data.sources.provider_runtime import (
     disabled_reason,
@@ -28,6 +28,7 @@ from morning_brief.models import NewsItem
 from morning_brief.observability import PipelineObserver
 
 logger = logging.getLogger(__name__)
+GROK_WEB_PROVIDER = providers.RUNTIME_GROK_WEB_SEARCH
 
 WEB_SEARCH_PROMPT = """Search the web for the most important financial news articles
 from the last 24 hours covering:
@@ -91,11 +92,11 @@ def _to_http_fetch_error(exc: Exception) -> HttpFetchError:
     )
     if status_code == 429:
         msg = f"Grok Web Search 호출 한도에 걸렸어요: {exc}"
-        open_circuit(GROK_PROVIDER, msg)
-        return HttpFetchError(msg, provider=GROK_PROVIDER, retryable=False, rate_limited=True)
+        open_circuit(GROK_WEB_PROVIDER, msg)
+        return HttpFetchError(msg, provider=GROK_WEB_PROVIDER, retryable=False, rate_limited=True)
     retryable = status_code in {500, 502, 503, 504} if status_code else False
     return HttpFetchError(
-        f"Grok Web Search 호출 실패: {exc}", provider=GROK_PROVIDER, retryable=retryable
+        f"Grok Web Search 호출 실패: {exc}", provider=GROK_WEB_PROVIDER, retryable=retryable
     )
 
 
@@ -153,7 +154,7 @@ def _perform_web_search(
             event="error.raised",
             message="Grok Web Search 응답 JSON 파싱이 실패했어요.",
             level=logging.WARNING,
-            provider=GROK_PROVIDER,
+            provider=GROK_WEB_PROVIDER,
             preview=content[:200],
             reason="invalid_json",
         )
@@ -185,7 +186,7 @@ def _record_usage(observer: PipelineObserver | None, usage: dict[str, int | None
         return
     failures = 1 if all(v is None for v in usage.values()) else 0
     observer.record_provider_usage(
-        GROK_PROVIDER,
+        GROK_WEB_PROVIDER,
         requests=1,
         input_tokens=usage["input_tokens"],
         output_tokens=usage["output_tokens"],
@@ -211,27 +212,27 @@ def fetch_grok_web_news(
             event="phase.skip",
             message="Grok API 키가 없어서 Web Search를 건너뛸게요.",
             level=logging.WARNING,
-            provider=GROK_PROVIDER,
+            provider=GROK_WEB_PROVIDER,
             reason="missing_api_key",
         )
         return []
 
-    reason = disabled_reason(GROK_PROVIDER)
+    reason = disabled_reason(GROK_WEB_PROVIDER)
     if reason:
-        record_skip(GROK_PROVIDER)
+        record_skip(GROK_WEB_PROVIDER)
         log_structured(
             logger,
             event="phase.skip",
             message="Grok은 이번 실행에서 더 이상 쓰지 않을게요.",
             level=logging.WARNING,
-            provider=GROK_PROVIDER,
+            provider=GROK_WEB_PROVIDER,
             reason=reason,
         )
         return []
 
     try:
         raw_articles, usage = execute_with_provider_retry(
-            provider=GROK_PROVIDER,
+            provider=GROK_WEB_PROVIDER,
             operation=lambda: _perform_web_search(
                 api_key=api_key, model=model, max_items=max_items
             ),
@@ -241,7 +242,7 @@ def fetch_grok_web_news(
                 event="provider.retry",
                 message="Grok Web Search를 다시 시도하는 중이에요.",
                 level=logging.WARNING,
-                provider=GROK_PROVIDER,
+                provider=GROK_WEB_PROVIDER,
                 attempt=attempt,
                 max_attempts=max_attempts,
                 reason=str(exc),
@@ -268,7 +269,7 @@ def fetch_grok_web_news(
                 event="error.raised",
                 message="Grok Web Search가 실패했어요.",
                 level=logging.WARNING,
-                provider=GROK_PROVIDER,
+                provider=GROK_WEB_PROVIDER,
                 reason=str(exc),
                 error_type=type(exc).__name__,
             )
@@ -284,7 +285,7 @@ def fetch_grok_web_news(
         logger,
         event="selection.complete",
         message="Grok Web Search 뉴스 기사 수집을 마쳤어요.",
-        provider=GROK_PROVIDER,
+        provider=GROK_WEB_PROVIDER,
         kept_count=len(items),
     )
     return items
