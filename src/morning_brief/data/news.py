@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from morning_brief.config import Settings
@@ -37,6 +38,11 @@ from morning_brief.data.sources.perplexity_sonar import (
     TopicSummary,
     collect_sonar_news_items,
     fetch_sonar_summaries,
+)
+from morning_brief.data.sources.thenewsapi_provider import (
+    FREE_PLAN_MAX_PAGE_SIZE,
+    TheNewsApiPage,
+    fetch_thenewsapi_page,
 )
 from morning_brief.logging_utils import log_structured
 from morning_brief.models import NewsItem
@@ -218,6 +224,158 @@ def _collect_coindesk_items(
                 error_type=type(exc).__name__,
             )
         return []
+
+
+def _collect_thenewsapi_page(
+    settings: Settings,
+    *,
+    max_items: int,
+    page: int = 1,
+    observer: PipelineObserver | None = None,
+) -> TheNewsApiPage:
+    if not settings.thenewsapi_enabled or not settings.thenewsapi_key or max_items <= 0:
+        return TheNewsApiPage(items=[], has_next=False, requested_size=0, page=page)
+
+    try:
+        return fetch_thenewsapi_page(
+            api_key=settings.thenewsapi_key,
+            max_items=min(max_items, settings.thenewsapi_max_items),
+            lookback_hours=settings.thenewsapi_lookback_hours,
+            langs=settings.thenewsapi_langs,
+            categories=settings.thenewsapi_categories,
+            query=settings.thenewsapi_query,
+            page=page,
+            observer=observer,
+        )
+    except Exception as exc:
+        log_structured(
+            logger,
+            event="error.raised",
+            message="TheNewsAPI에서 뉴스를 가져오지 못해 다른 소스로 이어갈게요.",
+            level=logging.WARNING,
+            provider="thenewsapi",
+            reason=str(exc),
+            error_type=type(exc).__name__,
+            page=page,
+        )
+        if observer is not None:
+            observer.log_event(
+                "thenewsapi_news_degraded",
+                level=logging.WARNING,
+                reason=str(exc),
+                error_type=type(exc).__name__,
+                page=page,
+            )
+        return TheNewsApiPage(items=[], has_next=False, requested_size=0, page=page)
+
+
+def _collect_primary_crypto_items(
+    settings: Settings,
+    *,
+    max_items: int,
+    observer: PipelineObserver | None = None,
+) -> tuple[list[NewsItem], list[NewsItem], list[NewsItem]]:
+    initial_requested_size = min(max_items, settings.thenewsapi_max_items, FREE_PLAN_MAX_PAGE_SIZE)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        coindesk_future = executor.submit(_collect_coindesk_items, settings, observer=observer)
+        thenewsapi_future = executor.submit(
+            _collect_thenewsapi_page,
+            settings,
+            max_items=initial_requested_size,
+            page=1,
+            observer=observer,
+        )
+        coindesk_items = coindesk_future.result()
+        first_page = thenewsapi_future.result()
+
+    thenewsapi_items = list(first_page.items)
+    items = _dedup_and_rank(
+        _merge_rank(
+            coindesk_items, thenewsapi_items, max_items=max(max_items * 2, len(coindesk_items))
+        ),
+        max_items=max(max_items * 2, len(coindesk_items) + len(thenewsapi_items)),
+    )
+    public_candidates, _ = filter_publish_news_candidates(items)
+    packet, _ = _packet_summary(public_candidates)
+    fallback_review = assess_perplexity_fallback_need(packet)
+    needs_more = bool(fallback_review.get("needs_legacy_fallback", False))
+
+    should_fetch_second_page = all(
+        [
+            settings.thenewsapi_enabled,
+            bool(settings.thenewsapi_key),
+            first_page.has_next,
+            first_page.requested_size >= FREE_PLAN_MAX_PAGE_SIZE,
+            len(items) < max_items,
+            needs_more,
+        ]
+    )
+
+    additional_page_used = False
+    quota_saved = False
+    quota_stop_reason = "not_applicable"
+    if should_fetch_second_page:
+        remaining_needed = max(
+            min(max_items, settings.thenewsapi_max_items) - len(thenewsapi_items), 0
+        )
+        if remaining_needed > 0:
+            second_page = _collect_thenewsapi_page(
+                settings,
+                max_items=remaining_needed,
+                page=2,
+                observer=observer,
+            )
+            if second_page.items:
+                additional_page_used = True
+                thenewsapi_items.extend(second_page.items)
+                items = _dedup_and_rank(
+                    _merge_rank(
+                        coindesk_items,
+                        thenewsapi_items,
+                        max_items=max(max_items * 2, len(coindesk_items) + len(thenewsapi_items)),
+                    ),
+                    max_items=max(max_items * 2, len(coindesk_items) + len(thenewsapi_items)),
+                )
+        else:
+            quota_saved = True
+            quota_stop_reason = "remaining_target_filled"
+    elif first_page.has_next:
+        quota_saved = True
+        quota_stop_reason = (
+            "quality_sufficient"
+            if not needs_more or len(items) >= max_items
+            else "free_plan_guardrail"
+        )
+
+    log_structured(
+        logger,
+        event="selection.complete",
+        message="1차 crypto 수집에 CoinDesk와 TheNewsAPI를 반영했어요.",
+        provider="thenewsapi",
+        coindesk_count=len(coindesk_items),
+        thenewsapi_count=len(thenewsapi_items),
+        kept_count=len(items),
+        requested_size=first_page.requested_size,
+        pages_fetched=1 + int(additional_page_used),
+        additional_page_used=additional_page_used,
+        quota_saved=quota_saved,
+        quota_stop_reason=quota_stop_reason,
+    )
+    if observer is not None:
+        observer.log_event(
+            "primary_crypto_news_collected",
+            coindesk_count=len(coindesk_items),
+            thenewsapi_count=len(thenewsapi_items),
+            kept_count=len(items),
+            requested_size=first_page.requested_size,
+            pages_fetched=1 + int(additional_page_used),
+            additional_page_used=additional_page_used,
+            quota_saved=quota_saved,
+            quota_stop_reason=quota_stop_reason,
+        )
+
+    return coindesk_items, thenewsapi_items, items
 
 
 def _collect_sonar_summaries(
@@ -475,7 +633,12 @@ def build_news_packet(
     """
     items: list[NewsItem] = []
     legacy_items: list[NewsItem] = []
-    coindesk_items = _collect_coindesk_items(settings, observer=observer)
+    public_fetch_limit = max(PUBLIC_ALL_NEWS_ITEMS, settings.max_news_items)
+    coindesk_items, thenewsapi_items, primary_crypto_items = _collect_primary_crypto_items(
+        settings,
+        max_items=public_fetch_limit,
+        observer=observer,
+    )
     official_signal_items = _collect_official_signal_items(settings, observer=observer)
     allow_broad_fallback = True
     fallback_review: dict | None = None
@@ -496,10 +659,9 @@ def build_news_packet(
     grok_web_news: list[NewsItem] = []
 
     public_merge_limit = max(PUBLIC_ALL_NEWS_ITEMS * 2, settings.max_news_items * 2)
-    public_fetch_limit = max(PUBLIC_ALL_NEWS_ITEMS, settings.max_news_items)
 
     if settings.research_provider == "perplexity":
-        items = list(coindesk_items)
+        items = list(primary_crypto_items)
         perplexity_items = fetch_news_from_perplexity(
             max_items=public_fetch_limit,
             api_key=settings.perplexity_api_key,
@@ -533,14 +695,14 @@ def build_news_packet(
                 candidate_count=len(sonar_news),
                 kept_count=len(perplexity_items),
             )
-        if not perplexity_items and not coindesk_items and observer is not None:
+        if not perplexity_items and not primary_crypto_items and observer is not None:
             observer.log_event(
                 "perplexity_degraded",
                 reason="Perplexity 결과가 비어 있어 legacy 뉴스와 Grok 보조 모드로 전환했어요.",
             )
 
         # Perplexity 0건 시 Gemini fallback
-        if not perplexity_items and not coindesk_items and settings.gemini_api_key:
+        if not perplexity_items and not primary_crypto_items and settings.gemini_api_key:
             gemini_items = fetch_gemini_grounding(
                 api_key=settings.gemini_api_key,
                 model=settings.gemini_model,
@@ -621,6 +783,7 @@ def build_news_packet(
                 "grok_keyword_skipped",
                 reason="coindesk_and_perplexity_coverage_sufficient",
                 coindesk_count=len(coindesk_items),
+                thenewsapi_count=len(thenewsapi_items),
                 official_signal_count=len(official_signal_items),
             )
 
@@ -680,7 +843,7 @@ def build_news_packet(
             max_items=PUBLIC_ALL_NEWS_ITEMS,
             newsapi_key=settings.newsapi_key,
         )
-        items = _merge_rank(coindesk_items, legacy_items, max_items=public_merge_limit)
+        items = _merge_rank(primary_crypto_items, legacy_items, max_items=public_merge_limit)
         items = _merge_rank(items, official_signal_items, max_items=public_merge_limit)
         x_signals, x_news, grok_keywords = _collect_x_keyword_signals(
             settings,

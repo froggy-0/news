@@ -265,6 +265,125 @@ def test_collect_from_newsapi_uses_passed_candidate_limit(monkeypatch):
     assert captured["max_items"] == 15
 
 
+def test_collect_primary_crypto_items_uses_needed_thenewsapi_size(monkeypatch):
+    captured: dict[str, object] = {}
+    monkeypatch.setenv("THENEWSAPI_ENABLED", "true")
+    monkeypatch.setenv("THENEWSAPI_KEY", "thenewsapi-key")
+    monkeypatch.setenv("THENEWSAPI_MAX_ITEMS", "20")
+    monkeypatch.setattr(
+        "morning_brief.data.news._collect_coindesk_items", lambda *args, **kwargs: []
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_thenewsapi_page",
+        lambda **kwargs: (
+            captured.update(kwargs)
+            or SimpleNamespace(items=[], has_next=False, requested_size=kwargs["max_items"], page=1)
+        ),
+    )
+
+    news._collect_primary_crypto_items(load_settings(), max_items=5)
+
+    assert captured["max_items"] == 5
+
+
+def test_collect_primary_crypto_items_uses_second_page_only_when_needed(monkeypatch):
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("THENEWSAPI_ENABLED", "true")
+    monkeypatch.setenv("THENEWSAPI_KEY", "thenewsapi-key")
+    monkeypatch.setenv("THENEWSAPI_MAX_ITEMS", "12")
+    monkeypatch.setattr(
+        "morning_brief.data.news._collect_coindesk_items", lambda *args, **kwargs: []
+    )
+
+    page_calls: list[int] = []
+
+    def fake_fetch_thenewsapi_page(**kwargs):
+        page_calls.append(kwargs["page"])
+        count = 10 if kwargs["page"] == 1 else 2
+        items = [
+            NewsItem(
+                title=f"Crypto item {kwargs['page']}-{index}",
+                url=f"https://www.coindesk.com/markets/2026/03/13/crypto-item-{kwargs['page']}-{index}",
+                source="CoinDesk",
+                published_at=now - timedelta(minutes=index),
+                topic="bitcoin",
+                provider="thenewsapi",
+                why_it_matters="크립토 흐름을 읽는 데 도움이 돼요.",
+                citations=[
+                    f"https://www.coindesk.com/markets/2026/03/13/crypto-item-{kwargs['page']}-{index}"
+                ],
+            )
+            for index in range(count)
+        ]
+        return SimpleNamespace(
+            items=items,
+            has_next=kwargs["page"] == 1,
+            requested_size=kwargs["max_items"],
+            page=kwargs["page"],
+        )
+
+    monkeypatch.setattr("morning_brief.data.news.fetch_thenewsapi_page", fake_fetch_thenewsapi_page)
+    monkeypatch.setattr(
+        "morning_brief.data.news.assess_perplexity_fallback_need",
+        lambda packet: {"needs_legacy_fallback": True},
+    )
+
+    _, thenewsapi_items, merged_items = news._collect_primary_crypto_items(
+        load_settings(), max_items=12
+    )
+
+    assert page_calls == [1, 2]
+    assert len(thenewsapi_items) == 12
+    assert len(merged_items) == 12
+
+
+def test_collect_primary_crypto_items_skips_second_page_when_quality_is_sufficient(monkeypatch):
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("THENEWSAPI_ENABLED", "true")
+    monkeypatch.setenv("THENEWSAPI_KEY", "thenewsapi-key")
+    monkeypatch.setenv("THENEWSAPI_MAX_ITEMS", "12")
+    monkeypatch.setattr(
+        "morning_brief.data.news._collect_coindesk_items", lambda *args, **kwargs: []
+    )
+
+    page_calls: list[int] = []
+
+    def fake_fetch_thenewsapi_page(**kwargs):
+        page_calls.append(kwargs["page"])
+        return SimpleNamespace(
+            items=[
+                NewsItem(
+                    title=f"Crypto item {index}",
+                    url=f"https://www.coindesk.com/markets/2026/03/13/crypto-item-{index}",
+                    source="CoinDesk",
+                    published_at=now - timedelta(minutes=index),
+                    topic="bitcoin",
+                    provider="thenewsapi",
+                    why_it_matters="크립토 흐름을 읽는 데 도움이 돼요.",
+                    citations=[f"https://www.coindesk.com/markets/2026/03/13/crypto-item-{index}"],
+                )
+                for index in range(10)
+            ],
+            has_next=True,
+            requested_size=kwargs["max_items"],
+            page=kwargs["page"],
+        )
+
+    monkeypatch.setattr("morning_brief.data.news.fetch_thenewsapi_page", fake_fetch_thenewsapi_page)
+    monkeypatch.setattr(
+        "morning_brief.data.news.assess_perplexity_fallback_need",
+        lambda packet: {"needs_legacy_fallback": False},
+    )
+
+    _, thenewsapi_items, merged_items = news._collect_primary_crypto_items(
+        load_settings(), max_items=12
+    )
+
+    assert page_calls == [1]
+    assert len(thenewsapi_items) == 10
+    assert len(merged_items) == 10
+
+
 def test_build_news_packet_adds_reliability_metadata(monkeypatch):
     now = datetime.now(timezone.utc)
     sample = [
@@ -284,6 +403,128 @@ def test_build_news_packet_adds_reliability_metadata(monkeypatch):
     assert packet[0]["source_tier"] == "tier_1"
     assert packet[0]["preferred_source"] is True
     assert packet[0]["age_hours"] is not None
+
+
+def test_build_news_packet_uses_thenewsapi_primary_and_skips_grok_and_legacy(monkeypatch):
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("RESEARCH_PROVIDER", "perplexity")
+    monkeypatch.setenv("ENABLE_OFFICIAL_X_SIGNALS", "false")
+    monkeypatch.setenv("ENABLE_LEGACY_NEWS_FALLBACK", "true")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "pplx-test-key")
+    monkeypatch.setenv("THENEWSAPI_ENABLED", "true")
+    monkeypatch.setenv("THENEWSAPI_KEY", "thenewsapi-key")
+    monkeypatch.setattr("morning_brief.data.news.fetch_coindesk_news", lambda **_: [])
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_thenewsapi_page",
+        lambda **_: SimpleNamespace(
+            items=[
+                NewsItem(
+                    title="Bitcoin ETF demand stays firm",
+                    url="https://www.coindesk.com/markets/2026/03/13/bitcoin-etf-demand-stays-firm",
+                    source="CoinDesk",
+                    published_at=now,
+                    topic="bitcoin",
+                    provider="thenewsapi",
+                    why_it_matters="기관 수요를 읽는 데 도움이 돼요.",
+                    citations=[
+                        "https://www.coindesk.com/markets/2026/03/13/bitcoin-etf-demand-stays-firm"
+                    ],
+                )
+            ],
+            has_next=False,
+            requested_size=1,
+            page=1,
+        ),
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news_from_perplexity",
+        lambda **_: [
+            NewsItem(
+                title="Fed tone stays steady",
+                url="https://www.reuters.com/world/us/fed-tone-stays-steady",
+                source="Reuters",
+                published_at=now - timedelta(hours=1),
+                topic="macro",
+                provider="perplexity_search",
+                why_it_matters="금리 흐름을 읽는 데 도움이 돼요.",
+                citations=["https://www.reuters.com/world/us/fed-tone-stays-steady"],
+            ),
+            NewsItem(
+                title="Nasdaq closes firmer",
+                url="https://www.bloomberg.com/news/nasdaq-closes-firmer",
+                source="Bloomberg",
+                published_at=now - timedelta(hours=2),
+                topic="us_equity",
+                provider="perplexity_search",
+                why_it_matters="미국 증시 흐름을 읽는 데 도움이 돼요.",
+                citations=["https://www.bloomberg.com/news/nasdaq-closes-firmer"],
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_x_keyword_signals",
+        lambda **_: (_ for _ in ()).throw(AssertionError("grok keyword should not run")),
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_grok_web_news",
+        lambda **_: (_ for _ in ()).throw(AssertionError("grok web should not run")),
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news",
+        lambda **_: (_ for _ in ()).throw(AssertionError("legacy fetch should not run")),
+    )
+
+    packet, _, _, _ = news.build_news_packet(settings=load_settings())
+
+    assert {item["provider"] for item in packet} == {"thenewsapi", "perplexity_search"}
+
+
+def test_build_news_packet_keeps_partial_success_when_thenewsapi_fails(monkeypatch):
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("RESEARCH_PROVIDER", "legacy")
+    monkeypatch.setenv("THENEWSAPI_ENABLED", "true")
+    monkeypatch.setenv("THENEWSAPI_KEY", "thenewsapi-key")
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_coindesk_news",
+        lambda **_: [
+            NewsItem(
+                title="Bitcoin ETF demand stays firm",
+                url="https://www.coindesk.com/markets/2026/03/13/bitcoin-etf-demand-stays-firm",
+                source="CoinDesk",
+                published_at=now,
+                topic="bitcoin",
+                provider="coindesk_api",
+                why_it_matters="기관 수요를 읽는 데 도움이 돼요.",
+                citations=[
+                    "https://www.coindesk.com/markets/2026/03/13/bitcoin-etf-demand-stays-firm"
+                ],
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_thenewsapi_page",
+        lambda **_: (_ for _ in ()).throw(HttpFetchError("boom", provider="thenewsapi")),
+    )
+    monkeypatch.setattr(
+        "morning_brief.data.news.fetch_news",
+        lambda **_: [
+            NewsItem(
+                title="Fed tone stays steady",
+                url="https://www.reuters.com/world/us/fed-tone-stays-steady",
+                source="Reuters",
+                published_at=now - timedelta(hours=1),
+                topic="macro",
+                provider="legacy_rss",
+                why_it_matters="금리 흐름을 읽는 데 도움이 돼요.",
+                citations=["https://www.reuters.com/world/us/fed-tone-stays-steady"],
+            )
+        ],
+    )
+
+    packet, _, _, _ = news.build_news_packet(settings=load_settings())
+
+    assert packet
+    assert {item["provider"] for item in packet} == {"legacy_rss"}
 
 
 def test_build_news_packet_uses_legacy_fallback_when_perplexity_is_empty(monkeypatch):
