@@ -53,6 +53,13 @@ class Settings:
     thenewsapi_langs: str
     thenewsapi_categories: str
     thenewsapi_query: str
+    marketaux_key: str
+    marketaux_enabled: bool
+    marketaux_max_items: int
+    marketaux_lookback_hours: int
+    marketaux_language: str
+    marketaux_domains: str
+    marketaux_search: str
     coindesk_news_enabled: bool
     coindesk_news_lookback_hours: int
     coindesk_news_weekend_lookback_hours: int
@@ -217,6 +224,25 @@ def load_settings() -> Settings:
             "(bitcoin OR btc OR ethereum OR eth OR crypto OR stablecoin OR 'bitcoin etf') AND NOT scam",
         ).strip()
         or "(bitcoin OR btc OR ethereum OR eth OR crypto OR stablecoin OR 'bitcoin etf') AND NOT scam",
+        marketaux_key=os.getenv("MARKETAUX_KEY", "").strip(),
+        marketaux_enabled=_env_bool("MARKETAUX_ENABLED", True),
+        marketaux_max_items=_env_bounded_int(
+            "MARKETAUX_MAX_ITEMS", default=3, minimum=1, maximum=6
+        ),
+        marketaux_lookback_hours=_env_bounded_int(
+            "MARKETAUX_LOOKBACK_HOURS", default=36, minimum=12, maximum=168
+        ),
+        marketaux_language=os.getenv("MARKETAUX_LANGUAGE", "en").strip() or "en",
+        marketaux_domains=os.getenv(
+            "MARKETAUX_DOMAINS",
+            "reuters.com,bloomberg.com,cnbc.com,coindesk.com,theblock.co,cointelegraph.com",
+        ).strip()
+        or "reuters.com,bloomberg.com,cnbc.com,coindesk.com,theblock.co,cointelegraph.com",
+        marketaux_search=os.getenv(
+            "MARKETAUX_SEARCH",
+            '(bitcoin | btc | ethereum | eth | crypto | stablecoin | "bitcoin etf") -scam',
+        ).strip()
+        or '(bitcoin | btc | ethereum | eth | crypto | stablecoin | "bitcoin etf") -scam',
         coindesk_news_enabled=_env_bool("COINDESK_NEWS_ENABLED", True),
         coindesk_news_lookback_hours=_env_bounded_int(
             "COINDESK_NEWS_LOOKBACK_HOURS", default=36, minimum=6, maximum=168

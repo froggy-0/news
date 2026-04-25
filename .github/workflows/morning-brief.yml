@@ -146,6 +146,7 @@ jobs:
           KIS_TOKEN_CACHE_PATH: .cache/kis_token/token.json
           PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
           THENEWSAPI_KEY: ${{ secrets.THENEWSAPI_KEY }}
+          MARKETAUX_KEY: ${{ secrets.MARKETAUX_KEY }}
           COINDESK_NEWS_ENABLED: ${{ vars.COINDESK_NEWS_ENABLED || 'true' }}
           COINDESK_NEWS_LOOKBACK_HOURS: ${{ vars.COINDESK_NEWS_LOOKBACK_HOURS || '36' }}
           COINDESK_NEWS_WEEKEND_LOOKBACK_HOURS: ${{ vars.COINDESK_NEWS_WEEKEND_LOOKBACK_HOURS || '72' }}
