@@ -31,6 +31,7 @@ COINDESK_API = "coindesk_api"
 # ---------------------------------------------------------------------------
 
 RUNTIME_GROK_KEYWORD = "grok_keyword"
+RUNTIME_GROK_WEB_SEARCH = "grok_web_search"
 
 # ---------------------------------------------------------------------------
 # Provider group sets

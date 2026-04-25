@@ -19,6 +19,11 @@ def test_runtime_grok_keyword_matches_policy_name() -> None:
     assert PROVIDER_POLICIES["grok_keyword"].name == providers.RUNTIME_GROK_KEYWORD
 
 
+def test_runtime_grok_web_search_matches_policy_name() -> None:
+    assert providers.RUNTIME_GROK_WEB_SEARCH == "grok_web_search"
+    assert PROVIDER_POLICIES["grok_web_search"].name == providers.RUNTIME_GROK_WEB_SEARCH
+
+
 def test_grok_official_x_matches_actual_value() -> None:
     """providers.GROK_OFFICIAL_X가 grok_official_signals.py:477에서 실제 설정하는 값과 일치해야 한다."""
     assert providers.GROK_OFFICIAL_X == "grok_official_x"

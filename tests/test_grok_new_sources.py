@@ -17,6 +17,7 @@ from morning_brief.data.sources.grok_x_keyword import (
     fetch_x_keyword_signals,
     x_signals_to_dict,
 )
+from morning_brief.observability import PipelineObserver
 
 
 class TestXSignalToNewsItem:
@@ -158,3 +159,53 @@ class TestFetchGrokWebNews:
     def test_empty_api_key_returns_empty(self):
         items = fetch_grok_web_news(api_key="", model="test")
         assert items == []
+
+    def test_records_usage_under_grok_web_search(self, monkeypatch, tmp_path):
+        observer = PipelineObserver(output_dir=tmp_path)
+
+        def fake_operation(**kwargs):
+            return (
+                [
+                    {
+                        "title": "Fed holds rates",
+                        "url": "https://www.reuters.com/fed-holds",
+                        "source": "Reuters",
+                        "published_at": "2026-03-15T10:00:00Z",
+                        "topic": "macro",
+                        "summary": "The Fed kept rates unchanged.",
+                    }
+                ],
+                {
+                    "input_tokens": 100,
+                    "output_tokens": 20,
+                    "cached_input_tokens": None,
+                    "reasoning_tokens": None,
+                    "cost_in_usd_ticks": 1_250_000,
+                    "num_sources_used": 3,
+                },
+            )
+
+        monkeypatch.setattr(
+            "morning_brief.data.sources.grok_web_search._perform_web_search",
+            fake_operation,
+        )
+        monkeypatch.setattr(
+            "morning_brief.data.sources.grok_web_search.execute_with_provider_retry",
+            lambda *, operation, **kwargs: operation(),
+        )
+
+        items = fetch_grok_web_news(
+            api_key="grok-test-key",
+            model="grok-test-model",
+            observer=observer,
+        )
+
+        assert len(items) == 1
+        assert "grok_web_search" in observer.provider_usage
+        assert "grok_official" not in observer.provider_usage
+        usage = observer.provider_usage["grok_web_search"]
+        assert usage.requests == 1
+        assert usage.cost_in_usd_ticks == 1_250_000
+        assert usage.num_sources_used == 3
+        assert observer.provider_usage_summary_payload()["grok_web_search"]["cost_usd"] == 0.000125
+        assert observer.cost_by_provider_line() == "grok_web_search=0.000125"
