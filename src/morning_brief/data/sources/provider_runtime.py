@@ -83,6 +83,12 @@ PROVIDER_POLICIES = {
         base_backoff_seconds=1.0,
         max_backoff_seconds=8.0,
     ),
+    "marketaux": ProviderPolicy(
+        name="marketaux",
+        min_interval_seconds=0.5,
+        base_backoff_seconds=1.0,
+        max_backoff_seconds=8.0,
+    ),
     "coindesk": ProviderPolicy(
         name="coindesk",
         min_interval_seconds=0.35,

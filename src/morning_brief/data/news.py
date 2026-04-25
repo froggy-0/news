@@ -32,6 +32,13 @@ from morning_brief.data.sources.grok_x_keyword import (
     fetch_x_keyword_signals,
 )
 from morning_brief.data.sources.http_client import HttpFetchError
+from morning_brief.data.sources.marketaux_provider import (
+    FREE_PLAN_MAX_LIMIT as MARKETAUX_FREE_PLAN_MAX_LIMIT,
+)
+from morning_brief.data.sources.marketaux_provider import (
+    MarketauxPage,
+    fetch_marketaux_page,
+)
 from morning_brief.data.sources.newsapi_provider import fetch_news_from_newsapi
 from morning_brief.data.sources.perplexity_search import fetch_news_from_perplexity
 from morning_brief.data.sources.perplexity_sonar import (
@@ -269,15 +276,61 @@ def _collect_thenewsapi_page(
         return TheNewsApiPage(items=[], has_next=False, requested_size=0, page=page)
 
 
+def _collect_marketaux_page(
+    settings: Settings,
+    *,
+    max_items: int,
+    page: int = 1,
+    observer: PipelineObserver | None = None,
+) -> MarketauxPage:
+    if not settings.marketaux_enabled or not settings.marketaux_key or max_items <= 0:
+        return MarketauxPage(items=[], has_next=False, requested_limit=0, page=page)
+
+    try:
+        return fetch_marketaux_page(
+            api_key=settings.marketaux_key,
+            max_items=min(max_items, settings.marketaux_max_items),
+            lookback_hours=settings.marketaux_lookback_hours,
+            language=settings.marketaux_language,
+            domains=settings.marketaux_domains,
+            search=settings.marketaux_search,
+            page=page,
+            observer=observer,
+        )
+    except Exception as exc:
+        log_structured(
+            logger,
+            event="error.raised",
+            message="Marketaux에서 뉴스를 가져오지 못해 다른 소스로 이어갈게요.",
+            level=logging.WARNING,
+            provider="marketaux",
+            reason=str(exc),
+            error_type=type(exc).__name__,
+            page=page,
+        )
+        if observer is not None:
+            observer.log_event(
+                "marketaux_news_degraded",
+                level=logging.WARNING,
+                reason=str(exc),
+                error_type=type(exc).__name__,
+                page=page,
+            )
+        return MarketauxPage(items=[], has_next=False, requested_limit=0, page=page)
+
+
 def _collect_primary_crypto_items(
     settings: Settings,
     *,
     max_items: int,
     observer: PipelineObserver | None = None,
-) -> tuple[list[NewsItem], list[NewsItem], list[NewsItem]]:
+) -> tuple[list[NewsItem], list[NewsItem], list[NewsItem], list[NewsItem]]:
     initial_requested_size = min(max_items, settings.thenewsapi_max_items, FREE_PLAN_MAX_PAGE_SIZE)
+    initial_marketaux_limit = min(
+        max_items, settings.marketaux_max_items, MARKETAUX_FREE_PLAN_MAX_LIMIT
+    )
 
-    with ThreadPoolExecutor(max_workers=2) as executor:
+    with ThreadPoolExecutor(max_workers=3) as executor:
         coindesk_future = executor.submit(_collect_coindesk_items, settings, observer=observer)
         thenewsapi_future = executor.submit(
             _collect_thenewsapi_page,
@@ -286,15 +339,34 @@ def _collect_primary_crypto_items(
             page=1,
             observer=observer,
         )
+        marketaux_future = executor.submit(
+            _collect_marketaux_page,
+            settings,
+            max_items=initial_marketaux_limit,
+            page=1,
+            observer=observer,
+        )
         coindesk_items = coindesk_future.result()
         first_page = thenewsapi_future.result()
+        marketaux_first_page = marketaux_future.result()
 
     thenewsapi_items = list(first_page.items)
+    marketaux_items = list(marketaux_first_page.items)
     items = _dedup_and_rank(
         _merge_rank(
-            coindesk_items, thenewsapi_items, max_items=max(max_items * 2, len(coindesk_items))
+            _merge_rank(
+                coindesk_items,
+                thenewsapi_items,
+                max_items=max(max_items * 2, len(coindesk_items) + len(thenewsapi_items)),
+            ),
+            marketaux_items,
+            max_items=max(
+                max_items * 2, len(coindesk_items) + len(thenewsapi_items) + len(marketaux_items)
+            ),
         ),
-        max_items=max(max_items * 2, len(coindesk_items) + len(thenewsapi_items)),
+        max_items=max(
+            max_items * 2, len(coindesk_items) + len(thenewsapi_items) + len(marketaux_items)
+        ),
     )
     public_candidates, _ = filter_publish_news_candidates(items)
     packet, _ = _packet_summary(public_candidates)
@@ -311,10 +383,23 @@ def _collect_primary_crypto_items(
             needs_more,
         ]
     )
+    should_fetch_marketaux_second_page = all(
+        [
+            settings.marketaux_enabled,
+            bool(settings.marketaux_key),
+            marketaux_first_page.has_next,
+            marketaux_first_page.requested_limit >= MARKETAUX_FREE_PLAN_MAX_LIMIT,
+            len(items) < max_items,
+            needs_more,
+        ]
+    )
 
     additional_page_used = False
+    marketaux_additional_page_used = False
     quota_saved = False
+    marketaux_quota_saved = False
     quota_stop_reason = "not_applicable"
+    marketaux_quota_stop_reason = "not_applicable"
     if should_fetch_second_page:
         remaining_needed = max(
             min(max_items, settings.thenewsapi_max_items) - len(thenewsapi_items), 0
@@ -347,35 +432,93 @@ def _collect_primary_crypto_items(
             if not needs_more or len(items) >= max_items
             else "free_plan_guardrail"
         )
+    if should_fetch_marketaux_second_page:
+        remaining_marketaux_needed = max(
+            min(max_items, settings.marketaux_max_items) - len(marketaux_items),
+            0,
+        )
+        if remaining_marketaux_needed > 0:
+            marketaux_second_page = _collect_marketaux_page(
+                settings,
+                max_items=remaining_marketaux_needed,
+                page=2,
+                observer=observer,
+            )
+            if marketaux_second_page.items:
+                marketaux_additional_page_used = True
+                marketaux_items.extend(marketaux_second_page.items)
+                items = _dedup_and_rank(
+                    _merge_rank(
+                        _merge_rank(
+                            coindesk_items,
+                            thenewsapi_items,
+                            max_items=max(
+                                max_items * 2,
+                                len(coindesk_items) + len(thenewsapi_items) + len(marketaux_items),
+                            ),
+                        ),
+                        marketaux_items,
+                        max_items=max(
+                            max_items * 2,
+                            len(coindesk_items) + len(thenewsapi_items) + len(marketaux_items),
+                        ),
+                    ),
+                    max_items=max(
+                        max_items * 2,
+                        len(coindesk_items) + len(thenewsapi_items) + len(marketaux_items),
+                    ),
+                )
+        else:
+            marketaux_quota_saved = True
+            marketaux_quota_stop_reason = "remaining_target_filled"
+    elif marketaux_first_page.has_next:
+        marketaux_quota_saved = True
+        marketaux_quota_stop_reason = (
+            "quality_sufficient"
+            if not needs_more or len(items) >= max_items
+            else "free_plan_guardrail"
+        )
 
     log_structured(
         logger,
         event="selection.complete",
-        message="1차 crypto 수집에 CoinDesk와 TheNewsAPI를 반영했어요.",
-        provider="thenewsapi",
+        message="1차 crypto 수집에 CoinDesk, TheNewsAPI, Marketaux를 반영했어요.",
+        provider="marketaux",
         coindesk_count=len(coindesk_items),
         thenewsapi_count=len(thenewsapi_items),
+        marketaux_count=len(marketaux_items),
         kept_count=len(items),
         requested_size=first_page.requested_size,
         pages_fetched=1 + int(additional_page_used),
         additional_page_used=additional_page_used,
         quota_saved=quota_saved,
         quota_stop_reason=quota_stop_reason,
+        marketaux_requested_limit=marketaux_first_page.requested_limit,
+        marketaux_pages_fetched=1 + int(marketaux_additional_page_used),
+        marketaux_additional_page_used=marketaux_additional_page_used,
+        marketaux_quota_saved=marketaux_quota_saved,
+        marketaux_quota_stop_reason=marketaux_quota_stop_reason,
     )
     if observer is not None:
         observer.log_event(
             "primary_crypto_news_collected",
             coindesk_count=len(coindesk_items),
             thenewsapi_count=len(thenewsapi_items),
+            marketaux_count=len(marketaux_items),
             kept_count=len(items),
             requested_size=first_page.requested_size,
             pages_fetched=1 + int(additional_page_used),
             additional_page_used=additional_page_used,
             quota_saved=quota_saved,
             quota_stop_reason=quota_stop_reason,
+            marketaux_requested_limit=marketaux_first_page.requested_limit,
+            marketaux_pages_fetched=1 + int(marketaux_additional_page_used),
+            marketaux_additional_page_used=marketaux_additional_page_used,
+            marketaux_quota_saved=marketaux_quota_saved,
+            marketaux_quota_stop_reason=marketaux_quota_stop_reason,
         )
 
-    return coindesk_items, thenewsapi_items, items
+    return coindesk_items, thenewsapi_items, marketaux_items, items
 
 
 def _collect_sonar_summaries(
@@ -634,10 +777,12 @@ def build_news_packet(
     items: list[NewsItem] = []
     legacy_items: list[NewsItem] = []
     public_fetch_limit = max(PUBLIC_ALL_NEWS_ITEMS, settings.max_news_items)
-    coindesk_items, thenewsapi_items, primary_crypto_items = _collect_primary_crypto_items(
-        settings,
-        max_items=public_fetch_limit,
-        observer=observer,
+    coindesk_items, thenewsapi_items, marketaux_items, primary_crypto_items = (
+        _collect_primary_crypto_items(
+            settings,
+            max_items=public_fetch_limit,
+            observer=observer,
+        )
     )
     official_signal_items = _collect_official_signal_items(settings, observer=observer)
     allow_broad_fallback = True
@@ -784,6 +929,7 @@ def build_news_packet(
                 reason="coindesk_and_perplexity_coverage_sufficient",
                 coindesk_count=len(coindesk_items),
                 thenewsapi_count=len(thenewsapi_items),
+                marketaux_count=len(marketaux_items),
                 official_signal_count=len(official_signal_items),
             )
 
