@@ -153,6 +153,8 @@ def _mask_cols_from(df: pd.DataFrame) -> list[str]:
         "btc_fwd_ret_7d",
         "btc_fwd_vol_5d",
         "btc_large_move_3d",
+        "btc_realized_vol_20d_lag1",
+        "btc_large_move_3d_vol_adj",
     }
     return [c for c in df.columns if c not in excluded]
 

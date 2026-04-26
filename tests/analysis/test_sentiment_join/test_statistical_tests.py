@@ -85,7 +85,7 @@ def test_run_statistical_tests_granger_skips_at_179_rows(
     )
     pair_calls: list[tuple] = []
 
-    def fake_granger_all_lags(df, predictor, target, max_lag=3):
+    def fake_granger_all_lags(df, predictor, target, max_lag=3, *, skip_collector=None):
         pair_calls.append((predictor, target))
         return None  # skip
 
@@ -110,7 +110,7 @@ def test_run_statistical_tests_granger_runs_at_180_rows(
     )
     pair_calls: list[tuple] = []
 
-    def fake_granger_all_lags(df, predictor, target, max_lag=3):
+    def fake_granger_all_lags(df, predictor, target, max_lag=3, *, skip_collector=None):
         pair_calls.append((predictor, target))
         return [
             {
@@ -132,6 +132,52 @@ def test_run_statistical_tests_granger_runs_at_180_rows(
     assert len(results["granger"]) == 69
     assert results["granger_executed"] is True
     assert results["granger_eligible_rows"] == 180
+
+
+def test_run_statistical_tests_records_granger_pair_skips(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        statistical_tests,
+        "_run_stationarity",
+        lambda series: _STATIONARY_RESULT,
+    )
+
+    def fake_granger_all_lags(df, predictor, target, max_lag=3, *, skip_collector=None):
+        if skip_collector is not None:
+            skip_collector.append(
+                {"predictor": predictor, "target": target, "reason": "unit_test_skip"}
+            )
+        return None
+
+    monkeypatch.setattr(statistical_tests, "_run_granger_all_lags", fake_granger_all_lags)
+
+    results = statistical_tests.run_statistical_tests(_sample_df(rows=180))
+
+    assert len(results["granger_skips"]) == 23
+    assert results["granger_skip_summary"] == {"unit_test_skip": 23}
+    assert {row["direction"] for row in results["granger_skips"]} == {"forward", "reverse"}
+
+
+def test_run_granger_all_lags_records_missing_column_skip() -> None:
+    skips: list[dict] = []
+    result = _run_granger_all_lags(
+        _sample_df(rows=180),
+        "missing_predictor",
+        "btc_log_return",
+        max_lag=3,
+        skip_collector=skips,
+    )
+
+    assert result is None
+    assert skips == [
+        {
+            "predictor": "missing_predictor",
+            "target": "btc_log_return",
+            "reason": "missing_column",
+            "missing_columns": ["missing_predictor"],
+        }
+    ]
 
 
 def test_run_statistical_tests_returns_stationarity_results(
@@ -483,7 +529,7 @@ def test_run_statistical_tests_granger_entries_have_direction(
         lambda series: _STATIONARY_RESULT,
     )
 
-    def fake_granger_all_lags(df, predictor, target, max_lag=3):
+    def fake_granger_all_lags(df, predictor, target, max_lag=3, *, skip_collector=None):
         return [
             {
                 "predictor": predictor,
@@ -921,7 +967,7 @@ def test_granger_results_schema_has_required_fields(
     """
     monkeypatch.setattr(statistical_tests, "_run_stationarity", lambda s: _STATIONARY_RESULT)
 
-    def fake_granger_all_lags(df, predictor, target, max_lag=3):
+    def fake_granger_all_lags(df, predictor, target, max_lag=3, *, skip_collector=None):
         return [
             {
                 "predictor": predictor,

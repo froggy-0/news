@@ -73,6 +73,9 @@ def test_last_k_rows_are_nan_per_target() -> None:
     assert res["btc_large_move_3d"].iloc[-3:].isna().all()
     assert res["btc_large_move_3d"].iloc[-4:-3].notna().all()
 
+    assert res["btc_large_move_3d_vol_adj"].iloc[-3:].isna().all()
+    assert res["btc_large_move_3d_vol_adj"].iloc[-4:-3].notna().all()
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # btc_large_move_3d 이진 + dtype
@@ -84,9 +87,12 @@ def test_large_move_3d_is_binary_int64_with_na() -> None:
     res = _add_forward_target_columns(df)
 
     assert str(res["btc_large_move_3d"].dtype) == "Int64"
+    assert str(res["btc_large_move_3d_vol_adj"].dtype) == "Int64"
     valid = res["btc_large_move_3d"].dropna()
     # 모든 유효값이 0/1 이어야 한다
     assert set(valid.unique().tolist()).issubset({0, 1})
+    valid_vol_adj = res["btc_large_move_3d_vol_adj"].dropna()
+    assert set(valid_vol_adj.unique().tolist()).issubset({0, 1})
 
 
 def test_large_move_3d_threshold_respected() -> None:
@@ -130,6 +136,16 @@ def test_fwd_vol_5d_equals_numpy_std() -> None:
     np.testing.assert_allclose(res.loc[t, "btc_fwd_vol_5d"], expected, atol=1e-12)
 
 
+def test_realized_vol_20d_lag1_uses_only_past_returns() -> None:
+    rets = [0.001 * ((i % 5) - 2) for i in range(35)]
+    df = _frame(rets)
+    res = _add_forward_target_columns(df)
+
+    t = 20
+    expected = np.std(rets[t - 20 : t], ddof=1)
+    np.testing.assert_allclose(res.loc[t, "btc_realized_vol_20d_lag1"], expected, atol=1e-12)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # btc_log_return 컬럼 부재 방어
 # ─────────────────────────────────────────────────────────────────────────────
@@ -156,4 +172,6 @@ def test_forward_target_columns_constant_is_stable() -> None:
         "btc_fwd_ret_7d",
         "btc_fwd_vol_5d",
         "btc_large_move_3d",
+        "btc_realized_vol_20d_lag1",
+        "btc_large_move_3d_vol_adj",
     )

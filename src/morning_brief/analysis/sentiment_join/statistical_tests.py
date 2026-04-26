@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import math
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
@@ -161,6 +162,19 @@ def stationarity_check(series: pd.Series) -> dict[str, Any]:
     return _run_stationarity(s)
 
 
+@dataclass(frozen=True)
+class StationarityGateResult:
+    """Detailed stationarity gate outcome for Granger skip diagnostics."""
+
+    series: pd.Series
+    stationary: bool
+    differenced: bool
+    rows: int
+    diff_rows: int
+    conclusion: str
+    diff_conclusion: str | None = None
+
+
 class TransferEntropy:
     """Discrete lagged-dependence estimator for non-linear signal screening."""
 
@@ -218,24 +232,97 @@ def _ensure_stationary(
         - was_differenced: 차분 적용 여부
     """
 
-    s = pd.to_numeric(series, errors="coerce").dropna()
+    result = _ensure_stationary_result(series)
+    return result.series, result.stationary, result.differenced
+
+
+def _ensure_stationary_result(series: pd.Series) -> StationarityGateResult:
+    """ADF+KPSS gate with details preserved for pair-level diagnostics."""
+
+    numeric = pd.to_numeric(series, errors="coerce")
+    s = numeric.dropna()
     if len(s) < MIN_ROWS_FOR_ADF:
         # 데이터 부족 → pass-through (Granger에서 행 수 부족으로 자연스럽게 skip)
-        return series, True, False
+        return StationarityGateResult(
+            series=series,
+            stationary=True,
+            differenced=False,
+            rows=int(len(s)),
+            diff_rows=0,
+            conclusion="insufficient_rows_for_stationarity_gate",
+        )
 
     adf_result = _run_stationarity(s)
     if adf_result["stationary"]:
-        return series, True, False
+        return StationarityGateResult(
+            series=series,
+            stationary=True,
+            differenced=False,
+            rows=int(len(s)),
+            diff_rows=0,
+            conclusion=str(adf_result.get("conclusion", "stationary")),
+        )
 
     # 비정상 → 첫 차분 후 재검정
-    diff_s = series.diff()
-    s_diff = pd.to_numeric(diff_s, errors="coerce").dropna()
+    diff_s = numeric.diff()
+    s_diff = diff_s.dropna()
     if len(s_diff) >= MIN_ROWS_FOR_ADF:
         diff_result = _run_stationarity(s_diff)
         if diff_result["stationary"]:
-            return diff_s, True, True
+            return StationarityGateResult(
+                series=diff_s,
+                stationary=True,
+                differenced=True,
+                rows=int(len(s)),
+                diff_rows=int(len(s_diff)),
+                conclusion=str(adf_result.get("conclusion", "non_stationary")),
+                diff_conclusion=str(diff_result.get("conclusion", "stationary")),
+            )
+        return StationarityGateResult(
+            series=series,
+            stationary=False,
+            differenced=False,
+            rows=int(len(s)),
+            diff_rows=int(len(s_diff)),
+            conclusion=str(adf_result.get("conclusion", "non_stationary")),
+            diff_conclusion=str(diff_result.get("conclusion", "non_stationary")),
+        )
 
-    return series, False, False
+    return StationarityGateResult(
+        series=series,
+        stationary=False,
+        differenced=False,
+        rows=int(len(s)),
+        diff_rows=int(len(s_diff)),
+        conclusion=str(adf_result.get("conclusion", "non_stationary")),
+        diff_conclusion="insufficient_rows_after_diff",
+    )
+
+
+def _record_granger_skip(
+    skip_collector: list[dict[str, Any]] | None,
+    *,
+    predictor: str,
+    target: str,
+    reason: str,
+    **extra: Any,
+) -> None:
+    """Append one structured skip record per Granger pair when diagnostics are requested."""
+    if skip_collector is None:
+        return
+    skip_collector.append(
+        {
+            "predictor": predictor,
+            "target": target,
+            "reason": reason,
+            **extra,
+        }
+    )
+
+
+def _summarize_granger_skips(skips: list[dict[str, Any]]) -> dict[str, int]:
+    counts = Counter(str(item.get("reason", "unknown")) for item in skips)
+    return dict(sorted(counts.items()))
 
 
 def _select_optimal_lag(work: pd.DataFrame, max_lag: int = 5) -> int:
@@ -255,6 +342,8 @@ def _run_granger_all_lags(
     predictor: str,
     target: str,
     max_lag: int = 3,
+    *,
+    skip_collector: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]] | None:
     """grangercausalitytests 단 1회 호출로 lag 1…max_lag 전체 결과 반환.
 
@@ -265,6 +354,14 @@ def _run_granger_all_lags(
     from statsmodels.tsa.stattools import grangercausalitytests
 
     if predictor not in df.columns or target not in df.columns:
+        missing = [col for col in (predictor, target) if col not in df.columns]
+        _record_granger_skip(
+            skip_collector,
+            predictor=predictor,
+            target=target,
+            reason="missing_column",
+            missing_columns=missing,
+        )
         return None
 
     # Int64(nullable integer) 등을 float으로 변환
@@ -274,13 +371,21 @@ def _run_granger_all_lags(
     work = work.dropna()
 
     if len(work) < MIN_ROWS_FOR_GRANGER:
+        _record_granger_skip(
+            skip_collector,
+            predictor=predictor,
+            target=target,
+            reason="insufficient_pair_rows_pre_stationarity",
+            rows=int(len(work)),
+            min_required=MIN_ROWS_FOR_GRANGER,
+        )
         return None
 
     # §4.1: 정상성 gate — predictor·target 모두 ADF+KPSS 통과해야 실행
-    pred_series, pred_stationary, pred_differenced = _ensure_stationary(work[predictor])
-    tgt_series, tgt_stationary, tgt_differenced = _ensure_stationary(work[target])
+    pred_gate = _ensure_stationary_result(work[predictor])
+    tgt_gate = _ensure_stationary_result(work[target])
 
-    if not pred_stationary or not tgt_stationary:
+    if not pred_gate.stationary or not tgt_gate.stationary:
         log_structured(
             logger,
             event="stats.granger_skipped_non_stationary",
@@ -288,15 +393,44 @@ def _run_granger_all_lags(
             level=logging.INFO,
             predictor=predictor,
             target=target,
-            pred_stationary=pred_stationary,
-            tgt_stationary=tgt_stationary,
+            pred_stationary=pred_gate.stationary,
+            tgt_stationary=tgt_gate.stationary,
+            pred_conclusion=pred_gate.conclusion,
+            tgt_conclusion=tgt_gate.conclusion,
+            pred_diff_conclusion=pred_gate.diff_conclusion,
+            tgt_diff_conclusion=tgt_gate.diff_conclusion,
+        )
+        _record_granger_skip(
+            skip_collector,
+            predictor=predictor,
+            target=target,
+            reason="non_stationary_after_diff",
+            rows=int(len(work)),
+            pred_stationary=pred_gate.stationary,
+            tgt_stationary=tgt_gate.stationary,
+            pred_conclusion=pred_gate.conclusion,
+            tgt_conclusion=tgt_gate.conclusion,
+            pred_diff_conclusion=pred_gate.diff_conclusion,
+            tgt_diff_conclusion=tgt_gate.diff_conclusion,
         )
         return None
 
     # 차분이 적용된 경우 정렬된 DataFrame 재구성
-    if pred_differenced or tgt_differenced:
-        work_stationary = pd.DataFrame({target: tgt_series, predictor: pred_series}).dropna()
+    if pred_gate.differenced or tgt_gate.differenced:
+        work_stationary = pd.DataFrame(
+            {target: tgt_gate.series, predictor: pred_gate.series}
+        ).dropna()
         if len(work_stationary) < MIN_ROWS_FOR_GRANGER:
+            _record_granger_skip(
+                skip_collector,
+                predictor=predictor,
+                target=target,
+                reason="insufficient_pair_rows_post_stationarity",
+                rows=int(len(work_stationary)),
+                min_required=MIN_ROWS_FOR_GRANGER,
+                pred_differenced=pred_gate.differenced,
+                tgt_differenced=tgt_gate.differenced,
+            )
             return None
         work = work_stationary
 
@@ -311,6 +445,14 @@ def _run_granger_all_lags(
             predictor=predictor,
             target=target,
             reason=str(exc),
+        )
+        _record_granger_skip(
+            skip_collector,
+            predictor=predictor,
+            target=target,
+            reason="granger_error",
+            error=str(exc),
+            rows=int(len(work)),
         )
         return None
 
@@ -450,12 +592,22 @@ def run_statistical_tests(df: pd.DataFrame) -> dict[str, Any]:
     # ── Granger 검정 (MIN_ROWS_FOR_GRANGER 기준) ──
     # §6: _run_granger_all_lags로 페어당 1회 호출 (중복 grangercausalitytests 제거)
     granger_results: list[dict[str, Any]] = []
+    granger_skips: list[dict[str, Any]] = []
     if len(df) >= MIN_ROWS_FOR_GRANGER:
         all_pairs = [(predictor, target, "forward") for predictor, target in GRANGER_PAIRS] + [
             (predictor, target, "reverse") for predictor, target in GRANGER_PAIRS_REVERSE
         ]
         for predictor, target, direction in all_pairs:
-            entries = _run_granger_all_lags(df, predictor, target, max_lag=max(GRANGER_LAGS))
+            skip_start = len(granger_skips)
+            entries = _run_granger_all_lags(
+                df,
+                predictor,
+                target,
+                max_lag=max(GRANGER_LAGS),
+                skip_collector=granger_skips,
+            )
+            for skip in granger_skips[skip_start:]:
+                skip["direction"] = direction
             if entries is not None:
                 for entry in entries:
                     entry["direction"] = direction
@@ -491,6 +643,8 @@ def run_statistical_tests(df: pd.DataFrame) -> dict[str, Any]:
             reason="insufficient_rows_for_granger",
         )
     results["granger"] = granger_results
+    results["granger_skips"] = granger_skips
+    results["granger_skip_summary"] = _summarize_granger_skips(granger_skips)
     results["granger_eligible_rows"] = len(df)
     results["granger_executed"] = len(df) >= MIN_ROWS_FOR_GRANGER
 
@@ -1187,7 +1341,15 @@ def walk_forward_validate(
 _PREDICTOR_TO_GRANGER_RAW: dict[str, str | None] = {
     "news_sentiment_mean_lag1": "news_sentiment_mean",
     "fng_value_lag1": "fng_value",
+    "fng_change_1d_lag1": "fng_change_1d",
+    "sentiment_momentum_lag1": "sentiment_momentum",
+    "sentiment_accel_lag1": None,
+    "fng_change_5d_lag1": None,
     "vix_lag1": None,
+    "btc_bear_regime_lag1": None,
+    "sentiment_momentum_x_bear_lag1": None,
+    "fng_change_1d_x_bear_lag1": None,
+    "funding_rate_x_bear_lag1": None,
     "full_hybrid_index_score_lag1": None,
     "core_hybrid_index_score_lag1": None,
 }
@@ -1220,10 +1382,24 @@ def _is_granger_significant(
 _ALPHA_PREDICTOR_CONFIGS: list[dict[str, Any]] = [
     {"col": "news_sentiment_mean_lag1", "threshold": 0, "inverted": False},
     {"col": "fng_value_lag1", "threshold": 50, "inverted": False},
+    {"col": "sentiment_momentum_lag1", "threshold": 0, "inverted": False},
+    {"col": "sentiment_accel_lag1", "threshold": 0, "inverted": False},
+    {"col": "fng_change_1d_lag1", "threshold": 0, "inverted": False},
+    {"col": "fng_change_5d_lag1", "threshold": 0, "inverted": False},
+    {"col": "btc_bear_regime_lag1", "threshold": 0.5, "inverted": True},
+    {"col": "sentiment_momentum_x_bear_lag1", "threshold": 0, "inverted": False},
+    {"col": "fng_change_1d_x_bear_lag1", "threshold": 0, "inverted": False},
+    {"col": "funding_rate_x_bear_lag1", "threshold": 0, "inverted": False},
     {"col": "vix_lag1", "threshold": 24, "inverted": True},
     {"col": "full_hybrid_index_score_lag1", "threshold": 50, "inverted": False},
     {"col": "core_hybrid_index_score_lag1", "threshold": 50, "inverted": False},
 ]
+
+_ALPHA_HORIZONS: dict[int, str] = {
+    1: "btc_log_return",
+    3: "btc_fwd_ret_3d",
+    7: "btc_fwd_ret_7d",
+}
 
 
 def _sanitize_nan(obj: Any) -> Any:
@@ -1239,6 +1415,110 @@ def _sanitize_nan(obj: Any) -> Any:
     if isinstance(obj, list):
         return [_sanitize_nan(item) for item in obj]
     return obj
+
+
+def _with_direction_label_for_return(df: pd.DataFrame, return_col: str) -> pd.DataFrame:
+    if return_col == "btc_log_return":
+        return df
+    result = df.copy()
+    if return_col in result.columns:
+        result["btc_direction_label"] = _derive_direction_label(result[return_col])
+    return result
+
+
+def _baseline_metrics_by_horizon(df: pd.DataFrame) -> dict[str, Any]:
+    from morning_brief.analysis.sentiment_join.baselines import (
+        always_up,
+        btc_momo_20d,
+        evaluate_baseline,
+        fng_contrarian,
+        vol_regime,
+    )
+
+    baseline_factories = {
+        "always_up": always_up,
+        "fng_contrarian": fng_contrarian,
+        "btc_momo_20d": btc_momo_20d,
+        "vol_regime": vol_regime,
+    }
+    metrics: dict[str, Any] = {}
+    for horizon_days, return_col in _ALPHA_HORIZONS.items():
+        if return_col not in df.columns:
+            continue
+        horizon_key = str(horizon_days)
+        metrics[horizon_key] = {}
+        for name, factory in baseline_factories.items():
+            signal = factory(df)
+            metrics[horizon_key][name] = evaluate_baseline(df, signal, return_col=return_col)
+    return metrics
+
+
+def _horizon_metrics(
+    df: pd.DataFrame,
+    *,
+    granger_results: list[dict[str, Any]] | None,
+    granger_executed: bool,
+) -> dict[str, Any]:
+    import dataclasses
+
+    metrics: dict[str, Any] = {}
+    for horizon_days, return_col in _ALPHA_HORIZONS.items():
+        if return_col not in df.columns:
+            continue
+        eval_df = _with_direction_label_for_return(df, return_col)
+        horizon_key = str(horizon_days)
+        metrics[horizon_key] = {"return_col": return_col, "hit_rates": [], "backtest": []}
+        for cfg in _ALPHA_PREDICTOR_CONFIGS:
+            col = cfg["col"]
+            if col not in eval_df.columns or eval_df[col].isna().all():
+                continue
+            granger_raw = _PREDICTOR_TO_GRANGER_RAW.get(col)
+            if not granger_executed or granger_results is None or granger_raw is None:
+                granger_sig = None
+            else:
+                granger_sig = _is_granger_significant(granger_results, granger_raw)
+            hr = compute_hit_rate(
+                eval_df,
+                col,
+                cfg["threshold"],
+                inverted=cfg["inverted"],
+                granger_significant=granger_sig,
+            )
+            bt = compute_backtest(
+                eval_df,
+                col,
+                cfg["threshold"],
+                return_col=return_col,
+                inverted=cfg["inverted"],
+                granger_significant=granger_sig,
+            )
+            hr_dict = dataclasses.asdict(hr)
+            bt_dict = dataclasses.asdict(bt)
+            hr_dict["horizon_days"] = horizon_days
+            hr_dict["return_col"] = return_col
+            bt_dict["horizon_days"] = horizon_days
+            bt_dict["return_col"] = return_col
+            metrics[horizon_key]["hit_rates"].append(hr_dict)
+            metrics[horizon_key]["backtest"].append(bt_dict)
+    return metrics
+
+
+def _walk_forward_horizons(df: pd.DataFrame) -> dict[str, Any]:
+    import dataclasses
+
+    results: dict[str, Any] = {}
+    for idx_name in ("full", "core"):
+        results[idx_name] = {}
+        for horizon_days, return_col in _ALPHA_HORIZONS.items():
+            wf = walk_forward_validate(
+                df,
+                index_name=idx_name,
+                return_col=return_col,
+                horizon_days=horizon_days,
+            )
+            if wf is not None:
+                results[idx_name][str(horizon_days)] = dataclasses.asdict(wf)
+    return results
 
 
 def run_alpha_validation(
@@ -1315,12 +1595,21 @@ def run_alpha_validation(
         if wf is not None:
             walk_forward[idx_name] = dataclasses.asdict(wf)
 
+    horizon_metrics = _horizon_metrics(
+        df,
+        granger_results=granger_results,
+        granger_executed=granger_executed,
+    )
+
     return _sanitize_nan(
         {
             "hit_rates": hit_rates,
             "correlations": correlations,
             "backtest": backtest_results,
             "walk_forward": walk_forward,
+            "baseline_metrics": _baseline_metrics_by_horizon(df),
+            "horizon_metrics": horizon_metrics,
+            "walk_forward_horizons": _walk_forward_horizons(df),
         }
     )
 
@@ -1336,14 +1625,17 @@ __all__ = [
     "HitRateResult",
     "MIN_ROWS_FOR_ADF",
     "MIN_ROWS_FOR_GRANGER",
+    "StationarityGateResult",
     "TransferEntropy",
     "WalkForwardFoldResult",
     "WalkForwardResult",
+    "_ALPHA_HORIZONS",
     "_ALPHA_PREDICTOR_CONFIGS",
     "_PREDICTOR_TO_GRANGER_RAW",
     "_apply_bh_correction",
     "_calendar_span",
     "_ensure_stationary",
+    "_ensure_stationary_result",
     "_is_granger_significant",
     "_max_consecutive_gap",
     "_run_granger_all_lags",

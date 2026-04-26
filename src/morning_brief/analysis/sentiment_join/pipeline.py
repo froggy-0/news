@@ -263,12 +263,43 @@ def _build_granger_correction(statistical_results: dict[str, object]) -> dict[st
     }
 
 
+def _target_diagnostics(df: pd.DataFrame) -> dict[str, dict[str, object]]:
+    diagnostics: dict[str, dict[str, object]] = {}
+    target_cols = [
+        "btc_fwd_ret_1d",
+        "btc_fwd_ret_3d",
+        "btc_fwd_ret_7d",
+        "btc_fwd_vol_5d",
+        "btc_large_move_3d",
+        "btc_realized_vol_20d_lag1",
+        "btc_large_move_3d_vol_adj",
+    ]
+    for col in target_cols:
+        if col not in df.columns:
+            continue
+        series = pd.to_numeric(df[col], errors="coerce")
+        valid = series.dropna()
+        record: dict[str, object] = {
+            "valid_rows": int(len(valid)),
+            "null_ratio": round(float(series.isna().mean()), 4) if len(series) else 0.0,
+        }
+        if col.startswith("btc_large_move"):
+            record["positive_rate"] = float(valid.mean()) if len(valid) else None
+        elif len(valid):
+            record["mean"] = float(valid.mean())
+            record["std"] = float(valid.std(ddof=1)) if len(valid) > 1 else None
+        diagnostics[col] = record
+    return diagnostics
+
+
 def run_sentiment_join(settings: SentimentJoinSettings) -> int:
     try:
         today = datetime.now(timezone.utc).date()
         end_date = today.isoformat()
         start_date = (today - timedelta(days=settings.lookback_days)).isoformat()
-        btc_start_date = (today - timedelta(days=settings.lookback_days + 1)).isoformat()
+        returns_start_date = (today - timedelta(days=settings.lookback_days + 1)).isoformat()
+        btc_history_days = settings.lookback_days + max(settings.regime_warmup_days, 1)
+        btc_history_start_date = (today - timedelta(days=btc_history_days)).isoformat()
         sentiment_dates = _date_strings(start_date, end_date)
 
         sentiment_df = fetch_r2_sentiment(
@@ -290,17 +321,17 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
         )
 
         btc_close_df = fetch_btc_close_binance(
-            btc_start_date, end_date, api_key=settings.binance_api_key
+            btc_history_start_date, end_date, api_key=settings.binance_api_key
         )
         btc_fallback_used = bool(btc_close_df.attrs.get("fallback_used", False))
         _log_source_complete("btc", btc_close_df, fallback_used=btc_fallback_used)
         btc_source = btc_close_df.attrs.get("btc_source", "unknown")
         if btc_close_df.empty:
-            btc_close_df = _empty_close_frame(btc_start_date, end_date)
+            btc_close_df = _empty_close_frame(btc_history_start_date, end_date)
             btc_close_df["btc_quote_volume"] = float("nan")
 
         usdkrw_close_df = fetch_usdkrw_close(
-            btc_start_date,
+            returns_start_date,
             end_date,
             settings.kis_app_key,
             settings.kis_app_secret,
@@ -308,10 +339,10 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
         usdkrw_fallback_used = bool(usdkrw_close_df.attrs.get("fallback_used", False))
         _log_source_complete("usdkrw", usdkrw_close_df, fallback_used=usdkrw_fallback_used)
         if usdkrw_close_df.empty:
-            usdkrw_close_df = _empty_close_frame(btc_start_date, end_date)
+            usdkrw_close_df = _empty_close_frame(returns_start_date, end_date)
 
         # §4 3-4: VIX optional feature. FRED_API_KEY 미설정·실패 시 빈 DataFrame.
-        vix_df = fetch_vix_history(btc_start_date, end_date)
+        vix_df = fetch_vix_history(returns_start_date, end_date)
         _log_source_complete(
             "vix",
             vix_df,
@@ -343,11 +374,15 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
         btc_close_df = normalize_dates(btc_close_df)
         usdkrw_close_df = normalize_dates(usdkrw_close_df)
         etf_df = normalize_dates(etf_df) if not etf_df.empty else etf_df
+        if not futures_df.empty:
+            futures_df.attrs.update(futures_source_attrs)
+        if not etf_df.empty:
+            etf_df.attrs.update(etf_source_attrs)
         # §4 3-4: VIX는 미국 시장 종가 기반이라 주말/공휴일이 비어 있으므로
         # 전체 달력으로 reindex + 2일 ffill. usdkrw와 동일한 패턴.
         if not vix_df.empty:
             vix_df = normalize_dates(vix_df)
-            vix_df = reindex_to_calendar(vix_df, btc_start_date, end_date)
+            vix_df = reindex_to_calendar(vix_df, returns_start_date, end_date)
             vix_df, vix_ffill_days = forward_fill_prices(vix_df, ["vix"], max_periods=2)
         else:
             vix_ffill_days = 0
@@ -358,11 +393,31 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
         # BTC(24/7)와 inner merge 시 주말 행이 전부 drop되어 Granger 최소치(180)에
         # 도달하지 못하므로, 전체 달력일로 reindex해 금요일 close를 주말로 ffill한다.
         # max_periods를 3으로 올려 3일 연휴까지 커버한다.
-        usdkrw_close_df = reindex_to_calendar(usdkrw_close_df, btc_start_date, end_date)
+        usdkrw_close_df = reindex_to_calendar(usdkrw_close_df, returns_start_date, end_date)
         usdkrw_close_df, usdkrw_ffill_days = forward_fill_prices(
             usdkrw_close_df, ["close"], max_periods=3
         )
         total_ffill_days += btc_ffill_days + usdkrw_ffill_days + vix_ffill_days
+        ffill_breakdown = {
+            "btc": {
+                "filled_days": btc_ffill_days,
+                "max_periods": 2,
+                "start_date": btc_history_start_date,
+                "end_date": end_date,
+            },
+            "usdkrw": {
+                "filled_days": usdkrw_ffill_days,
+                "max_periods": 3,
+                "start_date": returns_start_date,
+                "end_date": end_date,
+            },
+            "vix": {
+                "filled_days": vix_ffill_days,
+                "max_periods": 2,
+                "start_date": returns_start_date,
+                "end_date": end_date,
+            },
+        }
         if not etf_df.empty:
             etf_df["etf_total_btc"] = pd.to_numeric(
                 etf_df["etf_total_btc"], errors="coerce"
@@ -374,6 +429,7 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             etf_df["etf_net_inflow_usd"] = etf_df["etf_total_btc"].diff() * etf_df["close"]
             etf_df = etf_df.drop(columns=["close"])
             etf_df = trim_to_date_range(etf_df, start_date, end_date)
+            etf_df.attrs.update(etf_source_attrs)
 
         btc_returns_df = compute_returns(btc_close_df, "close")
         btc_returns_df = _rename_returns(btc_returns_df, "btc")
@@ -391,6 +447,8 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             usdkrw_returns_df = _empty_return_frame("usdkrw", start_date, end_date)
 
         futures_df = normalize_dates(futures_df) if not futures_df.empty else futures_df
+        if not futures_df.empty:
+            futures_df.attrs.update(futures_source_attrs)
         if not vix_df.empty:
             vix_df = trim_to_date_range(vix_df, start_date, end_date)
 
@@ -612,6 +670,18 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             and isinstance(statistical_results.get("granger", []), list)
             else []
         )
+        stats_granger_skips = (
+            cast(list[dict[str, Any]], statistical_results.get("granger_skips", []))
+            if isinstance(statistical_results, dict)
+            and isinstance(statistical_results.get("granger_skips", []), list)
+            else []
+        )
+        stats_granger_skip_summary = (
+            cast(dict[str, int], statistical_results.get("granger_skip_summary", {}))
+            if isinstance(statistical_results, dict)
+            and isinstance(statistical_results.get("granger_skip_summary", {}), dict)
+            else {}
+        )
         stats_granger_eligible_rows = (
             cast(int, statistical_results.get("granger_eligible_rows"))
             if isinstance(statistical_results, dict)
@@ -647,6 +717,24 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             and isinstance(alpha_validation_results.get("walk_forward"), dict)
             else None
         )
+        alpha_baseline_metrics = (
+            cast(dict[str, Any], alpha_validation_results.get("baseline_metrics"))
+            if isinstance(alpha_validation_results, dict)
+            and isinstance(alpha_validation_results.get("baseline_metrics"), dict)
+            else None
+        )
+        alpha_horizon_metrics = (
+            cast(dict[str, Any], alpha_validation_results.get("horizon_metrics"))
+            if isinstance(alpha_validation_results, dict)
+            and isinstance(alpha_validation_results.get("horizon_metrics"), dict)
+            else None
+        )
+        alpha_walk_forward_horizons = (
+            cast(dict[str, Any], alpha_validation_results.get("walk_forward_horizons"))
+            if isinstance(alpha_validation_results, dict)
+            and isinstance(alpha_validation_results.get("walk_forward_horizons"), dict)
+            else None
+        )
 
         stats_metadata = build_stats_metadata_payload(
             run_id=f"sentiment-join-{run_date}",
@@ -660,6 +748,8 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             outlier_filtered_ratio=masked_ratio,
             granger_eligible_rows=stats_granger_eligible_rows,
             granger_executed=stats_granger_executed,
+            granger_skips=stats_granger_skips,
+            granger_skip_summary=stats_granger_skip_summary,
             exclusion_counts=exclusion_counts if exclusion_counts else None,
             granger_correction=(
                 _build_granger_correction(statistical_results)
@@ -671,6 +761,11 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             correlations=alpha_correlations,
             backtest=alpha_backtest,
             walk_forward=alpha_walk_forward,
+            baseline_metrics=alpha_baseline_metrics,
+            horizon_metrics=alpha_horizon_metrics,
+            walk_forward_horizons=alpha_walk_forward_horizons,
+            ffill_breakdown=ffill_breakdown,
+            target_diagnostics=_target_diagnostics(master_df),
             structured_sources=structured_sources,
         )
 

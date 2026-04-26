@@ -19,6 +19,8 @@ def reset_provider_runtime_state(monkeypatch):
     from morning_brief.data.sources.provider_runtime import reset_provider_runtime_state
 
     monkeypatch.setenv("COINDESK_NEWS_ENABLED", "false")
+    monkeypatch.delenv("THENEWSAPI_KEY", raising=False)
+    monkeypatch.delenv("MARKETAUX_KEY", raising=False)
     reset_provider_runtime_state()
     yield
     reset_provider_runtime_state()

@@ -24,6 +24,7 @@ class SentimentJoinSettings:
     r2_s3_endpoint: str = ""
     r2_access_key_id: str = ""
     r2_secret_access_key: str = ""
+    regime_warmup_days: int = 220
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -72,6 +73,12 @@ def load_sentiment_join_settings() -> SentimentJoinSettings:
         minimum=0,
         maximum=3650,
     )
+    regime_warmup_days = _env_bounded_int(
+        "SENTIMENT_JOIN_REGIME_WARMUP_DAYS",
+        default=220,
+        minimum=0,
+        maximum=730,
+    )
 
     return SentimentJoinSettings(
         lookback_days=lookback_days,
@@ -87,6 +94,7 @@ def load_sentiment_join_settings() -> SentimentJoinSettings:
         kis_app_secret=os.getenv("KIS_APP_SECRET", "").strip(),
         binance_api_key=os.getenv("SENTIMENT_JOIN_BINANCE_KEY", "").strip(),
         futures_lambda_arn=os.getenv("FUTURES_LAMBDA_ARN", "").strip(),
+        regime_warmup_days=regime_warmup_days,
     )
 
 

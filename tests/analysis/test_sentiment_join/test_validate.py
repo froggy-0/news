@@ -50,6 +50,8 @@ def _valid_df() -> pd.DataFrame:
             "btc_fwd_ret_7d": [float("nan")],
             "btc_fwd_vol_5d": [float("nan")],
             "btc_large_move_3d": pd.array([pd.NA], dtype="Int64"),
+            "btc_realized_vol_20d_lag1": [float("nan")],
+            "btc_large_move_3d_vol_adj": pd.array([pd.NA], dtype="Int64"),
             # §4 v4: full / core 하이브리드 지수 + 0~100 score (NaN 허용)
             "full_hybrid_index": [float("nan")],
             "full_hybrid_index_score": [float("nan")],
@@ -85,6 +87,10 @@ def _valid_df() -> pd.DataFrame:
             "btc_drawdown_90d": [float("nan")],
             "btc_above_ma200": [float("nan")],
             "btc_above_ma200_lag1": [float("nan")],
+            "btc_bear_regime_lag1": [float("nan")],
+            "sentiment_momentum_x_bear_lag1": [float("nan")],
+            "fng_change_1d_x_bear_lag1": [float("nan")],
+            "funding_rate_x_bear_lag1": [float("nan")],
         }
     )
 

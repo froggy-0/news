@@ -18,10 +18,9 @@ import pandas as pd
 import pytest
 
 from morning_brief.analysis.sentiment_join.variance import (
-    GATE_CONDITIONAL_HIT_RATE_PP,
-    GATE_FDR_Q,
     GATE_HIT_RATE_DELTA_PP,
     GATE_MAX_MASKED_RATIO,
+    GATE_MIN_COVERAGE,
     GATE_MIN_STABILITY,
     GATE_SHARPE_DELTA,
     bh_correct,
@@ -246,8 +245,8 @@ def test_power_analysis_min_sample_decreases_with_larger_effect() -> None:
 _GATE_PARAM = {
     "hit_rate_delta": (GATE_HIT_RATE_DELTA_PP, GATE_HIT_RATE_DELTA_PP - 0.001),
     "sharpe_delta": (GATE_SHARPE_DELTA, GATE_SHARPE_DELTA - 0.001),
+    "coverage": (GATE_MIN_COVERAGE, GATE_MIN_COVERAGE - 0.001),
     "masked_ratio": (GATE_MAX_MASKED_RATIO, GATE_MAX_MASKED_RATIO + 0.001),
-    "fdr_q": (GATE_FDR_Q - 0.001, GATE_FDR_Q),
     "stability": (GATE_MIN_STABILITY, GATE_MIN_STABILITY - 0.001),
 }
 _GATE_KEYS = list(_GATE_PARAM.keys())
@@ -264,10 +263,6 @@ def test_promotion_gate_truth_table(bits: tuple[bool, ...]) -> None:
         pass_val, fail_val = _GATE_PARAM[key]
         kwargs[key] = pass_val if bit else fail_val
 
-    # hit_rate_ci_lower 는 conditional_promote에서만 활성화
-    # → promote 판정과 분리하기 위해 항상 fail 값 (ci_lower < GATE_HIT_RATE_DELTA_PP)
-    kwargs["hit_rate_ci_lower"] = GATE_CONDITIONAL_HIT_RATE_PP - 0.001
-
     result = evaluate_promotion_gate(**kwargs)  # type: ignore[arg-type]
 
     all_pass = all(bits)
@@ -278,27 +273,27 @@ def test_promotion_gate_truth_table(bits: tuple[bool, ...]) -> None:
         assert result.decision != "promote", f"bits={bits} → should not be promote"
 
 
-def test_promotion_gate_conditional_requires_ci_lower() -> None:
-    """ci_lower ≥ +1pp + 나머지 4개 충족 → conditional_promote."""
+def test_promotion_gate_rejects_when_coverage_fails() -> None:
+    """coverage 미달이면 나머지 uplift 조건을 충족해도 승격하지 않는다."""
     result = evaluate_promotion_gate(
-        hit_rate_delta=GATE_HIT_RATE_DELTA_PP - 0.005,  # hit_rate Δ 미달 → promote X
+        hit_rate_delta=GATE_HIT_RATE_DELTA_PP,
         sharpe_delta=GATE_SHARPE_DELTA,
+        coverage=GATE_MIN_COVERAGE - 0.001,
         masked_ratio=GATE_MAX_MASKED_RATIO,
-        fdr_q=GATE_FDR_Q - 0.01,
         stability=GATE_MIN_STABILITY,
-        hit_rate_ci_lower=GATE_CONDITIONAL_HIT_RATE_PP,  # ≥ +1pp
     )
-    assert result.decision == "conditional_promote"
+    assert result.decision == "research_only"
 
 
 def test_promotion_gate_research_only_when_all_fail() -> None:
     result = evaluate_promotion_gate(
         hit_rate_delta=-0.05,
         sharpe_delta=-0.5,
+        coverage=0.0,
         masked_ratio=0.9,
-        fdr_q=0.99,
         stability=0.0,
         hit_rate_ci_lower=-0.05,
+        fdr_q=0.99,
     )
     assert result.decision == "research_only"
 
@@ -307,13 +302,15 @@ def test_promotion_gate_stores_inputs() -> None:
     result = evaluate_promotion_gate(
         hit_rate_delta=0.03,
         sharpe_delta=0.15,
+        coverage=0.9,
         masked_ratio=0.05,
-        fdr_q=0.05,
         stability=0.6,
         hit_rate_ci_lower=0.02,
+        fdr_q=0.05,
     )
     assert result.hit_rate_delta == pytest.approx(0.03)
     assert result.sharpe_delta == pytest.approx(0.15)
+    assert result.coverage == pytest.approx(0.9)
     assert result.masked_ratio == pytest.approx(0.05)
     assert result.fdr_q == pytest.approx(0.05)
     assert result.stability == pytest.approx(0.6)

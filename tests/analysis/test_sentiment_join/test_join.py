@@ -11,6 +11,7 @@ from hypothesis import strategies as st
 from morning_brief.analysis.sentiment_join.join import (
     _add_btc_direction_label,
     _add_futures_lag_columns,
+    _add_regime_interaction_features,
     _add_sentiment_lag_columns,
     _apply_sentiment_quality_gate,
     detect_outliers_rolling_iqr,
@@ -376,6 +377,26 @@ def test_add_sentiment_lag_columns_second_row_equals_first_value() -> None:
         df.loc[0, "news_sentiment_mean"]
     )
     assert result.loc[1, "fng_value_lag1"] == pytest.approx(float(df.loc[0, "fng_value"]))
+
+
+def test_add_regime_interaction_features_uses_lagged_bear_state() -> None:
+    df = pd.DataFrame(
+        {
+            "btc_above_ma200": [1.0, 0.0, 0.0],
+            "sentiment_momentum_lag1": [0.2, -0.1, 0.3],
+            "fng_change_1d_lag1": [4.0, -2.0, 1.5],
+            "funding_rate_lag1": [0.001, -0.002, 0.003],
+        }
+    )
+
+    result = _add_regime_interaction_features(df)
+
+    assert pd.isna(result.loc[0, "btc_bear_regime_lag1"])
+    assert result.loc[1, "btc_bear_regime_lag1"] == pytest.approx(0.0)
+    assert result.loc[2, "btc_bear_regime_lag1"] == pytest.approx(1.0)
+    assert result.loc[2, "sentiment_momentum_x_bear_lag1"] == pytest.approx(0.3)
+    assert result.loc[2, "fng_change_1d_x_bear_lag1"] == pytest.approx(1.5)
+    assert result.loc[2, "funding_rate_x_bear_lag1"] == pytest.approx(0.003)
 
 
 def test_merge_sources_sentiment_lag1_is_t_minus_1() -> None:
