@@ -6,7 +6,7 @@ import { DataState } from "@/components/ui/DataState";
 import { RevealSection } from "@/components/ui/RevealSection";
 
 function toneClass(trend: "up" | "down" | "neutral" | null): string {
-  if (trend === "up") return "text-[#00ffff]";
+  if (trend === "up") return "text-[var(--accent-primary)]";
   if (trend === "down") return "text-[#ff6b6b]";
   return "text-white/55";
 }
@@ -125,7 +125,7 @@ export function StocksBoard({
           </div>
           <div className="flex items-center gap-4 text-[10px] font-mono uppercase tracking-[0.18em] text-white/42">
             <span className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[#00ffff]" />
+              <span className="h-2 w-2 rounded-full bg-[var(--accent-primary)]" />
               상승
             </span>
             <span className="flex items-center gap-2">

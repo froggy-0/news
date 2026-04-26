@@ -27,7 +27,7 @@ export function MetadataSection({
           {archiveHref ? (
             <Link
               href={archiveHref}
-              className="inline-flex items-center justify-center rounded-full border border-white/10 px-4 py-2 text-[10px] font-mono uppercase tracking-[0.22em] text-white/58 transition hover:border-[#00ffff]/30 hover:text-white"
+              className="inline-flex items-center justify-center rounded-full border border-white/10 px-4 py-2 text-[10px] font-mono uppercase tracking-[0.22em] text-white/58 transition hover:border-[var(--accent-primary)]/30 hover:text-white"
             >
               전체 발행본 보기
             </Link>
@@ -99,7 +99,7 @@ function StatusCard({
       <p
         className={`mt-3 text-sm leading-6 ${
           tone === "positive"
-            ? "text-[#00ffff]"
+            ? "text-[var(--accent-primary)]"
             : tone === "warning"
               ? "text-[#ffd166]"
               : "text-white/78"

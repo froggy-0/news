@@ -116,7 +116,7 @@ export function UnsubscribeResult() {
   const iconClass = loading || submitting
     ? "border-white/12 bg-white/[0.03] text-white/68"
     : isSuccess
-      ? "border-[#00ff66]/25 bg-[#00ff66]/10 text-[#00ff66]"
+      ? "border-[var(--accent-primary)]/25 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]"
       : isReady
         ? "border-white/12 bg-white/[0.03] text-white/68"
         : "border-[#ff6b6b]/25 bg-[#ff6b6b]/10 text-[#ff6b6b]";
@@ -124,7 +124,7 @@ export function UnsubscribeResult() {
   const badgeClass = loading || submitting
     ? "border-white/12 text-white/52"
     : isSuccess
-      ? "border-[#00ff66]/25 text-[#00ff66]"
+      ? "border-[var(--accent-primary)]/25 text-[var(--accent-primary)]"
       : isReady
         ? "border-white/12 text-white/52"
         : "border-[#ff6b6b]/25 text-[#ff6b6b]";

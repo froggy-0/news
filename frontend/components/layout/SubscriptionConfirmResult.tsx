@@ -86,7 +86,7 @@ export function SubscriptionConfirmResult() {
                 loading
                   ? "border-white/12 bg-white/[0.03] text-white/68"
                   : isSuccess
-                    ? "border-[#00ff66]/25 bg-[#00ff66]/10 text-[#00ff66]"
+                    ? "border-[var(--accent-primary)]/25 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]"
                     : "border-[#ff6b6b]/25 bg-[#ff6b6b]/10 text-[#ff6b6b]"
               }`}
             >
@@ -112,7 +112,7 @@ export function SubscriptionConfirmResult() {
               loading
                 ? "border-white/12 text-white/52"
                 : isSuccess
-                  ? "border-[#00ff66]/25 text-[#00ff66]"
+                  ? "border-[var(--accent-primary)]/25 text-[var(--accent-primary)]"
                   : "border-[#ff6b6b]/25 text-[#ff6b6b]"
             }`}
           >
@@ -136,7 +136,7 @@ export function SubscriptionConfirmResult() {
             </Link>
             <Link
               href="/archive"
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold tracking-tight text-black transition hover:bg-[#00ffff]"
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold tracking-tight text-black transition hover:bg-[var(--accent-primary)]"
             >
               브리핑 아카이브 보기
               <ArrowRight className="h-4 w-4" />

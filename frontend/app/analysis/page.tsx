@@ -51,7 +51,7 @@ export default async function AnalysisPage() {
           diagnosticsReady={diagnosticsReady}
         />
 
-        <div className="mx-auto w-full max-w-6xl space-y-14 px-6 py-14">
+        <div className="mx-auto w-full space-y-14 px-6 py-14 md:px-20">
           {/* § PIPELINE HEALTH */}
           <section>
             <SectionHeader
@@ -181,7 +181,7 @@ export default async function AnalysisPage() {
 
   return (
     <main className="relative overflow-hidden pb-16">
-      <SiteHeader historyEntries={[]} />
+      <SiteHeader />
       {content}
     </main>
   );
@@ -199,17 +199,17 @@ function SectionHeader({
   description: string;
 }) {
   return (
-    <div className="border-b border-white/8 pb-5">
+    <div className="border-b border-[rgba(169,146,125,0.10)] pb-5">
       <div className="flex flex-wrap items-baseline gap-3">
-        <span className="font-mono text-[0.62rem] tabular-nums tracking-[0.12em] text-white/20">
+        <span className="text-[0.62rem] tabular-nums tracking-[0.12em] text-[var(--taupe)]/35">
           §{index}
         </span>
-        <h2 className="text-[1rem] font-semibold tracking-[-0.02em] text-white/90">{title}</h2>
-        <span className="font-mono text-[0.65rem] tracking-[0.06em] text-[var(--accent-primary)]/50">
+        <h2 className="text-[1rem] font-semibold text-[var(--smoke)]/90">{title}</h2>
+        <span className="text-[0.65rem] tracking-[0.06em] text-[var(--accent-primary)]/70">
           {badge}
         </span>
       </div>
-      <p className="mt-2 max-w-3xl font-mono text-[0.74rem] leading-6 text-white/36">{description}</p>
+      <p className="mt-2 max-w-3xl text-[0.74rem] leading-6 text-[var(--taupe)]/60">{description}</p>
     </div>
   );
 }

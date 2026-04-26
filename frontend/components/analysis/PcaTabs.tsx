@@ -28,14 +28,13 @@ export function PcaTabs({ pca }: { pca: PcaSection }) {
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-[var(--accent-primary)]/80">
-            Feature Loadings
+            지표 기여도
           </p>
           <p className="mt-2 max-w-2xl text-[0.82rem] leading-6 text-white/46">
-            Right of center raises the composite signal; left lowers it.
-            Bar length reflects each feature&apos;s share of total explanatory weight.
+            종합 신호를 올리거나 낮추는 지표의 방향과 설명력 비중을 함께 봅니다.
           </p>
         </div>
-        <div className="inline-flex w-fit overflow-hidden rounded-full border border-[rgba(255,220,140,0.1)] bg-black/24 p-1">
+        <div className="inline-flex w-fit overflow-hidden rounded-full border border-[rgba(169,146,125,0.1)] bg-black/24 p-1">
           {(["full", "core"] as TabId[]).map((tab) => (
             <button
               key={tab}
@@ -43,7 +42,7 @@ export function PcaTabs({ pca }: { pca: PcaSection }) {
               onClick={() => setActive(tab)}
               className={`rounded-full px-4 py-2 font-mono text-[0.68rem] uppercase tracking-[0.14em] transition ${
                 active === tab
-                  ? "bg-white/12 text-white shadow-[0_0_22px_rgba(212,135,13,0.18)]"
+                  ? "bg-white/12 text-white shadow-[0_0_22px_rgba(73,17,28,0.18)]"
                   : "text-white/34 hover:text-white/66"
               }`}
               aria-pressed={active === tab}
@@ -60,7 +59,7 @@ export function PcaTabs({ pca }: { pca: PcaSection }) {
         <>
           <div className="grid gap-2 md:grid-cols-5">
             <MetricChip label="Components" value={`${data.nComponents}`} />
-            <MetricChip label="Variance" value={`${(data.explainedVariance * 100).toFixed(1)}%`} />
+            <MetricChip label="설명력" value={`${(data.explainedVariance * 100).toFixed(1)}%`} />
             <MetricChip label="Coverage" value={`${(data.coverageRatio * 100).toFixed(1)}%`} />
             <MetricChip label="Features used" value={`${data.selectedFeatures.length}`} />
             <MetricChip label="Excluded" value={`${data.excludedFeatures.length}`} />
@@ -69,9 +68,9 @@ export function PcaTabs({ pca }: { pca: PcaSection }) {
           <QualityNotice data={data} />
 
           {driver && (
-            <div className="rounded-2xl border border-[rgba(255,220,140,0.1)] bg-black/22 p-4">
+            <div className="rounded-2xl border border-[rgba(169,146,125,0.1)] bg-black/22 p-4">
               <p className="font-mono text-[0.64rem] uppercase tracking-[0.16em] text-white/34">
-                Dominant Driver
+                가장 큰 기여 지표
               </p>
               <p className="mt-2 text-[1rem] font-semibold text-white/86">{driver.label}</p>
               <p className="mt-1 font-mono text-[0.68rem] text-white/40">
@@ -117,7 +116,7 @@ function PcaIndexView({ data }: { data: PcaIndex }) {
               className={`grid gap-3 rounded-2xl border p-3 transition md:grid-cols-[minmax(120px,0.9fr)_minmax(220px,2fr)_84px] md:items-center ${
                 active
                   ? "border-white/22 bg-white/[0.06]"
-                  : "border-[rgba(255,220,140,0.08)] bg-white/[0.02] hover:border-[rgba(255,220,140,0.16)] hover:bg-white/[0.04]"
+                  : "border-[rgba(169,146,125,0.08)] bg-white/[0.02] hover:border-[rgba(169,146,125,0.16)] hover:bg-white/[0.04]"
               }`}
               onMouseEnter={() => setActiveFeature(feature)}
               onMouseLeave={() => setActiveFeature(null)}
@@ -182,9 +181,9 @@ function PcaIndexView({ data }: { data: PcaIndex }) {
       </div>
 
       {data.excludedFeatures.length > 0 && (
-        <div className="rounded-2xl border border-[rgba(255,220,140,0.08)] bg-black/20 p-4">
+        <div className="rounded-2xl border border-[rgba(169,146,125,0.08)] bg-black/20 p-4">
           <p className="font-mono text-[0.64rem] uppercase tracking-[0.16em] text-white/30">
-            Excluded Features
+            함께 쓰기 어려워 제외한 지표
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {data.excludedFeatures.map((feature, index) => (
@@ -210,7 +209,7 @@ function QualityNotice({ data }: { data: PcaIndex }) {
     return (
       <div className="rounded-2xl border border-[var(--accent-green)]/16 bg-[var(--accent-green)]/5 px-4 py-3">
         <p className="font-mono text-[0.68rem] uppercase tracking-[0.12em] text-[var(--accent-green)]/80">
-          Data quality OK · composite signal computed from available features
+          데이터 상태 참고 필요 · composite signal computed from available features
         </p>
       </div>
     );
@@ -225,7 +224,7 @@ function QualityNotice({ data }: { data: PcaIndex }) {
         aria-expanded={open}
       >
         <span className="font-mono text-[0.68rem] uppercase tracking-[0.12em] text-[var(--accent-warning)]">
-          Data quality {formatQualityStatus(data.qualityStatus)} · coverage {(data.coverageRatio * 100).toFixed(1)}%
+          데이터 상태 참고 필요 · Data quality {formatQualityStatus(data.qualityStatus)} · coverage {(data.coverageRatio * 100).toFixed(1)}%
         </span>
         <span className="font-mono text-[0.68rem] text-white/36">{open ? "collapse" : "view reasons"}</span>
       </button>
@@ -246,7 +245,7 @@ function QualityNotice({ data }: { data: PcaIndex }) {
 
 function MetricChip({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-[rgba(255,220,140,0.1)] bg-black/24 px-3 py-3">
+    <div className="rounded-2xl border border-[rgba(169,146,125,0.1)] bg-black/24 px-3 py-3">
       <p className="font-mono text-[0.58rem] uppercase tracking-[0.14em] text-white/28">{label}</p>
       <p className="mt-1 font-mono text-[0.78rem] tabular-nums text-white/76">{value}</p>
     </div>
@@ -255,7 +254,7 @@ function MetricChip({ label, value }: { label: string; value: string }) {
 
 function EmptyState({ status }: { status: string }) {
   return (
-    <div className="flex min-h-[260px] flex-col items-center justify-center gap-3 rounded-2xl border border-[rgba(255,220,140,0.08)] bg-black/20">
+    <div className="flex min-h-[260px] flex-col items-center justify-center gap-3 rounded-2xl border border-[rgba(169,146,125,0.08)] bg-black/20">
       <p className="font-mono text-[0.72rem] uppercase tracking-[0.16em] text-[var(--text-muted)]">
         Composite signal not computed
       </p>

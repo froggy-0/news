@@ -2,12 +2,18 @@ import Link from "next/link";
 
 export function SiteFooter() {
   return (
-    <footer className="mt-24 border-t border-[rgba(255,220,140,0.08)] bg-[#0b0906]/90 px-8 py-14 backdrop-blur-md">
-      <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-6 text-center">
-        <div className="text-lg font-bold tracking-[-0.08em] text-white">SOVEREIGN BRIEF</div>
-        <nav className="flex flex-wrap justify-center gap-x-6 gap-y-3">
+    <footer className="relative z-10 border-t border-[rgba(169,146,125,0.10)] bg-[#0a0908]/88 px-6 py-6 backdrop-blur-md md:px-20 md:py-8">
+      <div className="mx-auto flex w-full flex-col items-center justify-between gap-3 text-center md:flex-row md:text-left">
+        <div className="flex items-center gap-2">
+          <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent-primary)]" />
+          <div className="text-sm font-semibold tracking-normal text-[var(--taupe)]/60">SOVEREIGN BRIEF</div>
+        </div>
+        <nav className="flex flex-wrap justify-center gap-x-5 gap-y-2">
           <Link className="footer-link" href="/archive">
             Archive
+          </Link>
+          <Link className="footer-link" href="/analysis">
+            Analysis
           </Link>
           <Link className="footer-link" href="/privacy">
             Privacy Policy
@@ -19,11 +25,8 @@ export function SiteFooter() {
             LLM Index
           </a>
         </nav>
-        <p className="max-w-2xl text-sm leading-relaxed text-white/40">
-          Precision-engineered market intelligence — sovereign clarity before the narrative forms.
-        </p>
-        <div className="text-[10px] uppercase tracking-[0.24em] text-white/28">
-          © 2026 SOVEREIGN BRIEF · PUBLIC STATIC EDITION
+        <div className="text-[10px] text-[var(--taupe)]/35 md:text-xs">
+          Market intelligence · 정보 제공 목적
         </div>
       </div>
     </footer>

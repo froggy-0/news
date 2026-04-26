@@ -83,10 +83,10 @@ export function GrangerSymmetric({ granger }: { granger: GrangerSection }) {
       <div className="flex min-h-[280px] items-center justify-center">
         <div className="text-center">
           <p className="font-mono text-[0.72rem] uppercase tracking-[0.18em] text-[var(--text-muted)]">
-            Granger test not executed
+            시간 순서 검정 미수행
           </p>
           <p className="mt-2 text-[0.82rem] text-white/38">
-            Insufficient data — temporal precedence display will appear once enough rows accumulate.
+            충분한 행이 쌓이면 시간 순서 검정 결과가 표시됩니다.
           </p>
         </div>
       </div>
@@ -98,16 +98,15 @@ export function GrangerSymmetric({ granger }: { granger: GrangerSection }) {
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-[var(--accent-primary)]/80">
-            Leading signal relationships
+            먼저 움직인 신호
           </p>
           <p className="mt-2 max-w-2xl font-mono text-[0.76rem] leading-6 text-white/40">
-            Each card represents one directional relationship. Compare lag 1d / 2d / 3d to find
-            the window with the strongest explanatory power.
+            감성과 시장 중 어느 쪽이 먼저 움직였는지 lag 1일 / 2일 / 3일 기준으로 비교합니다.
           </p>
         </div>
         <div className="flex flex-wrap gap-2 font-mono text-[0.63rem] uppercase tracking-[0.12em]">
           <span className="rounded-full border border-[var(--accent-primary)]/24 bg-[var(--accent-primary)]/8 px-3 py-1 text-[var(--accent-primary)]">
-            adj p&lt;0.05
+            보정 p&lt;0.05
           </span>
           <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-white/34">
             temporal precedence · lag-based
@@ -117,7 +116,7 @@ export function GrangerSymmetric({ granger }: { granger: GrangerSection }) {
 
       <div className="grid gap-5 lg:grid-cols-2">
         <SignalColumn
-          title="Sentiment → Market"
+          title="감성이 먼저"
           subtitle="news leads price"
           groups={forward}
           maxScore={maxScore}
@@ -127,7 +126,7 @@ export function GrangerSymmetric({ granger }: { granger: GrangerSection }) {
           onPin={(id) => setPinnedLag((current) => (current === id ? null : id))}
         />
         <SignalColumn
-          title="Market → Sentiment"
+          title="시장이 먼저"
           subtitle="price leads news"
           groups={reverse}
           maxScore={maxScore}
@@ -161,7 +160,7 @@ function SignalColumn({
   onPin: (id: string) => void;
 }) {
   return (
-    <section className="rounded-2xl border border-[rgba(255,220,140,0.1)] bg-[rgba(255,248,235,0.018)] p-4">
+    <section className="rounded-2xl border border-[rgba(169,146,125,0.1)] bg-[rgba(255,248,235,0.018)] p-4">
       <div className="mb-4 flex items-baseline justify-between gap-3">
         <h3 className="font-mono text-[0.72rem] uppercase tracking-[0.16em] text-white/72">
           {title}
@@ -183,7 +182,7 @@ function SignalColumn({
             />
           ))
         ) : (
-          <div className="rounded-xl border border-[rgba(255,220,140,0.08)] bg-white/[0.02] p-5">
+          <div className="rounded-xl border border-[rgba(169,146,125,0.08)] bg-white/[0.02] p-5">
             <p className="font-mono text-[0.72rem] text-white/36">No significant relationships detected.</p>
           </div>
         )}
@@ -214,7 +213,7 @@ function SignalCard({
 
   return (
     <article
-      className="relative rounded-xl border border-[rgba(255,220,140,0.1)] bg-white/[0.02] p-4 transition duration-300 hover:-translate-y-0.5 hover:border-[rgba(255,220,140,0.18)] hover:bg-white/[0.034]"
+      className="relative rounded-xl border border-[rgba(169,146,125,0.1)] bg-white/[0.02] p-4 transition duration-300 hover:-translate-y-0.5 hover:border-[rgba(169,146,125,0.18)] hover:bg-white/[0.034]"
       style={{ animation: `fadeLift 420ms ease-out ${index * 45}ms both` }}
     >
       <style>{`
@@ -227,7 +226,7 @@ function SignalCard({
         <div className="min-w-0">
           <p className="truncate text-[0.9rem] font-semibold text-white/86">{group.label}</p>
           <p className="mt-1 font-mono text-[0.63rem] text-white/30">
-            best lag: {group.optimal.lag}d · {formatAdjustedPValue(group.optimal.pvalueAdjusted)}
+            best lag: {group.optimal.lag}일 전 · {formatAdjustedPValue(group.optimal.pvalueAdjusted)}
           </p>
         </div>
         <div className="flex items-center gap-2 font-mono text-[0.62rem] uppercase tracking-[0.12em]">
@@ -267,7 +266,7 @@ function SignalCard({
               aria-pressed={pinnedLag === id}
             >
               <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-white/32">
-                lag {lag.lag}d
+                {lag.lag}일 전
               </span>
               <span
                 className={`mt-2 block h-2 rounded-full border ${
@@ -277,7 +276,7 @@ function SignalCard({
                   background: lag.significant
                     ? "var(--accent-primary)"
                     : "rgba(255,255,255,0.16)",
-                  boxShadow: lag.significant ? "0 0 18px rgba(212,135,13,0.36)" : "none",
+                  boxShadow: lag.significant ? "0 0 18px rgba(73,17,28,0.36)" : "none",
                   width: `${Math.max(16, pct)}%`,
                 }}
               />

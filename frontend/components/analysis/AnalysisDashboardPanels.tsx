@@ -96,7 +96,7 @@ function statusToneFromRatio(value: number | null | undefined, warning = 0.1): T
   return "red";
 }
 
-function isFullDiagnosticArtifact(artifact: SentimentInsightArtifact): boolean {
+export function isFullDiagnosticArtifact(artifact: SentimentInsightArtifact): boolean {
   return artifact.schemaVersion === "sentiment-insight-v2" && objectEntries(artifact.rawStats).length > 0;
 }
 
@@ -233,7 +233,7 @@ export function DataQualityMatrix({
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-[var(--accent-primary)]/80">
-              Data quality matrix
+              데이터 품질 매트릭스
             </p>
             <p className="mt-2 max-w-2xl font-mono text-[0.76rem] leading-6 text-white/42">
               Input data state to inspect before reading any signal output. Source lineage, ffill counts, and outlier masking in a single view.
@@ -359,7 +359,7 @@ export function AlphaValidationBoard({
               onClick={() => setActiveHorizon(horizonKey)}
               className={`cursor-pointer rounded-full px-4 py-2 font-mono text-[0.68rem] uppercase tracking-[0.14em] transition ${
                 activeHorizon === horizonKey
-                  ? "bg-white/12 text-white shadow-[0_0_22px_rgba(212,135,13,0.18)]"
+                  ? "bg-white/12 text-white shadow-[0_0_22px_rgba(73,17,28,0.18)]"
                   : "text-white/34 hover:text-white/66"
               }`}
               aria-pressed={activeHorizon === horizonKey}
@@ -680,7 +680,7 @@ function RatioRow({
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-white/8">
         <div
-          className="h-full rounded-full bg-[var(--accent-primary)] shadow-[0_0_18px_rgba(212,135,13,0.30)]"
+          className="h-full rounded-full bg-[var(--accent-primary)] shadow-[0_0_18px_rgba(73,17,28,0.30)]"
           style={{ width: `${width}%` }}
         />
       </div>

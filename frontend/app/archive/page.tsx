@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 
 import { ArchiveDateList } from "@/components/archive/ArchiveDateList";
 import { SiteHeader } from "@/components/layout/SiteHeader";
-import { buildHistoryEntries } from "@/lib/history";
 import { fetchArchiveSummaryByDate, fetchIndex } from "@/lib/r2";
 
 export const metadata: Metadata = {
@@ -16,10 +15,7 @@ export default async function ArchivePage() {
 
   return (
     <main className="pb-6">
-      <SiteHeader
-        variant="archive-list"
-        historyEntries={buildHistoryEntries(index.dates)}
-      />
+      <SiteHeader variant="archive-list" />
       <ArchiveDateList items={items} />
     </main>
   );

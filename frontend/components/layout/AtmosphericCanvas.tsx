@@ -2,117 +2,253 @@
 
 import { useEffect, useRef } from "react";
 
-function drawFrame(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  t: number,
-) {
-  ctx.clearRect(0, 0, w, h);
+const vertexShaderSource = `
+  attribute vec2 position;
+  varying vec2 vUv;
 
-  const cx = w * 0.5;
-  const cy = h * 0.46;
-  const baseRadius = Math.min(w, h) * 0.3;
-  const pulse = 1 + Math.sin(t * 0.0007) * 0.035;
-  const r = baseRadius * pulse;
+  void main() {
+    vUv = position * 0.5 + 0.5;
+    gl_Position = vec4(position, 0.0, 1.0);
+  }
+`;
 
-  // ── outer atmospheric haze ───────────────────────────────────────────────
-  const haze = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 3.2);
-  haze.addColorStop(0, "rgba(190, 85, 18, 0.20)");
-  haze.addColorStop(0.3, "rgba(140, 52, 10, 0.12)");
-  haze.addColorStop(0.6, "rgba(90, 28, 5, 0.06)");
-  haze.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = haze;
-  ctx.fillRect(0, 0, w, h);
+const fragmentShaderSource = `
+  precision highp float;
 
-  // ── sphere body (highlight offset up-left for 3-D illusion) ─────────────
-  const hx = cx - r * 0.2;
-  const hy = cy - r * 0.24;
-  const sphere = ctx.createRadialGradient(hx, hy, 0, cx, cy, r);
-  sphere.addColorStop(0.0, "rgba(255, 168, 48, 0.96)");
-  sphere.addColorStop(0.08, "rgba(230, 115, 28, 0.88)");
-  sphere.addColorStop(0.22, "rgba(185, 68, 14, 0.76)");
-  sphere.addColorStop(0.42, "rgba(130, 38, 8, 0.60)");
-  sphere.addColorStop(0.62, "rgba(78, 18, 4, 0.42)");
-  sphere.addColorStop(0.82, "rgba(36, 8, 2, 0.22)");
-  sphere.addColorStop(1.0, "rgba(0,0,0,0)");
+  uniform float uTime;
+  uniform vec2 uResolution;
+  varying vec2 vUv;
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.clip();
-  ctx.fillStyle = sphere;
-  ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
-  ctx.restore();
+  vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+  vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+  vec3 permute(vec3 x) { return mod289(((x * 34.0) + 1.0) * x); }
 
-  // ── rim light (bottom-right) ─────────────────────────────────────────────
-  const rimX = cx + r * 0.58;
-  const rimY = cy + r * 0.48;
-  const rim = ctx.createRadialGradient(rimX, rimY, 0, rimX, rimY, r * 0.55);
-  rim.addColorStop(0, "rgba(200, 110, 30, 0.18)");
-  rim.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = rim;
-  ctx.fillRect(0, 0, w, h);
-
-  // ── nebula wisps (3 slow-rotating arcs) ─────────────────────────────────
-  for (let i = 0; i < 3; i++) {
-    const angle = t * 0.000055 * (i % 2 === 0 ? 1 : -0.7) + (i * Math.PI * 2) / 3;
-    const dx = Math.cos(angle);
-    const dy = Math.sin(angle) * 0.55;
-    const wx = cx + dx * r * 0.72;
-    const wy = cy + dy * r * 0.72;
-    const wispR = r * (0.5 + i * 0.12);
-    const wisp = ctx.createRadialGradient(wx, wy, 0, wx, wy, wispR);
-    const alpha = 0.09 + Math.sin(t * 0.0005 + i * 1.8) * 0.04;
-    wisp.addColorStop(0, `rgba(170, 62, 12, ${alpha})`);
-    wisp.addColorStop(0.5, `rgba(110, 34, 6, ${alpha * 0.5})`);
-    wisp.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = wisp;
-    ctx.fillRect(0, 0, w, h);
+  float noise(vec2 v) {
+    const vec4 C = vec4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
+    vec2 i = floor(v + dot(v, C.yy));
+    vec2 x0 = v - i + dot(i, C.xx);
+    vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+    vec4 x12 = x0.xyxy + C.xxzz;
+    x12.xy -= i1;
+    i = mod289(i);
+    vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
+    vec3 m = max(0.5 - vec3(dot(x0, x0), dot(x12.xy, x12.xy), dot(x12.zw, x12.zw)), 0.0);
+    m = m * m;
+    m = m * m;
+    vec3 x = 2.0 * fract(p * C.www) - 1.0;
+    vec3 h = abs(x) - 0.5;
+    vec3 ox = floor(x + 0.5);
+    vec3 a0 = x - ox;
+    m *= 1.79284291400159 - 0.85373472095314 * (a0 * a0 + h * h);
+    vec3 g;
+    g.x = a0.x * x0.x + h.x * x0.y;
+    g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+    return 130.0 * dot(m, g);
   }
 
-  // ── inner bright core (tiny, shimmers) ───────────────────────────────────
-  const shimmer = 0.7 + Math.sin(t * 0.0018) * 0.3;
-  const core = ctx.createRadialGradient(hx, hy, 0, hx, hy, r * 0.18);
-  core.addColorStop(0, `rgba(255, 210, 120, ${0.55 * shimmer})`);
-  core.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = core;
-  ctx.fillRect(0, 0, w, h);
+  float fbm(vec2 p) {
+    float value = 0.0;
+    float amplitude = 0.5;
+    for (int i = 0; i < 5; i++) {
+      value += amplitude * noise(p);
+      p *= 2.0;
+      amplitude *= 0.5;
+    }
+    return value;
+  }
+
+  float fbmLite(vec2 p) {
+    float value = 0.0;
+    float amplitude = 0.5;
+    for (int i = 0; i < 3; i++) {
+      value += amplitude * noise(p);
+      p *= 2.0;
+      amplitude *= 0.5;
+    }
+    return value;
+  }
+
+  float roundedBox(vec2 p, vec2 b, float r) {
+    vec2 q = abs(p) - b + r;
+    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
+  }
+
+  void main() {
+    float aspect = uResolution.x / uResolution.y;
+    vec2 uv = vUv - 0.5;
+    uv.x *= aspect;
+    float t = uTime;
+
+    float angle = 0.785;
+    mat2 rot = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
+    vec2 p = rot * uv;
+
+    float size = 0.16;
+    float radius = 0.04;
+    float d = roundedBox(p, vec2(size), radius);
+    float mask = 1.0 - smoothstep(-0.001, 0.002, d);
+
+    vec2 drift = vec2(
+      fbmLite(p * 2.5 + vec2(t * 0.12, t * 0.08)),
+      fbmLite(p * 2.5 + vec2(t * 0.09 + 5.2, t * 0.10 + 1.3))
+    );
+    vec2 grain = p * 2.0 + drift * 1.5;
+    float flow = fbm(grain);
+
+    float eps = 0.005;
+    float hx = fbm(grain + vec2(eps, 0.0)) - fbm(grain - vec2(eps, 0.0));
+    float hy = fbm(grain + vec2(0.0, eps)) - fbm(grain - vec2(0.0, eps));
+    vec3 normal = normalize(vec3(-hx * 0.5, -hy * 0.5, 0.5));
+    vec3 view = vec3(0.0, 0.0, 1.0);
+
+    vec2 lightPos = vec2(sin(t * 0.25) * 0.10, cos(t * 0.20) * 0.08);
+    float lightDist = length(p - lightPos);
+    float lightRadius = 0.09 + sin(t * 0.4) * 0.02;
+    float lightAtten = exp(-lightDist * lightDist / (lightRadius * lightRadius * 0.5));
+    vec3 lightDir = normalize(vec3(lightPos - p, 0.8));
+    vec3 halfDir = normalize(lightDir + view);
+    float spec = pow(max(dot(normal, halfDir), 0.0), 40.0);
+    float sharpSpec = pow(max(dot(normal, halfDir), 0.0), 200.0);
+
+    vec2 warmPos = vec2(cos(t * 0.18 + 3.0) * 0.12, sin(t * 0.15 + 1.5) * 0.10);
+    float warmDist = length(p - warmPos);
+    float warmAtten = exp(-warmDist * warmDist / (0.06 * 0.06));
+    vec3 warmDir = normalize(vec3(warmPos - p, 0.7));
+    vec3 warmHalf = normalize(warmDir + view);
+    float warmSpec = pow(max(dot(normal, warmHalf), 0.0), 60.0);
+
+    float shift = flow * 2.0 + t * 0.15;
+    vec3 tint = vec3(
+      sin(shift) * 0.5 + 0.5,
+      sin(shift + 2.094) * 0.5 + 0.5,
+      sin(shift + 4.189) * 0.5 + 0.5
+    );
+    tint = mix(tint, vec3(0.20, 0.15, 0.70), 0.6);
+
+    vec3 surface = vec3(0.005, 0.004, 0.010);
+    surface += tint * 0.30 * lightAtten;
+    surface += vec3(0.40, 0.45, 1.00) * spec * lightAtten * 0.70;
+    surface += vec3(0.90, 0.92, 1.00) * sharpSpec * lightAtten * 1.50;
+    surface += vec3(0.50, 0.25, 0.08) * warmSpec * warmAtten * 0.50;
+    surface += vec3(0.60, 0.35, 0.10) * warmAtten * 0.08;
+    surface += vec3(0.06, 0.06, 0.15) * pow(1.0 - max(dot(normal, view), 0.0), 4.0) * 0.15;
+
+    float rim = exp(-abs(d) * 80.0) * 0.20;
+    float edgeAngle = atan(p.y, p.x);
+    vec3 rimColor = mix(
+      vec3(0.15, 0.18, 0.50),
+      vec3(0.30, 0.15, 0.05),
+      sin(edgeAngle * 2.0 + t * 0.3) * 0.5 + 0.5
+    );
+
+    vec2 mirrorP = rot * (uv + vec2(0.0, 0.36));
+    float mirrorD = roundedBox(mirrorP, vec2(size * 0.85), radius);
+    float mirrorMask = 1.0 - smoothstep(-0.001, 0.002, mirrorD);
+    float mirrorFade = smoothstep(0.0, 0.18, -(uv.y + 0.08));
+
+    vec3 color = vec3(0.0);
+    color += surface * mask;
+    color += rimColor * rim;
+    color += surface * 0.15 * mirrorFade * mirrorMask * (1.0 - mask);
+
+    gl_FragColor = vec4(color, 1.0);
+  }
+`;
+
+function createShader(
+  gl: WebGLRenderingContext,
+  type: number,
+  source: string,
+): WebGLShader | null {
+  const shader = gl.createShader(type);
+  if (!shader) return null;
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    console.error(gl.getShaderInfoLog(shader));
+    gl.deleteShader(shader);
+    return null;
+  }
+  return shader;
+}
+
+function createProgram(canvas: HTMLCanvasElement) {
+  const gl = canvas.getContext("webgl", { antialias: true, alpha: true });
+  if (!gl) return null;
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+  if (!vertexShader || !fragmentShader) return null;
+
+  const program = gl.createProgram();
+  if (!program) return null;
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error(gl.getProgramInfoLog(program));
+    return null;
+  }
+
+  gl.useProgram(program);
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(
+    gl.ARRAY_BUFFER,
+    new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+    gl.STATIC_DRAW,
+  );
+
+  const position = gl.getAttribLocation(program, "position");
+  gl.enableVertexAttribArray(position);
+  gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+
+  return {
+    gl,
+    uResolution: gl.getUniformLocation(program, "uResolution"),
+    uTime: gl.getUniformLocation(program, "uTime"),
+  };
 }
 
 export function AtmosphericCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rafRef = useRef<number>(0);
+  const frameRef = useRef<number>(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const renderer = createProgram(canvas);
+    if (!renderer) return;
 
-    function resize() {
-      if (!canvas) return;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const startedAt = performance.now();
+
+    const resize = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = window.innerWidth * dpr;
-      canvas.height = window.innerHeight * dpr;
-      canvas.style.width = `${window.innerWidth}px`;
-      canvas.style.height = `${window.innerHeight}px`;
-      if (ctx) ctx.scale(dpr, dpr);
-    }
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      canvas.width = Math.max(1, Math.floor(width * dpr));
+      canvas.height = Math.max(1, Math.floor(height * dpr));
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      renderer.gl.viewport(0, 0, canvas.width, canvas.height);
+    };
+
+    const render = () => {
+      const time = reduceMotion ? 0.0 : (performance.now() - startedAt) / 1000;
+      renderer.gl.uniform1f(renderer.uTime, time);
+      renderer.gl.uniform2f(renderer.uResolution, canvas.width, canvas.height);
+      renderer.gl.drawArrays(renderer.gl.TRIANGLE_STRIP, 0, 4);
+      if (!reduceMotion) frameRef.current = requestAnimationFrame(render);
+    };
 
     resize();
+    render();
     window.addEventListener("resize", resize);
 
-    function loop(t: number) {
-      if (!canvas || !ctx) return;
-      drawFrame(ctx, window.innerWidth, window.innerHeight, t);
-      rafRef.current = requestAnimationFrame(loop);
-    }
-    rafRef.current = requestAnimationFrame(loop);
-
     return () => {
-      cancelAnimationFrame(rafRef.current);
+      cancelAnimationFrame(frameRef.current);
       window.removeEventListener("resize", resize);
     };
   }, []);
@@ -120,7 +256,7 @@ export function AtmosphericCanvas() {
   return (
     <canvas
       ref={canvasRef}
-      className="pointer-events-none fixed inset-0 z-0 opacity-[0.42] will-change-transform"
+      className="pointer-events-none fixed inset-0 z-0 opacity-40 will-change-transform"
       aria-hidden="true"
     />
   );
