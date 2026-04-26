@@ -7,7 +7,7 @@ import { fetchIndex, fetchLatest } from "@/lib/r2";
 
 export const metadata: Metadata = {
   title: "SOVEREIGN BRIEF",
-  description: "글로벌 마켓 데이터의 정교한 연결, 원본의 무결성으로 완성하는 투자 주권.",
+  description: "Structured market intelligence — quantitative signals, news sentiment, and daily briefings for sovereign investors.",
 };
 
 export default async function HomePage() {

@@ -37,25 +37,25 @@ function cleanFeatureName(value: string): string {
 export function formatFeatureLabel(value: string): string {
   const cleaned = cleanFeatureName(value);
   const labels: Record<string, string> = {
-    "news sentiment": "뉴스 감성",
-    "btc log return": "BTC 수익률",
-    "btc return": "BTC 가격 변화",
-    "fng value": "공포·탐욕 지수",
-    "funding rate": "펀딩비",
-    "volume change pct": "거래량 변화",
-    "btc long short ratio": "롱·숏 비율",
-    "etf net inflow usd": "ETF 순유입",
-    "vix": "VIX 변동성",
-    "sentiment momentum": "감성 모멘텀",
-    "sentiment accel": "감성 가속도",
-    "fng change 1d": "공포·탐욕 1일 변화",
-    "fng change 5d": "공포·탐욕 5일 변화",
-    "btc bear regime": "BTC 약세 regime",
-    "sentiment momentum x bear": "약세 감성 모멘텀",
-    "fng change 1d x bear": "약세 공포·탐욕 변화",
-    "funding rate x bear": "약세 펀딩비",
-    "full hybrid index score": "확장 종합 점수",
-    "core hybrid index score": "핵심 종합 점수",
+    "news sentiment": "News Sentiment",
+    "btc log return": "BTC Log Return",
+    "btc return": "BTC Price Change",
+    "fng value": "Fear & Greed Index",
+    "funding rate": "Funding Rate",
+    "volume change pct": "Volume Change",
+    "btc long short ratio": "Long/Short Ratio",
+    "etf net inflow usd": "ETF Net Inflow",
+    "vix": "VIX Volatility",
+    "sentiment momentum": "Sentiment Momentum",
+    "sentiment accel": "Sentiment Accel",
+    "fng change 1d": "F&G Change 1d",
+    "fng change 5d": "F&G Change 5d",
+    "btc bear regime": "BTC Bear Regime",
+    "sentiment momentum x bear": "Bear Sentiment Momentum",
+    "fng change 1d x bear": "Bear F&G Change",
+    "funding rate x bear": "Bear Funding Rate",
+    "full hybrid index score": "Extended Index Score",
+    "core hybrid index score": "Core Index Score",
   };
   return labels[cleaned] ?? cleaned;
 }
@@ -80,23 +80,23 @@ export function formatAdjustedPValue(value: number | null): string {
 }
 
 export function formatQualityStatus(value: string): string {
-  if (value === "ok") return "양호";
-  if (value === "degraded") return "참고 필요";
-  if (value === "critical") return "부족";
+  if (value === "ok") return "OK";
+  if (value === "degraded") return "Degraded";
+  if (value === "critical") return "Critical";
   return value;
 }
 
 export function formatQualityReason(value: string): string {
   const reasons: Record<string, string> = {
-    coverage_below_threshold: "데이터 확보율이 기준보다 낮습니다",
-    missing_full_expansion_features: "확장 지표 일부가 부족합니다",
-    btc_etf_history_unavailable: "ETF 과거 데이터가 부족합니다",
-    futures_oi_incomplete: "선물 미결제약정 데이터가 부족합니다",
-    futures_lsr_incomplete: "롱·숏 비율 데이터가 부족합니다",
-    futures_funding_incomplete: "펀딩비 데이터가 부족합니다",
+    coverage_below_threshold: "Coverage below threshold",
+    missing_full_expansion_features: "Some extended features missing",
+    btc_etf_history_unavailable: "Insufficient ETF history",
+    futures_oi_incomplete: "Futures open interest data incomplete",
+    futures_lsr_incomplete: "Long/short ratio data incomplete",
+    futures_funding_incomplete: "Funding rate data incomplete",
   };
   if (value.toLowerCase().startsWith("vif")) {
-    return "다른 지표와 너무 비슷해 제외했습니다";
+    return "Excluded — too collinear with another feature";
   }
   return reasons[value] ?? value.replace(/_/g, " ");
 }
@@ -174,4 +174,12 @@ export function deriveAnalysisSummary(artifact: SentimentInsightArtifact): Analy
     qualityStatus: dominantQuality(artifact.pca.full, artifact.pca.core),
     coverageRatio: Math.max(artifact.pca.full.coverageRatio, artifact.pca.core.coverageRatio),
   };
+}
+
+
+export function isFullDiagnosticArtifact(artifact: SentimentInsightArtifact): boolean {
+  return (
+    artifact.schemaVersion === "sentiment-insight-v2" &&
+    Object.keys(artifact.rawStats ?? {}).length > 0
+  );
 }

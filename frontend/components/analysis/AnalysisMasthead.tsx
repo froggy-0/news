@@ -35,7 +35,7 @@ export function AnalysisMasthead({
   const artifactOk = diagnosticsReady;
 
   return (
-    <div className="border-b border-white/10">
+    <div className="border-b border-[rgba(255,220,140,0.1)]">
       {/* Stale warning strip */}
       {staleWarning && (
         <div className="border-b border-[var(--accent-warning)]/30 bg-[var(--accent-warning)]/8 px-6 py-2.5">
@@ -85,7 +85,7 @@ export function AnalysisMasthead({
           </div>
 
           {/* Run metadata card */}
-          <div className="shrink-0 rounded-2xl border border-white/10 bg-white/[0.028] px-5 py-4 font-mono">
+          <div className="shrink-0 rounded-2xl border border-[rgba(255,220,140,0.1)] bg-white/[0.022] px-5 py-4 font-mono">
             <p className="mb-3 text-[0.6rem] uppercase tracking-[0.2em] text-white/28">Run Metadata</p>
             <dl className="grid grid-cols-2 gap-x-8 gap-y-2.5 text-[0.7rem]">
               <MetaItem label="Reference" value={referenceDate} />
@@ -168,9 +168,9 @@ function KpiCard({
 }) {
   const hasSignal = signal !== null;
   return (
-    <article className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.028] p-4 transition-all duration-300 hover:border-white/18 hover:bg-white/[0.04]">
+    <article className="group relative overflow-hidden rounded-2xl border border-[rgba(255,220,140,0.1)] bg-white/[0.022] p-4 transition-all duration-300 hover:border-[rgba(255,220,140,0.18)] hover:bg-white/[0.036]">
       <div className="absolute inset-0 rounded-2xl opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-        style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(0,255,255,0.04), transparent 70%)" }}
+        style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(212,135,13,0.06), transparent 70%)" }}
       />
       <p className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-white/28">{label}</p>
       <p className="mt-0.5 font-mono text-[0.58rem] tracking-[0.08em] text-[var(--accent-primary)]/50">
@@ -209,7 +209,7 @@ function KpiMetric({
           : "rgba(255,255,255,0.38)";
 
   return (
-    <article className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.028] p-4 transition-all duration-300 hover:border-white/18 hover:bg-white/[0.04]">
+    <article className="group relative overflow-hidden rounded-2xl border border-[rgba(255,220,140,0.1)] bg-white/[0.022] p-4 transition-all duration-300 hover:border-[rgba(255,220,140,0.18)] hover:bg-white/[0.036]">
       <div className="absolute inset-0 rounded-2xl opacity-0 transition-opacity duration-300 group-hover:opacity-100"
         style={{ background: `radial-gradient(ellipse at 50% 0%, color-mix(in srgb, ${accentColor} 8%, transparent), transparent 70%)` }}
       />

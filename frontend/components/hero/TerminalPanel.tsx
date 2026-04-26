@@ -32,7 +32,7 @@ export function TerminalPanel({
   const lines: TerminalLine[] = [
     { text: "system.intelligence — sovereign brief", type: "SYSTEM" },
     {
-      text: `발행 기준일 ${meta.date} · 생성 시각 ${formatIssueTime(meta.generatedAt)} KST`,
+      text: `reference date ${meta.date} · generated ${formatIssueTime(meta.generatedAt)} KST`,
       type: "INFO",
       status: "OK",
       tone: "primary",

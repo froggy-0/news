@@ -4,75 +4,86 @@ import type { BriefData } from "@schema/brief.types";
 import { SubscriptionForm } from "@/components/layout/SubscriptionForm";
 import { displayHeadline, formatPublicationDate, hasUsableHeadline } from "@/lib/format";
 
-import { ScatterText } from "./ScatterText";
 import { TerminalPanel } from "./TerminalPanel";
 
-export function HomeHero({ brief, heroSeed, latestDate }: { brief: BriefData; heroSeed: string; latestDate: string }) {
+export function HomeHero({
+  brief,
+  heroSeed,
+  latestDate,
+}: {
+  brief: BriefData;
+  heroSeed: string;
+  latestDate: string;
+}) {
   const heroHeadline = hasUsableHeadline(brief.meta.displayHeadline || brief.aiJudgment.headline)
     ? displayHeadline(brief.meta.displayHeadline || brief.aiJudgment.headline)
-    : `${formatPublicationDate(brief.meta.date)} 브리프`;
+    : `${formatPublicationDate(brief.meta.date)} Brief`;
 
   return (
     <section className="hero-stage" data-hero-seed={heroSeed}>
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-5 sm:px-6">
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.08fr)_minmax(20rem,0.92fr)] lg:items-end">
-          <div className="space-y-5">
-            <div className="space-y-3">
-              <p className="eyebrow">Daily Intelligence Brief</p>
-              <h1 className="max-w-[12ch] text-[2rem] font-black leading-[1.04] tracking-[-0.07em] text-[var(--text-primary)] md:text-[3.4rem]">
-                <span>주권 있는</span>
-                <br />
-                <span>투자자를 위한</span>
-                <br />
-                <ScatterText
-                  text="데이터 인텔리전스"
-                  seed={heroSeed}
-                  fontSize={58}
-                  density={0.72}
-                  spread={0.28}
-                  durationMs={920}
-                />
-              </h1>
-              <p className="copy-block max-w-[36rem] text-[0.98rem] text-[var(--text-secondary)]">
-                글로벌 마켓 데이터의 정교한 연결과 해석을 한 화면에서 먼저 읽고,
-                <br className="hidden sm:block" />
-                자세한 숫자와 뉴스 흐름으로 자연스럽게 내려가도록 설계했습니다.
-              </p>
-            </div>
+      <div className="relative z-10 mx-auto flex w-full max-w-4xl flex-col items-center px-6 text-center">
 
-            <div className="card-family-reading space-y-4 rounded-[var(--card-radius-reading)] p-[var(--card-padding-reading)]">
-              <div className="space-y-2">
-                <p className="section-title">오늘의 핵심 판단</p>
-                <p className="max-w-[34rem] text-[1rem] leading-7 text-[var(--text-primary)] md:text-[1.05rem]">
-                  {heroHeadline}
-                </p>
-                <p className="text-[0.84rem] leading-6 text-[var(--text-secondary)]">
-                  발행 기준일 {brief.meta.date} 기준으로 가장 먼저 읽어야 할 브리프를 상단에서 바로 엽니다.
-                </p>
-              </div>
+        {/* Eyebrow */}
+        <p
+          className="mb-10 font-mono text-[0.65rem] uppercase tracking-[0.32em]"
+          style={{ color: "var(--accent-primary)", opacity: 0.7 }}
+        >
+          Wall Street · Sovereign Intelligence · {brief.meta.date}
+        </p>
 
-              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                <a href={`/archive/${latestDate}`} className="hero-cta-primary">
-                  오늘 브리프 먼저 읽기
-                </a>
-              </div>
-            </div>
-          </div>
+        {/* Giant editorial headline */}
+        <h1
+          className="mb-7 leading-[1.04] tracking-[-0.05em]"
+          style={{
+            fontFamily: "var(--font-instrument-serif), serif",
+            fontStyle: "italic",
+            fontSize: "clamp(3rem, 7.5vw, 6rem)",
+          }}
+        >
+          <span className="block text-[var(--text-primary)]">Sovereign Market</span>
+          <span className="block" style={{ color: "var(--accent-primary)" }}>
+            Intelligence.
+          </span>
+        </h1>
 
-          <div className="space-y-4 lg:pb-1">
-            <div id="subscribe" className="card-family-utility rounded-[var(--card-radius-utility)] p-[var(--card-padding-utility)]">
-              <div className="mb-4 space-y-2">
-                <p className="section-title">Brief Access</p>
-                <p className="text-[0.92rem] leading-6 text-[var(--text-secondary)]">
-                  무료 구독으로 다음 발행부터 같은 형식의 브리프를 이메일로 받습니다.
-                </p>
-              </div>
-              <SubscriptionForm />
-            </div>
-          </div>
+        {/* Subheadline */}
+        <p className="mb-10 max-w-2xl text-[1.05rem] leading-7 text-white/50">
+          Structured market data, news sentiment, and quantitative signals unified
+          into a single daily intelligence brief — before the narrative forms.
+        </p>
+
+        {/* Subscription form — centered, full-width */}
+        <div id="subscribe" className="mb-12 w-full max-w-md">
+          <SubscriptionForm />
         </div>
 
-        <div className="pt-1">
+        {/* Today's signal card */}
+        <div
+          className="w-full max-w-2xl overflow-hidden rounded-2xl border p-6 text-left"
+          style={{
+            borderColor: "rgba(255,220,140,0.12)",
+            background: "linear-gradient(145deg, rgba(255,248,235,0.045), rgba(255,248,235,0.012))",
+            backdropFilter: "blur(16px)",
+          }}
+        >
+          <p
+            className="mb-3 font-mono text-[0.62rem] uppercase tracking-[0.22em]"
+            style={{ color: "var(--accent-primary)", opacity: 0.65 }}
+          >
+            Today&apos;s Signal · {brief.meta.date}
+          </p>
+          <p className="mb-5 text-[1rem] leading-7 text-white/82">{heroHeadline}</p>
+          <a
+            href={`/archive/${latestDate}`}
+            className="hero-cta-primary inline-flex rounded-[14px] px-6 py-3 text-[14px]"
+            style={{ minHeight: "auto" }}
+          >
+            Read Today&apos;s Brief
+          </a>
+        </div>
+
+        {/* Terminal status strip */}
+        <div className="mt-8 w-full max-w-2xl">
           <TerminalPanel meta={brief.meta} compact />
         </div>
       </div>

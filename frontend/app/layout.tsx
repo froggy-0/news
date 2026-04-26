@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Instrument_Serif, Inter, JetBrains_Mono } from "next/font/google";
 
+import { AtmosphericCanvas } from "@/components/layout/AtmosphericCanvas";
 import { BottomTabBar } from "@/components/layout/BottomTabBar";
 import { ScrollProgressBar } from "@/components/layout/ScrollProgressBar";
 import { SiteFooter } from "@/components/layout/SiteFooter";
@@ -31,7 +32,8 @@ const instrumentSerif = Instrument_Serif({
 
 export const metadata: Metadata = {
   title: "SOVEREIGN BRIEF",
-  description: "글로벌 마켓 데이터의 정교한 연결, 원본의 무결성으로 완성하는 투자 주권.",
+  description:
+    "Structured market intelligence — quantitative signals, news sentiment, and daily briefings for sovereign investors.",
 };
 
 export default function RootLayout({
@@ -41,10 +43,11 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="ko"
+      lang="en"
       className={`${inter.variable} ${jetBrainsMono.variable} ${instrumentSerif.variable}`}
     >
       <body>
+        <AtmosphericCanvas />
         <ScrollProgressBar />
         <div className="site-noise" />
         <div className="page-shell">

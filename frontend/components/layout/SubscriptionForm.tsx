@@ -31,13 +31,13 @@ export function SubscriptionForm() {
       });
       const payload = (await response.json()) as RequestSubscriptionResponse;
       if (!response.ok) {
-        throw new Error("error" in payload ? payload.error : "구독 신청 중 오류가 발생했습니다.");
+        throw new Error("error" in payload ? payload.error : "An error occurred. Please try again.");
       }
-      setMessage("message" in payload ? payload.message : "확인 메일을 보냈습니다.");
+      setMessage("message" in payload ? payload.message : "Check your inbox for a confirmation link.");
       setEmail("");
     } catch (submitError) {
       setError(
-        submitError instanceof Error ? submitError.message : "구독 신청 중 오류가 발생했습니다.",
+        submitError instanceof Error ? submitError.message : "An error occurred. Please try again.",
       );
     } finally {
       setSubmitting(false);
@@ -48,15 +48,15 @@ export function SubscriptionForm() {
     <form onSubmit={handleSubmit} className="space-y-3">
       <div className="relative group">
         <label className="sr-only" htmlFor="newsletter-email">
-          이메일 주소
+          Email address
         </label>
         <input
           id="newsletter-email"
           type="email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          placeholder="이메일 주소"
-          className="h-14 w-full rounded-[20px] border border-white/14 bg-black/60 px-4 pr-11 text-[15px] tracking-tight text-white outline-none transition placeholder:text-white/28 focus:border-[var(--accent-primary)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--accent-primary)_28%,transparent)]"
+          placeholder="Enter your email"
+          className="h-14 w-full rounded-[20px] border border-[rgba(255,220,140,0.14)] bg-[#0b0906]/70 px-4 pr-11 text-[15px] tracking-tight text-white outline-none transition placeholder:text-white/28 focus:border-[var(--accent-primary)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--accent-primary)_28%,transparent)]"
           required
         />
         <Mail className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/20 transition group-focus-within:text-[var(--accent-primary)]" />
@@ -64,22 +64,22 @@ export function SubscriptionForm() {
       <button
         type="submit"
         disabled={submitting}
-        className="group flex h-14 w-full items-center justify-center gap-2 rounded-[20px] bg-white px-4 text-[15px] font-bold tracking-tight text-black transition hover:bg-[var(--accent-primary)] disabled:cursor-not-allowed disabled:opacity-60"
+        className="group flex h-14 w-full items-center justify-center gap-2 rounded-[20px] bg-[var(--accent-primary)] px-4 text-[15px] font-bold tracking-tight text-[#0b0906] transition hover:bg-[#e8a820] disabled:cursor-not-allowed disabled:opacity-60"
       >
         {submitting ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" />
-            처리 중
+            Processing...
           </>
         ) : (
           <>
-            무료로 주권 확보하기
+            Subscribe Free
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
           </>
         )}
       </button>
-      <p className="text-[13px] leading-6 text-white/48">
-        확인 메일의 링크를 눌러야 다음 발송부터 브리프를 받을 수 있습니다.
+      <p className="text-[13px] leading-6 text-white/38">
+        Confirm via email link — you&apos;ll receive the next brief after verification.
       </p>
       {message ? <SubscriptionState tone="success">{message}</SubscriptionState> : null}
       {error ? <SubscriptionState tone="danger">{error}</SubscriptionState> : null}

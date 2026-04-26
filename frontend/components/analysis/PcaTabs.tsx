@@ -14,8 +14,8 @@ import {
 type TabId = "full" | "core";
 
 const TAB_LABELS: Record<TabId, string> = {
-  full: "확장",
-  core: "핵심",
+  full: "Extended",
+  core: "Core",
 };
 
 export function PcaTabs({ pca }: { pca: PcaSection }) {
@@ -28,14 +28,14 @@ export function PcaTabs({ pca }: { pca: PcaSection }) {
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-[var(--accent-primary)]/80">
-            지표 기여도
+            Feature Loadings
           </p>
           <p className="mt-2 max-w-2xl text-[0.82rem] leading-6 text-white/46">
-            중앙선을 기준으로 오른쪽은 종합 신호를 높이는 지표, 왼쪽은 낮추는 지표입니다.
-            막대가 길수록 전체 신호를 더 많이 움직입니다.
+            Right of center raises the composite signal; left lowers it.
+            Bar length reflects each feature&apos;s share of total explanatory weight.
           </p>
         </div>
-        <div className="inline-flex w-fit overflow-hidden rounded-full border border-white/10 bg-black/24 p-1">
+        <div className="inline-flex w-fit overflow-hidden rounded-full border border-[rgba(255,220,140,0.1)] bg-black/24 p-1">
           {(["full", "core"] as TabId[]).map((tab) => (
             <button
               key={tab}
@@ -43,7 +43,7 @@ export function PcaTabs({ pca }: { pca: PcaSection }) {
               onClick={() => setActive(tab)}
               className={`rounded-full px-4 py-2 font-mono text-[0.68rem] uppercase tracking-[0.14em] transition ${
                 active === tab
-                  ? "bg-white/12 text-white shadow-[0_0_22px_rgba(0,255,255,0.12)]"
+                  ? "bg-white/12 text-white shadow-[0_0_22px_rgba(212,135,13,0.18)]"
                   : "text-white/34 hover:text-white/66"
               }`}
               aria-pressed={active === tab}
@@ -59,24 +59,24 @@ export function PcaTabs({ pca }: { pca: PcaSection }) {
       ) : (
         <>
           <div className="grid gap-2 md:grid-cols-5">
-            <MetricChip label="압축 축" value={`${data.nComponents}개`} />
-            <MetricChip label="설명력" value={`${(data.explainedVariance * 100).toFixed(1)}%`} />
-            <MetricChip label="데이터 확보율" value={`${(data.coverageRatio * 100).toFixed(1)}%`} />
-            <MetricChip label="사용 지표" value={`${data.selectedFeatures.length}개`} />
-            <MetricChip label="제외 지표" value={`${data.excludedFeatures.length}개`} />
+            <MetricChip label="Components" value={`${data.nComponents}`} />
+            <MetricChip label="Variance" value={`${(data.explainedVariance * 100).toFixed(1)}%`} />
+            <MetricChip label="Coverage" value={`${(data.coverageRatio * 100).toFixed(1)}%`} />
+            <MetricChip label="Features used" value={`${data.selectedFeatures.length}`} />
+            <MetricChip label="Excluded" value={`${data.excludedFeatures.length}`} />
           </div>
 
           <QualityNotice data={data} />
 
           {driver && (
-            <div className="rounded-2xl border border-white/10 bg-black/22 p-4">
+            <div className="rounded-2xl border border-[rgba(255,220,140,0.1)] bg-black/22 p-4">
               <p className="font-mono text-[0.64rem] uppercase tracking-[0.16em] text-white/34">
-                가장 큰 기여 지표
+                Dominant Driver
               </p>
               <p className="mt-2 text-[1rem] font-semibold text-white/86">{driver.label}</p>
               <p className="mt-1 font-mono text-[0.68rem] text-white/40">
                 {driver.loading >= 0 ? "+" : ""}
-                {driver.loading.toFixed(3)} · {driver.direction === "positive" ? "종합 신호를 높이는 방향" : "종합 신호를 낮추는 방향"}
+                {driver.loading.toFixed(3)} · {driver.direction === "positive" ? "raises composite signal" : "lowers composite signal"}
               </p>
             </div>
           )}
@@ -100,9 +100,9 @@ function PcaIndexView({ data }: { data: PcaIndex }) {
   return (
     <div className="space-y-4">
       <div className="hidden grid-cols-[minmax(120px,0.9fr)_minmax(220px,2fr)_84px] gap-4 px-3 font-mono text-[0.62rem] uppercase tracking-[0.14em] text-white/28 md:grid">
-        <span>지표</span>
-        <span className="text-center">낮추는 방향 / 높이는 방향</span>
-        <span className="text-right">비중</span>
+        <span>Feature</span>
+        <span className="text-center">Lowers / Raises</span>
+        <span className="text-right">Weight</span>
       </div>
       <div className="space-y-2.5">
         {entries.map(([feature, loading], index) => {
@@ -117,7 +117,7 @@ function PcaIndexView({ data }: { data: PcaIndex }) {
               className={`grid gap-3 rounded-2xl border p-3 transition md:grid-cols-[minmax(120px,0.9fr)_minmax(220px,2fr)_84px] md:items-center ${
                 active
                   ? "border-white/22 bg-white/[0.06]"
-                  : "border-white/8 bg-white/[0.025] hover:border-white/16 hover:bg-white/[0.04]"
+                  : "border-[rgba(255,220,140,0.08)] bg-white/[0.02] hover:border-[rgba(255,220,140,0.16)] hover:bg-white/[0.04]"
               }`}
               onMouseEnter={() => setActiveFeature(feature)}
               onMouseLeave={() => setActiveFeature(null)}
@@ -136,7 +136,7 @@ function PcaIndexView({ data }: { data: PcaIndex }) {
                 <p className="text-[0.88rem] font-semibold leading-5 text-white/82">
                   {formatFeatureLabel(feature)}
                 </p>
-                <p className="mt-1 font-mono text-[0.63rem] text-white/32">영향력 {index + 1}위</p>
+                <p className="mt-1 font-mono text-[0.63rem] text-white/32">rank #{index + 1}</p>
               </div>
 
               <div className="relative min-h-[42px]">
@@ -147,18 +147,18 @@ function PcaIndexView({ data }: { data: PcaIndex }) {
                   style={{
                     width: `${Math.max(8, pct)}%`,
                     ...(positive
-                      ? { left: "50%", background: "rgba(0,255,102,0.72)" }
-                      : { right: "50%", background: "rgba(255,107,107,0.62)" }),
+                      ? { left: "50%", background: "rgba(109,189,122,0.72)" }
+                      : { right: "50%", background: "rgba(224,82,82,0.62)" }),
                     boxShadow: active
                       ? positive
-                        ? "0 0 24px rgba(0,255,102,0.22)"
-                        : "0 0 24px rgba(255,107,107,0.22)"
+                        ? "0 0 24px rgba(109,189,122,0.22)"
+                        : "0 0 24px rgba(224,82,82,0.22)"
                       : "none",
                   }}
                 />
                 <div className="absolute inset-x-0 bottom-0 flex justify-between font-mono text-[0.58rem] uppercase tracking-[0.1em] text-white/22">
-                  <span>낮춤</span>
-                  <span>높임</span>
+                  <span>lowers</span>
+                  <span>raises</span>
                 </div>
               </div>
 
@@ -173,7 +173,7 @@ function PcaIndexView({ data }: { data: PcaIndex }) {
                     positive ? "text-[var(--accent-green)]/72" : "text-[var(--accent-down)]/72"
                   }`}
                 >
-                  {positive ? "높이는 방향" : "낮추는 방향"}
+                  {positive ? "raises" : "lowers"}
                 </p>
               </div>
             </article>
@@ -182,9 +182,9 @@ function PcaIndexView({ data }: { data: PcaIndex }) {
       </div>
 
       {data.excludedFeatures.length > 0 && (
-        <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+        <div className="rounded-2xl border border-[rgba(255,220,140,0.08)] bg-black/20 p-4">
           <p className="font-mono text-[0.64rem] uppercase tracking-[0.16em] text-white/30">
-            함께 쓰기 어려워 제외한 지표
+            Excluded Features
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {data.excludedFeatures.map((feature, index) => (
@@ -210,7 +210,7 @@ function QualityNotice({ data }: { data: PcaIndex }) {
     return (
       <div className="rounded-2xl border border-[var(--accent-green)]/16 bg-[var(--accent-green)]/5 px-4 py-3">
         <p className="font-mono text-[0.68rem] uppercase tracking-[0.12em] text-[var(--accent-green)]/80">
-          데이터 상태 양호 · 사용 가능한 지표로 종합 신호를 계산했습니다
+          Data quality OK · composite signal computed from available features
         </p>
       </div>
     );
@@ -225,13 +225,13 @@ function QualityNotice({ data }: { data: PcaIndex }) {
         aria-expanded={open}
       >
         <span className="font-mono text-[0.68rem] uppercase tracking-[0.12em] text-[var(--accent-warning)]">
-          데이터 상태 {formatQualityStatus(data.qualityStatus)} · 확보율 {(data.coverageRatio * 100).toFixed(1)}%
+          Data quality {formatQualityStatus(data.qualityStatus)} · coverage {(data.coverageRatio * 100).toFixed(1)}%
         </span>
-        <span className="font-mono text-[0.68rem] text-white/36">{open ? "닫기" : "이유 보기"}</span>
+        <span className="font-mono text-[0.68rem] text-white/36">{open ? "collapse" : "view reasons"}</span>
       </button>
       {open && (
         <ul className="mt-3 space-y-1 border-t border-white/8 pt-3">
-          {(data.qualityReasons.length > 0 ? data.qualityReasons : ["데이터 품질이 낮아 참고가 필요합니다"]).map(
+          {(data.qualityReasons.length > 0 ? data.qualityReasons : ["Data quality is low — interpret with caution."]).map(
             (reason, index) => (
               <li key={`${reason}-${index}`} className="font-mono text-[0.7rem] text-white/46">
                 {formatQualityReason(reason)}
@@ -246,7 +246,7 @@ function QualityNotice({ data }: { data: PcaIndex }) {
 
 function MetricChip({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/24 px-3 py-3">
+    <div className="rounded-2xl border border-[rgba(255,220,140,0.1)] bg-black/24 px-3 py-3">
       <p className="font-mono text-[0.58rem] uppercase tracking-[0.14em] text-white/28">{label}</p>
       <p className="mt-1 font-mono text-[0.78rem] tabular-nums text-white/76">{value}</p>
     </div>
@@ -255,11 +255,11 @@ function MetricChip({ label, value }: { label: string; value: string }) {
 
 function EmptyState({ status }: { status: string }) {
   return (
-    <div className="flex min-h-[260px] flex-col items-center justify-center gap-3 rounded-2xl border border-white/8 bg-black/20">
+    <div className="flex min-h-[260px] flex-col items-center justify-center gap-3 rounded-2xl border border-[rgba(255,220,140,0.08)] bg-black/20">
       <p className="font-mono text-[0.72rem] uppercase tracking-[0.16em] text-[var(--text-muted)]">
-        종합 신호 계산 미수행
+        Composite signal not computed
       </p>
-      <p className="font-mono text-[0.66rem] text-white/34">데이터 상태: {formatQualityStatus(status)}</p>
+      <p className="font-mono text-[0.66rem] text-white/34">Data status: {formatQualityStatus(status)}</p>
     </div>
   );
 }

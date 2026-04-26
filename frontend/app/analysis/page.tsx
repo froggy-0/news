@@ -13,10 +13,9 @@ import {
   RawMetadataExplorer,
   StationarityPanel,
   TargetDiagnosticsPanel,
-  isFullDiagnosticArtifact,
 } from "@/components/analysis/AnalysisDashboardPanels";
 import { fetchSentimentInsight, isStaleReferenceDate } from "@/lib/analysis";
-import { deriveAnalysisSummary } from "@/lib/analysis-derive";
+import { deriveAnalysisSummary, isFullDiagnosticArtifact } from "@/lib/analysis-derive";
 
 export const dynamic = "force-static";
 

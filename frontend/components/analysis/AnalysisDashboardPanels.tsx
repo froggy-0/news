@@ -96,7 +96,7 @@ function statusToneFromRatio(value: number | null | undefined, warning = 0.1): T
   return "red";
 }
 
-export function isFullDiagnosticArtifact(artifact: SentimentInsightArtifact): boolean {
+function isFullDiagnosticArtifact(artifact: SentimentInsightArtifact): boolean {
   return artifact.schemaVersion === "sentiment-insight-v2" && objectEntries(artifact.rawStats).length > 0;
 }
 
@@ -113,7 +113,7 @@ export function AnalysisOverviewDeck({ artifact }: { artifact: SentimentInsightA
   const outlierTone = statusToneFromRatio(rows?.outlierFilteredRatio, 0.1);
 
   return (
-    <section className="space-y-4" aria-label="분석 리포트 핵심 상태">
+    <section className="space-y-4" aria-label="Analysis report key status">
       {!diagnosticsReady && (
         <LegacyArtifactNotice
           title="Public artifact is still legacy v1"
@@ -227,7 +227,7 @@ export function DataQualityMatrix({
         {!diagnosticsReady && (
           <LegacyArtifactNotice
             title="Data quality metadata is not in latest.json yet"
-            detail="parquet에는 row count, ffill breakdown, structured source lineage가 있지만 현재 public artifact는 v1이라 이 블록을 채울 수 없습니다."
+            detail="The parquet contains row count, ffill breakdown, and structured source lineage — but the current public artifact is v1, so this block is empty until the next v2 run."
           />
         )}
         <div className="flex items-start justify-between gap-4">
@@ -359,7 +359,7 @@ export function AlphaValidationBoard({
               onClick={() => setActiveHorizon(horizonKey)}
               className={`cursor-pointer rounded-full px-4 py-2 font-mono text-[0.68rem] uppercase tracking-[0.14em] transition ${
                 activeHorizon === horizonKey
-                  ? "bg-white/12 text-white shadow-[0_0_22px_rgba(0,255,255,0.12)]"
+                  ? "bg-white/12 text-white shadow-[0_0_22px_rgba(212,135,13,0.18)]"
                   : "text-white/34 hover:text-white/66"
               }`}
               aria-pressed={activeHorizon === horizonKey}
@@ -599,7 +599,7 @@ export function StationarityPanel({
             ) : (
               <tr>
                 <td colSpan={4}>
-                  <EmptyPanel label="stationarity metadata 없음" />
+                  <EmptyPanel label="No stationarity metadata" />
                 </td>
               </tr>
             )}
@@ -680,7 +680,7 @@ function RatioRow({
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-white/8">
         <div
-          className="h-full rounded-full bg-[var(--accent-primary)] shadow-[0_0_18px_rgba(0,255,255,0.22)]"
+          className="h-full rounded-full bg-[var(--accent-primary)] shadow-[0_0_18px_rgba(212,135,13,0.30)]"
           style={{ width: `${width}%` }}
         />
       </div>

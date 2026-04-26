@@ -39,7 +39,7 @@ export function UnsubscribeResult() {
         if (!cancelled) {
           setPreview({
             status: "invalid-token",
-            message: "구독 해지 링크를 확인하지 못했습니다.",
+            message: "Could not verify the unsubscribe link.",
           });
         }
       }
@@ -73,7 +73,7 @@ export function UnsubscribeResult() {
     } catch {
       setResult({
         status: "invalid-token",
-        message: "구독 해지 요청을 처리하지 못했습니다.",
+        message: "Failed to process the unsubscribe request.",
       });
     } finally {
       setSubmitting(false);
@@ -88,20 +88,20 @@ export function UnsubscribeResult() {
   const isReady = !loading && !isError && !isSuccess;
 
   const headline = loading
-    ? "구독 해지 링크를 확인하고 있습니다."
+    ? "Verifying your unsubscribe link..."
     : isSuccess
-      ? "구독 해지가 완료되었습니다."
+      ? "Unsubscribed successfully."
       : isReady
-        ? "구독 해지를 진행하시겠습니까?"
-        : "구독 해지 링크를 다시 확인해 주세요.";
+        ? "Confirm unsubscribe?"
+        : "Please check your unsubscribe link.";
 
   const subCopy = loading
-    ? "링크 유효성과 구독 상태를 점검하고 있습니다."
+    ? "Checking link validity and subscription status..."
     : isSuccess
-      ? "다음 발송부터 SOVEREIGN BRIEF를 받지 않으시게 됩니다."
+      ? "You will no longer receive SOVEREIGN BRIEF from the next send."
       : isReady
-        ? "아래 버튼을 누르면 수신이 즉시 중단됩니다."
-        : "링크가 만료되었거나 이미 사용된 경우 이메일로 직접 문의해 주세요.";
+        ? "Click the button below to stop receiving emails immediately."
+        : "If the link has expired or already been used, contact us directly by email.";
 
   const badge = submitting
     ? "processing"
@@ -159,14 +159,14 @@ export function UnsubscribeResult() {
               </p>
               <h2 className="text-xl tracking-tight text-white">
                 {submitting
-                  ? "해지 요청 처리 중"
+                  ? "Processing..."
                   : loading
-                    ? "상태 확인 중"
+                    ? "Checking..."
                     : isSuccess
-                      ? "구독 해지 완료"
+                      ? "Unsubscribed"
                       : isReady
-                        ? "해지 대기"
-                        : "확인 실패 또는 만료"}
+                        ? "Ready"
+                        : "Verification Failed"}
               </h2>
             </div>
           </div>
@@ -181,7 +181,7 @@ export function UnsubscribeResult() {
           tone={isError ? "danger" : isSuccess ? "success" : "neutral"}
         >
           <div className="copy-block">
-            <p>{activeState?.message ?? "구독 상태를 확인하는 중입니다."}</p>
+            <p>{activeState?.message ?? "Checking subscription status..."}</p>
             {activeState?.email ? <p className="numeric">{activeState.email}</p> : null}
           </div>
         </SubscriptionState>
@@ -192,7 +192,7 @@ export function UnsubscribeResult() {
               href="/"
               className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 px-5 py-3 text-sm tracking-tight text-white/72 transition hover:border-white/24 hover:text-white"
             >
-              취소하고 돌아가기
+              Cancel
             </Link>
             <button
               type="button"
@@ -200,7 +200,7 @@ export function UnsubscribeResult() {
               disabled={submitting}
               className="inline-flex items-center justify-center gap-2 rounded-full border border-[#ff6b6b]/30 bg-[#ff6b6b]/10 px-5 py-3 text-sm font-semibold tracking-tight text-[#ff6b6b] transition hover:bg-[#ff6b6b]/20 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {submitting ? "처리 중…" : "이 이메일 구독 해지"}
+              {submitting ? "Processing..." : "Unsubscribe this email"}
             </button>
           </div>
         ) : (isSuccess || isError) ? (
@@ -209,7 +209,7 @@ export function UnsubscribeResult() {
               href="/"
               className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 px-5 py-3 text-sm tracking-tight text-white/72 transition hover:border-white/24 hover:text-white"
             >
-              홈으로 돌아가기
+              Back to Home
             </Link>
           </div>
         ) : null}

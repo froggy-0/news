@@ -76,8 +76,8 @@ export function AnalysisSignalField({
         context.arc(x, y, radius, 0, Math.PI * 2);
         context.fillStyle =
           polarity > 0
-            ? `rgba(0, 255, 255, ${alpha})`
-            : `rgba(255, 107, 107, ${alpha})`;
+            ? `rgba(212, 135, 13, ${alpha})`
+            : `rgba(220, 80, 80, ${alpha})`;
         context.fill();
 
         if (i % 3 === 0) {
