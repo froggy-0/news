@@ -71,6 +71,20 @@ def _valid_df() -> pd.DataFrame:
             "lsr_source": ["empty"],
             "etf_source": ["empty"],
             "vix_source": ["empty"],
+            # 1-A: Level→Delta 피처 (NaN 허용)
+            "fng_change_1d": [float("nan")],
+            "fng_change_5d": [float("nan")],
+            "fng_change_1d_lag1": [float("nan")],
+            "fng_change_5d_lag1": [float("nan")],
+            "sentiment_momentum": [float("nan")],
+            "sentiment_accel": [float("nan")],
+            "sentiment_momentum_lag1": [float("nan")],
+            "sentiment_accel_lag1": [float("nan")],
+            # 1-B: BTC 레짐 피처 (NaN 허용)
+            "btc_ma_200d": [float("nan")],
+            "btc_drawdown_90d": [float("nan")],
+            "btc_above_ma200": [float("nan")],
+            "btc_above_ma200_lag1": [float("nan")],
         }
     )
 

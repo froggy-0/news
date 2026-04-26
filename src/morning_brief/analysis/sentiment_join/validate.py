@@ -79,6 +79,20 @@ MASTER_SCHEMA = pa.DataFrameSchema(
         # §2: 텍스트 스키마 버전 — 백필/실시간 감성 텍스트 입력 차이 추적용
         # None 허용을 위해 타입 미지정 (ingest_validation_reason와 동일 패턴)
         "text_schema_version": pa.Column(nullable=True),
+        # 1-A: Level→Delta 피처 — AR 구조 제거로 Granger/correlation 신호 품질 개선
+        "fng_change_1d": pa.Column(float, nullable=True),
+        "fng_change_5d": pa.Column(float, nullable=True),
+        "fng_change_1d_lag1": pa.Column(float, nullable=True),
+        "fng_change_5d_lag1": pa.Column(float, nullable=True),
+        "sentiment_momentum": pa.Column(float, nullable=True),
+        "sentiment_accel": pa.Column(float, nullable=True),
+        "sentiment_momentum_lag1": pa.Column(float, nullable=True),
+        "sentiment_accel_lag1": pa.Column(float, nullable=True),
+        # 1-B: BTC 200일 MA 기반 레짐 피처
+        "btc_ma_200d": pa.Column(float, pa.Check.ge(0), nullable=True),
+        "btc_drawdown_90d": pa.Column(float, nullable=True),
+        "btc_above_ma200": pa.Column(float, nullable=True),
+        "btc_above_ma200_lag1": pa.Column(float, nullable=True),
     },
     strict=True,
 )

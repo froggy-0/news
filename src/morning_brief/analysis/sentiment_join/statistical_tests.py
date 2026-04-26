@@ -32,9 +32,12 @@ _PREDICTORS_RAW = [
     "etf_net_inflow_usd",
     "usdkrw_log_return",
     "volume_change_pct",
+    # 1-A: delta 피처 — level AR 구조 제거 후 독립적 신호
+    "fng_change_1d",
+    "sentiment_momentum",
 ]
 
-GRANGER_PAIRS_TARGET = [(p, _TARGET) for p in _PREDICTORS_RAW]  # 8쌍
+GRANGER_PAIRS_TARGET = [(p, _TARGET) for p in _PREDICTORS_RAW]  # 10쌍
 
 GRANGER_PAIRS_CROSS = [
     # 정보 전파 경로 — Granger lag=k: "k일 전 predictor → 오늘 target"
@@ -49,7 +52,7 @@ GRANGER_PAIRS_CROSS = [
     ("funding_rate", "etf_net_inflow_usd"),
 ]  # 8쌍
 
-GRANGER_PAIRS = GRANGER_PAIRS_TARGET + GRANGER_PAIRS_CROSS  # 16쌍 × 3 lag = 48 검정
+GRANGER_PAIRS = GRANGER_PAIRS_TARGET + GRANGER_PAIRS_CROSS  # 18쌍 × 3 lag = 54 검정
 
 # §4.3: 역방향 페어 — 가격이 지표를 선행하는지 확인 (단순 선행 해석 방지)
 # target은 raw 컬럼 (double-lag 방지와 동일한 이유)
@@ -61,7 +64,7 @@ GRANGER_PAIRS_REVERSE = [
     ("btc_log_return", "etf_net_inflow_usd"),
 ]  # 5쌍 × 3 lag = 15 검정
 
-# 전체 BH-FDR family: (16 + 5) × 3 = 63 검정
+# 전체 BH-FDR family: (18 + 5) × 3 = 69 검정
 
 ADF_TARGETS = [
     # §4: Granger에 투입되는 모든 raw 변수에 ADF+KPSS 합의 검정 적용
@@ -74,6 +77,9 @@ ADF_TARGETS = [
     "etf_net_inflow_usd",
     "usdkrw_log_return",
     "volume_change_pct",
+    # 1-A: delta 피처 추가
+    "fng_change_1d",
+    "sentiment_momentum",
 ]
 
 

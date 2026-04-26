@@ -102,7 +102,7 @@ def test_run_statistical_tests_granger_skips_at_179_rows(
 def test_run_statistical_tests_granger_runs_at_180_rows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Property 6: 180행이면 Granger 실행. forward(16) + reverse(5) = 21쌍, 각 3 lag → 63 entry."""
+    """Property 6: 180행이면 Granger 실행. forward(18: TARGET 10 + CROSS 8) + reverse(5) = 23쌍, 각 3 lag → 69 entry."""
     monkeypatch.setattr(
         statistical_tests,
         "_run_stationarity",
@@ -127,9 +127,9 @@ def test_run_statistical_tests_granger_runs_at_180_rows(
 
     results = statistical_tests.run_statistical_tests(_sample_df(rows=180))
 
-    # forward(16: TARGET 8 + CROSS 8) + reverse(5) = 21쌍, 각 3 lag → 63 entry
-    assert len(pair_calls) == 21
-    assert len(results["granger"]) == 63
+    # forward(18: TARGET 10 + CROSS 8) + reverse(5) = 23쌍, 각 3 lag → 69 entry
+    assert len(pair_calls) == 23
+    assert len(results["granger"]) == 69
     assert results["granger_executed"] is True
     assert results["granger_eligible_rows"] == 180
 
@@ -458,10 +458,10 @@ def test_granger_pairs_use_raw_predictors() -> None:
 
 
 def test_granger_pairs_count() -> None:
-    """GRANGER_PAIRS = TARGET(8) + CROSS(8) = 16쌍."""
-    assert len(statistical_tests.GRANGER_PAIRS_TARGET) == 8
+    """GRANGER_PAIRS = TARGET(10) + CROSS(8) = 18쌍."""
+    assert len(statistical_tests.GRANGER_PAIRS_TARGET) == 10
     assert len(statistical_tests.GRANGER_PAIRS_CROSS) == 8
-    assert len(statistical_tests.GRANGER_PAIRS) == 16
+    assert len(statistical_tests.GRANGER_PAIRS) == 18
 
 
 def test_granger_pairs_reverse_has_btc_as_predictor() -> None:

@@ -100,6 +100,51 @@ def _has_any_data(df: pd.DataFrame, cols: list[str]) -> bool:
     return any(col in df.columns and df[col].notna().any() for col in cols)
 
 
+def _compute_regime(btc_close_df: pd.DataFrame, start_date: str, end_date: str) -> pd.DataFrame:
+    """1-B: BTC 200일 MA 기반 레짐 피처 계산.
+
+    btc_ma_200d     : 200일 단순 이동평균 (min_periods=100)
+    btc_drawdown_90d: 90일 고점 대비 낙폭 (0 ~ -1)
+    btc_above_ma200 : 현재가 > MA200 여부 (1.0 = bull, 0.0 = bear, NaN = MA 미확보)
+
+    lookback_days=365 기준에서 MA200 확보 구간은 약 165일부터 시작.
+    초기 NaN은 merge_sources에서 left-join 후 자연스럽게 유지된다.
+    """
+    empty_dates = _date_strings(start_date, end_date)
+    empty = pd.DataFrame(
+        {
+            "date": empty_dates,
+            "btc_ma_200d": [float("nan")] * len(empty_dates),
+            "btc_drawdown_90d": [float("nan")] * len(empty_dates),
+            "btc_above_ma200": [float("nan")] * len(empty_dates),
+        }
+    )
+
+    if btc_close_df.empty or "close" not in btc_close_df.columns:
+        return empty
+
+    df = btc_close_df[["date", "close"]].copy()
+    close = pd.to_numeric(df["close"], errors="coerce")
+    df["btc_ma_200d"] = close.rolling(200, min_periods=100).mean()
+    df["btc_above_ma200"] = (
+        (close > df["btc_ma_200d"])
+        .where(df["btc_ma_200d"].notna(), other=float("nan"))
+        .astype("float64")
+    )
+    rolling_max = close.rolling(90, min_periods=30).max()
+    df["btc_drawdown_90d"] = (close / rolling_max - 1).where(
+        rolling_max.notna(), other=float("nan")
+    )
+
+    from morning_brief.analysis.sentiment_join.transform import trim_to_date_range
+
+    return trim_to_date_range(
+        df[["date", "btc_ma_200d", "btc_drawdown_90d", "btc_above_ma200"]],
+        start_date,
+        end_date,
+    )
+
+
 def _structured_sources_metadata(
     *,
     futures_attrs: dict[str, object],
@@ -336,6 +381,9 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
         if btc_returns_df.empty:
             btc_returns_df = _empty_return_frame("btc", start_date, end_date)
 
+        # 1-B: close 원본 기반 레짐 피처 (compute_returns 이후에도 btc_close_df 유지)
+        regime_df = _compute_regime(btc_close_df, start_date, end_date)
+
         usdkrw_returns_df = compute_returns(usdkrw_close_df, "close")
         usdkrw_returns_df = _rename_returns(usdkrw_returns_df, "usdkrw")
         usdkrw_returns_df = trim_to_date_range(usdkrw_returns_df, start_date, end_date)
@@ -354,6 +402,7 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             futures_df,
             etf_df,
             vix_df,
+            regime_df,
         )
 
         exclusion_counts = master_df.attrs.get("exclusion_counts", {})

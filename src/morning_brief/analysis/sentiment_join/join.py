@@ -210,6 +210,42 @@ def _apply_sentiment_quality_gate(
     return filtered, exclusion_counts
 
 
+def _add_delta_features(df: pd.DataFrame) -> pd.DataFrame:
+    """1-A: level → delta 변환으로 AR 구조를 제거해 Granger/correlation 신호 품질 개선.
+
+    fng_change_1d       : FnG 1일 변화량 (AR 0.97 → 차분 시 ~0.1 이하)
+    fng_change_5d       : FnG 5일 변화량 (중기 추세)
+    sentiment_momentum  : 감성 - 7일 이동평균 이탈도 (AR 0.81 구조 제거)
+    sentiment_accel     : 감성 1일 변화 (가속도)
+
+    _lag1 버전은 look-ahead bias 차단용 (PCA / correlation 입력).
+    Granger 검정에는 raw 버전을 사용한다 (double-lag 방지).
+    """
+    result = df.copy()
+
+    if "fng_value" in result.columns:
+        fng = pd.to_numeric(result["fng_value"], errors="coerce").astype("float64")
+        result["fng_change_1d"] = fng.diff(1)
+        result["fng_change_5d"] = fng.diff(5)
+    else:
+        result["fng_change_1d"] = float("nan")
+        result["fng_change_5d"] = float("nan")
+    result["fng_change_1d_lag1"] = result["fng_change_1d"].shift(1)
+    result["fng_change_5d_lag1"] = result["fng_change_5d"].shift(1)
+
+    if "news_sentiment_mean" in result.columns:
+        sent = pd.to_numeric(result["news_sentiment_mean"], errors="coerce")
+        result["sentiment_momentum"] = sent - sent.rolling(7, min_periods=4).mean()
+        result["sentiment_accel"] = sent.diff(1)
+    else:
+        result["sentiment_momentum"] = float("nan")
+        result["sentiment_accel"] = float("nan")
+    result["sentiment_momentum_lag1"] = result["sentiment_momentum"].shift(1)
+    result["sentiment_accel_lag1"] = result["sentiment_accel"].shift(1)
+
+    return result
+
+
 def _add_btc_direction_label(df: pd.DataFrame) -> pd.DataFrame:
     """Req 8: btc_log_return 부호 기준으로 up/down/flat 라벨을 부여한다."""
     result = df.copy()
@@ -304,6 +340,7 @@ def merge_sources(
     futures_df: pd.DataFrame | None = None,
     etf_df: pd.DataFrame | None = None,
     vix_df: pd.DataFrame | None = None,
+    regime_df: pd.DataFrame | None = None,
     *,
     record_source_lineage: bool = True,
 ) -> pd.DataFrame:
@@ -336,6 +373,18 @@ def merge_sources(
     else:
         merged["vix"] = float("nan")
 
+    # 1-B: BTC 레짐 피처 — 200일 MA 기반 bull/bear 조건 변수
+    if regime_df is not None and not regime_df.empty:
+        regime_cols = [c for c in regime_df.columns if c != "date"]
+        merged = merged.merge(regime_df[["date"] + regime_cols], on="date", how="left")
+    else:
+        merged["btc_ma_200d"] = float("nan")
+        merged["btc_drawdown_90d"] = float("nan")
+        merged["btc_above_ma200"] = float("nan")
+    merged["btc_above_ma200_lag1"] = pd.to_numeric(
+        merged.get("btc_above_ma200"), errors="coerce"
+    ).shift(1)
+
     if record_source_lineage:
         futures_source = (
             str(futures_df.attrs.get("futures_source", "unknown"))
@@ -364,6 +413,7 @@ def merge_sources(
 
     merged = _add_futures_lag_columns(merged)
     merged = _add_sentiment_lag_columns(merged)
+    merged = _add_delta_features(merged)
     merged = _add_btc_direction_label(merged)
     merged = _add_forward_target_columns(merged)
 
@@ -373,17 +423,20 @@ def merge_sources(
     merged = detect_outliers_rolling_iqr(
         merged,
         cols=[
-            # 변화율·수익률 계열에만 rolling IQR×3 적용.
+            # 변화율·수익률 계열에만 rolling IQR 적용.
             # level/bounded 컬럼(fng_value[0,100], news_sentiment_mean[-1,1],
             # btc_long_short_ratio, open_interest_usd, btc_quote_volume)은
             # 분포 특성상 false positive가 많아 제외.
+            # etf_net_inflow_usd 제외: 주말 구조적 0값 때문에 rolling IQR이 극소화되어
+            # 평일 대형 유입이 모두 outlier로 오탐됨 (false positive 주요 원인).
             "btc_return",
             "usdkrw_return",
             "funding_rate",
             "oi_change_pct",
             "volume_change_pct",
-            "etf_net_inflow_usd",
         ],
+        window=60,  # 30→60: IQR 추정 안정성 향상 (단기 변동성 급변에 덜 민감)
+        min_periods=20,  # window 비례 조정
     )
 
     if len(merged) < 30:
@@ -427,6 +480,7 @@ __all__ = [
     "merge_sources",
     "_add_futures_lag_columns",
     "_add_sentiment_lag_columns",
+    "_add_delta_features",
     "_add_btc_direction_label",
     "_add_forward_target_columns",
     "_apply_sentiment_quality_gate",

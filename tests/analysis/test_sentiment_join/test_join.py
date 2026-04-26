@@ -184,10 +184,11 @@ def test_merge_sources_adds_etf_flow_lag1() -> None:
 
 def test_merge_sources_outlier_detection_includes_funding_rate() -> None:
     """이상치 감지는 변화율·수익률 계열 한정(funding_rate 포함) — bounded level은 제외."""
-    futures_df = _futures_df(40)
-    futures_df.loc[39, "funding_rate"] = 5.0  # 평소 0.0001 수준 대비 극단값
+    # window=60 이므로 60행 초과 데이터가 있어야 rolling IQR이 동작한다
+    futures_df = _futures_df(80)
+    futures_df.loc[79, "funding_rate"] = 5.0  # 평소 0.001 수준 대비 극단값
 
-    merged = merge_sources(_sentiment_df(40), _fng_df(40), _btc_df(40), _usdkrw_df(40), futures_df)
+    merged = merge_sources(_sentiment_df(80), _fng_df(80), _btc_df(80), _usdkrw_df(80), futures_df)
 
     assert bool(merged.iloc[-1]["is_outlier"]) is True
 
