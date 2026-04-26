@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 
 import pandas as pd
 
@@ -246,6 +247,33 @@ def _add_delta_features(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def _add_regime_interaction_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Bear-regime conditioned lagged features for alpha validation."""
+    result = df.copy()
+    if "btc_above_ma200" in result.columns:
+        above = pd.to_numeric(result["btc_above_ma200"], errors="coerce")
+        bear = pd.Series(float("nan"), index=result.index, dtype="float64")
+        valid = above.notna()
+        bear.loc[valid] = (above.loc[valid] == 0.0).astype(float)
+    else:
+        bear = pd.Series(float("nan"), index=result.index, dtype="float64")
+
+    result["btc_bear_regime_lag1"] = bear.shift(1)
+    interaction_sources = {
+        "sentiment_momentum_x_bear_lag1": "sentiment_momentum_lag1",
+        "fng_change_1d_x_bear_lag1": "fng_change_1d_lag1",
+        "funding_rate_x_bear_lag1": "funding_rate_lag1",
+    }
+    for out_col, source_col in interaction_sources.items():
+        if source_col in result.columns:
+            result[out_col] = (
+                pd.to_numeric(result[source_col], errors="coerce") * result["btc_bear_regime_lag1"]
+            )
+        else:
+            result[out_col] = float("nan")
+    return result
+
+
 def _add_btc_direction_label(df: pd.DataFrame) -> pd.DataFrame:
     """Req 8: btc_log_return 부호 기준으로 up/down/flat 라벨을 부여한다."""
     result = df.copy()
@@ -269,12 +297,17 @@ def _add_btc_direction_label(df: pd.DataFrame) -> pd.DataFrame:
 FWD_LARGE_MOVE_3D_THRESHOLD: float = 0.03
 """|btc_fwd_ret_3d| > 3% 를 'large move' 로 라벨링한다 (≈ 3-day log return 3%)."""
 
+BTC_REALIZED_VOL_20D_MIN_PERIODS: int = 10
+FWD_LARGE_MOVE_3D_VOL_MULTIPLIER: float = 1.5
+
 FORWARD_TARGET_COLUMNS: tuple[str, ...] = (
     "btc_fwd_ret_1d",
     "btc_fwd_ret_3d",
     "btc_fwd_ret_7d",
     "btc_fwd_vol_5d",
     "btc_large_move_3d",
+    "btc_realized_vol_20d_lag1",
+    "btc_large_move_3d_vol_adj",
 )
 
 
@@ -293,13 +326,16 @@ def _add_forward_target_columns(df: pd.DataFrame) -> pd.DataFrame:
 
     if "btc_log_return" not in result.columns:
         for col in FORWARD_TARGET_COLUMNS:
-            if col == "btc_large_move_3d":
+            if col in {"btc_large_move_3d", "btc_large_move_3d_vol_adj"}:
                 result[col] = pd.array([pd.NA] * len(result), dtype="Int64")
             else:
                 result[col] = float("nan")
         return result
 
     ret = pd.to_numeric(result["btc_log_return"], errors="coerce")
+    result["btc_realized_vol_20d_lag1"] = (
+        ret.rolling(20, min_periods=BTC_REALIZED_VOL_20D_MIN_PERIODS).std(ddof=1).shift(1)
+    )
 
     # 1-day forward
     result["btc_fwd_ret_1d"] = ret.shift(-1)
@@ -328,6 +364,20 @@ def _add_forward_target_columns(df: pd.DataFrame) -> pd.DataFrame:
         (fwd_3d[valid].abs() > FWD_LARGE_MOVE_3D_THRESHOLD).astype(int).to_numpy()
     )
     result["btc_large_move_3d"] = large_move
+
+    vol_adj = pd.array(
+        [pd.NA] * len(result),
+        dtype="Int64",
+    )
+    vol_threshold = (
+        FWD_LARGE_MOVE_3D_VOL_MULTIPLIER * result["btc_realized_vol_20d_lag1"] * math.sqrt(3)
+    )
+    adaptive_threshold = vol_threshold.clip(lower=FWD_LARGE_MOVE_3D_THRESHOLD)
+    valid_vol_adj = fwd_3d.notna() & adaptive_threshold.notna()
+    vol_adj[valid_vol_adj.to_numpy()] = (
+        (fwd_3d[valid_vol_adj].abs() > adaptive_threshold[valid_vol_adj]).astype(int).to_numpy()
+    )
+    result["btc_large_move_3d_vol_adj"] = vol_adj
 
     return result
 
@@ -414,6 +464,7 @@ def merge_sources(
     merged = _add_futures_lag_columns(merged)
     merged = _add_sentiment_lag_columns(merged)
     merged = _add_delta_features(merged)
+    merged = _add_regime_interaction_features(merged)
     merged = _add_btc_direction_label(merged)
     merged = _add_forward_target_columns(merged)
 
@@ -481,9 +532,12 @@ __all__ = [
     "_add_futures_lag_columns",
     "_add_sentiment_lag_columns",
     "_add_delta_features",
+    "_add_regime_interaction_features",
     "_add_btc_direction_label",
     "_add_forward_target_columns",
     "_apply_sentiment_quality_gate",
+    "BTC_REALIZED_VOL_20D_MIN_PERIODS",
     "FORWARD_TARGET_COLUMNS",
+    "FWD_LARGE_MOVE_3D_VOL_MULTIPLIER",
     "FWD_LARGE_MOVE_3D_THRESHOLD",
 ]

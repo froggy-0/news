@@ -220,6 +220,9 @@ def test_build_stats_metadata_payload_includes_alpha_validation_fields() -> None
         correlations=correlations,
         backtest=backtest,
         walk_forward=walk_forward,
+        baseline_metrics={"1": {"always_up": {"hit_rate": 0.51}}},
+        horizon_metrics={"3": {"return_col": "btc_fwd_ret_3d", "hit_rates": []}},
+        walk_forward_horizons={"full": {"3": {"avg_hit_rate": 0.53}}},
     )
 
     decoded = json.loads(payload.decode("utf-8"))
@@ -228,6 +231,9 @@ def test_build_stats_metadata_payload_includes_alpha_validation_fields() -> None
     assert decoded["correlations"] == correlations
     assert decoded["backtest"] == backtest
     assert decoded["walk_forward"] == walk_forward
+    assert decoded["baseline_metrics"] == {"1": {"always_up": {"hit_rate": 0.51}}}
+    assert decoded["horizon_metrics"] == {"3": {"return_col": "btc_fwd_ret_3d", "hit_rates": []}}
+    assert decoded["walk_forward_horizons"] == {"full": {"3": {"avg_hit_rate": 0.53}}}
 
 
 def test_build_stats_metadata_payload_defaults_empty_when_none() -> None:
@@ -246,4 +252,11 @@ def test_build_stats_metadata_payload_defaults_empty_when_none() -> None:
     assert decoded["correlations"] == []
     assert decoded["backtest"] == []
     assert decoded["walk_forward"] == {}
+    assert decoded["baseline_metrics"] == {}
+    assert decoded["horizon_metrics"] == {}
+    assert decoded["walk_forward_horizons"] == {}
+    assert decoded["granger_skips"] == []
+    assert decoded["granger_skip_summary"] == {}
+    assert decoded["ffill_breakdown"] == {}
+    assert decoded["target_diagnostics"] == {}
     assert decoded["structured_sources"] == {}

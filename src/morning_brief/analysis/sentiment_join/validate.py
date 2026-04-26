@@ -60,6 +60,8 @@ MASTER_SCHEMA = pa.DataFrameSchema(
         "btc_fwd_ret_7d": pa.Column(float, nullable=True),
         "btc_fwd_vol_5d": pa.Column(float, pa.Check.ge(0), nullable=True),
         "btc_large_move_3d": pa.Column("Int64", pa.Check.isin([0, 1]), nullable=True),
+        "btc_realized_vol_20d_lag1": pa.Column(float, pa.Check.ge(0), nullable=True),
+        "btc_large_move_3d_vol_adj": pa.Column("Int64", pa.Check.isin([0, 1]), nullable=True),
         # §4 v4: full / core 이중 하이브리드 지수 + 0~100 score.
         # 이전 단일 `hybrid_index` 컬럼은 v4에서 삭제되었습니다.
         "full_hybrid_index": pa.Column(float, nullable=True),
@@ -93,6 +95,10 @@ MASTER_SCHEMA = pa.DataFrameSchema(
         "btc_drawdown_90d": pa.Column(float, nullable=True),
         "btc_above_ma200": pa.Column(float, nullable=True),
         "btc_above_ma200_lag1": pa.Column(float, nullable=True),
+        "btc_bear_regime_lag1": pa.Column(float, nullable=True),
+        "sentiment_momentum_x_bear_lag1": pa.Column(float, nullable=True),
+        "fng_change_1d_x_bear_lag1": pa.Column(float, nullable=True),
+        "funding_rate_x_bear_lag1": pa.Column(float, nullable=True),
     },
     strict=True,
 )
@@ -100,7 +106,12 @@ MASTER_SCHEMA = pa.DataFrameSchema(
 
 def validate_master(df: pd.DataFrame) -> None:
     try:
-        for column in ("n_articles", "fng_value", "btc_large_move_3d"):
+        for column in (
+            "n_articles",
+            "fng_value",
+            "btc_large_move_3d",
+            "btc_large_move_3d_vol_adj",
+        ):
             if str(df[column].dtype) != "Int64":
                 raise SchemaError(
                     schema=MASTER_SCHEMA,

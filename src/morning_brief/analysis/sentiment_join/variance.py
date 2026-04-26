@@ -6,7 +6,7 @@
 - bootstrap_ci(df, metric) : fold-level bootstrap 95% CI (n=500)
 - bh_correct(p_values)     : Benjamini-Hochberg FDR 보정
 - fisher_z(r)              : Pearson→Fisher-z 변환
-- evaluate_promotion_gate(delta, baseline, ci_lower) : 5개 AND 조건 평가
+- evaluate_promotion_gate(delta, baseline) : 5개 AND 조건 평가
 """
 
 from __future__ import annotations
@@ -25,10 +25,9 @@ import pandas as pd
 
 GATE_HIT_RATE_DELTA_PP = 0.02  # hit_rate Δ ≥ +2pp
 GATE_SHARPE_DELTA = 0.10  # Sharpe Δ ≥ +0.10
+GATE_MIN_COVERAGE = 0.85  # coverage ≥ 85%
 GATE_MAX_MASKED_RATIO = 0.10  # masked_ratio ≤ 10%
-GATE_FDR_Q = 0.10  # FDR q < 0.10
 GATE_MIN_STABILITY = 0.50  # fold stability ≥ 0.50
-GATE_CONDITIONAL_HIT_RATE_PP = 0.01  # CI 하단 ≥ +1pp → conditional_promote
 
 
 @dataclass
@@ -58,19 +57,20 @@ class BootstrapCI:
 class PromotionGateResult:
     """승격 게이트 평가 결과."""
 
-    decision: str  # "promote" | "conditional_promote" | "research_only"
+    decision: str  # "promote" | "research_only"
     hit_rate_ok: bool
     sharpe_ok: bool
+    coverage_ok: bool
     masked_ratio_ok: bool
-    fdr_ok: bool
     stability_ok: bool
     # 입력 값 보존
     hit_rate_delta: float
     sharpe_delta: float
+    coverage: float
     masked_ratio: float
-    fdr_q: float
     stability: float
-    hit_rate_ci_lower: float
+    hit_rate_ci_lower: float = float("nan")
+    fdr_q: float = float("nan")
 
 
 @dataclass
@@ -358,33 +358,25 @@ def evaluate_promotion_gate(
     *,
     hit_rate_delta: float,
     sharpe_delta: float,
+    coverage: float,
     masked_ratio: float,
-    fdr_q: float,
     stability: float,
-    hit_rate_ci_lower: float,
+    hit_rate_ci_lower: float = float("nan"),
+    fdr_q: float = float("nan"),
 ) -> PromotionGateResult:
     """5개 AND 조건 평가.
 
-    promote             : 5개 모두 충족
-    conditional_promote : CI 하단 ≥ +1pp (GATE_CONDITIONAL_HIT_RATE_PP) + 나머지 4개 충족
-    research_only       : 그 외
+    promote       : hit_rate, Sharpe, coverage, masked_ratio, stability 모두 충족
+    research_only : 그 외
     """
     hit_rate_ok = hit_rate_delta >= GATE_HIT_RATE_DELTA_PP
     sharpe_ok = sharpe_delta >= GATE_SHARPE_DELTA
+    coverage_ok = coverage >= GATE_MIN_COVERAGE
     masked_ratio_ok = masked_ratio <= GATE_MAX_MASKED_RATIO
-    fdr_ok = fdr_q < GATE_FDR_Q
     stability_ok = stability >= GATE_MIN_STABILITY
 
-    if hit_rate_ok and sharpe_ok and masked_ratio_ok and fdr_ok and stability_ok:
+    if hit_rate_ok and sharpe_ok and coverage_ok and masked_ratio_ok and stability_ok:
         decision = "promote"
-    elif (
-        hit_rate_ci_lower >= GATE_CONDITIONAL_HIT_RATE_PP
-        and sharpe_ok
-        and masked_ratio_ok
-        and fdr_ok
-        and stability_ok
-    ):
-        decision = "conditional_promote"
     else:
         decision = "research_only"
 
@@ -392,15 +384,16 @@ def evaluate_promotion_gate(
         decision=decision,
         hit_rate_ok=hit_rate_ok,
         sharpe_ok=sharpe_ok,
+        coverage_ok=coverage_ok,
         masked_ratio_ok=masked_ratio_ok,
-        fdr_ok=fdr_ok,
         stability_ok=stability_ok,
         hit_rate_delta=hit_rate_delta,
         sharpe_delta=sharpe_delta,
+        coverage=coverage,
         masked_ratio=masked_ratio,
-        fdr_q=fdr_q,
         stability=stability,
         hit_rate_ci_lower=hit_rate_ci_lower,
+        fdr_q=fdr_q,
     )
 
 
@@ -411,10 +404,9 @@ __all__ = [
     "PowerAnalysisResult",
     "GATE_HIT_RATE_DELTA_PP",
     "GATE_SHARPE_DELTA",
+    "GATE_MIN_COVERAGE",
     "GATE_MAX_MASKED_RATIO",
-    "GATE_FDR_Q",
     "GATE_MIN_STABILITY",
-    "GATE_CONDITIONAL_HIT_RATE_PP",
     "bh_correct",
     "bootstrap_ci",
     "evaluate_promotion_gate",

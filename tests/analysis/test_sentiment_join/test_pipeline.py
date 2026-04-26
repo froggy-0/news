@@ -332,6 +332,9 @@ def test_run_sentiment_join_records_ffill_days_in_metadata(
     metadata = pq.read_metadata(file_path).metadata
     assert int(metadata[b"ffill_days"]) >= 2
     assert b"sentiment_join_stats" in metadata
+    stats = json.loads(metadata[b"sentiment_join_stats"].decode())
+    assert stats["ffill_breakdown"]["btc"]["filled_days"] >= 2
+    assert stats["ffill_breakdown"]["usdkrw"]["max_periods"] == 3
 
 
 def test_pipeline_does_not_import_main_pipeline() -> None:
@@ -485,6 +488,8 @@ def test_run_sentiment_join_records_etf_columns_and_outlier_metadata(
     assert "etf_total_aum_usd" in saved.columns
     assert "etf_net_inflow_usd" in saved.columns
     assert "etf_net_inflow_usd_lag1" in saved.columns
+    assert "btc_large_move_3d_vol_adj" in saved.columns
+    assert "btc_bear_regime_lag1" in saved.columns
     assert "rows_before_outlier_filter" in stats
     assert "rows_after_outlier_filter" in stats
     assert "hybrid_indices" in stats
@@ -492,6 +497,9 @@ def test_run_sentiment_join_records_etf_columns_and_outlier_metadata(
     assert "core" in stats["hybrid_indices"]
     assert "granger_eligible_rows" in stats
     assert "granger_executed" in stats
+    assert "granger_skips" in stats
+    assert "granger_skip_summary" in stats
+    assert "target_diagnostics" in stats
     assert "exclusion_counts" in stats
     assert isinstance(stats["exclusion_counts"], dict)
 

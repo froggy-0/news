@@ -1496,6 +1496,40 @@ class TestWalkForwardCoreIndex:
         # walk_forward가 dict이고 full/core 키를 가질 수 있음
         assert isinstance(wf, dict)
 
+    def test_run_alpha_validation_includes_horizon_and_baseline_metrics(self) -> None:
+        import numpy as np
+
+        from morning_brief.analysis.sentiment_join.statistical_tests import run_alpha_validation
+
+        rng = np.random.default_rng(7)
+        n_rows = 200
+        df = pd.DataFrame(
+            {
+                "date": pd.date_range("2024-01-01", periods=n_rows, freq="D"),
+                "news_sentiment_mean_lag1": rng.uniform(-1, 1, n_rows),
+                "fng_value_lag1": rng.uniform(0, 100, n_rows),
+                "sentiment_momentum_lag1": rng.normal(0, 0.1, n_rows),
+                "fng_change_1d_lag1": rng.normal(0, 5, n_rows),
+                "funding_rate_lag1": rng.uniform(-0.01, 0.01, n_rows),
+                "volume_change_pct_lag1": rng.uniform(-50, 50, n_rows),
+                "full_hybrid_index_score_lag1": rng.uniform(0, 100, n_rows),
+                "core_hybrid_index_score_lag1": rng.uniform(0, 100, n_rows),
+                "btc_log_return": rng.normal(0, 0.02, n_rows),
+                "btc_fwd_ret_3d": rng.normal(0, 0.04, n_rows),
+                "btc_fwd_ret_7d": rng.normal(0, 0.06, n_rows),
+                "btc_direction_label": rng.choice(["up", "down"], n_rows),
+            }
+        )
+
+        result = run_alpha_validation(df)
+
+        assert "baseline_metrics" in result
+        assert "horizon_metrics" in result
+        assert "walk_forward_horizons" in result
+        assert "1" in result["baseline_metrics"]
+        assert "3" in result["horizon_metrics"]
+        assert result["horizon_metrics"]["3"]["return_col"] == "btc_fwd_ret_3d"
+
     def test_walk_forward_insufficient_data_returns_none(self) -> None:
         """데이터 부족 시 core도 None 반환."""
         from morning_brief.analysis.sentiment_join.statistical_tests import walk_forward_validate

@@ -166,6 +166,7 @@ def _evaluate_gate(
             continue
         hit_delta = float(row["hit_rate"]) - base_hit
         sharpe_delta = float(row["sharpe"]) - base_sharpe
+        coverage = float(row["coverage"])
         masked = float(row["masked_ratio"])
         stability = float(row["stability"])
         ci_lower = bootstrap_map.get(spec_id, {}).get("ci_lower", float("nan"))
@@ -174,16 +175,18 @@ def _evaluate_gate(
         gate = evaluate_promotion_gate(
             hit_rate_delta=hit_delta,
             sharpe_delta=sharpe_delta,
+            coverage=coverage,
             masked_ratio=masked,
-            fdr_q=treatment_q,
             stability=stability,
             hit_rate_ci_lower=ci_lower_delta,
+            fdr_q=treatment_q,
         )
         results.append(
             {
                 "spec_id": spec_id,
                 "hit_rate_delta": hit_delta,
                 "sharpe_delta": sharpe_delta,
+                "coverage": coverage,
                 "masked_ratio": masked,
                 "stability": stability,
                 "fdr_q": treatment_q,
@@ -209,25 +212,23 @@ def _build_report_md(
 
     # 승격 게이트 요약
     promote = [r for r in gate_results if r["decision"] == "promote"]
-    conditional = [r for r in gate_results if r["decision"] == "conditional_promote"]
     research = [r for r in gate_results if r["decision"] == "research_only"]
     lines.append("## Promotion Gate Summary")
     lines.append("")
     lines.append(f"- **promote**: {len(promote)}")
-    lines.append(f"- **conditional_promote**: {len(conditional)}")
     lines.append(f"- **research_only**: {len(research)}")
     lines.append("")
 
     if promote:
         lines.append("### Promoted Treatments")
         lines.append("")
-        lines.append("| spec_id | hit_rate Δ | sharpe Δ | masked | stability | q |")
-        lines.append("|---|---:|---:|---:|---:|---:|")
+        lines.append("| spec_id | hit_rate Δ | sharpe Δ | coverage | masked | stability | q |")
+        lines.append("|---|---:|---:|---:|---:|---:|---:|")
         for r in promote:
             lines.append(
                 f"| {r['spec_id']} | {r['hit_rate_delta']:+.4f} | "
-                f"{r['sharpe_delta']:+.4f} | {r['masked_ratio']:.3f} | "
-                f"{r['stability']:.3f} | {r['fdr_q']:.4f} |"
+                f"{r['sharpe_delta']:+.4f} | {r['coverage']:.3f} | "
+                f"{r['masked_ratio']:.3f} | {r['stability']:.3f} | {r['fdr_q']:.4f} |"
             )
         lines.append("")
 
@@ -503,11 +504,8 @@ def main() -> int:
 
     # 결정 요약
     promote = [r for r in gate_results if r["decision"] == "promote"]
-    cond = [r for r in gate_results if r["decision"] == "conditional_promote"]
-    print(
-        f"\n승격 게이트: promote={len(promote)}, conditional={len(cond)}, "
-        f"research_only={len(gate_results) - len(promote) - len(cond)}"
-    )
+    research = [r for r in gate_results if r["decision"] == "research_only"]
+    print(f"\n승격 게이트: promote={len(promote)}, research_only={len(research)}")
 
     return 0
 
