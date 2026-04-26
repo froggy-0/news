@@ -46,6 +46,16 @@ export function formatFeatureLabel(value: string): string {
     "btc long short ratio": "롱·숏 비율",
     "etf net inflow usd": "ETF 순유입",
     "vix": "VIX 변동성",
+    "sentiment momentum": "감성 모멘텀",
+    "sentiment accel": "감성 가속도",
+    "fng change 1d": "공포·탐욕 1일 변화",
+    "fng change 5d": "공포·탐욕 5일 변화",
+    "btc bear regime": "BTC 약세 regime",
+    "sentiment momentum x bear": "약세 감성 모멘텀",
+    "fng change 1d x bear": "약세 공포·탐욕 변화",
+    "funding rate x bear": "약세 펀딩비",
+    "full hybrid index score": "확장 종합 점수",
+    "core hybrid index score": "핵심 종합 점수",
   };
   return labels[cleaned] ?? cleaned;
 }

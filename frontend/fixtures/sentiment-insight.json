@@ -1,13 +1,53 @@
 {
+  "schemaVersion": "sentiment-insight-v2",
   "generatedAtUtc": "2026-04-21T08:00:00+00:00",
   "referenceDate": "2026-04-21",
   "runId": "sentiment-join-20260421",
+  "summary": {
+    "rowsBeforeOutlierFilter": 365,
+    "rowsAfterOutlierFilter": 352,
+    "outlierFilteredCount": 13,
+    "outlierFilteredRatio": 0.0356,
+    "grangerEligibleRows": 352,
+    "grangerExecuted": true,
+    "significantGrangerCount": 4,
+    "grangerTestCount": 15,
+    "alphaCandidateCount": 5,
+    "baselineHorizonCount": 3,
+    "horizonMetricCount": 3,
+    "targetCount": 7,
+    "sourceCount": 4
+  },
+  "dataQuality": {
+    "rows": {
+      "beforeOutlierFilter": 365,
+      "afterOutlierFilter": 352,
+      "outlierFilteredCount": 13,
+      "outlierFilteredRatio": 0.0356
+    },
+    "ffillBreakdown": {
+      "btc": 0,
+      "usdkrw": 117,
+      "vix": 108
+    },
+    "structuredSources": {
+      "btc": { "mode": "coingecko", "status": "ok" },
+      "btc_etf": { "mode": "gold_history", "status": "ok" },
+      "futures": { "mode": "supabase", "status": "ok" },
+      "vix": { "mode": "fred", "status": "ok" }
+    },
+    "exclusionCounts": {
+      "vif": 2,
+      "coverage": 1
+    }
+  },
   "granger": {
     "executed": true,
     "correction": {
       "method": "fdr_bh",
       "nTests": 63
     },
+    "eligibleRows": 352,
     "results": [
       {
         "predictor": "news_sentiment_mean",
@@ -159,7 +199,9 @@
         "significant": false,
         "optimalLag": false
       }
-    ]
+    ],
+    "skips": [],
+    "skipSummary": {}
   },
   "pca": {
     "full": {
@@ -206,6 +248,150 @@
       "coverageRatio": 0.95,
       "qualityStatus": "ok",
       "qualityReasons": []
+    }
+  },
+  "alpha": {
+    "hitRates": [
+      {
+        "predictor": "news_sentiment_mean_lag1",
+        "hit_rate": 0.535,
+        "n_valid": 342,
+        "threshold": 0,
+        "granger_significant": true
+      },
+      {
+        "predictor": "fng_value_lag1",
+        "hit_rate": 0.508,
+        "n_valid": 342,
+        "threshold": 50,
+        "granger_significant": false
+      }
+    ],
+    "correlations": [
+      {
+        "col_a": "news_sentiment_mean_lag1",
+        "col_b": "btc_log_return",
+        "pearson_r": 0.12,
+        "spearman_r": 0.09
+      }
+    ],
+    "backtest": [
+      {
+        "predictor": "news_sentiment_mean_lag1",
+        "sharpe_ratio": 0.22,
+        "alpha": 0.014,
+        "strategy_cumulative_return": 0.08
+      }
+    ],
+    "walkForward": {
+      "full": {
+        "avg_hit_rate": 0.51,
+        "avg_alpha": 0.004,
+        "stability": 0.42,
+        "folds": []
+      },
+      "core": {
+        "avg_hit_rate": 0.52,
+        "avg_alpha": 0.006,
+        "stability": 0.48,
+        "folds": []
+      }
+    },
+    "baselineMetrics": {
+      "1": {
+        "always_up": { "hit_rate": 0.514, "coverage": 1 },
+        "btc_momo_20d": { "hit_rate": 0.526, "coverage": 0.94 }
+      },
+      "3": {
+        "always_up": { "hit_rate": 0.506, "coverage": 1 },
+        "btc_momo_20d": { "hit_rate": 0.518, "coverage": 0.94 }
+      },
+      "7": {
+        "always_up": { "hit_rate": 0.501, "coverage": 1 },
+        "btc_momo_20d": { "hit_rate": 0.509, "coverage": 0.94 }
+      }
+    },
+    "horizonMetrics": {
+      "1": {
+        "return_col": "btc_log_return",
+        "hit_rates": [
+          { "predictor": "news_sentiment_mean_lag1", "hit_rate": 0.535, "n_valid": 342 },
+          { "predictor": "fng_value_lag1", "hit_rate": 0.508, "n_valid": 342 }
+        ],
+        "backtest": [
+          { "predictor": "news_sentiment_mean_lag1", "sharpe_ratio": 0.22, "alpha": 0.014 },
+          { "predictor": "fng_value_lag1", "sharpe_ratio": -0.04, "alpha": -0.003 }
+        ]
+      },
+      "3": {
+        "return_col": "btc_fwd_ret_3d",
+        "hit_rates": [
+          { "predictor": "news_sentiment_mean_lag1", "hit_rate": 0.521, "n_valid": 340 },
+          { "predictor": "fng_value_lag1", "hit_rate": 0.503, "n_valid": 340 }
+        ],
+        "backtest": [
+          { "predictor": "news_sentiment_mean_lag1", "sharpe_ratio": 0.12, "alpha": 0.009 }
+        ]
+      },
+      "7": {
+        "return_col": "btc_fwd_ret_7d",
+        "hit_rates": [
+          { "predictor": "news_sentiment_mean_lag1", "hit_rate": 0.512, "n_valid": 336 }
+        ],
+        "backtest": [
+          { "predictor": "news_sentiment_mean_lag1", "sharpe_ratio": 0.04, "alpha": 0.002 }
+        ]
+      }
+    },
+    "walkForwardHorizons": {
+      "full": {
+        "1": { "avg_hit_rate": 0.51, "avg_alpha": 0.004, "stability": 0.42 },
+        "3": { "avg_hit_rate": 0.505, "avg_alpha": 0.002, "stability": 0.38 },
+        "7": { "avg_hit_rate": 0.499, "avg_alpha": -0.001, "stability": 0.33 }
+      },
+      "core": {
+        "1": { "avg_hit_rate": 0.52, "avg_alpha": 0.006, "stability": 0.48 },
+        "3": { "avg_hit_rate": 0.511, "avg_alpha": 0.003, "stability": 0.41 },
+        "7": { "avg_hit_rate": 0.502, "avg_alpha": 0.001, "stability": 0.36 }
+      }
+    }
+  },
+  "targets": {
+    "diagnostics": {
+      "btc_fwd_ret_1d": { "valid_rows": 351, "null_ratio": 0.0027, "mean": 0.0012, "std": 0.028 },
+      "btc_fwd_ret_3d": { "valid_rows": 349, "null_ratio": 0.0082, "mean": 0.0031, "std": 0.051 },
+      "btc_fwd_ret_7d": { "valid_rows": 345, "null_ratio": 0.0192, "mean": 0.0068, "std": 0.082 },
+      "btc_large_move_3d": { "valid_rows": 349, "null_ratio": 0.0082, "positive_rate": 0.383 },
+      "btc_realized_vol_20d_lag1": { "valid_rows": 342, "null_ratio": 0.063, "mean": 0.028, "std": 0.012 },
+      "btc_large_move_3d_vol_adj": { "valid_rows": 342, "null_ratio": 0.063, "positive_rate": 0.158 }
+    }
+  },
+  "stationarity": {
+    "adf": {
+      "btc_log_return": { "adf_stat": -8.42, "pvalue": 0.0001, "stationary": true },
+      "news_sentiment_mean": { "adf_stat": -4.91, "pvalue": 0.003, "stationary": true },
+      "fng_value": { "adf_stat": -2.72, "pvalue": 0.071, "stationary": false }
+    }
+  },
+  "rawStats": {
+    "run_id": "sentiment-join-20260421",
+    "generated_at_utc": "2026-04-21T08:00:00+00:00",
+    "rows_before_outlier_filter": 365,
+    "rows_after_outlier_filter": 352,
+    "outlier_filtered_count": 13,
+    "outlier_filtered_ratio": 0.0356,
+    "ffill_breakdown": {
+      "btc": 0,
+      "usdkrw": 117,
+      "vix": 108
+    },
+    "structured_sources": {
+      "btc_etf": { "mode": "gold_history", "status": "ok" },
+      "futures": { "mode": "supabase", "status": "ok" }
+    },
+    "target_diagnostics": {
+      "btc_large_move_3d": { "positive_rate": 0.383 },
+      "btc_large_move_3d_vol_adj": { "positive_rate": 0.158 }
     }
   }
 }

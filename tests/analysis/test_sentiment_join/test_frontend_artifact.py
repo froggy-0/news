@@ -112,7 +112,34 @@ def _make_stats_bytes(
                 "excluded_features": [],
             },
         },
-        # 허용되지 않는 키들 — 아티팩트에 나타나면 안 됨
+        "rows_before_outlier_filter": 365,
+        "rows_after_outlier_filter": 352,
+        "outlier_filtered_count": 13,
+        "outlier_filtered_ratio": 0.0356,
+        "granger_eligible_rows": 352,
+        "granger_skips": [],
+        "granger_skip_summary": {},
+        "ffill_breakdown": {"btc": 0, "usdkrw": 117, "vix": 108},
+        "exclusion_counts": {"vif": 1},
+        "target_diagnostics": {
+            "btc_large_move_3d": {"valid_rows": 350, "null_ratio": 0.01, "positive_rate": 0.38},
+            "btc_large_move_3d_vol_adj": {
+                "valid_rows": 350,
+                "null_ratio": 0.01,
+                "positive_rate": 0.16,
+            },
+        },
+        "hit_rates": [{"predictor": "news_sentiment_mean_lag1", "hit_rate": 0.53}],
+        "baseline_metrics": {"1": {"always_up": {"hit_rate": 0.51}}},
+        "horizon_metrics": {
+            "1": {
+                "return_col": "btc_log_return",
+                "hit_rates": [{"predictor": "news_sentiment_mean_lag1", "hit_rate": 0.53}],
+                "backtest": [],
+            }
+        },
+        "walk_forward_horizons": {"full": {"1": {"avg_hit_rate": 0.52, "stability": 0.45}}},
+        # 원본 metadata — v2 artifact에서는 rawStats에 보존되어야 함
         "walk_forward": {"index": "full", "folds": 3},
         "correlations": [{"feature": "fng_value", "pearson_r": 0.5}],
         "backtest": [{"index": "full", "horizon": 1, "sharpe": 0.7}],
@@ -214,9 +241,9 @@ def test_per_group_at_most_one_optimal_lag():
     assert all(v == 1 for v in group_counts.values())
 
 
-# ─── 화이트리스트 검증 ─────────────────────────────────────────────────────────
+# ─── v2 진단 metadata 검증 ────────────────────────────────────────────────────
 
-DISALLOWED_TOP_KEYS = {
+SNAKE_CASE_TOP_KEYS = {
     "walk_forward",
     "correlations",
     "backtest",
@@ -230,13 +257,30 @@ DISALLOWED_TOP_KEYS = {
 }
 
 
-def test_disallowed_keys_not_in_artifact():
+def test_snake_case_stats_not_promoted_to_top_level():
     artifact = build_frontend_artifact(
         stats_metadata_bytes=_make_stats_bytes(),
         reference_date="2026-04-21",
     )
-    found = DISALLOWED_TOP_KEYS & set(artifact.keys())
-    assert not found, f"불허 키가 아티팩트에 포함됨: {found}"
+    found = SNAKE_CASE_TOP_KEYS & set(artifact.keys())
+    assert not found, f"snake_case stats가 top-level에 포함됨: {found}"
+
+
+def test_v2_artifact_exposes_dashboard_diagnostics_and_raw_stats():
+    artifact = build_frontend_artifact(
+        stats_metadata_bytes=_make_stats_bytes(),
+        reference_date="2026-04-21",
+    )
+
+    assert artifact["schemaVersion"] == "sentiment-insight-v2"
+    assert artifact["summary"]["rowsAfterOutlierFilter"] == 352
+    assert artifact["summary"]["alphaCandidateCount"] == 1
+    assert artifact["dataQuality"]["ffillBreakdown"] == {"btc": 0, "usdkrw": 117, "vix": 108}
+    assert artifact["dataQuality"]["structuredSources"]["btc_etf"]["mode"] == "gold_history"
+    assert artifact["alpha"]["baselineMetrics"]["1"]["always_up"]["hit_rate"] == 0.51
+    assert artifact["targets"]["diagnostics"]["btc_large_move_3d_vol_adj"]["positive_rate"] == 0.16
+    assert artifact["stationarity"]["adf"]["btc_log_return"]["pvalue"] == 0.01
+    assert artifact["rawStats"]["structured_sources"]["btc_etf"]["mode"] == "gold_history"
 
 
 # ─── loadings 키 == selectedFeatures ─────────────────────────────────────────

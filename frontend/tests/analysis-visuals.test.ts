@@ -4,18 +4,57 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { AnalysisMasthead } from "../components/analysis/AnalysisMasthead";
+import {
+  AlphaValidationBoard,
+  AnalysisOverviewDeck,
+  DataQualityMatrix,
+  RawMetadataExplorer,
+  StationarityPanel,
+  TargetDiagnosticsPanel,
+} from "../components/analysis/AnalysisDashboardPanels";
 import { GrangerSymmetric } from "../components/analysis/GrangerSymmetric";
 import { PcaTabs } from "../components/analysis/PcaTabs";
 import { deriveAnalysisSummary } from "../lib/analysis-derive";
 import type { SentimentInsightArtifact } from "@schema/analysis.types";
 
 const artifact: SentimentInsightArtifact = {
+  schemaVersion: "sentiment-insight-v2",
   generatedAtUtc: "2026-04-21T08:00:00+00:00",
   referenceDate: "2026-04-21",
   runId: "sentiment-join-20260421",
+  summary: {
+    rowsBeforeOutlierFilter: 365,
+    rowsAfterOutlierFilter: 352,
+    outlierFilteredCount: 13,
+    outlierFilteredRatio: 0.0356,
+    grangerEligibleRows: 352,
+    grangerExecuted: true,
+    significantGrangerCount: 2,
+    grangerTestCount: 3,
+    alphaCandidateCount: 2,
+    baselineHorizonCount: 1,
+    horizonMetricCount: 1,
+    targetCount: 2,
+    sourceCount: 2,
+  },
+  dataQuality: {
+    rows: {
+      beforeOutlierFilter: 365,
+      afterOutlierFilter: 352,
+      outlierFilteredCount: 13,
+      outlierFilteredRatio: 0.0356,
+    },
+    ffillBreakdown: { btc: 0, usdkrw: 117, vix: 108 },
+    structuredSources: {
+      btc_etf: { mode: "gold_history", status: "ok" },
+      futures: { mode: "supabase", status: "ok" },
+    },
+    exclusionCounts: { vif: 1 },
+  },
   granger: {
     executed: true,
     correction: { method: "fdr_bh", nTests: 6 },
+    eligibleRows: 352,
     results: [
       {
         predictor: "news_sentiment_mean",
@@ -48,6 +87,8 @@ const artifact: SentimentInsightArtifact = {
         optimalLag: true,
       },
     ],
+    skips: [],
+    skipSummary: {},
   },
   pca: {
     full: {
@@ -72,6 +113,39 @@ const artifact: SentimentInsightArtifact = {
       qualityStatus: "ok",
       qualityReasons: [],
     },
+  },
+  alpha: {
+    hitRates: [{ predictor: "news_sentiment_mean_lag1", hit_rate: 0.53, n_valid: 340 }],
+    correlations: [],
+    backtest: [{ predictor: "news_sentiment_mean_lag1", sharpe_ratio: 0.22, alpha: 0.014 }],
+    walkForward: {},
+    baselineMetrics: { "1": { always_up: { hit_rate: 0.51 } } },
+    horizonMetrics: {
+      "1": {
+        return_col: "btc_log_return",
+        hit_rates: [{ predictor: "news_sentiment_mean_lag1", hit_rate: 0.53, n_valid: 340 }],
+        backtest: [{ predictor: "news_sentiment_mean_lag1", sharpe_ratio: 0.22, alpha: 0.014 }],
+      },
+    },
+    walkForwardHorizons: {
+      full: { "1": { avg_hit_rate: 0.52, stability: 0.45 } },
+    },
+  },
+  targets: {
+    diagnostics: {
+      btc_large_move_3d: { valid_rows: 349, null_ratio: 0.01, positive_rate: 0.38 },
+      btc_large_move_3d_vol_adj: { valid_rows: 342, null_ratio: 0.06, positive_rate: 0.16 },
+    },
+  },
+  stationarity: {
+    adf: {
+      btc_log_return: { adf_stat: -8.42, pvalue: 0.0001, stationary: true },
+      fng_value: { adf_stat: -2.72, pvalue: 0.071, stationary: false },
+    },
+  },
+  rawStats: {
+    ffill_breakdown: { btc: 0, usdkrw: 117 },
+    target_diagnostics: { btc_large_move_3d_vol_adj: { positive_rate: 0.16 } },
   },
 };
 
@@ -120,4 +194,22 @@ test("pca compass renders quality, contribution, and excluded feature context", 
   assert.match(markup, /설명력/);
   assert.match(markup, /데이터 상태 참고 필요/);
   assert.match(markup, /함께 쓰기 어려워 제외한 지표/);
+});
+
+test("analysis dashboard panels render quality, alpha, target, stationarity, and raw views", () => {
+  const markup = [
+    renderToStaticMarkup(createElement(AnalysisOverviewDeck, { artifact })),
+    renderToStaticMarkup(createElement(DataQualityMatrix, { dataQuality: artifact.dataQuality })),
+    renderToStaticMarkup(createElement(AlphaValidationBoard, { alpha: artifact.alpha, summary: artifact.summary })),
+    renderToStaticMarkup(createElement(TargetDiagnosticsPanel, { targets: artifact.targets })),
+    renderToStaticMarkup(createElement(StationarityPanel, { adf: artifact.stationarity?.adf })),
+    renderToStaticMarkup(createElement(RawMetadataExplorer, { rawStats: artifact.rawStats })),
+  ].join("\n");
+
+  assert.match(markup, /Run State/);
+  assert.match(markup, /데이터 품질 매트릭스/);
+  assert.match(markup, /Alpha validation/);
+  assert.match(markup, /Target diagnostics/);
+  assert.match(markup, /Stationarity gate/);
+  assert.match(markup, /Raw parquet metadata/);
 });
