@@ -91,10 +91,10 @@ def test_load_sentiment_join_settings_uses_defaults(
 
     settings = load_sentiment_join_settings()
 
-    assert settings.lookback_days == 180
+    assert settings.lookback_days == 365
     assert settings.output_dir == Path("data/sentiment_join").resolve()
     assert settings.r2_max_concurrency == 10
-    assert settings.retain_days == 30
+    assert settings.retain_days == 90
     assert settings.r2_public_bucket == ""
     assert settings.r2_s3_endpoint == ""
     assert settings.r2_access_key_id == ""
