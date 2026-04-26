@@ -359,7 +359,7 @@ export function AlphaValidationBoard({
               onClick={() => setActiveHorizon(horizonKey)}
               className={`cursor-pointer rounded-full px-4 py-2 font-mono text-[0.68rem] uppercase tracking-[0.14em] transition ${
                 activeHorizon === horizonKey
-                  ? "bg-white/12 text-white shadow-[0_0_22px_rgba(0,255,255,0.12)]"
+                  ? "bg-white/12 text-white shadow-[0_0_22px_rgba(212,135,13,0.18)]"
                   : "text-white/34 hover:text-white/66"
               }`}
               aria-pressed={activeHorizon === horizonKey}
@@ -680,7 +680,7 @@ function RatioRow({
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-white/8">
         <div
-          className="h-full rounded-full bg-[var(--accent-primary)] shadow-[0_0_18px_rgba(0,255,255,0.22)]"
+          className="h-full rounded-full bg-[var(--accent-primary)] shadow-[0_0_18px_rgba(212,135,13,0.30)]"
           style={{ width: `${width}%` }}
         />
       </div>

@@ -161,7 +161,7 @@ function SignalColumn({
   onPin: (id: string) => void;
 }) {
   return (
-    <section className="rounded-2xl border border-white/10 bg-black/20 p-4">
+    <section className="rounded-2xl border border-[rgba(255,220,140,0.1)] bg-[rgba(255,248,235,0.018)] p-4">
       <div className="mb-4 flex items-baseline justify-between gap-3">
         <h3 className="font-mono text-[0.72rem] uppercase tracking-[0.16em] text-white/72">
           {title}
@@ -183,7 +183,7 @@ function SignalColumn({
             />
           ))
         ) : (
-          <div className="rounded-xl border border-white/8 bg-white/[0.025] p-5">
+          <div className="rounded-xl border border-[rgba(255,220,140,0.08)] bg-white/[0.02] p-5">
             <p className="font-mono text-[0.72rem] text-white/36">No significant relationships detected.</p>
           </div>
         )}
@@ -214,7 +214,7 @@ function SignalCard({
 
   return (
     <article
-      className="relative rounded-xl border border-white/10 bg-white/[0.025] p-4 transition duration-300 hover:-translate-y-0.5 hover:border-white/18 hover:bg-white/[0.04]"
+      className="relative rounded-xl border border-[rgba(255,220,140,0.1)] bg-white/[0.02] p-4 transition duration-300 hover:-translate-y-0.5 hover:border-[rgba(255,220,140,0.18)] hover:bg-white/[0.034]"
       style={{ animation: `fadeLift 420ms ease-out ${index * 45}ms both` }}
     >
       <style>{`
@@ -277,7 +277,7 @@ function SignalCard({
                   background: lag.significant
                     ? "var(--accent-primary)"
                     : "rgba(255,255,255,0.16)",
-                  boxShadow: lag.significant ? "0 0 18px rgba(0,255,255,0.28)" : "none",
+                  boxShadow: lag.significant ? "0 0 18px rgba(212,135,13,0.36)" : "none",
                   width: `${Math.max(16, pct)}%`,
                 }}
               />
