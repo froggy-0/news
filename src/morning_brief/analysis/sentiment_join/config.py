@@ -52,7 +52,7 @@ def load_sentiment_join_settings() -> SentimentJoinSettings:
 
     lookback_days = _env_bounded_int(
         "SENTIMENT_JOIN_LOOKBACK_DAYS",
-        default=180,
+        default=365,
         minimum=0,
         maximum=10_000,
     )
@@ -68,7 +68,7 @@ def load_sentiment_join_settings() -> SentimentJoinSettings:
     )
     retain_days = _env_bounded_int(
         "SENTIMENT_JOIN_RETAIN_DAYS",
-        default=30,
+        default=90,
         minimum=0,
         maximum=3650,
     )

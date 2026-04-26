@@ -329,7 +329,7 @@ jobs:
           KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET || '' }}
           KIS_TOKEN_CACHE_PATH: .cache/kis_token/token.json
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-          SENTIMENT_JOIN_LOOKBACK_DAYS: ${{ vars.SENTIMENT_JOIN_LOOKBACK_DAYS || '180' }}
+          SENTIMENT_JOIN_LOOKBACK_DAYS: ${{ vars.SENTIMENT_JOIN_LOOKBACK_DAYS || '365' }}
           SENTIMENT_JOIN_RETAIN_DAYS: ${{ vars.SENTIMENT_JOIN_RETAIN_DAYS || '90' }}
           SENTIMENT_JOIN_BINANCE_KEY: ${{ secrets.SENTIMENT_JOIN_BINANCE_KEY || '' }}
           FUTURES_LAMBDA_ARN: ${{ vars.FUTURES_LAMBDA_ARN || '' }}
