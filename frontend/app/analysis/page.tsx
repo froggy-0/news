@@ -21,8 +21,8 @@ import { deriveAnalysisSummary } from "@/lib/analysis-derive";
 export const dynamic = "force-static";
 
 export const metadata: Metadata = {
-  title: "감성-시장 흐름 — SOVEREIGN BRIEF",
-  description: "뉴스 감성과 시장 지표의 시간 순서 기반 관계 분석",
+  title: "Signal Intelligence Lab — SOVEREIGN BRIEF",
+  description: "Temporal precedence analysis of news sentiment and BTC market structure",
 };
 
 export default async function AnalysisPage() {
@@ -52,27 +52,27 @@ export default async function AnalysisPage() {
           diagnosticsReady={diagnosticsReady}
         />
 
-        <div className="mx-auto w-full max-w-6xl space-y-16 px-6 py-14">
-          {/* Overview */}
+        <div className="mx-auto w-full max-w-6xl space-y-14 px-6 py-14">
+          {/* § PIPELINE HEALTH */}
           <section>
             <SectionHeader
-              title="오늘 분석을 믿어도 되는가"
+              index="01"
+              title="Pipeline Health"
               badge="run · coverage · source · raw metadata"
-              plain="가장 먼저 데이터 상태와 분석 실행 상태를 봅니다. 신호보다 품질이 먼저입니다."
-              detail="상단 카드는 parquet metadata의 핵심 진단값을 압축한 것입니다. 마스킹, ffill, skip이 커지면 아래 통계 결과는 참고용으로 낮춰 읽어야 합니다."
+              description="Data integrity check before reading any signal. Quality precedes interpretation."
             />
             <div className="mt-8">
               <AnalysisOverviewDeck artifact={artifact} />
             </div>
           </section>
 
-          {/* Data quality */}
+          {/* § DATA QUALITY */}
           <section>
             <SectionHeader
-              title="입력 데이터 상태"
+              index="02"
+              title="Data Quality"
               badge="source lineage · ffill · exclusion"
-              plain="BTC, ETF, 선물, VIX 같은 입력 데이터가 어디서 왔고 얼마나 보정되었는지 확인합니다."
-              detail="ffill이 큰 지표는 신호처럼 보여도 실제로는 오래된 값이 유지된 것일 수 있습니다. source lineage와 함께 봐야 합니다."
+              description="Where BTC, ETF, futures, and VIX inputs originated and how much interpolation was applied. High ffill counts indicate stale propagation, not real signal."
             />
             <div className="analysis-depth-panel mt-8 p-5 md:p-8">
               <DataQualityMatrix
@@ -82,26 +82,26 @@ export default async function AnalysisPage() {
             </div>
           </section>
 
-          {/* Granger */}
+          {/* § GRANGER CAUSALITY */}
           <section>
             <SectionHeader
-              title="누가 먼저 움직였나"
-              badge={`${artifact.granger.correction.nTests}개 관계 · 1-3일 전 데이터 검정`}
-              plain="뉴스 분위기가 시장을 먼저 움직였는지, 시장 움직임이 뉴스 분위기를 먼저 바꿨는지 봅니다."
-              detail="밝은 표시는 여러 관계를 동시에 검정한 뒤에도 우연일 가능성이 낮은 결과입니다. 링은 같은 관계 안에서 가장 설명력이 좋았던 날짜 간격입니다."
+              index="03"
+              title="Granger Causality"
+              badge={`${artifact.granger.correction.nTests} relationships · lag 1–3d`}
+              description="Tests whether past values of one series statistically precede changes in another. Highlighted results survive multiple-comparison correction."
             />
             <div className="analysis-depth-panel mt-8 p-5 md:p-8">
               <GrangerSymmetric granger={artifact.granger} />
             </div>
           </section>
 
-          {/* Alpha */}
+          {/* § ALPHA VALIDATION */}
           <section>
             <SectionHeader
-              title="신호가 기준선을 이겼나"
+              index="04"
+              title="Alpha Validation"
               badge="1d · 3d · 7d horizon · baseline uplift"
-              plain="후보 신호가 단순 baseline보다 나은지, 그리고 그 성능이 walk-forward에서도 유지되는지 봅니다."
-              detail="hit rate만 높아도 baseline 대비 uplift가 없거나 walk-forward 안정성이 낮으면 기본 후보로 승격하지 않는 것이 안전합니다."
+              description="Candidate signals must outperform naive baselines on lag-only forward returns. Walk-forward stability separates persistent edge from in-sample curve-fitting."
             />
             <div className="analysis-depth-panel mt-8 p-5 md:p-8">
               <AlphaValidationBoard
@@ -112,13 +112,13 @@ export default async function AnalysisPage() {
             </div>
           </section>
 
-          {/* Targets */}
+          {/* § TARGET DIAGNOSTICS */}
           <section>
             <SectionHeader
-              title="예측 문제가 너무 쉬워 보이지 않는가"
+              index="05"
+              title="Target Diagnostics"
               badge="forward returns · fixed label · volatility adjusted label"
-              plain="large move target의 이벤트 비율을 확인해 label이 과도하게 흔하거나 희소하지 않은지 봅니다."
-              detail="고정 임계값 label과 변동성 보정 label을 함께 보면 시장 regime에 따라 이벤트 정의가 왜곡되는지 점검할 수 있습니다."
+              description="Event rates for large-move labels. Labels that are too frequent or too rare distort the prediction task — compare fixed vs. vol-adjusted thresholds across regimes."
             />
             <div className="analysis-depth-panel mt-8 p-5 md:p-8">
               <TargetDiagnosticsPanel
@@ -128,26 +128,26 @@ export default async function AnalysisPage() {
             </div>
           </section>
 
-          {/* PCA */}
+          {/* § PCA FACTOR ANALYSIS */}
           <section>
             <SectionHeader
-              title="종합 신호를 만든 지표들"
-              badge="확장 지표 · 핵심 지표 · 기여도"
-              plain="여러 시장 지표를 하나의 종합 신호로 압축했을 때, 어떤 지표가 방향을 가장 많이 밀었는지 봅니다."
-              detail="중앙선 오른쪽은 종합 신호를 올리는 방향, 왼쪽은 낮추는 방향입니다. 설명력이 높을수록 여러 지표의 흐름을 하나의 신호로 잘 요약했다는 뜻입니다."
+              index="06"
+              title="PCA Factor Analysis"
+              badge="extended features · core features · loadings"
+              description="Compression of market indicators into a single hybrid index. Loadings reveal which features drive the composite signal direction and magnitude."
             />
             <div className="analysis-depth-panel mt-8 p-5 md:p-8">
               <PcaTabs pca={artifact.pca} />
             </div>
           </section>
 
-          {/* Stationarity */}
+          {/* § STATIONARITY GATE */}
           <section>
             <SectionHeader
-              title="통계 검정 전제"
+              index="07"
+              title="Stationarity Gate"
               badge="ADF · stationarity · diagnostics"
-              plain="시계열 검정이 해석 가능한 조건에서 실행되었는지 확인합니다."
-              detail="정상성 조건이 약하면 Granger 결과는 skip되거나 해석 신뢰도가 낮아질 수 있습니다. 이 표는 그 원인을 추적하기 위한 비행기록장치입니다."
+              description="Granger tests assume stationary inputs. Weak ADF results cause skips or reduce confidence in causality estimates — this panel traces the root cause."
             />
             <div className="analysis-depth-panel mt-8 p-5 md:p-8">
               <StationarityPanel
@@ -157,13 +157,13 @@ export default async function AnalysisPage() {
             </div>
           </section>
 
-          {/* Raw metadata */}
+          {/* § RAW PARQUET METADATA */}
           <section>
             <SectionHeader
-              title="원본 메타데이터"
+              index="08"
+              title="Raw Parquet Metadata"
               badge="sentiment_join_stats · no-loss view"
-              plain="요약 화면에서 빠진 필드가 없도록 parquet metadata 원본을 접을 수 있는 JSON으로 제공합니다."
-              detail="대시보드 카드는 해석을 돕기 위한 뷰이고, 이 영역은 디버깅과 원인 추적을 위한 원본 계약입니다."
+              description="Full parquet metadata exposed as JSON. Dashboard cards are curated views — this section is the ground truth for debugging and contract verification."
             />
             <div className="mt-8">
               <RawMetadataExplorer
@@ -189,30 +189,28 @@ export default async function AnalysisPage() {
 }
 
 function SectionHeader({
+  index,
   title,
   badge,
-  plain,
-  detail,
+  description,
 }: {
+  index: string;
   title: string;
   badge: string;
-  plain: string;
-  detail: string;
+  description: string;
 }) {
   return (
     <div className="border-b border-white/8 pb-5">
       <div className="flex flex-wrap items-baseline gap-3">
-        <h2 className="text-[1.1rem] font-semibold tracking-[-0.02em] text-white">{title}</h2>
-        <span className="font-mono text-[0.68rem] tracking-[0.04em] text-[var(--text-muted)]">
+        <span className="font-mono text-[0.62rem] tabular-nums tracking-[0.12em] text-white/20">
+          §{index}
+        </span>
+        <h2 className="text-[1rem] font-semibold tracking-[-0.02em] text-white/90">{title}</h2>
+        <span className="font-mono text-[0.65rem] tracking-[0.06em] text-[var(--accent-primary)]/50">
           {badge}
         </span>
       </div>
-      {/* 비전문가용 한 줄 설명 */}
-      <p className="mt-2 text-[0.9rem] leading-7 text-[var(--text-secondary)]">{plain}</p>
-      {/* 상세 해석 가이드 */}
-      <p className="mt-1.5 max-w-3xl text-[0.78rem] leading-6 text-[var(--text-muted)]">
-        {detail}
-      </p>
+      <p className="mt-2 max-w-3xl font-mono text-[0.74rem] leading-6 text-white/36">{description}</p>
     </div>
   );
 }
