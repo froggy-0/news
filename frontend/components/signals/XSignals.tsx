@@ -28,8 +28,8 @@ export function XSignals({
             </div>
           </div>
           <DataState
-            title="X Signal Status"
-            message="No X signals found in this run."
+            title="X 시그널 상태"
+            message="전체 X 시그널을 확인하지 못했어요."
             family="reading"
             minHeight={220}
           />
@@ -58,7 +58,7 @@ export function XSignals({
         <XSignalsList
           items={all}
           showRawToggle={showRawToggle}
-          emptyMessage="No X signals found in this run."
+          emptyMessage="전체 X 시그널을 확인하지 못했어요."
         />
       </div>
     </section>

@@ -9,7 +9,6 @@ import { SiteHeader } from "@/components/layout/SiteHeader";
 import { StocksBoard } from "@/components/market/StocksBoard";
 import { NewsFeed } from "@/components/news/NewsFeed";
 import { XSignals } from "@/components/signals/XSignals";
-import { buildHistoryEntries } from "@/lib/history";
 import { fetchBriefByDate, fetchIndex } from "@/lib/r2";
 
 export async function generateStaticParams() {
@@ -38,15 +37,11 @@ export default async function ArchiveDetailPage({
   const { date } = await params;
 
   try {
-    const [brief, index] = await Promise.all([fetchBriefByDate(date), fetchIndex()]);
+    const brief = await fetchBriefByDate(date);
 
     return (
       <main className="pb-6">
-        <SiteHeader
-          variant="archive-detail"
-          historyEntries={buildHistoryEntries(index.dates, brief.meta.date)}
-          currentDate={brief.meta.date}
-        />
+        <SiteHeader variant="archive-detail" />
         <JudgmentBlock
           headline={brief.meta.displayHeadline || brief.aiJudgment.headline}
           summaryLead={brief.aiJudgment.summaryLead}

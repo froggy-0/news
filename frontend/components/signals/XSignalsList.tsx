@@ -10,7 +10,7 @@ const XIcon = ({ className = "" }: { className?: string }) => (
 );
 
 function sentimentTone(value: XSignal["sentiment"]): string {
-  if (value === "bullish") return "bg-[#00ffff]/20 text-[#00ffff]";
+  if (value === "bullish") return "bg-[var(--accent-primary)]/20 text-[var(--accent-primary)]";
   if (value === "bearish") return "bg-[#ff6b6b]/18 text-[#ff6b6b]";
   return "bg-white/10 text-white/56";
 }
@@ -48,7 +48,7 @@ export function XSignalsList({
             <div
               className={`card-signal-line absolute left-0 top-0 h-0.5 w-full ${
                 signal.sentiment === "bullish"
-                  ? "bg-[#00ffff]/45"
+                  ? "bg-[var(--accent-primary)]/45"
                   : signal.sentiment === "bearish"
                     ? "bg-[#ff6b6b]/45"
                     : "bg-white/12"

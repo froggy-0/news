@@ -73,8 +73,8 @@ function themeIcon(topic: TopicSummary["topic"]) {
 }
 
 function themeAccent(topic: TopicSummary["topic"]): string {
-  if (topic === "macro") return "from-[#9dff73]/90 to-[#00ff66]/18";
-  if (topic === "us-stocks") return "from-[#00ffff]/90 to-[#00ffff]/18";
+  if (topic === "macro") return "from-[#9dff73]/90 to-[var(--accent-primary)]/18";
+  if (topic === "us-stocks") return "from-[var(--accent-primary)]/90 to-[var(--accent-primary)]/18";
   if (topic === "bigtech") return "from-[#ffd36b]/88 to-[#ffd36b]/16";
   if (topic === "bitcoin") return "from-[#ffb45c]/88 to-[#ff8a3d]/16";
   return "from-white/55 to-white/10";
