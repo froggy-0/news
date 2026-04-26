@@ -11,6 +11,7 @@ import {
   RawMetadataExplorer,
   StationarityPanel,
   TargetDiagnosticsPanel,
+  isFullDiagnosticArtifact,
 } from "../components/analysis/AnalysisDashboardPanels";
 import { GrangerSymmetric } from "../components/analysis/GrangerSymmetric";
 import { PcaTabs } from "../components/analysis/PcaTabs";
@@ -157,6 +158,8 @@ test("analysis masthead renders insight summary strip", () => {
       correction: artifact.granger.correction,
       staleWarning: false,
       summary: deriveAnalysisSummary(artifact),
+      schemaVersion: artifact.schemaVersion,
+      diagnosticsReady: isFullDiagnosticArtifact(artifact),
     }),
   );
 
@@ -199,11 +202,37 @@ test("pca compass renders quality, contribution, and excluded feature context", 
 test("analysis dashboard panels render quality, alpha, target, stationarity, and raw views", () => {
   const markup = [
     renderToStaticMarkup(createElement(AnalysisOverviewDeck, { artifact })),
-    renderToStaticMarkup(createElement(DataQualityMatrix, { dataQuality: artifact.dataQuality })),
-    renderToStaticMarkup(createElement(AlphaValidationBoard, { alpha: artifact.alpha, summary: artifact.summary })),
-    renderToStaticMarkup(createElement(TargetDiagnosticsPanel, { targets: artifact.targets })),
-    renderToStaticMarkup(createElement(StationarityPanel, { adf: artifact.stationarity?.adf })),
-    renderToStaticMarkup(createElement(RawMetadataExplorer, { rawStats: artifact.rawStats })),
+    renderToStaticMarkup(
+      createElement(DataQualityMatrix, {
+        dataQuality: artifact.dataQuality,
+        diagnosticsReady: isFullDiagnosticArtifact(artifact),
+      }),
+    ),
+    renderToStaticMarkup(
+      createElement(AlphaValidationBoard, {
+        alpha: artifact.alpha,
+        summary: artifact.summary,
+        diagnosticsReady: isFullDiagnosticArtifact(artifact),
+      }),
+    ),
+    renderToStaticMarkup(
+      createElement(TargetDiagnosticsPanel, {
+        targets: artifact.targets,
+        diagnosticsReady: isFullDiagnosticArtifact(artifact),
+      }),
+    ),
+    renderToStaticMarkup(
+      createElement(StationarityPanel, {
+        adf: artifact.stationarity?.adf,
+        diagnosticsReady: isFullDiagnosticArtifact(artifact),
+      }),
+    ),
+    renderToStaticMarkup(
+      createElement(RawMetadataExplorer, {
+        rawStats: artifact.rawStats,
+        diagnosticsReady: isFullDiagnosticArtifact(artifact),
+      }),
+    ),
   ].join("\n");
 
   assert.match(markup, /Run State/);
@@ -212,4 +241,32 @@ test("analysis dashboard panels render quality, alpha, target, stationarity, and
   assert.match(markup, /Target diagnostics/);
   assert.match(markup, /Stationarity gate/);
   assert.match(markup, /Raw parquet metadata/);
+});
+
+test("legacy v1 artifact renders pending diagnostics instead of false zeroes", () => {
+  const { schemaVersion, summary, dataQuality, alpha, targets, stationarity, rawStats, ...legacy } = artifact;
+  void schemaVersion;
+  void summary;
+  void dataQuality;
+  void alpha;
+  void targets;
+  void stationarity;
+  void rawStats;
+
+  const legacyArtifact: SentimentInsightArtifact = legacy;
+  const markup = [
+    renderToStaticMarkup(createElement(AnalysisOverviewDeck, { artifact: legacyArtifact })),
+    renderToStaticMarkup(
+      createElement(AlphaValidationBoard, {
+        alpha: legacyArtifact.alpha,
+        summary: legacyArtifact.summary,
+        diagnosticsReady: isFullDiagnosticArtifact(legacyArtifact),
+      }),
+    ),
+  ].join("\n");
+
+  assert.match(markup, /legacy v1/);
+  assert.match(markup, /metadata pending/);
+  assert.match(markup, /2 significant/);
+  assert.match(markup, /Alpha metrics are waiting for v2 artifact/);
 });
