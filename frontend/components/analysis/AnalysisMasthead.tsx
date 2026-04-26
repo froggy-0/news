@@ -23,109 +23,132 @@ export function AnalysisMasthead({
   schemaVersion?: string;
   diagnosticsReady: boolean;
 }) {
-  const generatedKst = (() => {
+  const generatedUtcShort = (() => {
     try {
-      return new Date(generatedAtUtc).toLocaleString("ko-KR", {
-        timeZone: "Asia/Seoul",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      return new Date(generatedAtUtc).toISOString().replace("T", " ").slice(0, 16) + " UTC";
     } catch {
       return generatedAtUtc;
     }
   })();
 
+  const artifactLabel = diagnosticsReady ? (schemaVersion ?? "v2") : "legacy v1";
+  const artifactOk = diagnosticsReady;
+
   return (
     <div className="border-b border-white/10">
+      {/* Stale warning strip */}
       {staleWarning && (
-        <div className="border-b border-[var(--accent-warning)]/30 bg-[var(--accent-warning)]/8 px-6 py-3">
-          <p className="font-mono text-[0.75rem] tracking-[0.08em] text-[var(--accent-warning)]">
-            기준일 {referenceDate} — 최신 분석 데이터가 아닐 수 있습니다
+        <div className="border-b border-[var(--accent-warning)]/30 bg-[var(--accent-warning)]/8 px-6 py-2.5">
+          <p className="font-mono text-[0.72rem] tracking-[0.1em] text-[var(--accent-warning)]">
+            ⚠ STALE ARTIFACT — reference date {referenceDate} may not reflect latest pipeline run
           </p>
         </div>
       )}
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-12 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="mb-2 font-mono text-[0.7rem] uppercase tracking-[0.18em] text-[var(--text-muted)]">
-            Parquet-backed research console
-          </p>
-          <h1
-            className="text-[2.4rem] leading-[1.1] tracking-[-0.03em] text-white md:text-[3.2rem]"
-            style={{ fontFamily: "var(--font-instrument-serif)", fontStyle: "italic" }}
-          >
-            감성 알파 리서치 랩
-          </h1>
-          <p className="mt-3 max-w-lg text-[0.95rem] leading-7 text-[var(--text-secondary)]">
-            뉴스 감성, BTC 시장 구조, ETF·선물 데이터를 하나의 검증 가능한 리서치 콘솔로
-            묶어 선행성, 품질, alpha 후보를 함께 점검합니다.
-          </p>
-          <p className="mt-2 max-w-lg text-[0.8rem] leading-6 text-[var(--text-muted)]">
-            Granger causality, PCA hybrid index, lag-only alpha validation, target diagnostics를
-            같은 기준일의 parquet metadata와 연결해 읽습니다.
-          </p>
-          {!diagnosticsReady && (
-            <div className="mt-5 max-w-xl rounded-2xl border border-[var(--accent-warning)]/24 bg-[var(--accent-warning)]/7 p-4">
-              <p className="font-mono text-[0.68rem] uppercase tracking-[0.14em] text-[var(--accent-warning)]">
-                Diagnostic artifact pending
-              </p>
-              <p className="mt-2 text-[0.78rem] leading-6 text-white/56">
-                현재 공개 JSON은 legacy 계약이라 parquet에 있는 data quality, alpha, target,
-                raw metadata가 아직 모두 노출되지 않았습니다. 다음 sentiment-join 재실행 후
-                v2 artifact가 publish되면 아래 진단 카드가 채워집니다.
-              </p>
-            </div>
-          )}
+
+      {/* Main header area */}
+      <div className="mx-auto w-full max-w-6xl px-6 pt-10 pb-6">
+        {/* Eyebrow */}
+        <div className="mb-4 flex items-center gap-3">
+          <span className="font-mono text-[0.65rem] uppercase tracking-[0.22em] text-[var(--accent-primary)]/60">
+            Sovereign Brief
+          </span>
+          <span className="h-px w-6 bg-white/12" />
+          <span className="font-mono text-[0.65rem] uppercase tracking-[0.22em] text-white/28">
+            Research Console
+          </span>
         </div>
-        <div className="shrink-0 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-          <dl className="grid grid-cols-1 gap-x-8 gap-y-3 font-mono text-[0.72rem] sm:grid-cols-2">
-            <MetaItem label="기준일" value={referenceDate} />
-            <MetaItem label="생성" value={generatedKst} />
-            <MetaItem
-              label="artifact"
-              value={diagnosticsReady ? (schemaVersion ?? "v2") : "legacy v1"}
-              accent={diagnosticsReady}
-            />
-            <MetaItem
-              label="diagnostics"
-              value={diagnosticsReady ? "complete" : "pending"}
-              accent={diagnosticsReady}
-              warning={!diagnosticsReady}
-            />
-            <MetaItem label="검정한 관계" value={`${correction.nTests}개`} />
-            <MetaItem
-              label="p-value 보정"
-              value={`적용 (${correction.method.toUpperCase().replace("_", "-")})`}
-              accent
-            />
-          </dl>
+
+        {/* Title row */}
+        <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+          <div className="flex-1">
+            <h1
+              className="text-[2.6rem] leading-[1.08] tracking-[-0.04em] text-white md:text-[3.6rem]"
+              style={{ fontFamily: "var(--font-instrument-serif)", fontStyle: "italic" }}
+            >
+              Signal Intelligence Lab
+            </h1>
+            <p className="mt-3 max-w-2xl font-mono text-[0.78rem] leading-6 text-white/40">
+              Granger causality · PCA hybrid index · lag-only alpha validation · target diagnostics
+              — all resolved against the same parquet reference date.
+            </p>
+
+            {!diagnosticsReady && (
+              <div className="mt-5 max-w-xl rounded-2xl border border-[var(--accent-warning)]/24 bg-[var(--accent-warning)]/7 px-4 py-3.5">
+                <p className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-[var(--accent-warning)]">
+                  diagnostic artifact pending
+                </p>
+                <p className="mt-1.5 text-[0.76rem] leading-6 text-white/52">
+                  Public JSON is legacy v1 — data quality, alpha, target, and rawStats blocks will populate after the next v2 sentiment-join run.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Run metadata card */}
+          <div className="shrink-0 rounded-2xl border border-white/10 bg-white/[0.028] px-5 py-4 font-mono">
+            <p className="mb-3 text-[0.6rem] uppercase tracking-[0.2em] text-white/28">Run Metadata</p>
+            <dl className="grid grid-cols-2 gap-x-8 gap-y-2.5 text-[0.7rem]">
+              <MetaItem label="Reference" value={referenceDate} />
+              <MetaItem label="Generated" value={generatedUtcShort} />
+              <MetaItem
+                label="Artifact"
+                value={artifactLabel}
+                accent={artifactOk}
+                warning={!artifactOk}
+              />
+              <MetaItem
+                label="Diagnostics"
+                value={diagnosticsReady ? "complete" : "pending"}
+                accent={diagnosticsReady}
+                warning={!diagnosticsReady}
+              />
+              <MetaItem label="Tests run" value={`${correction.nTests}`} />
+              <MetaItem
+                label="Correction"
+                value={correction.method.toUpperCase().replace("_", "-")}
+                accent
+              />
+            </dl>
+          </div>
         </div>
       </div>
+
+      {/* KPI strip — horizontal summary bar */}
       <div className="mx-auto w-full max-w-6xl px-6 pb-8">
-        <div
-          className="grid gap-3 md:grid-cols-4"
-          style={{ perspective: "1200px" }}
-          aria-label="분석 핵심 요약"
-        >
-          <SummarySignalCard title="감성이 먼저" caption="뉴스 분위기 -> 시장" signal={summary.strongestForward} />
-          <SummarySignalCard title="시장이 먼저" caption="시장 -> 뉴스 분위기" signal={summary.strongestReverse} />
-          <SummaryMetricCard
-            title="의미 있는 관계"
+        <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-4" aria-label="Analysis KPI summary">
+          <KpiCard
+            slot="A"
+            label="Sentiment Leads"
+            caption="news → market"
+            signal={summary.strongestForward}
+          />
+          <KpiCard
+            slot="B"
+            label="Market Leads"
+            caption="market → news"
+            signal={summary.strongestReverse}
+          />
+          <KpiMetric
+            label="Significant"
             value={`${summary.significantCount}`}
-            caption="보정 p-value 0.05 미만"
+            caption="adj p-value < 0.05"
             tone={summary.significantCount > 0 ? "cyan" : "muted"}
           />
-          <SummaryMetricCard
-            title="종합 신호 핵심"
-            value={summary.topPcaDriver?.label ?? "종합 신호 없음"}
+          <KpiMetric
+            label="Top PCA Driver"
+            value={summary.topPcaDriver?.label ?? "—"}
             caption={
               summary.topPcaDriver
-                ? `${summary.topPcaDriver.loading >= 0 ? "+" : ""}${summary.topPcaDriver.loading.toFixed(3)} · 데이터 ${(summary.coverageRatio * 100).toFixed(1)}%`
-                : `데이터 상태 ${formatQualityStatus(summary.qualityStatus)}`
+                ? `${summary.topPcaDriver.loading >= 0 ? "+" : ""}${summary.topPcaDriver.loading.toFixed(3)} · ${(summary.coverageRatio * 100).toFixed(1)}% coverage`
+                : `quality: ${formatQualityStatus(summary.qualityStatus)}`
             }
-            tone={summary.topPcaDriver?.direction === "negative" ? "red" : "green"}
+            tone={
+              summary.topPcaDriver?.direction === "negative"
+                ? "red"
+                : summary.topPcaDriver
+                  ? "green"
+                  : "muted"
+            }
           />
         </div>
       </div>
@@ -133,64 +156,72 @@ export function AnalysisMasthead({
   );
 }
 
-function SummarySignalCard({
-  title,
+function KpiCard({
+  label,
   caption,
   signal,
 }: {
-  title: string;
+  slot: string;
+  label: string;
   caption: string;
   signal: DerivedSignal | null;
 }) {
   const hasSignal = signal !== null;
   return (
-    <div className="analysis-depth-panel group min-h-[124px] p-4 transition-transform duration-300 hover:-translate-y-1">
-      <p className="font-mono text-[0.63rem] uppercase tracking-[0.16em] text-white/34">{title}</p>
-      <p className="mt-1 font-mono text-[0.62rem] tracking-[0.08em] text-[var(--accent-primary)]/70">
+    <article className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.028] p-4 transition-all duration-300 hover:border-white/18 hover:bg-white/[0.04]">
+      <div className="absolute inset-0 rounded-2xl opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+        style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(0,255,255,0.04), transparent 70%)" }}
+      />
+      <p className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-white/28">{label}</p>
+      <p className="mt-0.5 font-mono text-[0.58rem] tracking-[0.08em] text-[var(--accent-primary)]/50">
         {caption}
       </p>
-      <p className="mt-4 text-[0.9rem] font-semibold leading-5 text-white/86">
-        {hasSignal ? signal.label : "뚜렷한 관계 없음"}
+      <p className="mt-3.5 text-[0.9rem] font-semibold leading-5 text-white/86">
+        {hasSignal ? signal.label : "No significant relationship"}
       </p>
-      <p className="mt-2 font-mono text-[0.68rem] text-white/38">
+      <p className="mt-1.5 font-mono text-[0.65rem] text-white/34">
         {hasSignal && signal.lag !== null
-          ? `${signal.lag}일 전 · ${formatAdjustedPValue(signal.adjustedPValue)}${signal.significant ? " · 의미 있음" : ""}`
-          : "검정값 없음"}
+          ? `lag ${signal.lag}d · ${formatAdjustedPValue(signal.adjustedPValue)}${signal.significant ? " · significant" : ""}`
+          : "no test results"}
       </p>
-    </div>
+    </article>
   );
 }
 
-function SummaryMetricCard({
-  title,
+function KpiMetric({
+  label,
   value,
   caption,
   tone,
 }: {
-  title: string;
+  label: string;
   value: string;
   caption: string;
   tone: "cyan" | "green" | "red" | "muted";
 }) {
-  const color =
+  const accentColor =
     tone === "green"
       ? "var(--accent-green)"
       : tone === "red"
         ? "var(--accent-down)"
         : tone === "cyan"
           ? "var(--accent-primary)"
-          : "rgba(255,255,255,0.42)";
+          : "rgba(255,255,255,0.38)";
+
   return (
-    <div className="analysis-depth-panel group min-h-[124px] p-4 transition-transform duration-300 hover:-translate-y-1">
-      <p className="font-mono text-[0.63rem] uppercase tracking-[0.16em] text-white/34">{title}</p>
+    <article className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.028] p-4 transition-all duration-300 hover:border-white/18 hover:bg-white/[0.04]">
+      <div className="absolute inset-0 rounded-2xl opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+        style={{ background: `radial-gradient(ellipse at 50% 0%, color-mix(in srgb, ${accentColor} 8%, transparent), transparent 70%)` }}
+      />
+      <p className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-white/28">{label}</p>
       <p
-        className="mt-4 text-[1rem] font-semibold leading-5 text-white/88 md:text-[1.1rem]"
-        style={{ color }}
+        className="mt-3.5 text-[1.05rem] font-semibold leading-5"
+        style={{ color: accentColor }}
       >
         {value}
       </p>
-      <p className="mt-2 font-mono text-[0.68rem] text-white/38">{caption}</p>
-    </div>
+      <p className="mt-1.5 font-mono text-[0.65rem] text-white/34">{caption}</p>
+    </article>
   );
 }
 
@@ -209,11 +240,11 @@ function MetaItem({
     ? "text-[var(--accent-warning)]"
     : accent
       ? "text-[var(--accent-primary)]"
-      : "text-white/80";
+      : "text-white/76";
   return (
     <div>
-      <dt className="uppercase tracking-[0.12em] text-[var(--text-muted)]">{label}</dt>
-      <dd className={`mt-0.5 tracking-[0.04em] ${valueClass}`}>{value}</dd>
+      <dt className="text-[0.62rem] uppercase tracking-[0.12em] text-white/28">{label}</dt>
+      <dd className={`mt-0.5 text-[0.7rem] tracking-[0.04em] ${valueClass}`}>{value}</dd>
     </div>
   );
 }

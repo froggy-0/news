@@ -52,7 +52,7 @@ function formatPercent(value: number | null | undefined, digits = 1): string {
 
 function formatNumber(value: number | null | undefined, digits = 0): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "n/a";
-  return value.toLocaleString("ko-KR", {
+  return value.toLocaleString("en-US", {
     maximumFractionDigits: digits,
     minimumFractionDigits: digits,
   });
@@ -117,7 +117,7 @@ export function AnalysisOverviewDeck({ artifact }: { artifact: SentimentInsightA
       {!diagnosticsReady && (
         <LegacyArtifactNotice
           title="Public artifact is still legacy v1"
-          detail="운영 latest.json에는 Granger/PCA만 있고, parquet의 ffill, alpha, target, rawStats는 아직 공개 JSON에 반영되지 않았습니다. 숫자 0이 아니라 v2 artifact 재생성이 필요한 상태입니다."
+          detail="The live latest.json only contains Granger / PCA. ffill breakdown, alpha, target diagnostics, and rawStats exist in the parquet but are not yet reflected in the public JSON. A v2 sentiment-join re-run is required."
         />
       )}
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
@@ -135,7 +135,7 @@ export function AnalysisOverviewDeck({ artifact }: { artifact: SentimentInsightA
         caption={
           diagnosticsReady
             ? `raw ${formatNumber(rows?.beforeOutlierFilter ?? summary?.rowsBeforeOutlierFilter)} · masked ${formatPercent(rows?.outlierFilteredRatio, 1)}`
-            : "parquet에는 존재 · v2 JSON 재생성 필요"
+            : "exists in parquet · v2 JSON re-run required"
         }
         tone={diagnosticsReady ? outlierTone : "yellow"}
       />
@@ -233,30 +233,29 @@ export function DataQualityMatrix({
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-[var(--accent-primary)]/80">
-              데이터 품질 매트릭스
+              Data quality matrix
             </p>
-            <p className="mt-2 max-w-2xl text-[0.82rem] leading-6 text-white/48">
-              분석 결과보다 먼저 확인해야 하는 입력 데이터 상태입니다. source, ffill, outlier masking을
-              한 화면에서 확인합니다.
+            <p className="mt-2 max-w-2xl font-mono text-[0.76rem] leading-6 text-white/42">
+              Input data state to inspect before reading any signal output. Source lineage, ffill counts, and outlier masking in a single view.
             </p>
           </div>
-          <div className="hidden rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 font-mono text-[0.62rem] uppercase tracking-[0.12em] text-white/38 md:block">
+          <div className="hidden rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 font-mono text-[0.62rem] uppercase tracking-[0.12em] text-white/36 md:block">
             coverage first
           </div>
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
           <MetricTile
-            label="사용 행"
+            label="Rows used"
             value={diagnosticsReady ? formatNumber(rows?.afterOutlierFilter) : "pending"}
-            detail={diagnosticsReady ? `원본 ${formatNumber(rows?.beforeOutlierFilter)}` : "v2 artifact required"}
+            detail={diagnosticsReady ? `raw ${formatNumber(rows?.beforeOutlierFilter)}` : "v2 artifact required"}
           />
           <MetricTile
-            label="마스킹"
+            label="Masked"
             value={diagnosticsReady ? formatNumber(rows?.outlierFilteredCount) : "pending"}
             detail={diagnosticsReady ? formatPercent(rows?.outlierFilteredRatio, 2) : "parquet metadata pending"}
           />
-          <MetricTile label="제외 사유" value={`${exclusionEntries.length}`} detail="feature exclusion groups" />
+          <MetricTile label="Exclusions" value={`${exclusionEntries.length}`} detail="feature exclusion groups" />
         </div>
 
         <div className="mt-5 grid gap-3 lg:grid-cols-2">
@@ -273,7 +272,7 @@ export function DataQualityMatrix({
               </article>
             ))
           ) : (
-            <EmptyPanel label="source metadata 없음" />
+            <EmptyPanel label="no source metadata" />
           )}
         </div>
       </div>
@@ -287,7 +286,7 @@ export function DataQualityMatrix({
                 <RatioRow key={source} label={source} value={formatValue(value)} ratio={typeof value === "number" ? Math.min(value / 365, 1) : null} />
               ))
             ) : (
-              <EmptyPanel label="ffill breakdown 없음" />
+              <EmptyPanel label="no ffill breakdown" />
             )}
           </div>
         </div>
@@ -296,12 +295,12 @@ export function DataQualityMatrix({
           <div className="mt-4 flex flex-wrap gap-2">
             {exclusionEntries.length > 0 ? (
               exclusionEntries.map(([name, value]) => (
-                <span key={name} className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 font-mono text-[0.64rem] text-white/54">
+                <span key={name} className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 font-mono text-[0.64rem] text-white/52">
                   {name}: {formatValue(value)}
                 </span>
               ))
             ) : (
-              <span className="font-mono text-[0.68rem] text-white/34">제외 카운트 없음</span>
+              <span className="font-mono text-[0.68rem] text-white/32">no exclusions</span>
             )}
           </div>
         </div>
@@ -340,7 +339,7 @@ export function AlphaValidationBoard({
       {!diagnosticsReady && (
         <LegacyArtifactNotice
           title="Alpha metrics are waiting for v2 artifact"
-          detail="parquet에는 baseline_metrics, horizon_metrics, walk_forward_horizons가 있지만 현재 latest.json은 legacy v1이라 alpha 판을 비워둡니다."
+          detail="The parquet contains baseline_metrics, horizon_metrics, and walk_forward_horizons, but the current latest.json is legacy v1 — alpha panel left empty until re-run."
         />
       )}
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -348,9 +347,8 @@ export function AlphaValidationBoard({
           <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-[var(--accent-primary)]/80">
             Alpha validation
           </p>
-          <p className="mt-2 max-w-2xl text-[0.82rem] leading-6 text-white/48">
-            후보 신호는 baseline 대비 uplift가 있어야 승격할 수 있습니다. 동시상관이 아니라 1/3/7일 horizon 기준
-            선행 성능을 봅니다.
+          <p className="mt-2 max-w-2xl font-mono text-[0.76rem] leading-6 text-white/40">
+            Candidate signals must show baseline uplift to be promoted. Performance is evaluated on lag-only 1d / 3d / 7d forward returns, not contemporaneous correlation.
           </p>
         </div>
         <div className="inline-flex w-fit overflow-hidden rounded-full border border-white/10 bg-black/24 p-1">
@@ -374,22 +372,22 @@ export function AlphaValidationBoard({
 
       <div className="grid gap-3 md:grid-cols-4">
         <MetricTile
-          label="후보 신호"
+          label="Candidate signals"
           value={diagnosticsReady ? `${summary?.alphaCandidateCount ?? alpha?.hitRates.length ?? 0}` : "pending"}
           detail="lag-only predictors"
         />
         <MetricTile
           label="Horizon"
-          value={diagnosticsReady ? `${activeHorizon}일` : "pending"}
+          value={diagnosticsReady ? `${activeHorizon}d` : "pending"}
           detail={diagnosticsReady ? stringField(horizon, "return_col") || "return target" : "v2 artifact required"}
         />
         <MetricTile
-          label="최고 baseline"
+          label="Best baseline"
           value={diagnosticsReady ? formatPercent(bestBaseline, 1) : "pending"}
           detail="best reference model"
         />
         <MetricTile
-          label="walk-forward"
+          label="Walk-forward"
           value={diagnosticsReady ? `${objectEntries(alpha?.walkForwardHorizons).length}` : "pending"}
           detail="full/core folds"
         />
@@ -415,7 +413,7 @@ export function AlphaValidationBoard({
                 );
               })
             ) : (
-              <EmptyPanel label="horizon hit-rate 없음" />
+              <EmptyPanel label="no horizon hit-rate data" />
             )}
           </div>
         </div>
@@ -493,15 +491,14 @@ export function TargetDiagnosticsPanel({
         {!diagnosticsReady && (
           <LegacyArtifactNotice
             title="Target diagnostics are not published in latest.json"
-            detail="parquet에는 fixed/vol-adjusted large move label 진단이 있지만 현재 public artifact는 target diagnostics를 포함하지 않습니다."
+            detail="The parquet contains fixed / vol-adjusted large move label diagnostics, but the current public artifact does not include target diagnostics."
           />
         )}
         <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-[var(--accent-primary)]/80">
           Target diagnostics
         </p>
-        <p className="mt-2 text-[0.82rem] leading-6 text-white/48">
-          수익률 target과 large move label의 이벤트 비율을 비교합니다. label이 너무 흔하면 예측 문제가
-          쉬워 보이는 착시가 생깁니다.
+        <p className="mt-2 font-mono text-[0.76rem] leading-6 text-white/40">
+          Compare event rates across return targets and large-move labels. Labels that are too common create an illusion of easy prediction — inspect both fixed and vol-adjusted thresholds.
         </p>
         <div className="mt-5 space-y-4">
           <RatioRow label="fixed large move" value={formatPercent(numberField(fixed, "positive_rate"), 1)} ratio={numberField(fixed, "positive_rate")} />
@@ -522,14 +519,14 @@ export function TargetDiagnosticsPanel({
                       ? formatPercent(numberField(record, "positive_rate"), 1)
                       : formatNumber(numberField(record, "mean"), 4)}
                   </p>
-                  <p className="mt-2 font-mono text-[0.64rem] leading-5 text-white/38">
+                  <p className="mt-2 font-mono text-[0.64rem] leading-5 text-white/36">
                     valid {formatNumber(numberField(record, "valid_rows"))} · null {formatPercent(numberField(record, "null_ratio"), 1)}
                   </p>
                 </article>
               );
             })
           ) : (
-            <EmptyPanel label="target diagnostics 없음" />
+            <EmptyPanel label="no target diagnostics" />
           )}
         </div>
       </div>
@@ -551,7 +548,7 @@ export function StationarityPanel({
       {!diagnosticsReady && (
         <LegacyArtifactNotice
           title="Stationarity diagnostics pending"
-          detail="ADF/stationarity metadata는 parquet sentiment_join_stats에 있지만 legacy public artifact에는 포함되지 않았습니다."
+          detail="ADF / stationarity metadata exists in the parquet sentiment_join_stats but is not included in the legacy public artifact."
         />
       )}
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -559,9 +556,8 @@ export function StationarityPanel({
           <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-[var(--accent-primary)]/80">
             Stationarity gate
           </p>
-          <p className="mt-2 max-w-2xl text-[0.82rem] leading-6 text-white/48">
-            시계열 검정은 정상성 조건이 흔들리면 해석이 약해집니다. ADF 결과를 함께 노출해 skip과
-            유의성의 원인을 추적합니다.
+          <p className="mt-2 max-w-2xl font-mono text-[0.76rem] leading-6 text-white/40">
+            Time-series tests assume stationarity. Weak ADF results cause skips or reduce confidence in causality estimates — trace root cause here.
           </p>
         </div>
         <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 font-mono text-[0.62rem] uppercase tracking-[0.12em] text-white/38">
@@ -593,7 +589,7 @@ export function StationarityPanel({
                     <td className="px-3 py-3 font-mono tabular-nums">{formatNumber(pvalue, 4)}</td>
                     <td className="px-3 py-3 font-mono tabular-nums">{formatNumber(stat, 3)}</td>
                     <td className="rounded-r-2xl px-3 py-3">
-                      <span className={`rounded-full border px-2.5 py-1 font-mono text-[0.62rem] uppercase tracking-[0.12em] ${stationary ? toneClass("green") : toneClass("yellow")}`}>
+                      <span className={`rounded-full border px-2.5 py-1 font-mono text-[0.6rem] uppercase tracking-[0.12em] ${stationary ? toneClass("green") : toneClass("yellow")}`}>
                         {stationary ? "stationary" : "watch"}
                       </span>
                     </td>
@@ -630,10 +626,10 @@ export function RawMetadataExplorer({
           <span className="block font-mono text-[0.68rem] uppercase tracking-[0.18em] text-[var(--accent-primary)]/80">
             Raw parquet metadata
           </span>
-          <span className="mt-1 block text-[0.82rem] text-white/46">
+          <span className="mt-1 block font-mono text-[0.74rem] text-white/40">
             {diagnosticsReady
-              ? `sentiment_join_stats 원본 ${keyCount}개 key를 그대로 확인합니다.`
-              : "현재 latest.json은 legacy v1이라 rawStats가 아직 publish되지 않았습니다."}
+              ? `sentiment_join_stats · ${keyCount} keys · ground truth view`
+              : "latest.json is legacy v1 — rawStats not yet published"}
           </span>
         </span>
         <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 font-mono text-[0.62rem] uppercase tracking-[0.12em] text-white/38 group-open:text-[var(--accent-primary)]">
@@ -641,14 +637,14 @@ export function RawMetadataExplorer({
         </span>
       </summary>
       {diagnosticsReady ? (
-        <pre className="mt-4 max-h-[560px] overflow-auto rounded-2xl border border-white/8 bg-[#030303] p-4 text-[0.68rem] leading-5 text-white/58">
+        <pre className="mt-4 max-h-[560px] overflow-auto rounded-2xl border border-white/8 bg-[#030303] p-4 text-[0.68rem] leading-5 text-white/54">
           {JSON.stringify(payload, null, 2)}
         </pre>
       ) : (
         <div className="mt-4">
           <LegacyArtifactNotice
             title="Raw metadata unavailable in the public artifact"
-            detail="다음 v2 sentiment artifact가 생성되면 parquet의 sentiment_join_stats 전체가 이 JSON explorer에 표시됩니다."
+            detail="The full parquet sentiment_join_stats will appear here once the next v2 sentiment artifact is generated and published."
           />
         </div>
       )}
