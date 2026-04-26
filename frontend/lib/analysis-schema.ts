@@ -1,11 +1,20 @@
 import type {
+  AlphaSection,
+  ArtifactSummary,
+  DataQualityRows,
+  DataQualitySection,
   ExcludedFeature,
   GrangerCorrection,
   GrangerResult,
   GrangerSection,
+  GrangerSkip,
+  JsonObject,
+  JsonValue,
   PcaIndex,
   PcaSection,
   SentimentInsightArtifact,
+  StationaritySection,
+  TargetsSection,
 } from "@schema/analysis.types";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -31,6 +40,11 @@ function asNumber(value: unknown): number | null {
   return null;
 }
 
+function asFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  return null;
+}
+
 function asBoolean(value: unknown): boolean {
   return value === true;
 }
@@ -40,11 +54,59 @@ function asStringArray(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === "string");
 }
 
+function toJsonValue(value: unknown): JsonValue {
+  if (value === null) return null;
+  if (typeof value === "string" || typeof value === "boolean") return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (Array.isArray(value)) return value.map(toJsonValue);
+  if (isRecord(value)) {
+    const result: JsonObject = {};
+    for (const [key, item] of Object.entries(value)) {
+      result[key] = toJsonValue(item);
+    }
+    return result;
+  }
+  return String(value);
+}
+
+function toJsonObject(value: unknown): JsonObject {
+  const converted = toJsonValue(value);
+  return isRecord(converted) ? converted : {};
+}
+
+function toJsonArray(value: unknown): JsonValue[] {
+  const converted = toJsonValue(value);
+  return Array.isArray(converted) ? converted : [];
+}
+
 function parseExcludedFeature(value: unknown): ExcludedFeature {
   if (!isRecord(value)) return { feature: "", reason: "" };
   return {
     feature: typeof value.feature === "string" ? value.feature : "",
     reason: typeof value.reason === "string" ? value.reason : "",
+  };
+}
+
+function parseGrangerSkip(value: unknown): GrangerSkip {
+  if (!isRecord(value)) {
+    return {
+      predictor: "",
+      target: "",
+      direction: "",
+      reason: "unknown",
+      rowsBeforeStationarity: null,
+      rowsAfterStationarity: null,
+      message: "",
+    };
+  }
+  return {
+    predictor: typeof value.predictor === "string" ? value.predictor : "",
+    target: typeof value.target === "string" ? value.target : "",
+    direction: typeof value.direction === "string" ? value.direction : "",
+    reason: typeof value.reason === "string" ? value.reason : "unknown",
+    rowsBeforeStationarity: asFiniteNumber(value.rowsBeforeStationarity),
+    rowsAfterStationarity: asFiniteNumber(value.rowsAfterStationarity),
+    message: typeof value.message === "string" ? value.message : "",
   };
 }
 
@@ -84,8 +146,16 @@ function parseGrangerSection(value: unknown): GrangerSection {
   const correction = parseGrangerCorrection(raw.correction);
   const resultsRaw = Array.isArray(raw.results) ? raw.results : [];
   const results = resultsRaw.map((item, i) => parseGrangerResult(item, i));
+  const skipsRaw = Array.isArray(raw.skips) ? raw.skips : [];
 
-  return { executed, correction, results };
+  return {
+    executed,
+    correction,
+    eligibleRows: asFiniteNumber(raw.eligibleRows),
+    results,
+    skips: skipsRaw.map(parseGrangerSkip),
+    skipSummary: toJsonObject(raw.skipSummary),
+  };
 }
 
 function parsePcaIndex(value: unknown, name: string): PcaIndex {
@@ -120,13 +190,95 @@ function parsePcaSection(value: unknown): PcaSection {
   };
 }
 
+function parseArtifactSummary(value: unknown): ArtifactSummary {
+  const raw = isRecord(value) ? value : {};
+  return {
+    rowsBeforeOutlierFilter: asFiniteNumber(raw.rowsBeforeOutlierFilter),
+    rowsAfterOutlierFilter: asFiniteNumber(raw.rowsAfterOutlierFilter),
+    outlierFilteredCount: asFiniteNumber(raw.outlierFilteredCount),
+    outlierFilteredRatio: asFiniteNumber(raw.outlierFilteredRatio),
+    grangerEligibleRows: asFiniteNumber(raw.grangerEligibleRows),
+    grangerExecuted: asBoolean(raw.grangerExecuted),
+    significantGrangerCount: asFiniteNumber(raw.significantGrangerCount) ?? 0,
+    grangerTestCount: asFiniteNumber(raw.grangerTestCount) ?? 0,
+    alphaCandidateCount: asFiniteNumber(raw.alphaCandidateCount) ?? 0,
+    baselineHorizonCount: asFiniteNumber(raw.baselineHorizonCount) ?? 0,
+    horizonMetricCount: asFiniteNumber(raw.horizonMetricCount) ?? 0,
+    targetCount: asFiniteNumber(raw.targetCount) ?? 0,
+    sourceCount: asFiniteNumber(raw.sourceCount) ?? 0,
+  };
+}
+
+function parseDataQualityRows(value: unknown): DataQualityRows {
+  const raw = isRecord(value) ? value : {};
+  return {
+    beforeOutlierFilter: asFiniteNumber(raw.beforeOutlierFilter),
+    afterOutlierFilter: asFiniteNumber(raw.afterOutlierFilter),
+    outlierFilteredCount: asFiniteNumber(raw.outlierFilteredCount),
+    outlierFilteredRatio: asFiniteNumber(raw.outlierFilteredRatio),
+  };
+}
+
+function parseDataQualitySection(value: unknown): DataQualitySection {
+  const raw = isRecord(value) ? value : {};
+  return {
+    rows: parseDataQualityRows(raw.rows),
+    ffillBreakdown: toJsonObject(raw.ffillBreakdown),
+    structuredSources: toJsonObject(raw.structuredSources),
+    exclusionCounts: toJsonObject(raw.exclusionCounts),
+  };
+}
+
+function parseAlphaSection(value: unknown): AlphaSection {
+  const raw = isRecord(value) ? value : {};
+  return {
+    hitRates: toJsonArray(raw.hitRates),
+    correlations: toJsonArray(raw.correlations),
+    backtest: toJsonArray(raw.backtest),
+    walkForward: toJsonObject(raw.walkForward),
+    baselineMetrics: toJsonObject(raw.baselineMetrics),
+    horizonMetrics: toJsonObject(raw.horizonMetrics),
+    walkForwardHorizons: toJsonObject(raw.walkForwardHorizons),
+  };
+}
+
+function parseTargetsSection(value: unknown): TargetsSection {
+  const raw = isRecord(value) ? value : {};
+  return { diagnostics: toJsonObject(raw.diagnostics) };
+}
+
+function parseStationaritySection(value: unknown): StationaritySection {
+  const raw = isRecord(value) ? value : {};
+  return { adf: toJsonObject(raw.adf) };
+}
+
 export function parseSentimentInsight(value: unknown): SentimentInsightArtifact {
   const raw = requireRecord(value, "SentimentInsightArtifact");
+  const schemaVersion = typeof raw.schemaVersion === "string" ? raw.schemaVersion : undefined;
   const generatedAtUtc = requireString(raw.generatedAtUtc, "generatedAtUtc");
   const referenceDate = requireString(raw.referenceDate, "referenceDate");
   const runId = requireString(raw.runId, "runId");
+  const summary = parseArtifactSummary(raw.summary);
+  const dataQuality = parseDataQualitySection(raw.dataQuality);
   const granger = parseGrangerSection(raw.granger);
   const pca = parsePcaSection(raw.pca);
+  const alpha = parseAlphaSection(raw.alpha);
+  const targets = parseTargetsSection(raw.targets);
+  const stationarity = parseStationaritySection(raw.stationarity);
+  const rawStats = toJsonObject(raw.rawStats);
 
-  return { generatedAtUtc, referenceDate, runId, granger, pca };
+  return {
+    schemaVersion,
+    generatedAtUtc,
+    referenceDate,
+    runId,
+    summary,
+    dataQuality,
+    granger,
+    pca,
+    alpha,
+    targets,
+    stationarity,
+    rawStats,
+  };
 }

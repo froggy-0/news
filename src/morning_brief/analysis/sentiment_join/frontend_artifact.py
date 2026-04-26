@@ -1,8 +1,8 @@
 """프론트엔드 소비용 분석 아티팩트 추출 모듈.
 
-Master Parquet 메타데이터의 sentiment_join_stats JSON에서
-Granger 결과와 PCA loadings만 추출해 camelCase JSON으로 변환한다.
-통계 계산은 수행하지 않으며, 필터링·이름 변환·두 개의 유도 필드(direction, optimalLag)만 담당한다.
+Master Parquet 메타데이터의 sentiment_join_stats JSON을
+대시보드가 읽기 쉬운 camelCase 블록으로 변환한다.
+통계 계산은 수행하지 않으며, 원본 metadata는 rawStats에 보존해 정보 손실을 막는다.
 """
 
 from __future__ import annotations
@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from morning_brief.analysis.sentiment_join.statistical_tests import GRANGER_PAIRS_REVERSE
+
+ARTIFACT_SCHEMA_VERSION = "sentiment-insight-v2"
 
 # 역방향 페어를 set으로 변환해 O(1) 조회
 _REVERSE_PAIR_SET: frozenset[tuple[str, str]] = frozenset(GRANGER_PAIRS_REVERSE)
@@ -44,6 +46,50 @@ _PCA_INDEX_ALLOWED_KEYS = {
 
 def _to_direction(predictor: str, target: str) -> str:
     return "reverse" if (predictor, target) in _REVERSE_PAIR_SET else "forward"
+
+
+def _as_record(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _as_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return None
+
+
+def _as_float(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        result = float(value)
+        if result != result or result in (float("inf"), float("-inf")):
+            return None
+        return result
+    return None
+
+
+def _json_safe(value: Any) -> Any:
+    """JSON으로 안전하게 직렬화 가능한 값만 재귀적으로 보존한다."""
+    if value is None or isinstance(value, str | bool | int):
+        return value
+    if isinstance(value, float):
+        if value != value or value in (float("inf"), float("-inf")):
+            return None
+        return value
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    return str(value)
 
 
 def _build_granger_results(raw_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -107,6 +153,27 @@ def _build_granger_results(raw_results: list[dict[str, Any]]) -> list[dict[str, 
     return extracted
 
 
+def _build_granger_skips(raw_skips: list[Any]) -> list[dict[str, Any]]:
+    skips: list[dict[str, Any]] = []
+    for row in raw_skips:
+        if not isinstance(row, dict):
+            continue
+        predictor = str(row.get("predictor", ""))
+        target = str(row.get("target", ""))
+        skips.append(
+            {
+                "predictor": predictor,
+                "target": target,
+                "direction": str(row.get("direction") or _to_direction(predictor, target)),
+                "reason": str(row.get("reason", "unknown")),
+                "rowsBeforeStationarity": _as_int(row.get("rows_before_stationarity")),
+                "rowsAfterStationarity": _as_int(row.get("rows_after_stationarity")),
+                "message": str(row.get("message", "")),
+            }
+        )
+    return skips
+
+
 def _build_pca_index(raw_index: dict[str, Any]) -> dict[str, Any]:
     """hybrid_indices.{full|core} 원본에서 pca_summary + coverage + quality만 추출."""
     pca_summary = raw_index.get("pca_summary") or {}
@@ -150,6 +217,71 @@ def _build_pca_index(raw_index: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _build_summary(
+    payload: dict[str, Any],
+    *,
+    granger_results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    baseline_metrics = _as_record(payload.get("baseline_metrics"))
+    horizon_metrics = _as_record(payload.get("horizon_metrics"))
+    target_diagnostics = _as_record(payload.get("target_diagnostics"))
+    structured_sources = _as_record(payload.get("structured_sources"))
+
+    return {
+        "rowsBeforeOutlierFilter": _as_int(payload.get("rows_before_outlier_filter")),
+        "rowsAfterOutlierFilter": _as_int(payload.get("rows_after_outlier_filter")),
+        "outlierFilteredCount": _as_int(payload.get("outlier_filtered_count")),
+        "outlierFilteredRatio": _as_float(payload.get("outlier_filtered_ratio")),
+        "grangerEligibleRows": _as_int(payload.get("granger_eligible_rows")),
+        "grangerExecuted": bool(payload.get("granger_executed", False)),
+        "significantGrangerCount": sum(1 for row in granger_results if row.get("significant")),
+        "grangerTestCount": len(granger_results),
+        "alphaCandidateCount": len(_as_list(payload.get("hit_rates"))),
+        "baselineHorizonCount": len(baseline_metrics),
+        "horizonMetricCount": len(horizon_metrics),
+        "targetCount": len(target_diagnostics),
+        "sourceCount": len(structured_sources),
+    }
+
+
+def _build_data_quality(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "rows": {
+            "beforeOutlierFilter": _as_int(payload.get("rows_before_outlier_filter")),
+            "afterOutlierFilter": _as_int(payload.get("rows_after_outlier_filter")),
+            "outlierFilteredCount": _as_int(payload.get("outlier_filtered_count")),
+            "outlierFilteredRatio": _as_float(payload.get("outlier_filtered_ratio")),
+        },
+        "ffillBreakdown": _json_safe(_as_record(payload.get("ffill_breakdown"))),
+        "structuredSources": _json_safe(_as_record(payload.get("structured_sources"))),
+        "exclusionCounts": _json_safe(_as_record(payload.get("exclusion_counts"))),
+    }
+
+
+def _build_alpha(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "hitRates": _json_safe(_as_list(payload.get("hit_rates"))),
+        "correlations": _json_safe(_as_list(payload.get("correlations"))),
+        "backtest": _json_safe(_as_list(payload.get("backtest"))),
+        "walkForward": _json_safe(_as_record(payload.get("walk_forward"))),
+        "baselineMetrics": _json_safe(_as_record(payload.get("baseline_metrics"))),
+        "horizonMetrics": _json_safe(_as_record(payload.get("horizon_metrics"))),
+        "walkForwardHorizons": _json_safe(_as_record(payload.get("walk_forward_horizons"))),
+    }
+
+
+def _build_targets(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "diagnostics": _json_safe(_as_record(payload.get("target_diagnostics"))),
+    }
+
+
+def _build_stationarity(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "adf": _json_safe(_as_record(payload.get("adf"))),
+    }
+
+
 def build_frontend_artifact(
     *,
     stats_metadata_bytes: bytes,
@@ -173,33 +305,45 @@ def build_frontend_artifact(
     # Granger
     raw_results: list[dict[str, Any]] = []
     if isinstance(payload.get("granger_results"), list):
-        raw_results = payload["granger_results"]
+        raw_results = [row for row in payload["granger_results"] if isinstance(row, dict)]
     granger_results = _build_granger_results(raw_results) if granger_executed else []
+    granger_skips = _build_granger_skips(_as_list(payload.get("granger_skips")))
+    granger_skip_summary = _json_safe(_as_record(payload.get("granger_skip_summary")))
 
-    correction_raw = payload.get("granger_correction") or {}
+    correction_raw = _as_record(payload.get("granger_correction"))
     granger_correction = {
         "method": str(correction_raw.get("correction_method", "fdr_bh")),
         "nTests": int(correction_raw.get("n_tests", 0)),
     }
 
     # PCA
-    hybrid_indices = payload.get("hybrid_indices") or {}
-    full_raw = hybrid_indices.get("full") or {}
-    core_raw = hybrid_indices.get("core") or {}
+    hybrid_indices = _as_record(payload.get("hybrid_indices"))
+    full_raw = _as_record(hybrid_indices.get("full"))
+    core_raw = _as_record(hybrid_indices.get("core"))
 
     return {
+        "schemaVersion": ARTIFACT_SCHEMA_VERSION,
         "generatedAtUtc": generated_at_utc,
         "referenceDate": reference_date,
         "runId": run_id,
+        "summary": _build_summary(payload, granger_results=granger_results),
+        "dataQuality": _build_data_quality(payload),
         "granger": {
             "executed": granger_executed,
             "correction": granger_correction,
+            "eligibleRows": _as_int(payload.get("granger_eligible_rows")),
             "results": granger_results,
+            "skips": granger_skips,
+            "skipSummary": granger_skip_summary,
         },
         "pca": {
             "full": _build_pca_index(full_raw),
             "core": _build_pca_index(core_raw),
         },
+        "alpha": _build_alpha(payload),
+        "targets": _build_targets(payload),
+        "stationarity": _build_stationarity(payload),
+        "rawStats": _json_safe(payload),
     }
 
 
@@ -239,6 +383,7 @@ def write_frontend_artifact(
 
 
 __all__ = [
+    "ARTIFACT_SCHEMA_VERSION",
     "build_frontend_artifact",
     "should_skip_artifact",
     "write_frontend_artifact",
