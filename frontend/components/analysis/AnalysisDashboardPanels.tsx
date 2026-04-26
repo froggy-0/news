@@ -96,7 +96,7 @@ function statusToneFromRatio(value: number | null | undefined, warning = 0.1): T
   return "red";
 }
 
-export function isFullDiagnosticArtifact(artifact: SentimentInsightArtifact): boolean {
+function isFullDiagnosticArtifact(artifact: SentimentInsightArtifact): boolean {
   return artifact.schemaVersion === "sentiment-insight-v2" && objectEntries(artifact.rawStats).length > 0;
 }
 

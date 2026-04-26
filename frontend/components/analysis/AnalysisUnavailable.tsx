@@ -5,10 +5,10 @@ export function AnalysisUnavailable({ reason }: { reason?: string }) {
         className="text-[1.8rem] tracking-[-0.02em] text-white/40"
         style={{ fontFamily: "var(--font-instrument-serif)", fontStyle: "italic" }}
       >
-        분석 데이터 없음
+        Analysis Unavailable
       </p>
       <p className="max-w-sm text-center text-[0.9rem] leading-7 text-[var(--text-muted)]">
-        최신 분석 아티팩트를 불러오지 못했습니다. 파이프라인이 실행된 후 다시 확인해 주세요.
+        Could not load the latest analysis artifact. Check back after the next pipeline run.
       </p>
       {reason && (
         <p className="mt-1 font-mono text-[0.75rem] tracking-[0.04em] text-white/28">

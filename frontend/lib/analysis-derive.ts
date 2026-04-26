@@ -175,3 +175,11 @@ export function deriveAnalysisSummary(artifact: SentimentInsightArtifact): Analy
     coverageRatio: Math.max(artifact.pca.full.coverageRatio, artifact.pca.core.coverageRatio),
   };
 }
+
+
+export function isFullDiagnosticArtifact(artifact: SentimentInsightArtifact): boolean {
+  return (
+    artifact.schemaVersion === "sentiment-insight-v2" &&
+    Object.keys(artifact.rawStats ?? {}).length > 0
+  );
+}
