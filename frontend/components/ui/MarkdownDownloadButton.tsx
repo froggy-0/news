@@ -23,7 +23,7 @@ export function MarkdownDownloadButton({
       onClick={handleClick}
       className="rounded-full border border-white/15 px-4 py-2 text-xs tracking-[0.18em] text-[var(--text-secondary)] transition hover:border-[var(--accent-gold)] hover:text-[var(--text-primary)]"
     >
-      마크다운 받기
+      Download MD
     </button>
   );
 }

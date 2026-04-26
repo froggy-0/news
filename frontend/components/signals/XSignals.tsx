@@ -23,13 +23,13 @@ export function XSignals({
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-10">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div className="space-y-1">
-              <h2 className="section-title">전체 X 시그널</h2>
+              <h2 className="section-title">All X Signals</h2>
               <span className="eyebrow">Full Signal Flow</span>
             </div>
           </div>
           <DataState
-            title="X 시그널 상태"
-            message="이번 집계에서는 전체 X 시그널을 확인하지 못했어요."
+            title="X Signal Status"
+            message="No X signals found in this run."
             family="reading"
             minHeight={220}
           />
@@ -44,21 +44,21 @@ export function XSignals({
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="space-y-1">
             <h2 className="text-[11px] font-mono uppercase tracking-[0.4em] text-white/60">
-              전체 X 시그널
+              All X Signals
             </h2>
             <span className="text-[9px] font-mono uppercase tracking-[0.26em] text-white/28">
               Full Signal Flow
             </span>
           </div>
           <p className="max-w-md text-sm leading-7 text-white/52">
-            상세 페이지에서는 전체 시그널을 다시 읽고, 필요하면 원문 표현도 함께 확인할 수 있습니다.
+            The detail page shows all signals — original source language included.
           </p>
         </div>
 
         <XSignalsList
           items={all}
           showRawToggle={showRawToggle}
-          emptyMessage="이번 집계에서는 전체 X 시그널을 확인하지 못했어요."
+          emptyMessage="No X signals found in this run."
         />
       </div>
     </section>
