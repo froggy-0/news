@@ -13,6 +13,7 @@ import {
   RawMetadataExplorer,
   StationarityPanel,
   TargetDiagnosticsPanel,
+  isFullDiagnosticArtifact,
 } from "@/components/analysis/AnalysisDashboardPanels";
 import { fetchSentimentInsight, isStaleReferenceDate } from "@/lib/analysis";
 import { deriveAnalysisSummary } from "@/lib/analysis-derive";
@@ -31,6 +32,7 @@ export default async function AnalysisPage() {
     const artifact = await fetchSentimentInsight();
     const staleWarning = isStaleReferenceDate(artifact.referenceDate);
     const summary = deriveAnalysisSummary(artifact);
+    const diagnosticsReady = isFullDiagnosticArtifact(artifact);
 
     content = (
       <>
@@ -46,6 +48,8 @@ export default async function AnalysisPage() {
           correction={artifact.granger.correction}
           staleWarning={staleWarning}
           summary={summary}
+          schemaVersion={artifact.schemaVersion}
+          diagnosticsReady={diagnosticsReady}
         />
 
         <div className="mx-auto w-full max-w-6xl space-y-16 px-6 py-14">
@@ -71,7 +75,10 @@ export default async function AnalysisPage() {
               detail="ffill이 큰 지표는 신호처럼 보여도 실제로는 오래된 값이 유지된 것일 수 있습니다. source lineage와 함께 봐야 합니다."
             />
             <div className="analysis-depth-panel mt-8 p-5 md:p-8">
-              <DataQualityMatrix dataQuality={artifact.dataQuality} />
+              <DataQualityMatrix
+                dataQuality={artifact.dataQuality}
+                diagnosticsReady={diagnosticsReady}
+              />
             </div>
           </section>
 
@@ -97,7 +104,11 @@ export default async function AnalysisPage() {
               detail="hit rate만 높아도 baseline 대비 uplift가 없거나 walk-forward 안정성이 낮으면 기본 후보로 승격하지 않는 것이 안전합니다."
             />
             <div className="analysis-depth-panel mt-8 p-5 md:p-8">
-              <AlphaValidationBoard alpha={artifact.alpha} summary={artifact.summary} />
+              <AlphaValidationBoard
+                alpha={artifact.alpha}
+                summary={artifact.summary}
+                diagnosticsReady={diagnosticsReady}
+              />
             </div>
           </section>
 
@@ -110,7 +121,10 @@ export default async function AnalysisPage() {
               detail="고정 임계값 label과 변동성 보정 label을 함께 보면 시장 regime에 따라 이벤트 정의가 왜곡되는지 점검할 수 있습니다."
             />
             <div className="analysis-depth-panel mt-8 p-5 md:p-8">
-              <TargetDiagnosticsPanel targets={artifact.targets} />
+              <TargetDiagnosticsPanel
+                targets={artifact.targets}
+                diagnosticsReady={diagnosticsReady}
+              />
             </div>
           </section>
 
@@ -136,7 +150,10 @@ export default async function AnalysisPage() {
               detail="정상성 조건이 약하면 Granger 결과는 skip되거나 해석 신뢰도가 낮아질 수 있습니다. 이 표는 그 원인을 추적하기 위한 비행기록장치입니다."
             />
             <div className="analysis-depth-panel mt-8 p-5 md:p-8">
-              <StationarityPanel adf={artifact.stationarity?.adf} />
+              <StationarityPanel
+                adf={artifact.stationarity?.adf}
+                diagnosticsReady={diagnosticsReady}
+              />
             </div>
           </section>
 
@@ -149,7 +166,10 @@ export default async function AnalysisPage() {
               detail="대시보드 카드는 해석을 돕기 위한 뷰이고, 이 영역은 디버깅과 원인 추적을 위한 원본 계약입니다."
             />
             <div className="mt-8">
-              <RawMetadataExplorer rawStats={artifact.rawStats} />
+              <RawMetadataExplorer
+                rawStats={artifact.rawStats}
+                diagnosticsReady={diagnosticsReady}
+              />
             </div>
           </section>
         </div>

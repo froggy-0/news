@@ -96,30 +96,48 @@ function statusToneFromRatio(value: number | null | undefined, warning = 0.1): T
   return "red";
 }
 
+export function isFullDiagnosticArtifact(artifact: SentimentInsightArtifact): boolean {
+  return artifact.schemaVersion === "sentiment-insight-v2" && objectEntries(artifact.rawStats).length > 0;
+}
+
 export function AnalysisOverviewDeck({ artifact }: { artifact: SentimentInsightArtifact }) {
   const summary = artifact.summary;
   const rows = artifact.dataQuality?.rows;
+  const diagnosticsReady = isFullDiagnosticArtifact(artifact);
   const significantCount =
-    summary?.significantGrangerCount ?? artifact.granger.results.filter((row) => row.significant).length;
+    summary && summary.grangerTestCount > 0
+      ? summary.significantGrangerCount
+      : artifact.granger.results.filter((row) => row.significant).length;
   const skipCount = artifact.granger.skips?.length ?? 0;
   const rawKeyCount = objectEntries(artifact.rawStats).length;
   const outlierTone = statusToneFromRatio(rows?.outlierFilteredRatio, 0.1);
 
   return (
-    <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-6" aria-label="분석 리포트 핵심 상태">
+    <section className="space-y-4" aria-label="분석 리포트 핵심 상태">
+      {!diagnosticsReady && (
+        <LegacyArtifactNotice
+          title="Public artifact is still legacy v1"
+          detail="운영 latest.json에는 Granger/PCA만 있고, parquet의 ffill, alpha, target, rawStats는 아직 공개 JSON에 반영되지 않았습니다. 숫자 0이 아니라 v2 artifact 재생성이 필요한 상태입니다."
+        />
+      )}
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
       <OverviewCard
         icon={<ShieldCheck className="h-4 w-4" />}
         label="Run State"
-        value={artifact.schemaVersion ?? "v1"}
+        value={diagnosticsReady ? (artifact.schemaVersion ?? "v2") : "legacy v1"}
         caption={`${artifact.runId} · ${artifact.referenceDate}`}
-        tone="cyan"
+        tone={diagnosticsReady ? "cyan" : "yellow"}
       />
       <OverviewCard
         icon={<Database className="h-4 w-4" />}
         label="Rows"
-        value={formatNumber(rows?.afterOutlierFilter ?? summary?.rowsAfterOutlierFilter)}
-        caption={`raw ${formatNumber(rows?.beforeOutlierFilter ?? summary?.rowsBeforeOutlierFilter)} · masked ${formatPercent(rows?.outlierFilteredRatio, 1)}`}
-        tone={outlierTone}
+        value={diagnosticsReady ? formatNumber(rows?.afterOutlierFilter ?? summary?.rowsAfterOutlierFilter) : "metadata pending"}
+        caption={
+          diagnosticsReady
+            ? `raw ${formatNumber(rows?.beforeOutlierFilter ?? summary?.rowsBeforeOutlierFilter)} · masked ${formatPercent(rows?.outlierFilteredRatio, 1)}`
+            : "parquet에는 존재 · v2 JSON 재생성 필요"
+        }
+        tone={diagnosticsReady ? outlierTone : "yellow"}
       />
       <OverviewCard
         icon={<Activity className="h-4 w-4" />}
@@ -131,24 +149,37 @@ export function AnalysisOverviewDeck({ artifact }: { artifact: SentimentInsightA
       <OverviewCard
         icon={<LineChart className="h-4 w-4" />}
         label="Alpha"
-        value={`${summary?.alphaCandidateCount ?? artifact.alpha?.hitRates.length ?? 0} signals`}
-        caption={`${summary?.horizonMetricCount ?? objectEntries(artifact.alpha?.horizonMetrics).length} horizons · baseline linked`}
-        tone="cyan"
+        value={
+          diagnosticsReady
+            ? `${summary?.alphaCandidateCount ?? artifact.alpha?.hitRates.length ?? 0} signals`
+            : "metadata pending"
+        }
+        caption={
+          diagnosticsReady
+            ? `${summary?.horizonMetricCount ?? objectEntries(artifact.alpha?.horizonMetrics).length} horizons · baseline linked`
+            : "baseline/horizon metrics pending"
+        }
+        tone={diagnosticsReady ? "cyan" : "yellow"}
       />
       <OverviewCard
         icon={<Target className="h-4 w-4" />}
         label="Targets"
-        value={`${summary?.targetCount ?? objectEntries(artifact.targets?.diagnostics).length}`}
+        value={
+          diagnosticsReady
+            ? `${summary?.targetCount ?? objectEntries(artifact.targets?.diagnostics).length}`
+            : "metadata pending"
+        }
         caption="fixed + volatility adjusted labels"
-        tone="green"
+        tone={diagnosticsReady ? "green" : "yellow"}
       />
       <OverviewCard
         icon={<TableProperties className="h-4 w-4" />}
         label="Raw Metadata"
-        value={`${rawKeyCount} keys`}
-        caption="parquet sentiment_join_stats"
-        tone={rawKeyCount > 0 ? "green" : "muted"}
+        value={diagnosticsReady ? `${rawKeyCount} keys` : "metadata pending"}
+        caption={diagnosticsReady ? "parquet sentiment_join_stats" : "rawStats pending in latest.json"}
+        tone={diagnosticsReady ? "green" : "yellow"}
       />
+      </div>
     </section>
   );
 }
@@ -178,7 +209,13 @@ function OverviewCard({
   );
 }
 
-export function DataQualityMatrix({ dataQuality }: { dataQuality?: DataQualitySection }) {
+export function DataQualityMatrix({
+  dataQuality,
+  diagnosticsReady,
+}: {
+  dataQuality?: DataQualitySection;
+  diagnosticsReady: boolean;
+}) {
   const sourceEntries = objectEntries(dataQuality?.structuredSources);
   const ffillEntries = objectEntries(dataQuality?.ffillBreakdown);
   const exclusionEntries = objectEntries(dataQuality?.exclusionCounts);
@@ -187,6 +224,12 @@ export function DataQualityMatrix({ dataQuality }: { dataQuality?: DataQualitySe
   return (
     <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
       <div className="rounded-2xl border border-white/10 bg-black/24 p-4">
+        {!diagnosticsReady && (
+          <LegacyArtifactNotice
+            title="Data quality metadata is not in latest.json yet"
+            detail="parquet에는 row count, ffill breakdown, structured source lineage가 있지만 현재 public artifact는 v1이라 이 블록을 채울 수 없습니다."
+          />
+        )}
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-[var(--accent-primary)]/80">
@@ -203,8 +246,16 @@ export function DataQualityMatrix({ dataQuality }: { dataQuality?: DataQualitySe
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          <MetricTile label="사용 행" value={formatNumber(rows?.afterOutlierFilter)} detail={`원본 ${formatNumber(rows?.beforeOutlierFilter)}`} />
-          <MetricTile label="마스킹" value={formatNumber(rows?.outlierFilteredCount)} detail={formatPercent(rows?.outlierFilteredRatio, 2)} />
+          <MetricTile
+            label="사용 행"
+            value={diagnosticsReady ? formatNumber(rows?.afterOutlierFilter) : "pending"}
+            detail={diagnosticsReady ? `원본 ${formatNumber(rows?.beforeOutlierFilter)}` : "v2 artifact required"}
+          />
+          <MetricTile
+            label="마스킹"
+            value={diagnosticsReady ? formatNumber(rows?.outlierFilteredCount) : "pending"}
+            detail={diagnosticsReady ? formatPercent(rows?.outlierFilteredRatio, 2) : "parquet metadata pending"}
+          />
           <MetricTile label="제외 사유" value={`${exclusionEntries.length}`} detail="feature exclusion groups" />
         </div>
 
@@ -259,7 +310,15 @@ export function DataQualityMatrix({ dataQuality }: { dataQuality?: DataQualitySe
   );
 }
 
-export function AlphaValidationBoard({ alpha, summary }: { alpha?: AlphaSection; summary?: ArtifactSummary }) {
+export function AlphaValidationBoard({
+  alpha,
+  summary,
+  diagnosticsReady,
+}: {
+  alpha?: AlphaSection;
+  summary?: ArtifactSummary;
+  diagnosticsReady: boolean;
+}) {
   const horizons = useMemo(
     () => objectEntries(alpha?.horizonMetrics).map(([key]) => key).sort((a, b) => Number(a) - Number(b)),
     [alpha?.horizonMetrics],
@@ -278,6 +337,12 @@ export function AlphaValidationBoard({ alpha, summary }: { alpha?: AlphaSection;
 
   return (
     <div className="space-y-5">
+      {!diagnosticsReady && (
+        <LegacyArtifactNotice
+          title="Alpha metrics are waiting for v2 artifact"
+          detail="parquet에는 baseline_metrics, horizon_metrics, walk_forward_horizons가 있지만 현재 latest.json은 legacy v1이라 alpha 판을 비워둡니다."
+        />
+      )}
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-[var(--accent-primary)]/80">
@@ -308,10 +373,26 @@ export function AlphaValidationBoard({ alpha, summary }: { alpha?: AlphaSection;
       </div>
 
       <div className="grid gap-3 md:grid-cols-4">
-        <MetricTile label="후보 신호" value={`${summary?.alphaCandidateCount ?? alpha?.hitRates.length ?? 0}`} detail="lag-only predictors" />
-        <MetricTile label="Horizon" value={`${activeHorizon}일`} detail={stringField(horizon, "return_col") || "return target"} />
-        <MetricTile label="최고 baseline" value={formatPercent(bestBaseline, 1)} detail="best reference model" />
-        <MetricTile label="walk-forward" value={`${objectEntries(alpha?.walkForwardHorizons).length}`} detail="full/core folds" />
+        <MetricTile
+          label="후보 신호"
+          value={diagnosticsReady ? `${summary?.alphaCandidateCount ?? alpha?.hitRates.length ?? 0}` : "pending"}
+          detail="lag-only predictors"
+        />
+        <MetricTile
+          label="Horizon"
+          value={diagnosticsReady ? `${activeHorizon}일` : "pending"}
+          detail={diagnosticsReady ? stringField(horizon, "return_col") || "return target" : "v2 artifact required"}
+        />
+        <MetricTile
+          label="최고 baseline"
+          value={diagnosticsReady ? formatPercent(bestBaseline, 1) : "pending"}
+          detail="best reference model"
+        />
+        <MetricTile
+          label="walk-forward"
+          value={diagnosticsReady ? `${objectEntries(alpha?.walkForwardHorizons).length}` : "pending"}
+          detail="full/core folds"
+        />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
@@ -383,7 +464,24 @@ function WalkForwardRows({ alpha, activeHorizon }: { alpha?: AlphaSection; activ
   );
 }
 
-export function TargetDiagnosticsPanel({ targets }: { targets?: TargetsSection }) {
+function LegacyArtifactNotice({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="mb-4 rounded-2xl border border-[var(--accent-warning)]/24 bg-[var(--accent-warning)]/7 p-4">
+      <p className="font-mono text-[0.66rem] uppercase tracking-[0.14em] text-[var(--accent-warning)]">
+        {title}
+      </p>
+      <p className="mt-2 text-[0.76rem] leading-6 text-white/52">{detail}</p>
+    </div>
+  );
+}
+
+export function TargetDiagnosticsPanel({
+  targets,
+  diagnosticsReady,
+}: {
+  targets?: TargetsSection;
+  diagnosticsReady: boolean;
+}) {
   const diagnostics = targets?.diagnostics ?? {};
   const entries = objectEntries(diagnostics).filter(([, value]) => isJsonObject(value));
   const fixed = isJsonObject(diagnostics.btc_large_move_3d) ? diagnostics.btc_large_move_3d : undefined;
@@ -392,6 +490,12 @@ export function TargetDiagnosticsPanel({ targets }: { targets?: TargetsSection }
   return (
     <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
       <div className="rounded-2xl border border-white/10 bg-black/24 p-4">
+        {!diagnosticsReady && (
+          <LegacyArtifactNotice
+            title="Target diagnostics are not published in latest.json"
+            detail="parquet에는 fixed/vol-adjusted large move label 진단이 있지만 현재 public artifact는 target diagnostics를 포함하지 않습니다."
+          />
+        )}
         <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-[var(--accent-primary)]/80">
           Target diagnostics
         </p>
@@ -433,11 +537,23 @@ export function TargetDiagnosticsPanel({ targets }: { targets?: TargetsSection }
   );
 }
 
-export function StationarityPanel({ adf }: { adf?: JsonObject }) {
+export function StationarityPanel({
+  adf,
+  diagnosticsReady,
+}: {
+  adf?: JsonObject;
+  diagnosticsReady: boolean;
+}) {
   const rows = objectEntries(adf).filter(([, value]) => isJsonObject(value)).slice(0, 12);
 
   return (
     <div className="rounded-2xl border border-white/10 bg-black/24 p-4">
+      {!diagnosticsReady && (
+        <LegacyArtifactNotice
+          title="Stationarity diagnostics pending"
+          detail="ADF/stationarity metadata는 parquet sentiment_join_stats에 있지만 legacy public artifact에는 포함되지 않았습니다."
+        />
+      )}
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-[var(--accent-primary)]/80">
@@ -498,7 +614,13 @@ export function StationarityPanel({ adf }: { adf?: JsonObject }) {
   );
 }
 
-export function RawMetadataExplorer({ rawStats }: { rawStats?: JsonObject }) {
+export function RawMetadataExplorer({
+  rawStats,
+  diagnosticsReady,
+}: {
+  rawStats?: JsonObject;
+  diagnosticsReady: boolean;
+}) {
   const payload = rawStats ?? {};
   const keyCount = objectEntries(payload).length;
   return (
@@ -509,16 +631,27 @@ export function RawMetadataExplorer({ rawStats }: { rawStats?: JsonObject }) {
             Raw parquet metadata
           </span>
           <span className="mt-1 block text-[0.82rem] text-white/46">
-            sentiment_join_stats 원본 {keyCount}개 key를 그대로 확인합니다.
+            {diagnosticsReady
+              ? `sentiment_join_stats 원본 ${keyCount}개 key를 그대로 확인합니다.`
+              : "현재 latest.json은 legacy v1이라 rawStats가 아직 publish되지 않았습니다."}
           </span>
         </span>
         <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 font-mono text-[0.62rem] uppercase tracking-[0.12em] text-white/38 group-open:text-[var(--accent-primary)]">
           expand
         </span>
       </summary>
-      <pre className="mt-4 max-h-[560px] overflow-auto rounded-2xl border border-white/8 bg-[#030303] p-4 text-[0.68rem] leading-5 text-white/58">
-        {JSON.stringify(payload, null, 2)}
-      </pre>
+      {diagnosticsReady ? (
+        <pre className="mt-4 max-h-[560px] overflow-auto rounded-2xl border border-white/8 bg-[#030303] p-4 text-[0.68rem] leading-5 text-white/58">
+          {JSON.stringify(payload, null, 2)}
+        </pre>
+      ) : (
+        <div className="mt-4">
+          <LegacyArtifactNotice
+            title="Raw metadata unavailable in the public artifact"
+            detail="다음 v2 sentiment artifact가 생성되면 parquet의 sentiment_join_stats 전체가 이 JSON explorer에 표시됩니다."
+          />
+        </div>
+      )}
     </details>
   );
 }

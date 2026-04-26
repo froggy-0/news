@@ -12,12 +12,16 @@ export function AnalysisMasthead({
   correction,
   staleWarning,
   summary,
+  schemaVersion,
+  diagnosticsReady,
 }: {
   referenceDate: string;
   generatedAtUtc: string;
   correction: GrangerCorrection;
   staleWarning: boolean;
   summary: AnalysisSummary;
+  schemaVersion?: string;
+  diagnosticsReady: boolean;
 }) {
   const generatedKst = (() => {
     try {
@@ -39,34 +43,57 @@ export function AnalysisMasthead({
       {staleWarning && (
         <div className="border-b border-[var(--accent-warning)]/30 bg-[var(--accent-warning)]/8 px-6 py-3">
           <p className="font-mono text-[0.75rem] tracking-[0.08em] text-[var(--accent-warning)]">
-            ⚠ 기준일 {referenceDate} — 최신 분석 데이터가 아닐 수 있습니다
+            기준일 {referenceDate} — 최신 분석 데이터가 아닐 수 있습니다
           </p>
         </div>
       )}
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-12 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="mb-2 font-mono text-[0.7rem] uppercase tracking-[0.18em] text-[var(--text-muted)]">
-            흐름 분석
+            Parquet-backed research console
           </p>
           <h1
             className="text-[2.4rem] leading-[1.1] tracking-[-0.03em] text-white md:text-[3.2rem]"
             style={{ fontFamily: "var(--font-instrument-serif)", fontStyle: "italic" }}
           >
-            감성-시장 흐름
+            감성 알파 리서치 랩
           </h1>
           <p className="mt-3 max-w-lg text-[0.95rem] leading-7 text-[var(--text-secondary)]">
-            뉴스 분위기가 시장보다 먼저 움직였는지, 아니면 시장 움직임이 뉴스 분위기를
-            바꿨는지 확인합니다.
+            뉴스 감성, BTC 시장 구조, ETF·선물 데이터를 하나의 검증 가능한 리서치 콘솔로
+            묶어 선행성, 품질, alpha 후보를 함께 점검합니다.
           </p>
           <p className="mt-2 max-w-lg text-[0.8rem] leading-6 text-[var(--text-muted)]">
-            단순 상관관계가 아니라 “며칠 전 데이터가 오늘의 변화를 설명하는지”를 보는
-            시간 순서 기반 분석입니다.
+            Granger causality, PCA hybrid index, lag-only alpha validation, target diagnostics를
+            같은 기준일의 parquet metadata와 연결해 읽습니다.
           </p>
+          {!diagnosticsReady && (
+            <div className="mt-5 max-w-xl rounded-2xl border border-[var(--accent-warning)]/24 bg-[var(--accent-warning)]/7 p-4">
+              <p className="font-mono text-[0.68rem] uppercase tracking-[0.14em] text-[var(--accent-warning)]">
+                Diagnostic artifact pending
+              </p>
+              <p className="mt-2 text-[0.78rem] leading-6 text-white/56">
+                현재 공개 JSON은 legacy 계약이라 parquet에 있는 data quality, alpha, target,
+                raw metadata가 아직 모두 노출되지 않았습니다. 다음 sentiment-join 재실행 후
+                v2 artifact가 publish되면 아래 진단 카드가 채워집니다.
+              </p>
+            </div>
+          )}
         </div>
         <div className="shrink-0 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
           <dl className="grid grid-cols-1 gap-x-8 gap-y-3 font-mono text-[0.72rem] sm:grid-cols-2">
             <MetaItem label="기준일" value={referenceDate} />
             <MetaItem label="생성" value={generatedKst} />
+            <MetaItem
+              label="artifact"
+              value={diagnosticsReady ? (schemaVersion ?? "v2") : "legacy v1"}
+              accent={diagnosticsReady}
+            />
+            <MetaItem
+              label="diagnostics"
+              value={diagnosticsReady ? "complete" : "pending"}
+              accent={diagnosticsReady}
+              warning={!diagnosticsReady}
+            />
             <MetaItem label="검정한 관계" value={`${correction.nTests}개`} />
             <MetaItem
               label="p-value 보정"
@@ -171,19 +198,22 @@ function MetaItem({
   label,
   value,
   accent,
+  warning,
 }: {
   label: string;
   value: string;
   accent?: boolean;
+  warning?: boolean;
 }) {
+  const valueClass = warning
+    ? "text-[var(--accent-warning)]"
+    : accent
+      ? "text-[var(--accent-primary)]"
+      : "text-white/80";
   return (
     <div>
       <dt className="uppercase tracking-[0.12em] text-[var(--text-muted)]">{label}</dt>
-      <dd
-        className={`mt-0.5 tracking-[0.04em] ${accent ? "text-[var(--accent-primary)]" : "text-white/80"}`}
-      >
-        {value}
-      </dd>
+      <dd className={`mt-0.5 tracking-[0.04em] ${valueClass}`}>{value}</dd>
     </div>
   );
 }
