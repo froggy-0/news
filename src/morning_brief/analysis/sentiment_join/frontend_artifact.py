@@ -264,9 +264,11 @@ def _build_alpha(payload: dict[str, Any]) -> dict[str, Any]:
         "correlations": _json_safe(_as_list(payload.get("correlations"))),
         "backtest": _json_safe(_as_list(payload.get("backtest"))),
         "walkForward": _json_safe(_as_record(payload.get("walk_forward"))),
+        "walkForwardLegacy1d": _json_safe(_as_record(payload.get("walk_forward_legacy_1d"))),
         "baselineMetrics": _json_safe(_as_record(payload.get("baseline_metrics"))),
         "horizonMetrics": _json_safe(_as_record(payload.get("horizon_metrics"))),
         "walkForwardHorizons": _json_safe(_as_record(payload.get("walk_forward_horizons"))),
+        "featureGroupSummary": _json_safe(_as_record(payload.get("feature_group_summary"))),
     }
 
 

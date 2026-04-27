@@ -717,6 +717,12 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             and isinstance(alpha_validation_results.get("walk_forward"), dict)
             else None
         )
+        alpha_walk_forward_legacy_1d = (
+            cast(dict[str, Any], alpha_validation_results.get("walk_forward_legacy_1d"))
+            if isinstance(alpha_validation_results, dict)
+            and isinstance(alpha_validation_results.get("walk_forward_legacy_1d"), dict)
+            else None
+        )
         alpha_baseline_metrics = (
             cast(dict[str, Any], alpha_validation_results.get("baseline_metrics"))
             if isinstance(alpha_validation_results, dict)
@@ -733,6 +739,12 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             cast(dict[str, Any], alpha_validation_results.get("walk_forward_horizons"))
             if isinstance(alpha_validation_results, dict)
             and isinstance(alpha_validation_results.get("walk_forward_horizons"), dict)
+            else None
+        )
+        alpha_feature_group_summary = (
+            cast(dict[str, Any], alpha_validation_results.get("feature_group_summary"))
+            if isinstance(alpha_validation_results, dict)
+            and isinstance(alpha_validation_results.get("feature_group_summary"), dict)
             else None
         )
 
@@ -761,9 +773,11 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             correlations=alpha_correlations,
             backtest=alpha_backtest,
             walk_forward=alpha_walk_forward,
+            walk_forward_legacy_1d=alpha_walk_forward_legacy_1d,
             baseline_metrics=alpha_baseline_metrics,
             horizon_metrics=alpha_horizon_metrics,
             walk_forward_horizons=alpha_walk_forward_horizons,
+            feature_group_summary=alpha_feature_group_summary,
             ffill_breakdown=ffill_breakdown,
             target_diagnostics=_target_diagnostics(master_df),
             structured_sources=structured_sources,

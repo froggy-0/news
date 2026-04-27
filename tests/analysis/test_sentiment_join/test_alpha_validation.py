@@ -1499,6 +1499,7 @@ class TestWalkForwardCoreIndex:
     def test_run_alpha_validation_includes_horizon_and_baseline_metrics(self) -> None:
         import numpy as np
 
+        from morning_brief.analysis.sentiment_join.bootstrap import BootstrapConfig
         from morning_brief.analysis.sentiment_join.statistical_tests import run_alpha_validation
 
         rng = np.random.default_rng(7)
@@ -1511,7 +1512,10 @@ class TestWalkForwardCoreIndex:
                 "sentiment_momentum_lag1": rng.normal(0, 0.1, n_rows),
                 "fng_change_1d_lag1": rng.normal(0, 5, n_rows),
                 "funding_rate_lag1": rng.uniform(-0.01, 0.01, n_rows),
+                "btc_long_short_ratio_lag1": rng.uniform(0.5, 2.0, n_rows),
+                "etf_net_inflow_usd_lag1": rng.uniform(-1e8, 1e8, n_rows),
                 "volume_change_pct_lag1": rng.uniform(-50, 50, n_rows),
+                "vix_lag1": rng.uniform(12, 35, n_rows),
                 "full_hybrid_index_score_lag1": rng.uniform(0, 100, n_rows),
                 "core_hybrid_index_score_lag1": rng.uniform(0, 100, n_rows),
                 "btc_log_return": rng.normal(0, 0.02, n_rows),
@@ -1521,14 +1525,63 @@ class TestWalkForwardCoreIndex:
             }
         )
 
-        result = run_alpha_validation(df)
+        result = run_alpha_validation(
+            df,
+            bootstrap_config=BootstrapConfig(n_bootstrap=20, block_length=3, seed=7),
+        )
 
         assert "baseline_metrics" in result
         assert "horizon_metrics" in result
         assert "walk_forward_horizons" in result
+        assert "feature_group_summary" in result
         assert "7" in result["baseline_metrics"]
         assert "7" in result["horizon_metrics"]
         assert result["horizon_metrics"]["7"]["return_col"] == "btc_fwd_ret_7d"
+        first_hit_rate = result["horizon_metrics"]["7"]["hit_rates"][0]
+        assert first_hit_rate["decision"] in {"promote", "research_only"}
+        assert first_hit_rate["decision_strict"] in {"promote", "research_only"}
+        assert "best_baseline" in first_hit_rate
+        assert "hit_rate_lift_vs_best_baseline" in first_hit_rate
+        assert "sharpe_lift_vs_best_baseline" in first_hit_rate
+        assert result["feature_group_summary"]["7"]
+        if result["walk_forward"]:
+            assert {row["horizon_days"] for row in result["walk_forward"].values()} == {7}
+        if result["walk_forward_legacy_1d"]:
+            assert {row["horizon_days"] for row in result["walk_forward_legacy_1d"].values()} == {1}
+
+    def test_horizon_metrics_align_paired_bootstrap_by_index(self) -> None:
+        from morning_brief.analysis.sentiment_join.bootstrap import BootstrapConfig
+        from morning_brief.analysis.sentiment_join.statistical_tests import _horizon_metrics
+
+        n_rows = 20
+        news = np.linspace(-1.0, 1.0, n_rows)
+        news[0] = np.nan
+        df = pd.DataFrame(
+            {
+                "date": pd.date_range("2024-01-01", periods=n_rows, freq="D"),
+                "news_sentiment_mean_lag1": news,
+                "fng_value_lag1": [10.0, 20.0, 80.0] + [50.0] * (n_rows - 3),
+                "btc_fwd_ret_7d": np.linspace(-0.03, 0.03, n_rows),
+                "btc_direction_label": ["up", "down"] * 10,
+            }
+        )
+
+        metrics = _horizon_metrics(
+            df,
+            granger_results=None,
+            granger_executed=False,
+            bootstrap_config=BootstrapConfig(n_bootstrap=10, block_length=2, seed=1),
+        )
+
+        row = next(
+            item
+            for item in metrics["7"]["hit_rates"]
+            if item["predictor"] == "news_sentiment_mean_lag1"
+        )
+        alignment = row["paired_baseline_alignment"]["fng_contrarian"]
+        assert alignment["signal_rows"] == 19
+        assert alignment["baseline_rows"] == 3
+        assert alignment["paired_rows"] == 2
 
     def test_walk_forward_insufficient_data_returns_none(self) -> None:
         """데이터 부족 시 core도 None 반환."""

@@ -139,6 +139,8 @@ def _make_stats_bytes(
             }
         },
         "walk_forward_horizons": {"full": {"1": {"avg_hit_rate": 0.52, "stability": 0.45}}},
+        "walk_forward_legacy_1d": {"full": {"avg_hit_rate": 0.49, "horizon_days": 1}},
+        "feature_group_summary": {"7": {"stationary": {"avg_hit_rate": 0.54}}},
         # 원본 metadata — v2 artifact에서는 rawStats에 보존되어야 함
         "walk_forward": {"index": "full", "folds": 3},
         "correlations": [{"feature": "fng_value", "pearson_r": 0.5}],
@@ -278,6 +280,8 @@ def test_v2_artifact_exposes_dashboard_diagnostics_and_raw_stats():
     assert artifact["dataQuality"]["ffillBreakdown"] == {"btc": 0, "usdkrw": 117, "vix": 108}
     assert artifact["dataQuality"]["structuredSources"]["btc_etf"]["mode"] == "gold_history"
     assert artifact["alpha"]["baselineMetrics"]["1"]["always_up"]["hit_rate"] == 0.51
+    assert artifact["alpha"]["walkForwardLegacy1d"]["full"]["horizon_days"] == 1
+    assert artifact["alpha"]["featureGroupSummary"]["7"]["stationary"]["avg_hit_rate"] == 0.54
     assert artifact["targets"]["diagnostics"]["btc_large_move_3d_vol_adj"]["positive_rate"] == 0.16
     assert artifact["stationarity"]["adf"]["btc_log_return"]["pvalue"] == 0.01
     assert artifact["rawStats"]["structured_sources"]["btc_etf"]["mode"] == "gold_history"
