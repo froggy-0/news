@@ -669,7 +669,10 @@ def run_statistical_tests(df: pd.DataFrame) -> dict[str, Any]:
 
 @dataclass(frozen=True)
 class HitRateResult:
-    """단일 Predictor의 방향 적중률 및 분류 성능 결과."""
+    """단일 Predictor의 방향 적중률 및 분류 성능 결과.
+
+    *_ci_* 필드는 block bootstrap 으로 산출된 신뢰구간. bootstrap 미실행 시 NaN.
+    """
 
     predictor: str
     threshold: float
@@ -684,6 +687,11 @@ class HitRateResult:
     n_valid: int
     inverted: bool  # VIX 등 방향 반전 여부
     granger_significant: bool | None  # Granger 연계 플래그
+    hit_rate_ci_lower: float = float("nan")
+    hit_rate_ci_upper: float = float("nan")
+    bootstrap_n: int = 0
+    bootstrap_method: str = ""
+    bootstrap_block_length: int = 0
 
 
 def compute_hit_rate(
@@ -933,6 +941,13 @@ class BacktestResult:
     transaction_cost_bps: float
     inverted: bool
     granger_significant: bool | None
+    sharpe_ci_lower: float = float("nan")
+    sharpe_ci_upper: float = float("nan")
+    cumulative_return_ci_lower: float = float("nan")
+    cumulative_return_ci_upper: float = float("nan")
+    bootstrap_n: int = 0
+    bootstrap_method: str = ""
+    bootstrap_block_length: int = 0
 
 
 def compute_backtest(
