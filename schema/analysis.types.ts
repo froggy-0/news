@@ -99,6 +99,9 @@ export interface AlphaSection {
   baselineMetrics: JsonObject;
   horizonMetrics: JsonObject;
   walkForwardHorizons: JsonObject;
+  // Block bootstrap CI / BH-FDR run-time metadata (run_alpha_validation 산출).
+  // 셀별 hit_rate_ci_*, sharpe_ci_*, pvalue_vs_baselines, fdr_q 는 hitRates / horizonMetrics 안에 nested.
+  bootstrapConfig?: JsonObject;
 }
 
 export interface TargetsSection {
