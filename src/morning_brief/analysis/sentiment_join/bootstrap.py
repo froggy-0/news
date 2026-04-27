@@ -74,7 +74,7 @@ def _circular_block_indices(n: int, block_length: int, rng: np.random.Generator)
     block_length = min(block_length, n)
     blocks_needed = math.ceil(n / block_length)
     starts = rng.integers(low=0, high=n, size=blocks_needed)
-    offsets = np.arange(block_length, dtype=np.int64)
+    offsets: np.ndarray = np.arange(block_length, dtype=np.int64)
     raw = (starts[:, None] + offsets[None, :]) % n
     return raw.reshape(-1)[:n].astype(np.int64)
 
@@ -120,7 +120,7 @@ def bootstrap_metric(
         )
     rng = np.random.default_rng(cfg.seed)
     point = float(metric_fn(arr))
-    boot = np.empty(cfg.n_bootstrap, dtype=np.float64)
+    boot: np.ndarray = np.empty(cfg.n_bootstrap, dtype=np.float64)
     for i in range(cfg.n_bootstrap):
         idx = _resample_indices(n, cfg, rng)
         boot[i] = float(metric_fn(arr[idx]))
@@ -169,8 +169,8 @@ def bootstrap_paired(
     rng = np.random.default_rng(cfg.seed)
     sig_point = float(metric_fn(sig))
     base_point = float(metric_fn(base))
-    boot_sig = np.empty(cfg.n_bootstrap, dtype=np.float64)
-    boot_base = np.empty(cfg.n_bootstrap, dtype=np.float64)
+    boot_sig: np.ndarray = np.empty(cfg.n_bootstrap, dtype=np.float64)
+    boot_base: np.ndarray = np.empty(cfg.n_bootstrap, dtype=np.float64)
     leq_count = 0
     for i in range(cfg.n_bootstrap):
         idx = _resample_indices(n, cfg, rng)

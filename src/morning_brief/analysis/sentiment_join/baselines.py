@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -59,13 +60,13 @@ def evaluate_baseline(
     *,
     return_col: str = "btc_log_return",
     bootstrap: BootstrapConfig | None = None,
-) -> dict[str, float]:
+) -> dict[str, Any]:
     """단일 baseline 의 hit_rate / Sharpe / coverage 산출.
 
     bootstrap 가 주어지면 hit_rate / Sharpe 의 block bootstrap CI 를 추가 필드로 반환:
     `hit_rate_ci_lower/upper`, `sharpe_ci_lower/upper`, `bootstrap_n/method/block_length`.
     """
-    empty_ci = {
+    empty_ci: dict[str, Any] = {
         "hit_rate_ci_lower": float("nan"),
         "hit_rate_ci_upper": float("nan"),
         "sharpe_ci_lower": float("nan"),
