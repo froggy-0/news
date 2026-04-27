@@ -3,9 +3,10 @@ from __future__ import annotations
 import logging
 import math
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from morning_brief.analysis.sentiment_join.bootstrap import (
@@ -1539,35 +1540,32 @@ def _baseline_metrics_by_horizon(
     return metrics
 
 
-def _signal_hits_array(
+def _signal_hits_series(
     df: pd.DataFrame,
     predictor_col: str,
     threshold: float,
     *,
     inverted: bool,
-) -> tuple[Any, Any]:
-    """compute_hit_rate 내부 hits 산출 로직 재사용 (NaN/flat 제외 후 같은 행 정렬).
-
-    Returns (hits_array, valid_index). hits[i] in {0, 1}; valid_index 는 원본 df 인덱스.
-    """
-    import numpy as np
+) -> pd.Series:
+    """compute_hit_rate 내부 hits 산출 로직을 index 보존 형태로 재사용한다."""
 
     work = df[[predictor_col, "btc_direction_label"]].copy()
     work = work[work["btc_direction_label"] != "flat"]
     work = work.dropna(subset=[predictor_col, "btc_direction_label"])
     if work.empty:
-        return np.empty(0, dtype=float), work.index
+        return pd.Series(dtype=float, name="signal_hit")
     pred_above = work[predictor_col] > threshold
     predicted_up = ~pred_above if inverted else pred_above
     actual_up = work["btc_direction_label"] == "up"
-    hits = (predicted_up == actual_up).to_numpy(dtype=float)
-    return hits, work.index
+    return pd.Series((predicted_up == actual_up).to_numpy(dtype=float), index=work.index)
 
 
-def _baseline_hits_array(df: pd.DataFrame, baseline_signal: pd.Series, return_col: str) -> Any:
-    """evaluate_baseline 내부 hits 산출 로직 재사용 — 동일 row 집합으로 정렬해야 paired."""
-    import numpy as np
-
+def _baseline_hits_series(
+    df: pd.DataFrame,
+    baseline_signal: pd.Series,
+    return_col: str,
+) -> pd.Series:
+    """evaluate_baseline 내부 hits 산출 로직을 index 보존 형태로 재사용한다."""
     aligned = pd.DataFrame(
         {
             "signal": pd.to_numeric(baseline_signal, errors="coerce"),
@@ -1576,8 +1574,130 @@ def _baseline_hits_array(df: pd.DataFrame, baseline_signal: pd.Series, return_co
     ).dropna()
     active = aligned[aligned["signal"] != 0]
     if active.empty:
-        return np.empty(0, dtype=float)
-    return (np.sign(active["signal"].to_numpy()) == np.sign(active["ret"].to_numpy())).astype(float)
+        return pd.Series(dtype=float, name="baseline_hit")
+    hits = (np.sign(active["signal"].to_numpy()) == np.sign(active["ret"].to_numpy())).astype(float)
+    return pd.Series(hits, index=active.index)
+
+
+def _finite(value: Any) -> float:
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return float("nan")
+    return result if math.isfinite(result) else float("nan")
+
+
+def _best_baseline(
+    baseline_metrics: dict[str, Any],
+    metric: str,
+) -> tuple[str | None, dict[str, Any]]:
+    candidates: list[tuple[str, dict[str, Any], float]] = []
+    for name, payload in baseline_metrics.items():
+        if not isinstance(payload, dict):
+            continue
+        value = _finite(payload.get(metric))
+        if math.isfinite(value):
+            candidates.append((name, payload, value))
+    if not candidates:
+        return None, {}
+    name, payload, _ = max(candidates, key=lambda item: item[2])
+    return name, payload
+
+
+def _walk_forward_stability(
+    walk_forward_horizons: dict[str, Any],
+    predictor: str,
+    horizon_key: str,
+) -> float:
+    index_name: str | None = None
+    if predictor == "full_hybrid_index_score_lag1":
+        index_name = "full"
+    elif predictor == "core_hybrid_index_score_lag1":
+        index_name = "core"
+    if index_name is None:
+        return float("nan")
+    index_payload = walk_forward_horizons.get(index_name)
+    if not isinstance(index_payload, dict):
+        return float("nan")
+    horizon_payload = index_payload.get(horizon_key)
+    if not isinstance(horizon_payload, dict):
+        return float("nan")
+    return _finite(horizon_payload.get("stability"))
+
+
+def _feature_group_for_predictor(predictor: str) -> str:
+    if predictor in {"news_sentiment_mean_lag1", "fng_value_lag1", "vix_lag1"}:
+        return "level"
+    if predictor in {
+        "sentiment_momentum_lag1",
+        "sentiment_accel_lag1",
+        "fng_change_1d_lag1",
+        "fng_change_5d_lag1",
+    }:
+        return "stationary"
+    if predictor in {
+        "btc_bear_regime_lag1",
+        "sentiment_momentum_x_bear_lag1",
+        "fng_change_1d_x_bear_lag1",
+        "funding_rate_x_bear_lag1",
+    }:
+        return "regime"
+    if predictor in {"full_hybrid_index_score_lag1", "core_hybrid_index_score_lag1"}:
+        return "hybrid"
+    return "other"
+
+
+def _feature_group_summary(horizon_metrics: dict[str, Any]) -> dict[str, Any]:
+    summary: dict[str, Any] = {}
+    for horizon_key, hcell in horizon_metrics.items():
+        if not isinstance(hcell, dict):
+            continue
+        hit_rows = [row for row in hcell.get("hit_rates", []) if isinstance(row, dict)]
+        backtest_rows = {
+            row.get("predictor"): row for row in hcell.get("backtest", []) if isinstance(row, dict)
+        }
+        groups: dict[str, list[dict[str, Any]]] = {}
+        for row in hit_rows:
+            groups.setdefault(_feature_group_for_predictor(str(row.get("predictor"))), []).append(
+                row
+            )
+
+        horizon_summary: dict[str, Any] = {}
+        for group, rows in groups.items():
+            hit_values = [_finite(row.get("hit_rate")) for row in rows]
+            hit_values = [value for value in hit_values if math.isfinite(value)]
+            q_values = [_finite(row.get("fdr_q")) for row in rows]
+            q_values = [value for value in q_values if math.isfinite(value)]
+            sharpe_values: list[float] = []
+            for row in rows:
+                bt = backtest_rows.get(row.get("predictor"))
+                if isinstance(bt, dict):
+                    sharpe = _finite(bt.get("sharpe_ratio"))
+                    if math.isfinite(sharpe):
+                        sharpe_values.append(sharpe)
+            best_row = max(rows, key=lambda row: _finite(row.get("hit_rate")))
+            horizon_summary[group] = {
+                "predictor_count": len(rows),
+                "avg_hit_rate": float(sum(hit_values) / len(hit_values))
+                if hit_values
+                else float("nan"),
+                "best_predictor": best_row.get("predictor"),
+                "best_hit_rate": best_row.get("hit_rate"),
+                "avg_sharpe": (
+                    float(sum(sharpe_values) / len(sharpe_values))
+                    if sharpe_values
+                    else float("nan")
+                ),
+                "min_fdr_q": min(q_values) if q_values else float("nan"),
+                "decision_promote_count": sum(
+                    1 for row in rows if row.get("decision") == "promote"
+                ),
+                "decision_strict_promote_count": sum(
+                    1 for row in rows if row.get("decision_strict") == "promote"
+                ),
+            }
+        summary[horizon_key] = horizon_summary
+    return summary
 
 
 def _horizon_metrics(
@@ -1585,18 +1705,17 @@ def _horizon_metrics(
     *,
     granger_results: list[dict[str, Any]] | None,
     granger_executed: bool,
+    walk_forward_horizons: dict[str, Any] | None = None,
     bootstrap_config: BootstrapConfig | None = None,
 ) -> dict[str, Any]:
-    import dataclasses
-
-    import numpy as np
-
     from morning_brief.analysis.sentiment_join.baselines import (
         always_up,
         btc_momo_20d,
+        evaluate_baseline,
         fng_contrarian,
         vol_regime,
     )
+    from morning_brief.analysis.sentiment_join.variance import evaluate_promotion_gate
 
     baseline_factories = {
         "always_up": always_up,
@@ -1614,6 +1733,23 @@ def _horizon_metrics(
         eval_df = _with_direction_label_for_return(df, return_col)
         horizon_key = str(horizon_days)
         metrics[horizon_key] = {"return_col": return_col, "hit_rates": [], "backtest": []}
+        baseline_metrics = {
+            name: evaluate_baseline(
+                eval_df,
+                factory(eval_df),
+                return_col=return_col,
+                bootstrap=bootstrap_config,
+            )
+            for name, factory in baseline_factories.items()
+        }
+        best_hit_baseline_name, best_hit_baseline = _best_baseline(
+            baseline_metrics,
+            "hit_rate",
+        )
+        best_sharpe_baseline_name, best_sharpe_baseline = _best_baseline(
+            baseline_metrics,
+            "sharpe",
+        )
         for cfg in _ALPHA_PREDICTOR_CONFIGS:
             col = cfg["col"]
             if col not in eval_df.columns or eval_df[col].isna().all():
@@ -1640,8 +1776,8 @@ def _horizon_metrics(
                 granger_significant=granger_sig,
                 bootstrap=bootstrap_config,
             )
-            hr_dict = dataclasses.asdict(hr)
-            bt_dict = dataclasses.asdict(bt)
+            hr_dict = asdict(hr)
+            bt_dict = asdict(bt)
             hr_dict["horizon_days"] = horizon_days
             hr_dict["return_col"] = return_col
             bt_dict["horizon_days"] = horizon_days
@@ -1650,27 +1786,97 @@ def _horizon_metrics(
             # Paired bootstrap p-value vs each baseline → take MAX (signal must beat ALL baselines).
             # Hit-rate metric used as the gate signal; CI hard-separation 보강 데이터.
             cell_p_value = float("nan")
+            baseline_alignment: dict[str, Any] = {}
             if bootstrap_config is not None:
-                signal_hits, _ = _signal_hits_array(
+                signal_hits = _signal_hits_series(
                     eval_df, col, cfg["threshold"], inverted=cfg["inverted"]
                 )
-                if signal_hits.size >= 2:
+                if len(signal_hits) >= 2:
                     baseline_p_values: list[float] = []
-                    for _, factory in baseline_factories.items():
+                    for baseline_name, factory in baseline_factories.items():
                         baseline_signal = factory(eval_df)
-                        baseline_hits = _baseline_hits_array(eval_df, baseline_signal, return_col)
-                        # Align lengths via min — paired bootstrap requires equal length.
-                        if baseline_hits.size < 2:
+                        baseline_hits = _baseline_hits_series(
+                            eval_df,
+                            baseline_signal,
+                            return_col,
+                        )
+                        paired = pd.concat(
+                            [
+                                signal_hits.rename("signal"),
+                                baseline_hits.rename("baseline"),
+                            ],
+                            axis=1,
+                            join="inner",
+                        ).dropna()
+                        baseline_alignment[baseline_name] = {
+                            "signal_rows": int(len(signal_hits)),
+                            "baseline_rows": int(len(baseline_hits)),
+                            "paired_rows": int(len(paired)),
+                        }
+                        if len(paired) < 2:
                             continue
-                        n_pair = min(signal_hits.size, baseline_hits.size)
-                        sig_arr = signal_hits[:n_pair]
-                        base_arr = baseline_hits[:n_pair]
+                        sig_arr = paired["signal"].to_numpy(dtype=float)
+                        base_arr = paired["baseline"].to_numpy(dtype=float)
                         sig_res, _ = bootstrap_paired(sig_arr, base_arr, np.mean, bootstrap_config)
                         if math.isfinite(sig_res.pvalue_one_sided):
                             baseline_p_values.append(sig_res.pvalue_one_sided)
                     if baseline_p_values:
                         cell_p_value = float(max(baseline_p_values))
             hr_dict["pvalue_vs_baselines"] = cell_p_value
+            hr_dict["paired_baseline_alignment"] = baseline_alignment
+            hit_rate_lift = _finite(hr_dict.get("hit_rate")) - _finite(
+                best_hit_baseline.get("hit_rate")
+            )
+            sharpe_lift = _finite(bt_dict.get("sharpe_ratio")) - _finite(
+                best_sharpe_baseline.get("sharpe")
+            )
+            stability = _walk_forward_stability(
+                walk_forward_horizons or {},
+                col,
+                horizon_key,
+            )
+            gate = evaluate_promotion_gate(
+                hit_rate_delta=hit_rate_lift,
+                sharpe_delta=sharpe_lift,
+                coverage=float(hr.n_valid / len(eval_df)) if len(eval_df) else 0.0,
+                masked_ratio=float("nan"),
+                stability=stability,
+                hit_rate_ci_lower=hr.hit_rate_ci_lower,
+                hit_rate_ci_upper=hr.hit_rate_ci_upper,
+                sharpe_ci_lower=bt.sharpe_ci_lower,
+                sharpe_ci_upper=bt.sharpe_ci_upper,
+                baseline_hit_rate_ci_upper=_finite(best_hit_baseline.get("hit_rate_ci_upper")),
+                baseline_sharpe_ci_upper=_finite(best_sharpe_baseline.get("sharpe_ci_upper")),
+            )
+            hr_dict.update(
+                {
+                    "decision": gate.decision,
+                    "decision_strict": gate.decision_strict,
+                    "best_baseline": best_hit_baseline_name,
+                    "best_hit_rate_baseline": best_hit_baseline_name,
+                    "best_sharpe_baseline": best_sharpe_baseline_name,
+                    "baseline_hit_rate": best_hit_baseline.get("hit_rate"),
+                    "baseline_hit_rate_ci_upper": best_hit_baseline.get("hit_rate_ci_upper"),
+                    "baseline_sharpe": best_sharpe_baseline.get("sharpe"),
+                    "baseline_sharpe_ci_upper": best_sharpe_baseline.get("sharpe_ci_upper"),
+                    "strategy_sharpe": bt.sharpe_ratio,
+                    "sharpe_ci_lower": bt.sharpe_ci_lower,
+                    "sharpe_ci_upper": bt.sharpe_ci_upper,
+                    "hit_rate_lift_vs_best_baseline": hit_rate_lift,
+                    "sharpe_lift_vs_best_baseline": sharpe_lift,
+                    "coverage": gate.coverage,
+                    "masked_ratio": gate.masked_ratio,
+                    "stability": gate.stability,
+                    "hit_rate_ok": gate.hit_rate_ok,
+                    "sharpe_ok": gate.sharpe_ok,
+                    "coverage_ok": gate.coverage_ok,
+                    "masked_ratio_ok": gate.masked_ratio_ok,
+                    "stability_ok": gate.stability_ok,
+                    "hit_rate_ci_ok": gate.hit_rate_ci_ok,
+                    "sharpe_ci_ok": gate.sharpe_ci_ok,
+                    "fdr_ok": gate.fdr_ok,
+                }
+            )
             cell_pvalues.append((horizon_key, col, cell_p_value))
 
             metrics[horizon_key]["hit_rates"].append(hr_dict)
@@ -1685,12 +1891,33 @@ def _horizon_metrics(
             for hr_dict in hcell["hit_rates"]:
                 key = (horizon_key, hr_dict["predictor"])
                 hr_dict["fdr_q"] = q_lookup.get(key, float("nan"))
+                gate = evaluate_promotion_gate(
+                    hit_rate_delta=_finite(hr_dict.get("hit_rate_lift_vs_best_baseline")),
+                    sharpe_delta=_finite(hr_dict.get("sharpe_lift_vs_best_baseline")),
+                    coverage=_finite(hr_dict.get("coverage")),
+                    masked_ratio=_finite(hr_dict.get("masked_ratio")),
+                    stability=_finite(hr_dict.get("stability")),
+                    hit_rate_ci_lower=_finite(hr_dict.get("hit_rate_ci_lower")),
+                    hit_rate_ci_upper=_finite(hr_dict.get("hit_rate_ci_upper")),
+                    sharpe_ci_lower=_finite(hr_dict.get("sharpe_ci_lower")),
+                    sharpe_ci_upper=_finite(hr_dict.get("sharpe_ci_upper")),
+                    baseline_hit_rate_ci_upper=_finite(hr_dict.get("baseline_hit_rate_ci_upper")),
+                    baseline_sharpe_ci_upper=_finite(hr_dict.get("baseline_sharpe_ci_upper")),
+                    fdr_q=_finite(hr_dict.get("fdr_q")),
+                )
+                hr_dict.update(
+                    {
+                        "decision": gate.decision,
+                        "decision_strict": gate.decision_strict,
+                        "fdr_ok": gate.fdr_ok,
+                        "hit_rate_ci_ok": gate.hit_rate_ci_ok,
+                        "sharpe_ci_ok": gate.sharpe_ci_ok,
+                    }
+                )
     return metrics
 
 
 def _walk_forward_horizons(df: pd.DataFrame) -> dict[str, Any]:
-    import dataclasses
-
     results: dict[str, Any] = {}
     for idx_name in ("full", "core"):
         results[idx_name] = {}
@@ -1702,7 +1929,7 @@ def _walk_forward_horizons(df: pd.DataFrame) -> dict[str, Any]:
                 horizon_days=horizon_days,
             )
             if wf is not None:
-                results[idx_name][str(horizon_days)] = dataclasses.asdict(wf)
+                results[idx_name][str(horizon_days)] = asdict(wf)
     return results
 
 
@@ -1725,8 +1952,6 @@ def run_alpha_validation(
         {"hit_rates": [...], "correlations": [...], "backtest": [...], "walk_forward": {...},
          "baseline_metrics": {...}, "horizon_metrics": {...}, "walk_forward_horizons": {...}}
     """
-    import dataclasses
-
     if bootstrap_config is None:
         bootstrap_config = BootstrapConfig()
 
@@ -1758,7 +1983,7 @@ def run_alpha_validation(
             granger_significant=granger_sig,
             bootstrap=bootstrap_config,
         )
-        hit_rates.append(dataclasses.asdict(hr))
+        hit_rates.append(asdict(hr))
 
         # Backtest
         bt = compute_backtest(
@@ -1769,7 +1994,7 @@ def run_alpha_validation(
             granger_significant=granger_sig,
             bootstrap=bootstrap_config,
         )
-        backtest_results.append(dataclasses.asdict(bt))
+        backtest_results.append(asdict(bt))
 
     # Correlations: predictor vs btc_log_return + predictor 간 상관 (Req 3.4, 3.5)
     available_predictors: list[str] = []
@@ -1789,31 +2014,42 @@ def run_alpha_validation(
             corr_pairs.append((col_a, col_b))
 
     corr_results = compute_correlations(df, corr_pairs, stationarity_results)
-    correlations = [dataclasses.asdict(c) for c in corr_results]
+    correlations = [asdict(c) for c in corr_results]
 
     # Walk-Forward: full + core 양쪽 실행
     walk_forward: dict[str, Any] = {}
     for idx_name in ("full", "core"):
         wf = walk_forward_validate(df, index_name=idx_name)
         if wf is not None:
-            walk_forward[idx_name] = dataclasses.asdict(wf)
+            walk_forward[idx_name] = asdict(wf)
 
+    walk_forward_horizons = _walk_forward_horizons(df)
+    primary_horizon_key = str(max(_ALPHA_HORIZONS.keys()))
+    primary_walk_forward = {
+        idx_name: horizon_payload[primary_horizon_key]
+        for idx_name, horizon_payload in walk_forward_horizons.items()
+        if isinstance(horizon_payload, dict) and primary_horizon_key in horizon_payload
+    }
     horizon_metrics = _horizon_metrics(
         df,
         granger_results=granger_results,
         granger_executed=granger_executed,
+        walk_forward_horizons=walk_forward_horizons,
         bootstrap_config=bootstrap_config,
     )
+    feature_group_summary = _feature_group_summary(horizon_metrics)
 
     return _sanitize_nan(
         {
             "hit_rates": hit_rates,
             "correlations": correlations,
             "backtest": backtest_results,
-            "walk_forward": walk_forward,
+            "walk_forward": primary_walk_forward,
+            "walk_forward_legacy_1d": walk_forward,
             "baseline_metrics": _baseline_metrics_by_horizon(df, bootstrap_config=bootstrap_config),
             "horizon_metrics": horizon_metrics,
-            "walk_forward_horizons": _walk_forward_horizons(df),
+            "walk_forward_horizons": walk_forward_horizons,
+            "feature_group_summary": feature_group_summary,
             "bootstrap_config": {
                 "n_bootstrap": bootstrap_config.n_bootstrap,
                 "block_length": bootstrap_config.block_length,
