@@ -100,9 +100,9 @@ def _make_raw_master(days: int = 300, *, seed: int = 42) -> pd.DataFrame:
 
 
 def test_default_grid_cell_count() -> None:
-    """2 scaler × 4 mask × 3 horizon × 2 index = 48."""
+    """2 scaler × 4 mask × 1 horizon × 2 index = 16 (T+7 단일 horizon)."""
     grid = default_grid()
-    assert len(grid) == 48
+    assert len(grid) == 16
 
 
 def test_default_grid_all_unique_spec_ids() -> None:
