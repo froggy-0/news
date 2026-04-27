@@ -269,6 +269,8 @@ def _build_alpha(payload: dict[str, Any]) -> dict[str, Any]:
         "horizonMetrics": _json_safe(_as_record(payload.get("horizon_metrics"))),
         "walkForwardHorizons": _json_safe(_as_record(payload.get("walk_forward_horizons"))),
         "featureGroupSummary": _json_safe(_as_record(payload.get("feature_group_summary"))),
+        "baselineGapSummary": _json_safe(_as_record(payload.get("baseline_gap_summary"))),
+        "nextResearchCandidates": _json_safe(_as_record(payload.get("next_research_candidates"))),
     }
 
 

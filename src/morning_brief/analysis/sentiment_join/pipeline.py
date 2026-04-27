@@ -76,6 +76,52 @@ def _empty_return_frame(prefix: str, start_date: str, end_date: str) -> pd.DataF
     )
 
 
+def _build_outlier_mask_summary(
+    flags: pd.DataFrame,
+    classification: pd.DataFrame,
+    *,
+    hybrid_diagnostics: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    rows = int(len(flags))
+    per_column: dict[str, dict[str, Any]] = {}
+    for col in flags.columns:
+        mask = flags[col].fillna(False).astype(bool)
+        reasons: dict[str, int] = {}
+        if col in classification.columns:
+            reason_counts = classification.loc[mask, col].dropna().astype(str).value_counts()
+            reasons = {str(reason): int(count) for reason, count in reason_counts.items()}
+        masked_cells = int(mask.sum())
+        per_column[str(col)] = {
+            "masked_cells": masked_cells,
+            "masked_ratio": masked_cells / rows if rows else 0.0,
+            "reasons": reasons,
+        }
+
+    hybrid_sources: dict[str, list[str]] = {}
+    if isinstance(hybrid_diagnostics, dict):
+        for spec_name in ("full", "core"):
+            diag = hybrid_diagnostics.get(spec_name, {})
+            pca_summary = diag.get("pca_summary", {}) if isinstance(diag, dict) else {}
+            selected = (
+                pca_summary.get("selected_features") if isinstance(pca_summary, dict) else None
+            )
+            if isinstance(selected, list):
+                hybrid_sources[f"{spec_name}_hybrid_index_score_lag1"] = [
+                    str(feature) for feature in selected
+                ]
+
+    global_cells = sum(item["masked_cells"] for item in per_column.values())
+    denominator = rows * len(flags.columns)
+    return {
+        "rows": rows,
+        "global_masked_cells": int(global_cells),
+        "global_masked_denominator": int(denominator),
+        "global_masked_ratio": global_cells / denominator if denominator else 0.0,
+        "per_column": per_column,
+        "hybrid_index_source_columns": hybrid_sources,
+    }
+
+
 def _log_source_complete(source: str, df: pd.DataFrame, *, fallback_used: bool) -> None:
     log_structured(
         logger,
@@ -595,6 +641,12 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             master_df[lag1_col] = master_df[score_col].shift(1)
             analysis_with_hybrid[lag1_col] = analysis_with_hybrid[score_col].shift(1)
 
+        outlier_mask_summary = _build_outlier_mask_summary(
+            _outlier_result.flags,
+            _outlier_result.classification,
+            hybrid_diagnostics=analysis_with_hybrid.attrs.get("hybrid_index_diagnostics", {}),
+        )
+
         # §4 v4: Alpha Validation 실행 (실패 시 파이프라인 중단하지 않음)
         alpha_validation_results: dict[str, object] = {}
         try:
@@ -618,6 +670,7 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
                 stationarity_results=_sr if isinstance(_sr, dict) else None,
                 granger_results=_gr if isinstance(_gr, list) else None,
                 granger_executed=bool(_ge),
+                outlier_mask_summary=outlier_mask_summary,
             )
         except Exception as exc:
             log_structured(
@@ -747,6 +800,24 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             and isinstance(alpha_validation_results.get("feature_group_summary"), dict)
             else None
         )
+        alpha_baseline_gap_summary = (
+            cast(dict[str, Any], alpha_validation_results.get("baseline_gap_summary"))
+            if isinstance(alpha_validation_results, dict)
+            and isinstance(alpha_validation_results.get("baseline_gap_summary"), dict)
+            else None
+        )
+        alpha_next_research_candidates = (
+            cast(dict[str, Any], alpha_validation_results.get("next_research_candidates"))
+            if isinstance(alpha_validation_results, dict)
+            and isinstance(alpha_validation_results.get("next_research_candidates"), dict)
+            else None
+        )
+        alpha_outlier_mask_summary = (
+            cast(dict[str, Any], alpha_validation_results.get("outlier_mask_summary"))
+            if isinstance(alpha_validation_results, dict)
+            and isinstance(alpha_validation_results.get("outlier_mask_summary"), dict)
+            else outlier_mask_summary
+        )
 
         stats_metadata = build_stats_metadata_payload(
             run_id=f"sentiment-join-{run_date}",
@@ -778,6 +849,9 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             horizon_metrics=alpha_horizon_metrics,
             walk_forward_horizons=alpha_walk_forward_horizons,
             feature_group_summary=alpha_feature_group_summary,
+            baseline_gap_summary=alpha_baseline_gap_summary,
+            next_research_candidates=alpha_next_research_candidates,
+            outlier_mask_summary=alpha_outlier_mask_summary,
             ffill_breakdown=ffill_breakdown,
             target_diagnostics=_target_diagnostics(master_df),
             structured_sources=structured_sources,

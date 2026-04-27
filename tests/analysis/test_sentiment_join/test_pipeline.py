@@ -90,6 +90,40 @@ def _btc_close_df(
     return df
 
 
+def test_build_outlier_mask_summary_preserves_column_and_hybrid_sources() -> None:
+    flags = pd.DataFrame(
+        {
+            "news_sentiment_mean": [True, False, True],
+            "fng_value": [False, False, False],
+        }
+    )
+    classification = pd.DataFrame(
+        {
+            "news_sentiment_mean": ["iqr_single", None, "data_error"],
+            "fng_value": [None, None, None],
+        }
+    )
+
+    summary = pipeline._build_outlier_mask_summary(
+        flags,
+        classification,
+        hybrid_diagnostics={
+            "full": {"pca_summary": {"selected_features": ["news_sentiment_mean", "fng_value"]}}
+        },
+    )
+
+    assert summary["rows"] == 3
+    assert summary["per_column"]["news_sentiment_mean"]["masked_cells"] == 2
+    assert summary["per_column"]["news_sentiment_mean"]["reasons"] == {
+        "iqr_single": 1,
+        "data_error": 1,
+    }
+    assert summary["hybrid_index_source_columns"]["full_hybrid_index_score_lag1"] == [
+        "news_sentiment_mean",
+        "fng_value",
+    ]
+
+
 def _etf_df(main_dates: list[str]) -> pd.DataFrame:
     totals = [1000.0 + idx * 10.0 for idx in range(len(main_dates))]
     df = pd.DataFrame(
