@@ -1396,8 +1396,6 @@ _ALPHA_PREDICTOR_CONFIGS: list[dict[str, Any]] = [
 ]
 
 _ALPHA_HORIZONS: dict[int, str] = {
-    1: "btc_log_return",
-    3: "btc_fwd_ret_3d",
     7: "btc_fwd_ret_7d",
 }
 

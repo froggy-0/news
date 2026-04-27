@@ -126,10 +126,10 @@ def write_tracking_artifact(
 def default_grid(
     scalers: tuple[ScalerKind, ...] = ("standard", "robust"),
     masks: tuple[PolicyName, ...] = ("row", "column", "winsorize", "none"),
-    horizons: tuple[int, ...] = (1, 3, 7),
+    horizons: tuple[int, ...] = (7,),
     indices: tuple[str, ...] = ("full", "core"),
 ) -> list[ExperimentSpec]:
-    """2×4×3×2 = 48 기본 grid. tasks.md 의 64 는 horizon 4개(+fwd_vol)까지 포함한 수치."""
+    """2×4×1×2 = 16 기본 grid. T+7 단일 horizon."""
     return [
         ExperimentSpec(scaler=s, mask=m, horizon_days=h, index_name=i)
         for s in scalers
