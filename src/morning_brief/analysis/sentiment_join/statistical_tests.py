@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 MIN_ROWS_FOR_ADF = 30
 MIN_ROWS_FOR_GRANGER = 180
 GRANGER_LAGS = [1, 2, 3]
+ANNUALIZATION_FACTOR = 365  # BTC 24/7 calendar-day candles, no weekend gap → 365 (not 252)
 
 # §0: Granger 내부에서 predictor[t-1..t-k]를 자체 처리하므로 raw 컬럼을 투입해야 한다.
 # _lag1 버전을 투입하면 실제 검정 관계가 한 칸 더 밀리는 double-lag이 발생한다.
@@ -925,7 +926,7 @@ class BacktestResult:
     strategy_cumulative_return: float
     bnh_cumulative_return: float
     alpha: float  # strategy - bnh
-    sharpe_ratio: float  # annualized, sqrt(365)
+    sharpe_ratio: float  # annualized via sqrt(ANNUALIZATION_FACTOR)
     max_drawdown: float  # <= 0
     n_trades: int  # 포지션 전환 횟수
     n_valid: int
@@ -1006,12 +1007,12 @@ def compute_backtest(
     bnh_cumret = float(np.sum(returns))
     alpha = strategy_cumret - bnh_cumret
 
-    # Sharpe Ratio: mean/std × sqrt(365)
+    # Sharpe Ratio: mean/std × sqrt(ANNUALIZATION_FACTOR)
     std = float(np.std(strategy_returns, ddof=1)) if n_valid > 1 else 0.0
     if std == 0.0:
         sharpe_ratio = float("nan")
     else:
-        sharpe_ratio = float(np.mean(strategy_returns)) / std * math.sqrt(365)
+        sharpe_ratio = float(np.mean(strategy_returns)) / std * math.sqrt(ANNUALIZATION_FACTOR)
 
     # Max Drawdown: min(cumulative_curve - running_max)
     cumulative_curve = np.cumsum(strategy_returns)

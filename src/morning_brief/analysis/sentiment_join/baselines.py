@@ -5,7 +5,7 @@ import math
 import numpy as np
 import pandas as pd
 
-TRADING_DAYS_PER_YEAR = 252
+TRADING_DAYS_PER_YEAR = 365  # BTC 24/7 calendar-day candles, no weekend gap → 365 (not 252)
 
 
 def _as_signal(values: pd.Series, index: pd.Index) -> pd.Series:

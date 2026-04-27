@@ -55,7 +55,7 @@ FOLDS_SCHEMA_COLUMNS: tuple[str, ...] = (
     "stability",
 )
 
-TRADING_DAYS_PER_YEAR = 252
+TRADING_DAYS_PER_YEAR = 365  # BTC 24/7 calendar-day candles, no weekend gap → 365 (not 252)
 
 
 @dataclass(frozen=True)
@@ -167,9 +167,10 @@ def _build_custom_specs(scaler: ScalerKind) -> tuple[IndexSpec, ...]:
 
 
 def _fold_sharpe(df: pd.DataFrame, return_col: str, signal_col: str) -> float:
-    """fold 내 strategy sharpe = mean / std * sqrt(252).
+    """fold 내 strategy sharpe = mean / std * sqrt(TRADING_DAYS_PER_YEAR).
 
     strategy 수익률 = sign(signal - 50) * return. NaN·flat 은 제외.
+    BTC 24/7 → 365 일 기준 연환산 (baselines.py / statistical_tests.py 와 동일).
     """
     if signal_col not in df.columns or return_col not in df.columns:
         return float("nan")
