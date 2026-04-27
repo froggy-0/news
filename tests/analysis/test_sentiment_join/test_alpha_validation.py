@@ -1528,12 +1528,33 @@ class TestWalkForwardCoreIndex:
         result = run_alpha_validation(
             df,
             bootstrap_config=BootstrapConfig(n_bootstrap=20, block_length=3, seed=7),
+            outlier_mask_summary={
+                "rows": n_rows,
+                "global_masked_cells": 0,
+                "global_masked_denominator": n_rows,
+                "global_masked_ratio": 0.0,
+                "per_column": {
+                    "news_sentiment_mean": {
+                        "masked_cells": 5,
+                        "masked_ratio": 5 / n_rows,
+                        "reasons": {"iqr_single": 5},
+                    },
+                    "fng_value": {"masked_cells": 2, "masked_ratio": 2 / n_rows},
+                    "vix": {"masked_cells": 0, "masked_ratio": 0.0},
+                },
+                "hybrid_index_source_columns": {
+                    "full_hybrid_index_score_lag1": ["news_sentiment_mean", "fng_value"],
+                    "core_hybrid_index_score_lag1": ["news_sentiment_mean"],
+                },
+            },
         )
 
         assert "baseline_metrics" in result
         assert "horizon_metrics" in result
         assert "walk_forward_horizons" in result
         assert "feature_group_summary" in result
+        assert "baseline_gap_summary" in result
+        assert "next_research_candidates" in result
         assert "7" in result["baseline_metrics"]
         assert "7" in result["horizon_metrics"]
         assert result["horizon_metrics"]["7"]["return_col"] == "btc_fwd_ret_7d"
@@ -1543,11 +1564,73 @@ class TestWalkForwardCoreIndex:
         assert "best_baseline" in first_hit_rate
         assert "hit_rate_lift_vs_best_baseline" in first_hit_rate
         assert "sharpe_lift_vs_best_baseline" in first_hit_rate
+        assert "vol_regime_hit_rate_lift" in first_hit_rate
+        assert "vol_regime_sharpe_lift" in first_hit_rate
+        assert "payoff_diagnostics" in first_hit_rate
+        assert first_hit_rate["masked_ratio_source"] == "source_columns"
+        assert first_hit_rate["masked_cells"] == 5
+        assert result["baseline_gap_summary"]["7"]["vol_regime_hit_rate"] is not None
+        assert isinstance(result["next_research_candidates"]["7"], list)
         assert result["feature_group_summary"]["7"]
         if result["walk_forward"]:
             assert {row["horizon_days"] for row in result["walk_forward"].values()} == {7}
         if result["walk_forward_legacy_1d"]:
             assert {row["horizon_days"] for row in result["walk_forward_legacy_1d"].values()} == {1}
+
+    def test_payoff_diagnostics_splits_correct_and_wrong_returns(self) -> None:
+        from morning_brief.analysis.sentiment_join.statistical_tests import _payoff_diagnostics
+
+        df = pd.DataFrame(
+            {
+                "signal": [1.0, 1.0, -1.0, -1.0],
+                "btc_fwd_ret_7d": [0.10, -0.04, -0.02, 0.06],
+                "btc_direction_label": ["up", "down", "down", "up"],
+            }
+        )
+
+        diag = _payoff_diagnostics(
+            df,
+            "signal",
+            0.0,
+            return_col="btc_fwd_ret_7d",
+            inverted=False,
+            transaction_cost_bps=0.0,
+        )
+
+        assert diag["correct_count"] == 2
+        assert diag["wrong_count"] == 2
+        assert math.isclose(diag["avg_return_when_correct"], 0.04)
+        assert math.isclose(diag["avg_return_when_wrong"], 0.01)
+        assert math.isclose(diag["payoff_ratio"], 4.0)
+        assert diag["exposure_ratio"] == 0.5
+
+    def test_payoff_ratio_sanitizes_zero_wrong_return(self) -> None:
+        from morning_brief.analysis.sentiment_join.statistical_tests import (
+            _payoff_diagnostics,
+            _sanitize_nan,
+        )
+
+        df = pd.DataFrame(
+            {
+                "signal": [1.0, 1.0],
+                "btc_fwd_ret_7d": [0.03, 0.0],
+                "btc_direction_label": ["up", "down"],
+            }
+        )
+
+        diag = _sanitize_nan(
+            _payoff_diagnostics(
+                df,
+                "signal",
+                0.0,
+                return_col="btc_fwd_ret_7d",
+                inverted=False,
+                transaction_cost_bps=0.0,
+            )
+        )
+
+        assert diag["avg_return_when_wrong"] == 0.0
+        assert diag["payoff_ratio"] is None
 
     def test_horizon_metrics_align_paired_bootstrap_by_index(self) -> None:
         from morning_brief.analysis.sentiment_join.bootstrap import BootstrapConfig

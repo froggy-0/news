@@ -218,6 +218,9 @@ def test_build_stats_metadata_payload_includes_alpha_validation_fields() -> None
         }
     }
     feature_group_summary = {"7": {"stationary": {"avg_hit_rate": 0.54}}}
+    baseline_gap_summary = {"7": {"best_baseline": "vol_regime"}}
+    next_research_candidates = {"7": [{"predictor": "sentiment_momentum_lag1"}]}
+    outlier_mask_summary = {"rows": 200, "global_masked_ratio": 0.02}
 
     payload = build_stats_metadata_payload(
         run_id="sentiment-join-20260501",
@@ -234,6 +237,9 @@ def test_build_stats_metadata_payload_includes_alpha_validation_fields() -> None
         horizon_metrics={"3": {"return_col": "btc_fwd_ret_3d", "hit_rates": []}},
         walk_forward_horizons={"full": {"3": {"avg_hit_rate": 0.53}}},
         feature_group_summary=feature_group_summary,
+        baseline_gap_summary=baseline_gap_summary,
+        next_research_candidates=next_research_candidates,
+        outlier_mask_summary=outlier_mask_summary,
     )
 
     decoded = json.loads(payload.decode("utf-8"))
@@ -247,6 +253,9 @@ def test_build_stats_metadata_payload_includes_alpha_validation_fields() -> None
     assert decoded["horizon_metrics"] == {"3": {"return_col": "btc_fwd_ret_3d", "hit_rates": []}}
     assert decoded["walk_forward_horizons"] == {"full": {"3": {"avg_hit_rate": 0.53}}}
     assert decoded["feature_group_summary"] == feature_group_summary
+    assert decoded["baseline_gap_summary"] == baseline_gap_summary
+    assert decoded["next_research_candidates"] == next_research_candidates
+    assert decoded["outlier_mask_summary"] == outlier_mask_summary
 
 
 def test_build_stats_metadata_payload_defaults_empty_when_none() -> None:
@@ -270,6 +279,9 @@ def test_build_stats_metadata_payload_defaults_empty_when_none() -> None:
     assert decoded["horizon_metrics"] == {}
     assert decoded["walk_forward_horizons"] == {}
     assert decoded["feature_group_summary"] == {}
+    assert decoded["baseline_gap_summary"] == {}
+    assert decoded["next_research_candidates"] == {}
+    assert decoded["outlier_mask_summary"] == {}
     assert decoded["granger_skips"] == []
     assert decoded["granger_skip_summary"] == {}
     assert decoded["ffill_breakdown"] == {}

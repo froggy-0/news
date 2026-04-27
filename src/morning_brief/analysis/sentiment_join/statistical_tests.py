@@ -1482,6 +1482,19 @@ _ALPHA_HORIZONS: dict[int, str] = {
     7: "btc_fwd_ret_7d",
 }
 
+_PREDICTOR_SOURCE_COLUMNS: dict[str, list[str]] = {
+    "news_sentiment_mean_lag1": ["news_sentiment_mean"],
+    "sentiment_momentum_lag1": ["news_sentiment_mean"],
+    "sentiment_accel_lag1": ["news_sentiment_mean"],
+    "sentiment_momentum_x_bear_lag1": ["news_sentiment_mean"],
+    "fng_value_lag1": ["fng_value"],
+    "fng_change_1d_lag1": ["fng_value"],
+    "fng_change_5d_lag1": ["fng_value"],
+    "fng_change_1d_x_bear_lag1": ["fng_value"],
+    "funding_rate_x_bear_lag1": ["funding_rate"],
+    "vix_lag1": ["vix"],
+}
+
 
 def _sanitize_nan(obj: Any) -> Any:
     """float NaN을 None으로 변환하여 JSON 직렬화 안전성을 확보한다.
@@ -1505,6 +1518,137 @@ def _with_direction_label_for_return(df: pd.DataFrame, return_col: str) -> pd.Da
     if return_col in result.columns:
         result["btc_direction_label"] = _derive_direction_label(result[return_col])
     return result
+
+
+def _payoff_diagnostics(
+    df: pd.DataFrame,
+    signal_col: str,
+    threshold: float,
+    *,
+    return_col: str,
+    inverted: bool,
+    transaction_cost_bps: float = 10.0,
+) -> dict[str, Any]:
+    work = df[[signal_col, return_col, "btc_direction_label"]].copy()
+    work = work[work["btc_direction_label"] != "flat"]
+    work = work.dropna(subset=[signal_col, return_col, "btc_direction_label"])
+    if work.empty:
+        return {
+            "avg_return_when_correct": float("nan"),
+            "avg_return_when_wrong": float("nan"),
+            "median_return_when_correct": float("nan"),
+            "median_return_when_wrong": float("nan"),
+            "payoff_ratio": float("nan"),
+            "correct_count": 0,
+            "wrong_count": 0,
+            "exposure_ratio": float("nan"),
+            "turnover_ratio": float("nan"),
+            "avg_strategy_return": float("nan"),
+            "avg_bnh_return": float("nan"),
+        }
+
+    signal = pd.to_numeric(work[signal_col], errors="coerce").to_numpy(dtype=float)
+    returns = pd.to_numeric(work[return_col], errors="coerce").to_numpy(dtype=float)
+    pred_above = signal > threshold
+    predicted_up = ~pred_above if inverted else pred_above
+    actual_up = (work["btc_direction_label"] == "up").to_numpy(dtype=bool)
+    correct_mask = predicted_up == actual_up
+    wrong_mask = ~correct_mask
+    buy = signal <= threshold if inverted else signal > threshold
+    strategy_returns = np.where(buy, returns, 0.0)
+
+    n_valid = len(work)
+    n_trades = 0
+    if n_valid > 1:
+        position_changes = buy[1:] != buy[:-1]
+        n_trades = int(position_changes.sum())
+        if transaction_cost_bps > 0.0 and n_trades > 0:
+            cost_per_trade = math.log(1 - transaction_cost_bps / 10000)
+            cost_array = np.where(
+                np.concatenate([[False], position_changes]),
+                cost_per_trade,
+                0.0,
+            )
+            strategy_returns = strategy_returns + cost_array
+
+    avg_correct = (
+        float(np.mean(returns[correct_mask])) if bool(correct_mask.any()) else float("nan")
+    )
+    avg_wrong = float(np.mean(returns[wrong_mask])) if bool(wrong_mask.any()) else float("nan")
+    payoff_ratio = (
+        abs(avg_correct / avg_wrong)
+        if math.isfinite(avg_correct) and math.isfinite(avg_wrong) and avg_wrong != 0.0
+        else float("nan")
+    )
+
+    return {
+        "avg_return_when_correct": avg_correct,
+        "avg_return_when_wrong": avg_wrong,
+        "median_return_when_correct": (
+            float(np.median(returns[correct_mask])) if bool(correct_mask.any()) else float("nan")
+        ),
+        "median_return_when_wrong": (
+            float(np.median(returns[wrong_mask])) if bool(wrong_mask.any()) else float("nan")
+        ),
+        "payoff_ratio": payoff_ratio,
+        "correct_count": int(correct_mask.sum()),
+        "wrong_count": int(wrong_mask.sum()),
+        "exposure_ratio": float(np.mean(buy)),
+        "turnover_ratio": float(n_trades / max(n_valid - 1, 1)),
+        "avg_strategy_return": float(np.mean(strategy_returns)),
+        "avg_bnh_return": float(np.mean(returns)),
+    }
+
+
+def _mask_stats_for_predictor(
+    predictor: str,
+    outlier_mask_summary: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if not isinstance(outlier_mask_summary, dict):
+        return {
+            "masked_ratio": float("nan"),
+            "masked_cells": 0,
+            "masked_denominator": 0,
+            "masked_source_columns": [],
+            "masked_ratio_source": "missing",
+        }
+
+    rows = int(outlier_mask_summary.get("rows") or 0)
+    per_column = outlier_mask_summary.get("per_column")
+    if not isinstance(per_column, dict):
+        per_column = {}
+    source = "source_columns"
+    source_columns = _PREDICTOR_SOURCE_COLUMNS.get(predictor)
+    if predictor in {"full_hybrid_index_score_lag1", "core_hybrid_index_score_lag1"}:
+        hybrid_sources = outlier_mask_summary.get("hybrid_index_source_columns")
+        if isinstance(hybrid_sources, dict):
+            source_columns = hybrid_sources.get(predictor)
+        source = "hybrid_selected_features"
+
+    valid_columns = [
+        str(col) for col in (source_columns or []) if isinstance(per_column.get(str(col)), dict)
+    ]
+    if valid_columns and rows > 0:
+        masked_cells = sum(int(per_column[col].get("masked_cells") or 0) for col in valid_columns)
+        denominator = rows * len(valid_columns)
+        return {
+            "masked_ratio": masked_cells / denominator if denominator > 0 else float("nan"),
+            "masked_cells": int(masked_cells),
+            "masked_denominator": int(denominator),
+            "masked_source_columns": valid_columns,
+            "masked_ratio_source": source,
+        }
+
+    global_cells = int(outlier_mask_summary.get("global_masked_cells") or 0)
+    global_denominator = int(outlier_mask_summary.get("global_masked_denominator") or 0)
+    global_ratio = outlier_mask_summary.get("global_masked_ratio")
+    return {
+        "masked_ratio": _finite(global_ratio),
+        "masked_cells": global_cells,
+        "masked_denominator": global_denominator,
+        "masked_source_columns": [],
+        "masked_ratio_source": "global",
+    }
 
 
 def _baseline_metrics_by_horizon(
@@ -1676,6 +1820,35 @@ def _feature_group_summary(horizon_metrics: dict[str, Any]) -> dict[str, Any]:
                     if math.isfinite(sharpe):
                         sharpe_values.append(sharpe)
             best_row = max(rows, key=lambda row: _finite(row.get("hit_rate")))
+            payoff_rows = [
+                row
+                for row in rows
+                if math.isfinite(_finite((row.get("payoff_diagnostics") or {}).get("payoff_ratio")))
+            ]
+            payoff_values = [
+                _finite((row.get("payoff_diagnostics") or {}).get("payoff_ratio"))
+                for row in payoff_rows
+            ]
+            best_payoff_row = (
+                max(
+                    payoff_rows,
+                    key=lambda row: _finite(
+                        (row.get("payoff_diagnostics") or {}).get("payoff_ratio")
+                    ),
+                )
+                if payoff_rows
+                else {}
+            )
+            vol_hit_lifts = [
+                _finite(row.get("vol_regime_hit_rate_lift"))
+                for row in rows
+                if math.isfinite(_finite(row.get("vol_regime_hit_rate_lift")))
+            ]
+            vol_sharpe_lifts = [
+                _finite(row.get("vol_regime_sharpe_lift"))
+                for row in rows
+                if math.isfinite(_finite(row.get("vol_regime_sharpe_lift")))
+            ]
             horizon_summary[group] = {
                 "predictor_count": len(rows),
                 "avg_hit_rate": float(sum(hit_values) / len(hit_values))
@@ -1695,8 +1868,133 @@ def _feature_group_summary(horizon_metrics: dict[str, Any]) -> dict[str, Any]:
                 "decision_strict_promote_count": sum(
                     1 for row in rows if row.get("decision_strict") == "promote"
                 ),
+                "avg_payoff_ratio": (
+                    float(sum(payoff_values) / len(payoff_values))
+                    if payoff_values
+                    else float("nan")
+                ),
+                "best_payoff_predictor": best_payoff_row.get("predictor"),
+                "avg_vol_regime_hit_rate_lift": (
+                    float(sum(vol_hit_lifts) / len(vol_hit_lifts))
+                    if vol_hit_lifts
+                    else float("nan")
+                ),
+                "avg_vol_regime_sharpe_lift": (
+                    float(sum(vol_sharpe_lifts) / len(vol_sharpe_lifts))
+                    if vol_sharpe_lifts
+                    else float("nan")
+                ),
+                "positive_payoff_count": sum(
+                    1
+                    for row in rows
+                    if _finite((row.get("payoff_diagnostics") or {}).get("payoff_ratio")) > 1.0
+                ),
+                "candidate_count_after_quality_gate": sum(
+                    1 for row in rows if _is_next_research_candidate(row)
+                ),
             }
         summary[horizon_key] = horizon_summary
+    return summary
+
+
+def _is_next_research_candidate(row: dict[str, Any]) -> bool:
+    payoff_ratio = _finite((row.get("payoff_diagnostics") or {}).get("payoff_ratio"))
+    paired = row.get("paired_baseline_alignment") or {}
+    vol_alignment = paired.get("vol_regime") if isinstance(paired, dict) else {}
+    paired_rows = (
+        int(vol_alignment.get("paired_rows") or 0) if isinstance(vol_alignment, dict) else 0
+    )
+    return (
+        payoff_ratio > 1.0
+        and _finite(row.get("vol_regime_hit_rate_lift")) > -0.05
+        and _finite(row.get("masked_ratio")) <= 0.10
+        and paired_rows >= 180
+    )
+
+
+def _next_research_candidates(horizon_metrics: dict[str, Any]) -> dict[str, Any]:
+    candidates: dict[str, Any] = {}
+    for horizon_key, hcell in horizon_metrics.items():
+        if not isinstance(hcell, dict):
+            continue
+        rows = [
+            row
+            for row in hcell.get("hit_rates", [])
+            if isinstance(row, dict) and _is_next_research_candidate(row)
+        ]
+        candidates[horizon_key] = [
+            {
+                "predictor": row.get("predictor"),
+                "feature_group": _feature_group_for_predictor(str(row.get("predictor"))),
+                "hit_rate": row.get("hit_rate"),
+                "strategy_sharpe": row.get("strategy_sharpe"),
+                "payoff_ratio": (row.get("payoff_diagnostics") or {}).get("payoff_ratio"),
+                "vol_regime_hit_rate_lift": row.get("vol_regime_hit_rate_lift"),
+                "vol_regime_sharpe_lift": row.get("vol_regime_sharpe_lift"),
+                "masked_ratio": row.get("masked_ratio"),
+                "paired_rows_vs_vol_regime": (
+                    (row.get("paired_baseline_alignment") or {})
+                    .get("vol_regime", {})
+                    .get("paired_rows")
+                ),
+                "decision": row.get("decision"),
+                "decision_strict": row.get("decision_strict"),
+            }
+            for row in sorted(
+                rows,
+                key=lambda row: _finite((row.get("payoff_diagnostics") or {}).get("payoff_ratio")),
+                reverse=True,
+            )
+        ]
+    return candidates
+
+
+def _baseline_gap_summary(
+    horizon_metrics: dict[str, Any],
+    baseline_metrics: dict[str, Any],
+) -> dict[str, Any]:
+    summary: dict[str, Any] = {}
+    for horizon_key, hcell in horizon_metrics.items():
+        if not isinstance(hcell, dict):
+            continue
+        hit_rows = [row for row in hcell.get("hit_rates", []) if isinstance(row, dict)]
+        baselines = baseline_metrics.get(horizon_key, {})
+        if not hit_rows or not isinstance(baselines, dict):
+            continue
+        best_baseline_name, _ = _best_baseline(baselines, "hit_rate")
+        vol = baselines.get("vol_regime", {}) if isinstance(baselines, dict) else {}
+        vol_hit = _finite(vol.get("hit_rate")) if isinstance(vol, dict) else float("nan")
+        vol_sharpe = _finite(vol.get("sharpe")) if isinstance(vol, dict) else float("nan")
+        top_hit = max(hit_rows, key=lambda row: _finite(row.get("hit_rate")))
+        top_sharpe = max(hit_rows, key=lambda row: _finite(row.get("strategy_sharpe")))
+        summary[horizon_key] = {
+            "best_baseline": best_baseline_name,
+            "top_signal_by_hit_rate": {
+                "predictor": top_hit.get("predictor"),
+                "hit_rate": top_hit.get("hit_rate"),
+            },
+            "top_signal_by_sharpe": {
+                "predictor": top_sharpe.get("predictor"),
+                "strategy_sharpe": top_sharpe.get("strategy_sharpe"),
+            },
+            "vol_regime_hit_rate": vol.get("hit_rate") if isinstance(vol, dict) else float("nan"),
+            "vol_regime_sharpe": vol.get("sharpe") if isinstance(vol, dict) else float("nan"),
+            "top_signal_hit_rate_gap": _finite(top_hit.get("hit_rate")) - vol_hit,
+            "top_signal_sharpe_gap": _finite(top_sharpe.get("strategy_sharpe")) - vol_sharpe,
+            "signals_beating_vol_regime_count": sum(
+                1
+                for row in hit_rows
+                if _finite(row.get("vol_regime_hit_rate_lift")) > 0.0
+                and _finite(row.get("vol_regime_sharpe_lift")) > 0.0
+            ),
+            "signals_beating_vol_regime_strict_count": sum(
+                1
+                for row in hit_rows
+                if row.get("decision_strict") == "promote"
+                and _finite(row.get("vol_regime_hit_rate_lift")) > 0.0
+                and _finite(row.get("vol_regime_sharpe_lift")) > 0.0
+            ),
+        }
     return summary
 
 
@@ -1707,6 +2005,7 @@ def _horizon_metrics(
     granger_executed: bool,
     walk_forward_horizons: dict[str, Any] | None = None,
     bootstrap_config: BootstrapConfig | None = None,
+    outlier_mask_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     from morning_brief.analysis.sentiment_join.baselines import (
         always_up,
@@ -1750,6 +2049,7 @@ def _horizon_metrics(
             baseline_metrics,
             "sharpe",
         )
+        vol_regime_metrics = baseline_metrics.get("vol_regime", {})
         for cfg in _ALPHA_PREDICTOR_CONFIGS:
             col = cfg["col"]
             if col not in eval_df.columns or eval_df[col].isna().all():
@@ -1830,16 +2130,31 @@ def _horizon_metrics(
             sharpe_lift = _finite(bt_dict.get("sharpe_ratio")) - _finite(
                 best_sharpe_baseline.get("sharpe")
             )
+            vol_regime_hit_rate_lift = _finite(hr_dict.get("hit_rate")) - _finite(
+                vol_regime_metrics.get("hit_rate") if isinstance(vol_regime_metrics, dict) else None
+            )
+            vol_regime_sharpe_lift = _finite(bt_dict.get("sharpe_ratio")) - _finite(
+                vol_regime_metrics.get("sharpe") if isinstance(vol_regime_metrics, dict) else None
+            )
             stability = _walk_forward_stability(
                 walk_forward_horizons or {},
                 col,
                 horizon_key,
             )
+            mask_stats = _mask_stats_for_predictor(col, outlier_mask_summary)
+            payoff = _payoff_diagnostics(
+                eval_df,
+                col,
+                cfg["threshold"],
+                return_col=return_col,
+                inverted=cfg["inverted"],
+                transaction_cost_bps=10.0,
+            )
             gate = evaluate_promotion_gate(
                 hit_rate_delta=hit_rate_lift,
                 sharpe_delta=sharpe_lift,
                 coverage=float(hr.n_valid / len(eval_df)) if len(eval_df) else 0.0,
-                masked_ratio=float("nan"),
+                masked_ratio=_finite(mask_stats.get("masked_ratio")),
                 stability=stability,
                 hit_rate_ci_lower=hr.hit_rate_ci_lower,
                 hit_rate_ci_upper=hr.hit_rate_ci_upper,
@@ -1864,8 +2179,15 @@ def _horizon_metrics(
                     "sharpe_ci_upper": bt.sharpe_ci_upper,
                     "hit_rate_lift_vs_best_baseline": hit_rate_lift,
                     "sharpe_lift_vs_best_baseline": sharpe_lift,
+                    "vol_regime_hit_rate_lift": vol_regime_hit_rate_lift,
+                    "vol_regime_sharpe_lift": vol_regime_sharpe_lift,
+                    "payoff_diagnostics": payoff,
                     "coverage": gate.coverage,
                     "masked_ratio": gate.masked_ratio,
+                    "masked_cells": mask_stats["masked_cells"],
+                    "masked_denominator": mask_stats["masked_denominator"],
+                    "masked_source_columns": mask_stats["masked_source_columns"],
+                    "masked_ratio_source": mask_stats["masked_ratio_source"],
                     "stability": gate.stability,
                     "hit_rate_ok": gate.hit_rate_ok,
                     "sharpe_ok": gate.sharpe_ok,
@@ -1940,6 +2262,7 @@ def run_alpha_validation(
     granger_executed: bool = False,
     *,
     bootstrap_config: BootstrapConfig | None = None,
+    outlier_mask_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Alpha Validation을 실행한다.
 
@@ -2036,8 +2359,12 @@ def run_alpha_validation(
         granger_executed=granger_executed,
         walk_forward_horizons=walk_forward_horizons,
         bootstrap_config=bootstrap_config,
+        outlier_mask_summary=outlier_mask_summary,
     )
+    baseline_metrics = _baseline_metrics_by_horizon(df, bootstrap_config=bootstrap_config)
     feature_group_summary = _feature_group_summary(horizon_metrics)
+    baseline_gap_summary = _baseline_gap_summary(horizon_metrics, baseline_metrics)
+    next_research_candidates = _next_research_candidates(horizon_metrics)
 
     return _sanitize_nan(
         {
@@ -2046,10 +2373,13 @@ def run_alpha_validation(
             "backtest": backtest_results,
             "walk_forward": primary_walk_forward,
             "walk_forward_legacy_1d": walk_forward,
-            "baseline_metrics": _baseline_metrics_by_horizon(df, bootstrap_config=bootstrap_config),
+            "baseline_metrics": baseline_metrics,
             "horizon_metrics": horizon_metrics,
             "walk_forward_horizons": walk_forward_horizons,
             "feature_group_summary": feature_group_summary,
+            "baseline_gap_summary": baseline_gap_summary,
+            "next_research_candidates": next_research_candidates,
+            "outlier_mask_summary": outlier_mask_summary or {},
             "bootstrap_config": {
                 "n_bootstrap": bootstrap_config.n_bootstrap,
                 "block_length": bootstrap_config.block_length,
