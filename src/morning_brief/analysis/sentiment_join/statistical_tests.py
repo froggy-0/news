@@ -10,7 +10,9 @@ import pandas as pd
 
 from morning_brief.analysis.sentiment_join.bootstrap import (
     BootstrapConfig,
+    benjamini_hochberg,
     bootstrap_metric,
+    bootstrap_paired,
 )
 from morning_brief.logging_utils import log_structured
 
@@ -1537,6 +1539,49 @@ def _baseline_metrics_by_horizon(
     return metrics
 
 
+def _signal_hits_array(
+    df: pd.DataFrame,
+    predictor_col: str,
+    threshold: float,
+    *,
+    inverted: bool,
+) -> tuple[Any, Any]:
+    """compute_hit_rate 내부 hits 산출 로직 재사용 (NaN/flat 제외 후 같은 행 정렬).
+
+    Returns (hits_array, valid_index). hits[i] in {0, 1}; valid_index 는 원본 df 인덱스.
+    """
+    import numpy as np
+
+    work = df[[predictor_col, "btc_direction_label"]].copy()
+    work = work[work["btc_direction_label"] != "flat"]
+    work = work.dropna(subset=[predictor_col, "btc_direction_label"])
+    if work.empty:
+        return np.empty(0, dtype=float), work.index
+    pred_above = work[predictor_col] > threshold
+    predicted_up = ~pred_above if inverted else pred_above
+    actual_up = work["btc_direction_label"] == "up"
+    hits = (predicted_up == actual_up).to_numpy(dtype=float)
+    return hits, work.index
+
+
+def _baseline_hits_array(df: pd.DataFrame, baseline_signal: pd.Series, return_col: str) -> Any:
+    """evaluate_baseline 내부 hits 산출 로직 재사용 — 동일 row 집합으로 정렬해야 paired."""
+    import numpy as np
+
+    aligned = pd.DataFrame(
+        {
+            "signal": pd.to_numeric(baseline_signal, errors="coerce"),
+            "ret": pd.to_numeric(df[return_col], errors="coerce"),
+        }
+    ).dropna()
+    active = aligned[aligned["signal"] != 0]
+    if active.empty:
+        return np.empty(0, dtype=float)
+    return (
+        np.sign(active["signal"].to_numpy()) == np.sign(active["ret"].to_numpy())
+    ).astype(float)
+
+
 def _horizon_metrics(
     df: pd.DataFrame,
     *,
@@ -1546,7 +1591,25 @@ def _horizon_metrics(
 ) -> dict[str, Any]:
     import dataclasses
 
+    import numpy as np
+
+    from morning_brief.analysis.sentiment_join.baselines import (
+        always_up,
+        btc_momo_20d,
+        fng_contrarian,
+        vol_regime,
+    )
+
+    baseline_factories = {
+        "always_up": always_up,
+        "fng_contrarian": fng_contrarian,
+        "btc_momo_20d": btc_momo_20d,
+        "vol_regime": vol_regime,
+    }
+
     metrics: dict[str, Any] = {}
+    cell_pvalues: list[tuple[str, str, float]] = []  # (horizon_key, predictor, p_value)
+
     for horizon_days, return_col in _ALPHA_HORIZONS.items():
         if return_col not in df.columns:
             continue
@@ -1585,8 +1648,49 @@ def _horizon_metrics(
             hr_dict["return_col"] = return_col
             bt_dict["horizon_days"] = horizon_days
             bt_dict["return_col"] = return_col
+
+            # Paired bootstrap p-value vs each baseline → take MAX (signal must beat ALL baselines).
+            # Hit-rate metric used as the gate signal; CI hard-separation 보강 데이터.
+            cell_p_value = float("nan")
+            if bootstrap_config is not None:
+                signal_hits, _ = _signal_hits_array(
+                    eval_df, col, cfg["threshold"], inverted=cfg["inverted"]
+                )
+                if signal_hits.size >= 2:
+                    baseline_p_values: list[float] = []
+                    for _, factory in baseline_factories.items():
+                        baseline_signal = factory(eval_df)
+                        baseline_hits = _baseline_hits_array(
+                            eval_df, baseline_signal, return_col
+                        )
+                        # Align lengths via min — paired bootstrap requires equal length.
+                        if baseline_hits.size < 2:
+                            continue
+                        n_pair = min(signal_hits.size, baseline_hits.size)
+                        sig_arr = signal_hits[:n_pair]
+                        base_arr = baseline_hits[:n_pair]
+                        sig_res, _ = bootstrap_paired(
+                            sig_arr, base_arr, np.mean, bootstrap_config
+                        )
+                        if math.isfinite(sig_res.pvalue_one_sided):
+                            baseline_p_values.append(sig_res.pvalue_one_sided)
+                    if baseline_p_values:
+                        cell_p_value = float(max(baseline_p_values))
+            hr_dict["pvalue_vs_baselines"] = cell_p_value
+            cell_pvalues.append((horizon_key, col, cell_p_value))
+
             metrics[horizon_key]["hit_rates"].append(hr_dict)
             metrics[horizon_key]["backtest"].append(bt_dict)
+
+    # BH-FDR across (predictor × horizon) family
+    if cell_pvalues:
+        p_array = np.array([p for _, _, p in cell_pvalues], dtype=float)
+        q_array = benjamini_hochberg(p_array)
+        q_lookup = {(h, c): float(q) for (h, c, _), q in zip(cell_pvalues, q_array)}
+        for horizon_key, hcell in metrics.items():
+            for hr_dict in hcell["hit_rates"]:
+                key = (horizon_key, hr_dict["predictor"])
+                hr_dict["fdr_q"] = q_lookup.get(key, float("nan"))
     return metrics
 
 

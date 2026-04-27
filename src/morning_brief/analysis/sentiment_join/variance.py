@@ -29,6 +29,11 @@ GATE_MIN_COVERAGE = 0.85  # coverage ≥ 85%
 GATE_MAX_MASKED_RATIO = 0.10  # masked_ratio ≤ 10%
 GATE_MIN_STABILITY = 0.50  # fold stability ≥ 0.50
 
+# CI-strict gate (decision_strict) — overlapping sample 환경에서의 보수적 비교
+GATE_HIT_RATE_CI_DELTA_PP = 0.0  # signal CI 하한 ≥ baseline CI 상한 (hard separation)
+GATE_SHARPE_CI_DELTA = 0.0  # 동일
+GATE_FDR_Q = 0.10  # BH-FDR q ≤ 0.10 (탐색적 finance 표준)
+
 
 @dataclass
 class AnovaResult:
@@ -55,7 +60,12 @@ class BootstrapCI:
 
 @dataclass
 class PromotionGateResult:
-    """승격 게이트 평가 결과."""
+    """승격 게이트 평가 결과.
+
+    decision        : 기존 5조건 (hit_rate / Sharpe / coverage / masked / stability) AND.
+    decision_strict : 위 + CI hard separation (hit_rate / Sharpe) + BH-FDR q ≤ GATE_FDR_Q.
+                       advisory — 운영 결정은 decision 으로 유지. calibration 후 승격 검토.
+    """
 
     decision: str  # "promote" | "research_only"
     hit_rate_ok: bool
@@ -71,6 +81,16 @@ class PromotionGateResult:
     stability: float
     hit_rate_ci_lower: float = float("nan")
     fdr_q: float = float("nan")
+    # CI-strict 추가 필드
+    hit_rate_ci_upper: float = float("nan")
+    sharpe_ci_lower: float = float("nan")
+    sharpe_ci_upper: float = float("nan")
+    baseline_hit_rate_ci_upper: float = float("nan")
+    baseline_sharpe_ci_upper: float = float("nan")
+    hit_rate_ci_ok: bool = False
+    sharpe_ci_ok: bool = False
+    fdr_ok: bool = False
+    decision_strict: str = "research_only"
 
 
 @dataclass
@@ -363,11 +383,21 @@ def evaluate_promotion_gate(
     stability: float,
     hit_rate_ci_lower: float = float("nan"),
     fdr_q: float = float("nan"),
+    hit_rate_ci_upper: float = float("nan"),
+    sharpe_ci_lower: float = float("nan"),
+    sharpe_ci_upper: float = float("nan"),
+    baseline_hit_rate_ci_upper: float = float("nan"),
+    baseline_sharpe_ci_upper: float = float("nan"),
 ) -> PromotionGateResult:
-    """5개 AND 조건 평가.
+    """5개 AND 조건 평가 + CI-strict advisory.
 
-    promote       : hit_rate, Sharpe, coverage, masked_ratio, stability 모두 충족
-    research_only : 그 외
+    decision        : hit_rate / Sharpe / coverage / masked_ratio / stability 모두 충족.
+                       기존 운영 결정 (변경 없음).
+    decision_strict : decision == "promote" AND
+                       (signal hit_rate CI 하한 - baseline hit_rate CI 상한) ≥ GATE_HIT_RATE_CI_DELTA_PP AND
+                       (signal sharpe CI 하한 - baseline sharpe CI 상한) ≥ GATE_SHARPE_CI_DELTA AND
+                       fdr_q ≤ GATE_FDR_Q (NaN 이면 False).
+                       overlapping sample 보정 후의 보수적 결정. advisory 로 보고.
     """
     hit_rate_ok = hit_rate_delta >= GATE_HIT_RATE_DELTA_PP
     sharpe_ok = sharpe_delta >= GATE_SHARPE_DELTA
@@ -379,6 +409,24 @@ def evaluate_promotion_gate(
         decision = "promote"
     else:
         decision = "research_only"
+
+    def _ci_separated(signal_lower: float, baseline_upper: float, threshold: float) -> bool:
+        if not (math.isfinite(signal_lower) and math.isfinite(baseline_upper)):
+            return False
+        return (signal_lower - baseline_upper) >= threshold
+
+    hit_rate_ci_ok = _ci_separated(
+        hit_rate_ci_lower, baseline_hit_rate_ci_upper, GATE_HIT_RATE_CI_DELTA_PP
+    )
+    sharpe_ci_ok = _ci_separated(
+        sharpe_ci_lower, baseline_sharpe_ci_upper, GATE_SHARPE_CI_DELTA
+    )
+    fdr_ok = math.isfinite(fdr_q) and fdr_q <= GATE_FDR_Q
+
+    if decision == "promote" and hit_rate_ci_ok and sharpe_ci_ok and fdr_ok:
+        decision_strict = "promote"
+    else:
+        decision_strict = "research_only"
 
     return PromotionGateResult(
         decision=decision,
@@ -394,6 +442,15 @@ def evaluate_promotion_gate(
         stability=stability,
         hit_rate_ci_lower=hit_rate_ci_lower,
         fdr_q=fdr_q,
+        hit_rate_ci_upper=hit_rate_ci_upper,
+        sharpe_ci_lower=sharpe_ci_lower,
+        sharpe_ci_upper=sharpe_ci_upper,
+        baseline_hit_rate_ci_upper=baseline_hit_rate_ci_upper,
+        baseline_sharpe_ci_upper=baseline_sharpe_ci_upper,
+        hit_rate_ci_ok=hit_rate_ci_ok,
+        sharpe_ci_ok=sharpe_ci_ok,
+        fdr_ok=fdr_ok,
+        decision_strict=decision_strict,
     )
 
 
