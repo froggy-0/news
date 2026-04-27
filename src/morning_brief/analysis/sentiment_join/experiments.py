@@ -55,7 +55,7 @@ FOLDS_SCHEMA_COLUMNS: tuple[str, ...] = (
     "stability",
 )
 
-TRADING_DAYS_PER_YEAR = 252
+TRADING_DAYS_PER_YEAR = 365  # BTC 24/7 calendar-day candles, no weekend gap → 365 (not 252)
 
 
 @dataclass(frozen=True)
@@ -126,10 +126,10 @@ def write_tracking_artifact(
 def default_grid(
     scalers: tuple[ScalerKind, ...] = ("standard", "robust"),
     masks: tuple[PolicyName, ...] = ("row", "column", "winsorize", "none"),
-    horizons: tuple[int, ...] = (1, 3, 7),
+    horizons: tuple[int, ...] = (7,),
     indices: tuple[str, ...] = ("full", "core"),
 ) -> list[ExperimentSpec]:
-    """2×4×3×2 = 48 기본 grid. tasks.md 의 64 는 horizon 4개(+fwd_vol)까지 포함한 수치."""
+    """2×4×1×2 = 16 기본 grid. T+7 단일 horizon."""
     return [
         ExperimentSpec(scaler=s, mask=m, horizon_days=h, index_name=i)
         for s in scalers
@@ -167,9 +167,10 @@ def _build_custom_specs(scaler: ScalerKind) -> tuple[IndexSpec, ...]:
 
 
 def _fold_sharpe(df: pd.DataFrame, return_col: str, signal_col: str) -> float:
-    """fold 내 strategy sharpe = mean / std * sqrt(252).
+    """fold 내 strategy sharpe = mean / std * sqrt(TRADING_DAYS_PER_YEAR).
 
     strategy 수익률 = sign(signal - 50) * return. NaN·flat 은 제외.
+    BTC 24/7 → 365 일 기준 연환산 (baselines.py / statistical_tests.py 와 동일).
     """
     if signal_col not in df.columns or return_col not in df.columns:
         return float("nan")

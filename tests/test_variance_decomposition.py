@@ -314,3 +314,98 @@ def test_promotion_gate_stores_inputs() -> None:
     assert result.masked_ratio == pytest.approx(0.05)
     assert result.fdr_q == pytest.approx(0.05)
     assert result.stability == pytest.approx(0.6)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# decision_strict (CI hard separation + BH-FDR) advisory 게이트 테스트
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _all_pass_kwargs() -> dict[str, float]:
+    """기존 5조건 모두 통과하는 baseline kwargs (decision == 'promote')."""
+    return {
+        "hit_rate_delta": GATE_HIT_RATE_DELTA_PP + 0.01,
+        "sharpe_delta": GATE_SHARPE_DELTA + 0.05,
+        "coverage": GATE_MIN_COVERAGE + 0.05,
+        "masked_ratio": GATE_MAX_MASKED_RATIO - 0.05,
+        "stability": GATE_MIN_STABILITY + 0.10,
+    }
+
+
+def test_decision_strict_promote_when_ci_separated_and_fdr_passes() -> None:
+    """5조건 + CI hard separation + BH-FDR q ≤ 0.10 → decision_strict == 'promote'."""
+    result = evaluate_promotion_gate(
+        **_all_pass_kwargs(),
+        hit_rate_ci_lower=0.55,
+        hit_rate_ci_upper=0.62,
+        sharpe_ci_lower=0.40,
+        sharpe_ci_upper=1.10,
+        baseline_hit_rate_ci_upper=0.50,
+        baseline_sharpe_ci_upper=0.20,
+        fdr_q=0.05,
+    )
+    assert result.decision == "promote"
+    assert result.decision_strict == "promote"
+    assert result.hit_rate_ci_ok is True
+    assert result.sharpe_ci_ok is True
+    assert result.fdr_ok is True
+
+
+def test_decision_strict_research_only_when_ci_overlaps() -> None:
+    """signal CI 하한 < baseline CI 상한 → decision_strict='research_only' (decision 은 promote)."""
+    result = evaluate_promotion_gate(
+        **_all_pass_kwargs(),
+        hit_rate_ci_lower=0.45,  # baseline upper 0.50 보다 낮음 → CI 겹침
+        hit_rate_ci_upper=0.62,
+        sharpe_ci_lower=0.40,
+        sharpe_ci_upper=1.10,
+        baseline_hit_rate_ci_upper=0.50,
+        baseline_sharpe_ci_upper=0.20,
+        fdr_q=0.05,
+    )
+    assert result.decision == "promote"
+    assert result.decision_strict == "research_only"
+    assert result.hit_rate_ci_ok is False
+
+
+def test_decision_strict_research_only_when_fdr_above_threshold() -> None:
+    result = evaluate_promotion_gate(
+        **_all_pass_kwargs(),
+        hit_rate_ci_lower=0.55,
+        hit_rate_ci_upper=0.62,
+        sharpe_ci_lower=0.40,
+        sharpe_ci_upper=1.10,
+        baseline_hit_rate_ci_upper=0.50,
+        baseline_sharpe_ci_upper=0.20,
+        fdr_q=0.20,  # > 0.10 → FDR 미통과
+    )
+    assert result.decision == "promote"
+    assert result.decision_strict == "research_only"
+    assert result.fdr_ok is False
+
+
+def test_decision_strict_research_only_when_ci_fields_missing() -> None:
+    """CI / FDR 데이터가 NaN 이면 hard separation 평가 불가 → decision_strict='research_only'."""
+    result = evaluate_promotion_gate(**_all_pass_kwargs())
+    assert result.decision == "promote"
+    assert result.decision_strict == "research_only"
+    assert result.hit_rate_ci_ok is False
+    assert result.fdr_ok is False
+
+
+def test_decision_strict_never_promote_when_decision_research_only() -> None:
+    """기존 5조건 미충족 시 CI 가 좋아도 decision_strict 는 promote 가 될 수 없다."""
+    kwargs = _all_pass_kwargs()
+    kwargs["coverage"] = GATE_MIN_COVERAGE - 0.01
+    result = evaluate_promotion_gate(
+        **kwargs,
+        hit_rate_ci_lower=0.55,
+        hit_rate_ci_upper=0.62,
+        sharpe_ci_lower=0.40,
+        sharpe_ci_upper=1.10,
+        baseline_hit_rate_ci_upper=0.50,
+        baseline_sharpe_ci_upper=0.20,
+        fdr_q=0.01,
+    )
+    assert result.decision == "research_only"
+    assert result.decision_strict == "research_only"

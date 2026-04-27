@@ -99,7 +99,7 @@ export default async function AnalysisPage() {
             <SectionHeader
               index="04"
               title="Alpha Validation"
-              badge="1d · 3d · 7d horizon · baseline uplift"
+              badge="7d horizon · baseline uplift"
               description="Candidate signals must outperform naive baselines on lag-only forward returns. Walk-forward stability separates persistent edge from in-sample curve-fitting."
             />
             <div className="analysis-depth-panel mt-8 p-5 md:p-8">

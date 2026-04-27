@@ -231,6 +231,7 @@ function parseDataQualitySection(value: unknown): DataQualitySection {
 
 function parseAlphaSection(value: unknown): AlphaSection {
   const raw = isRecord(value) ? value : {};
+  const bootstrapRaw = raw.bootstrapConfig ?? raw.bootstrap_config;
   return {
     hitRates: toJsonArray(raw.hitRates),
     correlations: toJsonArray(raw.correlations),
@@ -239,6 +240,7 @@ function parseAlphaSection(value: unknown): AlphaSection {
     baselineMetrics: toJsonObject(raw.baselineMetrics),
     horizonMetrics: toJsonObject(raw.horizonMetrics),
     walkForwardHorizons: toJsonObject(raw.walkForwardHorizons),
+    bootstrapConfig: bootstrapRaw === undefined ? undefined : toJsonObject(bootstrapRaw),
   };
 }
 

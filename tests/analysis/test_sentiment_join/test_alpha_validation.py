@@ -1526,9 +1526,9 @@ class TestWalkForwardCoreIndex:
         assert "baseline_metrics" in result
         assert "horizon_metrics" in result
         assert "walk_forward_horizons" in result
-        assert "1" in result["baseline_metrics"]
-        assert "3" in result["horizon_metrics"]
-        assert result["horizon_metrics"]["3"]["return_col"] == "btc_fwd_ret_3d"
+        assert "7" in result["baseline_metrics"]
+        assert "7" in result["horizon_metrics"]
+        assert result["horizon_metrics"]["7"]["return_col"] == "btc_fwd_ret_7d"
 
     def test_walk_forward_insufficient_data_returns_none(self) -> None:
         """데이터 부족 시 core도 None 반환."""

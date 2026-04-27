@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import math
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
-TRADING_DAYS_PER_YEAR = 252
+from morning_brief.analysis.sentiment_join.bootstrap import (
+    BootstrapConfig,
+    bootstrap_metric,
+)
+
+TRADING_DAYS_PER_YEAR = 365  # BTC 24/7 calendar-day candles, no weekend gap → 365 (not 252)
 
 
 def _as_signal(values: pd.Series, index: pd.Index) -> pd.Series:
@@ -53,9 +59,24 @@ def evaluate_baseline(
     signal: pd.Series,
     *,
     return_col: str = "btc_log_return",
-) -> dict[str, float]:
+    bootstrap: BootstrapConfig | None = None,
+) -> dict[str, Any]:
+    """단일 baseline 의 hit_rate / Sharpe / coverage 산출.
+
+    bootstrap 가 주어지면 hit_rate / Sharpe 의 block bootstrap CI 를 추가 필드로 반환:
+    `hit_rate_ci_lower/upper`, `sharpe_ci_lower/upper`, `bootstrap_n/method/block_length`.
+    """
+    empty_ci: dict[str, Any] = {
+        "hit_rate_ci_lower": float("nan"),
+        "hit_rate_ci_upper": float("nan"),
+        "sharpe_ci_lower": float("nan"),
+        "sharpe_ci_upper": float("nan"),
+        "bootstrap_n": 0,
+        "bootstrap_method": "",
+        "bootstrap_block_length": 0,
+    }
     if return_col not in df.columns:
-        return {"hit_rate": float("nan"), "sharpe": float("nan"), "coverage": 0.0}
+        return {"hit_rate": float("nan"), "sharpe": float("nan"), "coverage": 0.0, **empty_ci}
     aligned = pd.DataFrame(
         {
             "signal": pd.to_numeric(signal, errors="coerce"),
@@ -63,12 +84,12 @@ def evaluate_baseline(
         }
     ).dropna()
     if aligned.empty:
-        return {"hit_rate": float("nan"), "sharpe": float("nan"), "coverage": 0.0}
+        return {"hit_rate": float("nan"), "sharpe": float("nan"), "coverage": 0.0, **empty_ci}
     active = aligned[aligned["signal"] != 0]
     coverage = float(len(active) / len(df)) if len(df) else 0.0
     if active.empty:
-        return {"hit_rate": float("nan"), "sharpe": float("nan"), "coverage": coverage}
-    hits = np.sign(active["signal"].to_numpy()) == np.sign(active["ret"].to_numpy())
+        return {"hit_rate": float("nan"), "sharpe": float("nan"), "coverage": coverage, **empty_ci}
+    hits = (np.sign(active["signal"].to_numpy()) == np.sign(active["ret"].to_numpy())).astype(float)
     strategy_ret = np.sign(active["signal"].to_numpy()) * active["ret"].to_numpy()
     sigma = float(np.std(strategy_ret, ddof=1)) if len(strategy_ret) > 1 else 0.0
     sharpe = (
@@ -76,7 +97,37 @@ def evaluate_baseline(
         if sigma > 1e-12
         else float("nan")
     )
-    return {"hit_rate": float(np.mean(hits)), "sharpe": sharpe, "coverage": coverage}
+
+    ci_payload = dict(empty_ci)
+    if bootstrap is not None and len(strategy_ret) > 1:
+        ann_factor = math.sqrt(TRADING_DAYS_PER_YEAR)
+
+        def _sharpe_metric(arr: np.ndarray) -> float:
+            if arr.size < 2:
+                return float("nan")
+            sd = float(np.std(arr, ddof=1))
+            if sd <= 0.0:
+                return float("nan")
+            return float(np.mean(arr)) / sd * ann_factor
+
+        hr_boot = bootstrap_metric(hits, np.mean, bootstrap)
+        sh_boot = bootstrap_metric(strategy_ret, _sharpe_metric, bootstrap)
+        ci_payload = {
+            "hit_rate_ci_lower": hr_boot.ci_lower,
+            "hit_rate_ci_upper": hr_boot.ci_upper,
+            "sharpe_ci_lower": sh_boot.ci_lower,
+            "sharpe_ci_upper": sh_boot.ci_upper,
+            "bootstrap_n": hr_boot.n_bootstrap,
+            "bootstrap_method": hr_boot.method,
+            "bootstrap_block_length": hr_boot.block_length,
+        }
+
+    return {
+        "hit_rate": float(np.mean(hits)),
+        "sharpe": sharpe,
+        "coverage": coverage,
+        **ci_payload,
+    }
 
 
 __all__ = [

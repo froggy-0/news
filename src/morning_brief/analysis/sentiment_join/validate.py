@@ -104,6 +104,33 @@ MASTER_SCHEMA = pa.DataFrameSchema(
 )
 
 
+def _check_lag1_first_row_nan(df: pd.DataFrame) -> None:
+    """date 정렬 시 첫 행의 모든 `*_lag1` 컬럼은 NaN 이어야 한다 (lookahead 감사).
+
+    단일 행 DataFrame 은 시간 invariant 평가 대상이 아니므로 검사를 건너뛴다
+    (기존 단위 테스트의 1-row fixture 호환).
+    """
+    if "date" not in df.columns or len(df) < 2:
+        return
+    sorted_df = df.sort_values("date").reset_index(drop=True)
+    offenders: list[str] = []
+    for col in sorted_df.columns:
+        if not col.endswith("_lag1"):
+            continue
+        first = sorted_df[col].iloc[0]
+        if not pd.isna(first):
+            offenders.append(f"{col}={first!r}")
+    if offenders:
+        raise SchemaError(
+            schema=MASTER_SCHEMA,
+            data=df,
+            message=(
+                "lag1 columns must have NaN at first date (lookahead audit): "
+                + ", ".join(offenders)
+            ),
+        )
+
+
 def validate_master(df: pd.DataFrame) -> None:
     try:
         for column in (
@@ -119,6 +146,7 @@ def validate_master(df: pd.DataFrame) -> None:
                     message=f"{column} must use pandas Int64 dtype",
                 )
         MASTER_SCHEMA.validate(df)
+        _check_lag1_first_row_nan(df)
     except (SchemaError, SchemaErrors) as exc:
         if isinstance(exc, SchemaErrors):
             primary_error = exc.schema_errors[0] if exc.schema_errors else None
