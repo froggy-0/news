@@ -418,9 +418,7 @@ def evaluate_promotion_gate(
     hit_rate_ci_ok = _ci_separated(
         hit_rate_ci_lower, baseline_hit_rate_ci_upper, GATE_HIT_RATE_CI_DELTA_PP
     )
-    sharpe_ci_ok = _ci_separated(
-        sharpe_ci_lower, baseline_sharpe_ci_upper, GATE_SHARPE_CI_DELTA
-    )
+    sharpe_ci_ok = _ci_separated(sharpe_ci_lower, baseline_sharpe_ci_upper, GATE_SHARPE_CI_DELTA)
     fdr_ok = math.isfinite(fdr_q) and fdr_q <= GATE_FDR_Q
 
     if decision == "promote" and hit_rate_ci_ok and sharpe_ci_ok and fdr_ok:

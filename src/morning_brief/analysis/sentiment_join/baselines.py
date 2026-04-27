@@ -88,9 +88,7 @@ def evaluate_baseline(
     coverage = float(len(active) / len(df)) if len(df) else 0.0
     if active.empty:
         return {"hit_rate": float("nan"), "sharpe": float("nan"), "coverage": coverage, **empty_ci}
-    hits = (
-        np.sign(active["signal"].to_numpy()) == np.sign(active["ret"].to_numpy())
-    ).astype(float)
+    hits = (np.sign(active["signal"].to_numpy()) == np.sign(active["ret"].to_numpy())).astype(float)
     strategy_ret = np.sign(active["signal"].to_numpy()) * active["ret"].to_numpy()
     sigma = float(np.std(strategy_ret, ddof=1)) if len(strategy_ret) > 1 else 0.0
     sharpe = (

@@ -1577,9 +1577,7 @@ def _baseline_hits_array(df: pd.DataFrame, baseline_signal: pd.Series, return_co
     active = aligned[aligned["signal"] != 0]
     if active.empty:
         return np.empty(0, dtype=float)
-    return (
-        np.sign(active["signal"].to_numpy()) == np.sign(active["ret"].to_numpy())
-    ).astype(float)
+    return (np.sign(active["signal"].to_numpy()) == np.sign(active["ret"].to_numpy())).astype(float)
 
 
 def _horizon_metrics(
@@ -1660,18 +1658,14 @@ def _horizon_metrics(
                     baseline_p_values: list[float] = []
                     for _, factory in baseline_factories.items():
                         baseline_signal = factory(eval_df)
-                        baseline_hits = _baseline_hits_array(
-                            eval_df, baseline_signal, return_col
-                        )
+                        baseline_hits = _baseline_hits_array(eval_df, baseline_signal, return_col)
                         # Align lengths via min — paired bootstrap requires equal length.
                         if baseline_hits.size < 2:
                             continue
                         n_pair = min(signal_hits.size, baseline_hits.size)
                         sig_arr = signal_hits[:n_pair]
                         base_arr = baseline_hits[:n_pair]
-                        sig_res, _ = bootstrap_paired(
-                            sig_arr, base_arr, np.mean, bootstrap_config
-                        )
+                        sig_res, _ = bootstrap_paired(sig_arr, base_arr, np.mean, bootstrap_config)
                         if math.isfinite(sig_res.pvalue_one_sided):
                             baseline_p_values.append(sig_res.pvalue_one_sided)
                     if baseline_p_values:

@@ -29,7 +29,7 @@ def test_perturbing_past_returns_does_not_change_forward_target(horizon: int) ->
     base = _make_df()
     perturbed = base.copy()
     target_idx = 25  # forward target 평가 시점 (마지막 horizon 행은 NaN 이라 안전 마진 확보)
-    perturbed.loc[: target_idx, "btc_log_return"] += 0.10  # past + present 모두 흔들기
+    perturbed.loc[:target_idx, "btc_log_return"] += 0.10  # past + present 모두 흔들기
 
     base_out = _add_forward_target_columns(base)
     perturbed_out = _add_forward_target_columns(perturbed)
@@ -50,9 +50,9 @@ def test_perturbing_future_returns_does_change_forward_target(horizon: int) -> N
     perturbed_out = _add_forward_target_columns(perturbed)
 
     col = f"btc_fwd_ret_{horizon}d"
-    assert not np.isclose(
-        base_out[col].iloc[target_idx], perturbed_out[col].iloc[target_idx]
-    ), f"{col}[{target_idx}] should reflect future return change"
+    assert not np.isclose(base_out[col].iloc[target_idx], perturbed_out[col].iloc[target_idx]), (
+        f"{col}[{target_idx}] should reflect future return change"
+    )
 
 
 @pytest.mark.parametrize("horizon", [1, 3, 7])
