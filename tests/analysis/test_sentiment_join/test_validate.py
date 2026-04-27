@@ -277,3 +277,27 @@ def test_validate_master_strict_requires_hybrid_score_lag1_columns() -> None:
         df = _valid_df().drop(columns=[missing_col])
         with pytest.raises(SchemaError):
             validate_master(df)
+
+
+def _two_row_df_from_valid() -> pd.DataFrame:
+    """`_valid_df()` 1-row 를 복제해 t=0(NaN), t=1(값) 2-row 로 확장."""
+    base = _valid_df()
+    second = base.copy()
+    second.loc[0, "date"] = "2026-04-11"
+    return pd.concat([base, second], ignore_index=True)
+
+
+def test_validate_master_rejects_lag1_non_nan_at_first_row() -> None:
+    """다중 행 master DF 의 첫 행(가장 이른 date) 에 lag1 값이 채워져 있으면 거부해야 한다."""
+    df = _two_row_df_from_valid()
+    df.loc[0, "news_sentiment_mean_lag1"] = 0.42  # t=0 에 lag1 값 → lookahead
+    with pytest.raises(SchemaError, match="lag1 columns must have NaN at first date"):
+        validate_master(df)
+
+
+def test_validate_master_accepts_lag1_value_at_second_row() -> None:
+    """t=0 NaN, t=1 값 채움 — 정상 시계열 시작 패턴."""
+    df = _two_row_df_from_valid()
+    df.loc[1, "news_sentiment_mean_lag1"] = 0.42
+    df.loc[1, "fng_value_lag1"] = 55.0
+    validate_master(df)
