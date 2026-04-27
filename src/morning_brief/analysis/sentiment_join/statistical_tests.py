@@ -8,6 +8,10 @@ from typing import Any
 
 import pandas as pd
 
+from morning_brief.analysis.sentiment_join.bootstrap import (
+    BootstrapConfig,
+    bootstrap_metric,
+)
 from morning_brief.logging_utils import log_structured
 
 logger = logging.getLogger(__name__)
@@ -701,6 +705,7 @@ def compute_hit_rate(
     *,
     inverted: bool = False,
     granger_significant: bool | None = None,
+    bootstrap: BootstrapConfig | None = None,
 ) -> HitRateResult:
     """단일 Predictor의 방향 적중률 및 분류 성능을 산출한다.
 
@@ -708,7 +713,10 @@ def compute_hit_rate(
     - btc_direction_label == "flat" 행 제외
     - NaN 행 제외
     - 유효 행 0건 시 모든 지표 NaN, CM 모두 0
+    - bootstrap 가 주어지면 hit rate 의 CI 를 block bootstrap 으로 산출 (overlapping 보정)
     """
+    import numpy as np
+
     work = df[[predictor_col, "btc_direction_label"]].copy()
 
     # flat 라벨 행 제외
@@ -765,6 +773,20 @@ def compute_hit_rate(
     else:
         f1 = float("nan")
 
+    ci_lower = float("nan")
+    ci_upper = float("nan")
+    boot_n = 0
+    boot_method = ""
+    boot_block_length = 0
+    if bootstrap is not None and n_valid > 0:
+        hits = (predicted_up == actual_up).to_numpy(dtype=float)
+        boot_res = bootstrap_metric(hits, np.mean, bootstrap)
+        ci_lower = boot_res.ci_lower
+        ci_upper = boot_res.ci_upper
+        boot_n = boot_res.n_bootstrap
+        boot_method = boot_res.method
+        boot_block_length = boot_res.block_length
+
     return HitRateResult(
         predictor=predictor_col,
         threshold=threshold,
@@ -779,6 +801,11 @@ def compute_hit_rate(
         n_valid=n_valid,
         inverted=inverted,
         granger_significant=granger_significant,
+        hit_rate_ci_lower=ci_lower,
+        hit_rate_ci_upper=ci_upper,
+        bootstrap_n=boot_n,
+        bootstrap_method=boot_method,
+        bootstrap_block_length=boot_block_length,
     )
 
 
@@ -959,12 +986,14 @@ def compute_backtest(
     transaction_cost_bps: float = 10.0,
     inverted: bool = False,
     granger_significant: bool | None = None,
+    bootstrap: BootstrapConfig | None = None,
 ) -> BacktestResult:
     """단일 전략의 누적 수익 백테스트를 수행한다.
 
     전략: signal > threshold → 매수(당일 수익률 적용), 이하 → 현금(0)
     inverted: signal <= threshold → 매수, > threshold → 현금
     거래 비용: 포지션 전환 시 편도 transaction_cost_bps / 10000 차감 (log return)
+    bootstrap 가 주어지면 strategy_returns 위에서 Sharpe / cumulative return CI 산출.
     """
     import numpy as np
 
@@ -1035,6 +1064,34 @@ def compute_backtest(
     drawdowns = cumulative_curve - running_max
     max_drawdown = float(np.min(drawdowns))
 
+    sharpe_ci_lower = float("nan")
+    sharpe_ci_upper = float("nan")
+    cumret_ci_lower = float("nan")
+    cumret_ci_upper = float("nan")
+    boot_n = 0
+    boot_method = ""
+    boot_block_length = 0
+    if bootstrap is not None and n_valid > 1:
+        ann_factor = math.sqrt(ANNUALIZATION_FACTOR)
+
+        def _sharpe_metric(arr: np.ndarray) -> float:
+            if arr.size < 2:
+                return float("nan")
+            sd = float(np.std(arr, ddof=1))
+            if sd <= 0.0:
+                return float("nan")
+            return float(np.mean(arr)) / sd * ann_factor
+
+        sharpe_boot = bootstrap_metric(strategy_returns, _sharpe_metric, bootstrap)
+        cumret_boot = bootstrap_metric(strategy_returns, np.sum, bootstrap)
+        sharpe_ci_lower = sharpe_boot.ci_lower
+        sharpe_ci_upper = sharpe_boot.ci_upper
+        cumret_ci_lower = cumret_boot.ci_lower
+        cumret_ci_upper = cumret_boot.ci_upper
+        boot_n = sharpe_boot.n_bootstrap
+        boot_method = sharpe_boot.method
+        boot_block_length = sharpe_boot.block_length
+
     return BacktestResult(
         predictor=signal_col,
         threshold=threshold,
@@ -1048,6 +1105,13 @@ def compute_backtest(
         transaction_cost_bps=transaction_cost_bps,
         inverted=inverted,
         granger_significant=granger_significant,
+        sharpe_ci_lower=sharpe_ci_lower,
+        sharpe_ci_upper=sharpe_ci_upper,
+        cumulative_return_ci_lower=cumret_ci_lower,
+        cumulative_return_ci_upper=cumret_ci_upper,
+        bootstrap_n=boot_n,
+        bootstrap_method=boot_method,
+        bootstrap_block_length=boot_block_length,
     )
 
 
@@ -1440,7 +1504,11 @@ def _with_direction_label_for_return(df: pd.DataFrame, return_col: str) -> pd.Da
     return result
 
 
-def _baseline_metrics_by_horizon(df: pd.DataFrame) -> dict[str, Any]:
+def _baseline_metrics_by_horizon(
+    df: pd.DataFrame,
+    *,
+    bootstrap_config: BootstrapConfig | None = None,
+) -> dict[str, Any]:
     from morning_brief.analysis.sentiment_join.baselines import (
         always_up,
         btc_momo_20d,
@@ -1463,7 +1531,9 @@ def _baseline_metrics_by_horizon(df: pd.DataFrame) -> dict[str, Any]:
         metrics[horizon_key] = {}
         for name, factory in baseline_factories.items():
             signal = factory(df)
-            metrics[horizon_key][name] = evaluate_baseline(df, signal, return_col=return_col)
+            metrics[horizon_key][name] = evaluate_baseline(
+                df, signal, return_col=return_col, bootstrap=bootstrap_config
+            )
     return metrics
 
 
@@ -1472,6 +1542,7 @@ def _horizon_metrics(
     *,
     granger_results: list[dict[str, Any]] | None,
     granger_executed: bool,
+    bootstrap_config: BootstrapConfig | None = None,
 ) -> dict[str, Any]:
     import dataclasses
 
@@ -1497,6 +1568,7 @@ def _horizon_metrics(
                 cfg["threshold"],
                 inverted=cfg["inverted"],
                 granger_significant=granger_sig,
+                bootstrap=bootstrap_config,
             )
             bt = compute_backtest(
                 eval_df,
@@ -1505,6 +1577,7 @@ def _horizon_metrics(
                 return_col=return_col,
                 inverted=cfg["inverted"],
                 granger_significant=granger_sig,
+                bootstrap=bootstrap_config,
             )
             hr_dict = dataclasses.asdict(hr)
             bt_dict = dataclasses.asdict(bt)
@@ -1540,16 +1613,24 @@ def run_alpha_validation(
     stationarity_results: dict[str, Any] | None = None,
     granger_results: list[dict[str, Any]] | None = None,
     granger_executed: bool = False,
+    *,
+    bootstrap_config: BootstrapConfig | None = None,
 ) -> dict[str, Any]:
     """Alpha Validation을 실행한다.
 
     pipeline.py에서 compute_hybrid_indices 완료 후, lag1 컬럼 생성 후에 호출.
     stationarity_results와 granger_results는 run_statistical_tests의 반환값에서 추출.
+    bootstrap_config 가 None 이면 기본값 (circular block, L=14, n=1000) 사용.
+    horizon_metrics / baseline_metrics 모두 동일 config 로 비교 가능한 CI 산출.
 
     Returns:
-        {"hit_rates": [...], "correlations": [...], "backtest": [...], "walk_forward": {...}}
+        {"hit_rates": [...], "correlations": [...], "backtest": [...], "walk_forward": {...},
+         "baseline_metrics": {...}, "horizon_metrics": {...}, "walk_forward_horizons": {...}}
     """
     import dataclasses
+
+    if bootstrap_config is None:
+        bootstrap_config = BootstrapConfig()
 
     hit_rates: list[dict[str, Any]] = []
     backtest_results: list[dict[str, Any]] = []
@@ -1572,13 +1653,23 @@ def run_alpha_validation(
 
         # Hit Rate
         hr = compute_hit_rate(
-            df, col, threshold, inverted=inverted, granger_significant=granger_sig
+            df,
+            col,
+            threshold,
+            inverted=inverted,
+            granger_significant=granger_sig,
+            bootstrap=bootstrap_config,
         )
         hit_rates.append(dataclasses.asdict(hr))
 
         # Backtest
         bt = compute_backtest(
-            df, col, threshold, inverted=inverted, granger_significant=granger_sig
+            df,
+            col,
+            threshold,
+            inverted=inverted,
+            granger_significant=granger_sig,
+            bootstrap=bootstrap_config,
         )
         backtest_results.append(dataclasses.asdict(bt))
 
@@ -1613,6 +1704,7 @@ def run_alpha_validation(
         df,
         granger_results=granger_results,
         granger_executed=granger_executed,
+        bootstrap_config=bootstrap_config,
     )
 
     return _sanitize_nan(
@@ -1621,9 +1713,16 @@ def run_alpha_validation(
             "correlations": correlations,
             "backtest": backtest_results,
             "walk_forward": walk_forward,
-            "baseline_metrics": _baseline_metrics_by_horizon(df),
+            "baseline_metrics": _baseline_metrics_by_horizon(df, bootstrap_config=bootstrap_config),
             "horizon_metrics": horizon_metrics,
             "walk_forward_horizons": _walk_forward_horizons(df),
+            "bootstrap_config": {
+                "n_bootstrap": bootstrap_config.n_bootstrap,
+                "block_length": bootstrap_config.block_length,
+                "method": bootstrap_config.method,
+                "seed": bootstrap_config.seed,
+                "ci_alpha": bootstrap_config.ci_alpha,
+            },
         }
     )
 
