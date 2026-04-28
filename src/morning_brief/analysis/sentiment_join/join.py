@@ -274,6 +274,27 @@ def _add_regime_interaction_features(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def _add_vix_regime_feature(result: pd.DataFrame) -> pd.DataFrame:
+    """VIX rolling median 대비 상대적 위치를 연속값으로 파생.
+
+    vix_regime_score = (rolling_median - vix) / (rolling_median.abs() + 1e-8), clip [-3, 3]
+    양수 = VIX < median (low-vol, risk-on), 음수 = VIX > median (high-vol, risk-off).
+    vol_regime() baseline의 adaptive threshold 로직과 동일한 방향성을 연속값으로 표현해
+    PCA가 체제 정보를 흡수할 수 있도록 한다.
+    """
+    if "vix" not in result.columns:
+        result["vix_regime_score"] = float("nan")
+        result["vix_regime_score_lag1"] = float("nan")
+        return result
+
+    vix = pd.to_numeric(result["vix"], errors="coerce")
+    median = vix.rolling(60, min_periods=10).median()
+    score = ((median - vix) / (median.abs() + 1e-8)).clip(-3.0, 3.0)
+    result["vix_regime_score"] = score
+    result["vix_regime_score_lag1"] = score.shift(1)
+    return result
+
+
 def _add_btc_direction_label(df: pd.DataFrame) -> pd.DataFrame:
     """Req 8: btc_log_return 부호 기준으로 up/down/flat 라벨을 부여한다."""
     result = df.copy()
@@ -465,6 +486,7 @@ def merge_sources(
     merged = _add_sentiment_lag_columns(merged)
     merged = _add_delta_features(merged)
     merged = _add_regime_interaction_features(merged)
+    merged = _add_vix_regime_feature(merged)
     merged = _add_btc_direction_label(merged)
     merged = _add_forward_target_columns(merged)
 

@@ -53,6 +53,11 @@ FOLDS_SCHEMA_COLUMNS: tuple[str, ...] = (
     "coverage",
     "masked_ratio",
     "stability",
+    "correct_mean",
+    "wrong_mean",
+    "correct_n",
+    "wrong_n",
+    "fold_payoff_ratio",
 )
 
 TRADING_DAYS_PER_YEAR = 365  # BTC 24/7 calendar-day candles, no weekend gap → 365 (not 252)
@@ -186,6 +191,53 @@ def _fold_sharpe(df: pd.DataFrame, return_col: str, signal_col: str) -> float:
     return mu / sigma * math.sqrt(TRADING_DAYS_PER_YEAR)
 
 
+def _fold_payoff_decompose(
+    fold_df: pd.DataFrame,
+    return_col: str,
+    signal_col: str,
+    *,
+    neutral_score: float = 50.0,
+) -> dict[str, Any]:
+    """fold 내 correct/wrong return 분해.
+
+    fold_payoff_ratio = |avg_correct_return| / |avg_wrong_return|.
+    tail-winner 진단: 이 값이 1~2개 fold에 집중되어 있으면 payoff ratio의 tail dependency.
+    """
+    nan_result: dict[str, Any] = {
+        "correct_mean": float("nan"),
+        "wrong_mean": float("nan"),
+        "correct_n": 0,
+        "wrong_n": 0,
+        "fold_payoff_ratio": float("nan"),
+    }
+    if signal_col not in fold_df.columns or return_col not in fold_df.columns:
+        return nan_result
+    sub = fold_df[[signal_col, return_col]].dropna()
+    if len(sub) < 5:
+        return nan_result
+    pos = np.sign(sub[signal_col].to_numpy(dtype=float) - neutral_score)
+    ret = sub[return_col].to_numpy(dtype=float)
+    nonzero = pos != 0
+    correct_mask = nonzero & (pos == np.sign(ret))
+    wrong_mask = nonzero & (pos != np.sign(ret))
+    correct_ret = ret[correct_mask]
+    wrong_ret = ret[wrong_mask]
+    c_mean = float(np.mean(correct_ret)) if len(correct_ret) > 0 else float("nan")
+    w_mean = float(np.mean(wrong_ret)) if len(wrong_ret) > 0 else float("nan")
+    payoff = (
+        abs(c_mean / w_mean)
+        if (math.isfinite(c_mean) and math.isfinite(w_mean) and abs(w_mean) > 1e-12)
+        else float("nan")
+    )
+    return {
+        "correct_mean": c_mean,
+        "wrong_mean": w_mean,
+        "correct_n": int(len(correct_ret)),
+        "wrong_n": int(len(wrong_ret)),
+        "fold_payoff_ratio": payoff,
+    }
+
+
 class ExperimentRunner:
     """raw master(pre-mask) 를 받아 ExperimentSpec 별 fold 지표를 수집한다.
 
@@ -283,6 +335,7 @@ class ExperimentRunner:
                 else float("nan")
             )
             sharpe = _fold_sharpe(fold_df, spec.return_col, score_lag1_col)
+            payoff_decomp = _fold_payoff_decompose(fold_df, spec.return_col, score_lag1_col)
             rows.append(
                 {
                     "spec_id": spec.spec_id,
@@ -300,6 +353,7 @@ class ExperimentRunner:
                     "coverage": coverage,
                     "masked_ratio": masked_ratio,
                     "stability": wf.stability,
+                    **payoff_decomp,
                 }
             )
 
@@ -325,6 +379,11 @@ def _empty_fold_frame(spec: ExperimentSpec | None) -> pd.DataFrame:
             "hit_rate": float("nan"),
             "cumret": float("nan"),
             "alpha": float("nan"),
+            "correct_mean": float("nan"),
+            "wrong_mean": float("nan"),
+            "correct_n": 0,
+            "wrong_n": 0,
+            "fold_payoff_ratio": float("nan"),
             "sharpe": float("nan"),
             "coverage": float("nan"),
             "masked_ratio": float("nan"),
@@ -341,4 +400,5 @@ __all__ = [
     "FOLDS_SCHEMA_COLUMNS",
     "default_grid",
     "write_tracking_artifact",
+    "_fold_payoff_decompose",
 ]

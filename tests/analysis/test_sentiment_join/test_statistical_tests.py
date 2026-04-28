@@ -991,3 +991,89 @@ def test_granger_results_schema_has_required_fields(
         assert "direction" in entry, f"direction 누락: {entry}"
         assert isinstance(entry["significant"], bool)
         assert entry["direction"] in ("forward", "reverse")
+
+
+# ---------------------------------------------------------------------------
+# _fold_payoff_decompose 단위 테스트
+# ---------------------------------------------------------------------------
+
+
+class TestFoldPayoffDecompose:
+    def _make_fold_df(self) -> "pd.DataFrame":
+        import numpy as np
+
+        rng = np.random.default_rng(7)
+        n = 30
+        dates = pd.date_range("2025-01-01", periods=n, freq="D").strftime("%Y-%m-%d").tolist()
+        signal = rng.uniform(20, 80, n)
+        ret = rng.normal(0, 0.02, n)
+        return pd.DataFrame(
+            {"date": dates, "full_hybrid_index_score_lag1": signal, "btc_fwd_ret_7d": ret}
+        )
+
+    def test_fold_payoff_decompose_returns_expected_keys(self) -> None:
+        from morning_brief.analysis.sentiment_join.experiments import _fold_payoff_decompose
+
+        df = self._make_fold_df()
+        result = _fold_payoff_decompose(df, "btc_fwd_ret_7d", "full_hybrid_index_score_lag1")
+        for key in ("correct_mean", "wrong_mean", "correct_n", "wrong_n", "fold_payoff_ratio"):
+            assert key in result
+
+    def test_fold_payoff_decompose_counts_sum_to_nonzero(self) -> None:
+        from morning_brief.analysis.sentiment_join.experiments import _fold_payoff_decompose
+
+        df = self._make_fold_df()
+        result = _fold_payoff_decompose(df, "btc_fwd_ret_7d", "full_hybrid_index_score_lag1")
+        assert result["correct_n"] + result["wrong_n"] > 0
+
+    def test_fold_payoff_decompose_payoff_ratio_finite_when_data_ok(self) -> None:
+        import math
+
+        from morning_brief.analysis.sentiment_join.experiments import _fold_payoff_decompose
+
+        df = self._make_fold_df()
+        result = _fold_payoff_decompose(df, "btc_fwd_ret_7d", "full_hybrid_index_score_lag1")
+        assert math.isfinite(result["fold_payoff_ratio"]) or result["wrong_n"] == 0
+
+    def test_fold_payoff_decompose_missing_col_returns_nan(self) -> None:
+        import math
+
+        from morning_brief.analysis.sentiment_join.experiments import _fold_payoff_decompose
+
+        df = self._make_fold_df()
+        result = _fold_payoff_decompose(df, "nonexistent_col", "full_hybrid_index_score_lag1")
+        assert math.isnan(result["fold_payoff_ratio"])
+        assert result["correct_n"] == 0
+
+    def test_experiment_runner_fold_rows_include_payoff_fields(self) -> None:
+        import numpy as np
+
+        from morning_brief.analysis.sentiment_join.experiments import (
+            ExperimentRunner,
+            ExperimentSpec,
+        )
+
+        rng = np.random.default_rng(99)
+        n = 300
+        dates = pd.date_range("2023-01-01", periods=n, freq="D").strftime("%Y-%m-%d").tolist()
+        df = pd.DataFrame(
+            {
+                "date": dates,
+                "news_sentiment_mean_lag1": rng.uniform(-0.3, 0.3, n),
+                "fng_value_lag1": rng.uniform(20, 80, n),
+                "funding_rate_lag1": rng.uniform(-0.002, 0.002, n),
+                "volume_change_pct_lag1": rng.uniform(-5, 5, n),
+                "btc_log_return": rng.normal(0, 0.02, n),
+                "btc_fwd_ret_7d": rng.normal(0, 0.05, n),
+                "btc_direction_label": rng.choice(["up", "down"], n).tolist(),
+                "btc_quote_volume": rng.uniform(1e8, 1e9, n),
+                "is_outlier": [False] * n,
+                "news_sentiment_mean": rng.uniform(-0.3, 0.3, n),
+                "fng_value": pd.array(rng.integers(20, 80, n), dtype="Int64"),
+            }
+        )
+        spec = ExperimentSpec(scaler="standard", mask="none", horizon_days=7, index_name="core")
+        runner = ExperimentRunner(df, train_days=120, test_days=30)
+        result = runner.run(spec)
+        assert "fold_payoff_ratio" in result.columns
+        assert "correct_n" in result.columns

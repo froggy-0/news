@@ -43,6 +43,10 @@ HYBRID_FEATURE_CANDIDATES_FULL = [
     # §4 3-4: VIX는 optional. 수집 실패 시 전 행 NaN이므로 compute_hybrid_indices의
     # dropna 단계에서 자동 제외됩니다 (VIF gate 없이도 안전).
     "vix_lag1",
+    # VIX rolling median 대비 상대적 위치 (연속값 [-3,3]). vol_regime baseline의
+    # adaptive threshold 정보를 PCA가 흡수할 수 있도록 추가. vix_lag1과 공선성이 있으나
+    # VIF gate(threshold=10.0)가 자동 처리한다.
+    "vix_regime_score_lag1",
 ]
 HYBRID_FEATURE_CANDIDATES_CORE = [
     "news_sentiment_mean_lag1",
