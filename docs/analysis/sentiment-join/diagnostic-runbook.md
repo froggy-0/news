@@ -7,7 +7,7 @@
 GitHub Actions에서 수동 실행하는 경로를 우선 사용합니다. secret 값을 로컬에서 출력하지 않고, workflow artifact로 master parquet를 받을 수 있기 때문입니다.
 
 ```bash
-gh workflow run sentiment-join.yml -f lookback_days=365
+gh workflow run sentiment-join.yml -f lookback_days=540
 gh run list --workflow sentiment-join.yml --limit 5
 gh run watch <run_id> --exit-status
 gh run download <run_id> -n sentiment-join-artifacts -D /tmp/sentiment-join-<run_id>
@@ -16,7 +16,7 @@ gh run download <run_id> -n sentiment-join-artifacts -D /tmp/sentiment-join-<run
 로컬에서 실행할 때는 필요한 환경변수가 이미 준비되어 있다는 전제에서만 실행합니다. `.env` 또는 `.env.*` 내용을 출력하지 않습니다.
 
 ```bash
-SENTIMENT_JOIN_LOOKBACK_DAYS=365 \
+SENTIMENT_JOIN_LOOKBACK_DAYS=540 \
 SENTIMENT_JOIN_REGIME_WARMUP_DAYS=220 \
 make sentiment-join
 ```
@@ -62,7 +62,7 @@ PY
 5. `granger_skip_summary.non_stationary_after_diff`가 많으면 데이터 결측 문제가 아니라 정상성 gate에서 차단된 것입니다. 이 경우 해당 pair의 `pred_conclusion`, `tgt_conclusion`, `diff_conclusion`을 봅니다.
 6. `insufficient_pair_rows_pre_stationarity` 또는 `insufficient_pair_rows_post_stationarity`가 많으면 lookback, source coverage, outlier mask 이후 유효 행 수를 확인합니다.
 7. Alpha 성능은 `horizon_metrics`만 단독으로 보지 말고 같은 horizon의 `baseline_metrics` 대비 uplift로 봅니다. T일 feature는 T+1/T+3/T+7 target만 예측하는 기준입니다.
-8. `btc_ma_200d` 초반 결측이 많으면 `SENTIMENT_JOIN_REGIME_WARMUP_DAYS`를 확인합니다. 기본값 220일이면 365일 lookback에서 초기 NaN 비율이 크게 줄어야 합니다.
+8. `btc_ma_200d` 초반 결측이 많으면 `SENTIMENT_JOIN_REGIME_WARMUP_DAYS`를 확인합니다. 기본값 220일이면 540일 lookback에서 초기 NaN 비율이 크게 줄어야 합니다.
 9. large move 비율이 과하면 `target_diagnostics.btc_large_move_3d`와 `target_diagnostics.btc_large_move_3d_vol_adj`를 비교합니다. fixed threshold와 volatility-adjusted target을 분리해서 해석합니다.
 
 ## 4. 성공 기준

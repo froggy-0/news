@@ -391,50 +391,28 @@ def test_fetch_korea_index_points_uses_verified_contracts(monkeypatch):
     assert calls == [("0001", "^KS11", "kospi"), ("1001", "^KQ11", "kosdaq")]
 
 
-def test_fetch_newsletter_display_data_adds_korea_indices(monkeypatch, tmp_path: Path):
-    monkeypatch.setattr(
-        "morning_brief.data.market.fetch_korea_investor_points",
-        lambda **_: [
-            _point(
-                label="원/달러 환율",
-                ticker="USDKRW",
-                canonical_key="usdkrw",
-                price=1506.4,
-                change_pct=0.1,
-            )
-        ],
-    )
-    monkeypatch.setattr(
-        "morning_brief.data.market.fetch_korea_index_points",
-        lambda **_: [
-            _point(
-                label="코스피",
-                ticker="0001",
-                canonical_key="kospi",
-                price=5450.33,
-                change_pct=1.36,
-            ),
-            _point(
-                label="코스닥",
-                ticker="1001",
-                canonical_key="kosdaq",
-                price=1047.37,
-                change_pct=-1.54,
-            ),
-        ],
-    )
-    monkeypatch.setattr("morning_brief.data.market.fetch_tech_stock_points", lambda **_: [])
-    monkeypatch.setattr("morning_brief.data.market.BTC_ETF_TICKERS", [])
+def test_fetch_newsletter_display_data_skips_display_only_kis_calls(monkeypatch, tmp_path: Path):
+    def fail_call(**_):
+        raise AssertionError("display-only KIS fetch should not be called")
+
+    monkeypatch.setattr("morning_brief.data.market.fetch_korea_investor_points", fail_call)
+    monkeypatch.setattr("morning_brief.data.market.fetch_korea_index_points", fail_call)
+    monkeypatch.setattr("morning_brief.data.market.fetch_tech_stock_points", fail_call)
+    monkeypatch.setattr("morning_brief.data.market._safe_kis_point_and_volume", fail_call)
 
     display = fetch_newsletter_display_data(cache_dir=tmp_path)
 
-    assert [point["canonical_key"] for point in display["korea_indices"]] == ["kospi", "kosdaq"]
-    assert [point["canonical_key"] for point in display["korea_watch"]] == ["usdkrw"]
+    assert display == {
+        "korea_watch": [],
+        "korea_indices": [],
+        "tech_stocks": [],
+        "btc_etf_points": [],
+    }
 
 
 def test_build_market_packet_korea_watch_is_empty(monkeypatch, tmp_path: Path):
     """build_market_packet()의 korea_watch는 빈 리스트여야 한다.
-    usdkrw/nq_futures는 fetch_newsletter_display_data()에서 렌더링 직전에 수집됨."""
+    public 화면에서도 display-only KIS 호출 없이 crypto 중심 지표만 사용한다."""
     monkeypatch.setattr("morning_brief.data.market.fetch_macro_points", lambda **_: [])
     monkeypatch.setattr("morning_brief.data.market.fetch_us_index_points", lambda **_: [])
     monkeypatch.setattr(

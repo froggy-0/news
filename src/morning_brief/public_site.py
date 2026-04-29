@@ -30,14 +30,6 @@ _PUBLIC_SNAPSHOT_SPECS = (
     ("macro", "us10y", "US10Y", "미국 10년물"),
     ("macro", "dxy", "DXY", "달러 인덱스"),
     ("macro", "vix", "VIX", "VIX"),
-    ("korea_watch", "usdkrw", "KRW", "원/달러 환율"),
-    ("korea_watch", "nq_futures", "NQ1!", "나스닥 선물"),
-    ("validated_indices", "dow30", "DJI", "다우30"),
-    ("korea_indices", "kospi", "KOSPI", "코스피"),
-    ("korea_indices", "kosdaq", "KOSDAQ", "코스닥"),
-    ("us_indices", "spy", "SPX", "S&P 500"),
-    ("us_indices", "qqq", "QQQ", "나스닥 100"),
-    ("us_indices", "soxx", "SOXX", "반도체 ETF"),
 )
 
 _PUBLIC_TOPIC_SPECS = (
@@ -275,6 +267,10 @@ def build_public_brief(
         all_x_signals=all_x_signals,
     )
     featured_x_signals_payload = featured_x_signals or None
+    market_snapshot_items = (
+        _market_snapshot_items_v2(unified) if unified is not None else _market_snapshot_items(packet)
+    )
+    bitcoin_payload = _bitcoin_section_v2(unified) if unified is not None else _bitcoin_section(packet)
 
     return {
         "meta": {
@@ -302,9 +298,7 @@ def build_public_brief(
             "sentimentByCategory": _compute_sentiment_by_category(display_news),
         },
         "marketSnapshot": {
-            "items": _market_snapshot_items_v2(unified)
-            if unified is not None
-            else _market_snapshot_items(packet),
+            "items": market_snapshot_items,
         },
         "aiJudgment": {
             "headline": headline,
@@ -313,10 +307,12 @@ def build_public_brief(
             "summarySupport": summary_support,
         },
         "topicSummaries": topic_summaries,
-        "techStocks": _tech_stocks(packet),
-        "bitcoin": _bitcoin_section_v2(unified)
-        if unified is not None
-        else _bitcoin_section(packet),
+        "techStocks": [],
+        "cryptoIndicators": _crypto_indicators(
+            bitcoin=bitcoin_payload,
+            market_snapshot_items=market_snapshot_items,
+        ),
+        "bitcoin": bitcoin_payload,
         "featuredXSignals": featured_x_signals_payload,
         "allXSignals": all_x_signals or None,
         "featuredNews": featured_news,
@@ -821,14 +817,6 @@ def _market_snapshot_items_v2(unified: UnifiedOutput) -> list[dict[str, Any]]:
         quant.us10y,
         quant.dxy,
         quant.vix,
-        quant.usdkrw,
-        quant.nq_futures,
-        quant.dow30,
-        quant.kospi,
-        quant.kosdaq,
-        quant.spy,
-        quant.qqq,
-        quant.soxx,
     )
     items: list[dict[str, Any]] = []
     for ticker in ticker_fields:
@@ -861,6 +849,113 @@ def _market_snapshot_items_v2(unified: UnifiedOutput) -> list[dict[str, Any]]:
     if len(items) < _MIN_PUBLIC_TICKER_ITEMS:
         return []
     return items
+
+
+def _crypto_indicators(
+    *,
+    bitcoin: dict[str, Any],
+    market_snapshot_items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    indicators: list[dict[str, Any]] = []
+
+    btc_price = bitcoin.get("price")
+    if btc_price is not None:
+        indicators.append(
+            {
+                "symbol": "BTC",
+                "label": "비트코인 현물",
+                "value": btc_price,
+                "change": bitcoin.get("change"),
+                "trend": bitcoin.get("trend"),
+                "isCached": False,
+                "history": _snapshot_history(market_snapshot_items, "BTC"),
+                "description": "현물 가격과 24시간 등락",
+            }
+        )
+
+    fear_greed = bitcoin.get("fearGreedIndex")
+    if isinstance(fear_greed, dict) and isinstance(fear_greed.get("value"), int):
+        value = int(fear_greed["value"])
+        indicators.append(
+            {
+                "symbol": "F&G",
+                "label": "공포·탐욕 지수",
+                "value": str(value),
+                "change": str(fear_greed.get("label") or "").strip() or None,
+                "trend": "up" if value >= 55 else "down" if value <= 45 else "neutral",
+                "isCached": False,
+                "history": [],
+                "description": "크립토 투자 심리",
+            }
+        )
+
+    etf = bitcoin.get("etf")
+    if isinstance(etf, dict):
+        total_holding = etf.get("totalHolding")
+        if total_holding is not None:
+            issuer_count = len(etf.get("issuers", [])) if isinstance(etf.get("issuers"), list) else 0
+            indicators.append(
+                {
+                    "symbol": "ETF BTC",
+                    "label": "ETF 보유 BTC",
+                    "value": total_holding,
+                    "change": f"{issuer_count} issuers" if issuer_count else None,
+                    "trend": "neutral",
+                    "isCached": False,
+                    "history": [],
+                    "description": "현물 ETF 공식 합산 보유량",
+                }
+            )
+        total_aum = etf.get("totalAum")
+        if total_aum is not None:
+            indicators.append(
+                {
+                    "symbol": "ETF AUM",
+                    "label": "ETF 총 AUM",
+                    "value": total_aum,
+                    "change": None,
+                    "trend": "neutral",
+                    "isCached": False,
+                    "history": [],
+                    "description": "현물 ETF 운용자산",
+                }
+            )
+
+    for symbol, label, description in (
+        ("VIX", "변동성 환경", "위험자산 변동성 참고"),
+        ("DXY", "달러 유동성", "달러 강도와 유동성 참고"),
+    ):
+        snapshot_item = _snapshot_item(market_snapshot_items, symbol)
+        if snapshot_item is None:
+            continue
+        indicators.append(
+            {
+                "symbol": symbol,
+                "label": label,
+                "value": snapshot_item.get("value"),
+                "change": snapshot_item.get("change"),
+                "trend": snapshot_item.get("trend"),
+                "isCached": bool(snapshot_item.get("isCached")),
+                "history": snapshot_item.get("history") if isinstance(snapshot_item.get("history"), list) else [],
+                "description": description,
+            }
+        )
+
+    return indicators
+
+
+def _snapshot_item(items: list[dict[str, Any]], symbol: str) -> dict[str, Any] | None:
+    for item in items:
+        if str(item.get("symbol", "")).strip().upper() == symbol:
+            return item
+    return None
+
+
+def _snapshot_history(items: list[dict[str, Any]], symbol: str) -> list[float]:
+    item = _snapshot_item(items, symbol)
+    if item is None or not isinstance(item.get("history"), list):
+        return []
+    return [value for value in item["history"] if isinstance(value, (float, int))]
 
 
 def _parse_key_metric(raw: str | None) -> str | None:

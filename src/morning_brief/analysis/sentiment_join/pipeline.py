@@ -153,7 +153,7 @@ def _compute_regime(btc_close_df: pd.DataFrame, start_date: str, end_date: str) 
     btc_drawdown_90d: 90일 고점 대비 낙폭 (0 ~ -1)
     btc_above_ma200 : 현재가 > MA200 여부 (1.0 = bull, 0.0 = bear, NaN = MA 미확보)
 
-    lookback_days=365 기준에서 MA200 확보 구간은 약 165일부터 시작.
+    lookback_days=540 기준에서 MA200 확보 구간은 약 340일부터 시작.
     초기 NaN은 merge_sources에서 left-join 후 자연스럽게 유지된다.
     """
     empty_dates = _date_strings(start_date, end_date)

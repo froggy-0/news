@@ -19,17 +19,16 @@ export function XSignals({
 
   if (featured.length === 0 && all.length === 0) {
     return (
-      <section id="signals" className="border-b border-white/10 px-6 py-16">
+      <section id="signals" className="border-b border-white/10 px-6 py-20">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-10">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div className="space-y-1">
               <h2 className="section-title">All X Signals</h2>
-              <span className="eyebrow">Full Signal Flow</span>
-            </div>
+              <span className="eyebrow">Full Signal Flow</span>            </div>
           </div>
           <DataState
             title="X 시그널 상태"
-            message="전체 X 시그널을 확인하지 못했어요."
+            message="이번 집계에서는 전체 X 시그널을 확인하지 못했어요."
             family="reading"
             minHeight={220}
           />
@@ -39,16 +38,12 @@ export function XSignals({
   }
 
   return (
-    <section id="signals" className="border-b border-white/10 px-6 py-16">
+    <section id="signals" className="border-b border-white/10 px-6 py-20">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-10">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="space-y-1">
-            <h2 className="text-[11px] font-mono uppercase tracking-[0.4em] text-white/60">
-              All X Signals
-            </h2>
-            <span className="text-[9px] font-mono uppercase tracking-[0.26em] text-white/28">
-              Full Signal Flow
-            </span>
+            <h2 className="section-title">All X Signals</h2>
+            <span className="eyebrow">Full Signal Flow</span>
           </div>
           <p className="max-w-md text-sm leading-7 text-white/52">
             The detail page shows all signals — original source language included.
@@ -58,7 +53,7 @@ export function XSignals({
         <XSignalsList
           items={all}
           showRawToggle={showRawToggle}
-          emptyMessage="전체 X 시그널을 확인하지 못했어요."
+          emptyMessage="이번 집계에서는 전체 X 시그널을 확인하지 못했어요."
         />
       </div>
     </section>

@@ -25,6 +25,7 @@ export interface BriefData {
   aiJudgment: AIJudgment;
   topicSummaries: TopicSummary[];
   techStocks: TechStock[];
+  cryptoIndicators: CryptoIndicator[];
   bitcoin: BitcoinSection;
   featuredXSignals: XSignal[] | null;
   allXSignals: XSignal[] | null;
@@ -88,6 +89,10 @@ export interface TickerItem {
   trend: "up" | "down" | "neutral" | null;
   isCached: boolean;
   history: number[];
+}
+
+export interface CryptoIndicator extends TickerItem {
+  description: string | null;
 }
 
 export interface AIJudgment {
