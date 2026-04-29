@@ -268,9 +268,13 @@ def build_public_brief(
     )
     featured_x_signals_payload = featured_x_signals or None
     market_snapshot_items = (
-        _market_snapshot_items_v2(unified) if unified is not None else _market_snapshot_items(packet)
+        _market_snapshot_items_v2(unified)
+        if unified is not None
+        else _market_snapshot_items(packet)
     )
-    bitcoin_payload = _bitcoin_section_v2(unified) if unified is not None else _bitcoin_section(packet)
+    bitcoin_payload = (
+        _bitcoin_section_v2(unified) if unified is not None else _bitcoin_section(packet)
+    )
 
     return {
         "meta": {
@@ -893,7 +897,9 @@ def _crypto_indicators(
     if isinstance(etf, dict):
         total_holding = etf.get("totalHolding")
         if total_holding is not None:
-            issuer_count = len(etf.get("issuers", [])) if isinstance(etf.get("issuers"), list) else 0
+            issuer_count = (
+                len(etf.get("issuers", [])) if isinstance(etf.get("issuers"), list) else 0
+            )
             indicators.append(
                 {
                     "symbol": "ETF BTC",
@@ -936,7 +942,9 @@ def _crypto_indicators(
                 "change": snapshot_item.get("change"),
                 "trend": snapshot_item.get("trend"),
                 "isCached": bool(snapshot_item.get("isCached")),
-                "history": snapshot_item.get("history") if isinstance(snapshot_item.get("history"), list) else [],
+                "history": snapshot_item.get("history")
+                if isinstance(snapshot_item.get("history"), list)
+                else [],
                 "description": description,
             }
         )

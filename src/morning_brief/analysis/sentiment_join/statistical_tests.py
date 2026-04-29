@@ -2247,7 +2247,9 @@ def _horizon_metrics(
 
             # Paired bootstrap p-value vs each baseline → take MAX (signal must beat ALL baselines).
             # Hit-rate metric used as the gate signal; CI hard-separation 보강 데이터.
-            signal_hits = _signal_hits_series(eval_df, col, cfg["threshold"], inverted=cfg["inverted"])
+            signal_hits = _signal_hits_series(
+                eval_df, col, cfg["threshold"], inverted=cfg["inverted"]
+            )
             cell_p_value, baseline_alignment = _paired_baseline_comparison(
                 eval_df,
                 signal_hits,

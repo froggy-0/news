@@ -256,9 +256,7 @@ def test_build_public_brief_matches_frontend_contract_shape() -> None:
     assert "4-2. 핵심 뉴스 5선" not in payload["aiJudgment"]["body"]
     symbols = {item["symbol"] for item in payload["marketSnapshot"]["items"]}
     assert {"US10Y", "DXY", "VIX", "BTC"} <= symbols
-    assert {"KRW", "NQ1!", "DJI", "KOSPI", "KOSDAQ", "SPX", "QQQ", "SOXX"}.isdisjoint(
-        symbols
-    )
+    assert {"KRW", "NQ1!", "DJI", "KOSPI", "KOSDAQ", "SPX", "QQQ", "SOXX"}.isdisjoint(symbols)
     assert payload["techStocks"] == []
     crypto_symbols = {item["symbol"] for item in payload["cryptoIndicators"]}
     assert {"BTC", "F&G", "ETF BTC", "ETF AUM", "VIX", "DXY"} <= crypto_symbols
