@@ -1683,3 +1683,91 @@ class TestWalkForwardCoreIndex:
 
         result = walk_forward_validate(df, train_days=120, test_days=30, index_name="core")
         assert result is None
+
+
+class TestAdaptiveThresholdAndCompound:
+    """adaptive_hit_rate 필드 및 compound predictor 검증."""
+
+    def _make_df(self, n: int = 80) -> pd.DataFrame:
+        import numpy as np
+
+        rng = np.random.default_rng(42)
+        dates = pd.date_range("2025-01-01", periods=n, freq="D").strftime("%Y-%m-%d").tolist()
+        ret = rng.normal(0, 0.02, n)
+        return pd.DataFrame(
+            {
+                "date": dates,
+                "btc_log_return": ret,
+                "btc_fwd_ret_7d": pd.Series(ret).shift(-7).values,
+                "btc_direction_label": ["up" if r > 0 else "down" for r in ret],
+                "news_sentiment_mean_lag1": rng.uniform(-0.3, 0.3, n),
+                "fng_value_lag1": rng.uniform(20, 80, n),
+                "sentiment_momentum_lag1": rng.uniform(-0.1, 0.1, n),
+                "sentiment_accel_lag1": rng.uniform(-0.05, 0.05, n),
+                "fng_change_1d_lag1": rng.uniform(-5, 5, n),
+                "fng_change_5d_lag1": rng.uniform(-10, 10, n),
+                "btc_bear_regime_lag1": rng.choice([0.0, 1.0], n),
+                "sentiment_momentum_x_bear_lag1": rng.uniform(-0.1, 0.1, n),
+                "fng_change_1d_x_bear_lag1": rng.uniform(-5, 5, n),
+                "funding_rate_x_bear_lag1": rng.uniform(-0.002, 0.002, n),
+                "vix_lag1": rng.uniform(15, 35, n),
+                "vix_regime_score_lag1": rng.uniform(-1.5, 1.5, n),
+                "full_hybrid_index_score_lag1": rng.uniform(30, 70, n),
+                "core_hybrid_index_score_lag1": rng.uniform(30, 70, n),
+            }
+        )
+
+    def test_adaptive_hit_rate_field_present_in_horizon_metrics(self) -> None:
+        from morning_brief.analysis.sentiment_join.statistical_tests import run_alpha_validation
+
+        df = self._make_df()
+        results = run_alpha_validation(df)
+        hit_rates = results["horizon_metrics"]["7"]["hit_rates"]
+        row = next(r for r in hit_rates if r["predictor"] == "news_sentiment_mean_lag1")
+        assert "adaptive_hit_rate" in row
+        assert "adaptive_sharpe" in row
+
+    def test_adaptive_hit_rate_is_float_or_nan(self) -> None:
+        from morning_brief.analysis.sentiment_join.statistical_tests import run_alpha_validation
+
+        df = self._make_df()
+        results = run_alpha_validation(df)
+        for row in results["horizon_metrics"]["7"]["hit_rates"]:
+            ahr = row.get("adaptive_hit_rate")
+            assert ahr is None or isinstance(ahr, float)
+
+    def test_vix_regime_score_lag1_predictor_present(self) -> None:
+        from morning_brief.analysis.sentiment_join.statistical_tests import run_alpha_validation
+
+        df = self._make_df()
+        results = run_alpha_validation(df)
+        hit_rates = results["horizon_metrics"]["7"]["hit_rates"]
+        predictors = {r["predictor"] for r in hit_rates}
+        assert "vix_regime_score_lag1" in predictors
+
+    def test_compound_predictor_present_in_hit_rates(self) -> None:
+        from morning_brief.analysis.sentiment_join.statistical_tests import run_alpha_validation
+
+        df = self._make_df()
+        results = run_alpha_validation(df)
+        hit_rates = results["horizon_metrics"]["7"]["hit_rates"]
+        predictors = {r["predictor"] for r in hit_rates}
+        assert "vol_regime_filtered_full_hybrid_score_lag1" in predictors
+
+    def test_compound_predictor_has_vol_regime_lift_field(self) -> None:
+        from morning_brief.analysis.sentiment_join.statistical_tests import run_alpha_validation
+
+        df = self._make_df()
+        results = run_alpha_validation(df)
+        hit_rates = results["horizon_metrics"]["7"]["hit_rates"]
+        row = next(
+            (
+                r
+                for r in hit_rates
+                if r["predictor"] == "vol_regime_filtered_full_hybrid_score_lag1"
+            ),
+            None,
+        )
+        assert row is not None
+        assert "vol_regime_hit_rate_lift" in row
+        assert "payoff_diagnostics" in row

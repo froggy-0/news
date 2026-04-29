@@ -1474,6 +1474,7 @@ _ALPHA_PREDICTOR_CONFIGS: list[dict[str, Any]] = [
     {"col": "fng_change_1d_x_bear_lag1", "threshold": 0, "inverted": False},
     {"col": "funding_rate_x_bear_lag1", "threshold": 0, "inverted": False},
     {"col": "vix_lag1", "threshold": 24, "inverted": True},
+    {"col": "vix_regime_score_lag1", "threshold": 0.0, "inverted": False},
     {"col": "full_hybrid_index_score_lag1", "threshold": 50, "inverted": False},
     {"col": "core_hybrid_index_score_lag1", "threshold": 50, "inverted": False},
 ]
@@ -1493,6 +1494,7 @@ _PREDICTOR_SOURCE_COLUMNS: dict[str, list[str]] = {
     "fng_change_1d_x_bear_lag1": ["fng_value"],
     "funding_rate_x_bear_lag1": ["funding_rate"],
     "vix_lag1": ["vix"],
+    "vix_regime_score_lag1": ["vix"],
 }
 
 
@@ -1723,6 +1725,89 @@ def _baseline_hits_series(
     return pd.Series(hits, index=active.index)
 
 
+def _adaptive_threshold_hit_rate(
+    df: pd.DataFrame,
+    predictor_col: str,
+    *,
+    window: int = 60,
+    min_periods: int = 20,
+    inverted: bool = False,
+    return_col: str,
+) -> dict[str, float]:
+    """predictor의 rolling median을 adaptive threshold로 사용한 hit_rate / sharpe 계산.
+
+    고정 threshold(=50 or 0)와 비교해 rolling 경계 이탈 개선 여부를 진단한다.
+    결과는 기존 predictor row에 additional 필드로 병합된다 (기존 계약 변경 없음).
+    """
+    empty: dict[str, float] = {
+        "adaptive_hit_rate": float("nan"),
+        "adaptive_sharpe": float("nan"),
+    }
+    if predictor_col not in df.columns or return_col not in df.columns:
+        return empty
+
+    vals = pd.to_numeric(df[predictor_col], errors="coerce")
+    adaptive_thresh = vals.rolling(window, min_periods=min_periods).median()
+    rets = pd.to_numeric(df[return_col], errors="coerce")
+    direction = (
+        df["btc_direction_label"]
+        if "btc_direction_label" in df.columns
+        else pd.Series("", index=df.index)
+    )
+
+    valid = vals.notna() & adaptive_thresh.notna() & rets.notna() & (direction != "flat")
+    if int(valid.sum()) < 10:
+        return empty
+
+    predicted_up = (vals > adaptive_thresh) if not inverted else (vals <= adaptive_thresh)
+    actual_up = direction == "up"
+    hit = (predicted_up == actual_up)[valid].astype(float)
+
+    position = ((vals > adaptive_thresh).astype(float) * 2 - 1)[valid]
+    if inverted:
+        position = -position
+    strat_ret = position * rets[valid]
+    sigma = float(strat_ret.std(ddof=1)) if len(strat_ret) > 1 else 0.0
+    sharpe = (
+        float(strat_ret.mean()) / sigma * math.sqrt(ANNUALIZATION_FACTOR)
+        if sigma > 1e-12
+        else float("nan")
+    )
+    return {"adaptive_hit_rate": float(hit.mean()), "adaptive_sharpe": sharpe}
+
+
+def _compute_regime_filtered_compound(
+    df: pd.DataFrame,
+    hybrid_col: str,
+    *,
+    neutral_score: float = 50.0,
+) -> pd.Series:
+    """vol_regime=-1(고변동성) 구간에서 hybrid score를 neutral_score로 강제.
+
+    compound predictor: hybrid가 long을 원하지만 vol_regime이 risk-off이면 포지션 철수.
+    vol_regime >= 0인 구간에서만 hybrid 신호를 그대로 사용한다.
+    """
+    from morning_brief.analysis.sentiment_join.baselines import vol_regime as _vol_regime
+
+    regime = _vol_regime(df)
+    score = pd.to_numeric(
+        df.get(hybrid_col, pd.Series(dtype=float, index=df.index)), errors="coerce"
+    )
+    return score.where(regime >= 0, neutral_score)
+
+
+_COMPOUND_PREDICTOR_CONFIGS: list[dict[str, Any]] = [
+    {
+        "source_col": "full_hybrid_index_score_lag1",
+        "tmp_col": "_vrf_full_hybrid_lag1",
+        "label": "vol_regime_filtered_full_hybrid_score_lag1",
+        "threshold": 50.0,
+        "inverted": False,
+        "group": "hybrid",
+    },
+]
+
+
 def _finite(value: Any) -> float:
     try:
         result = float(value)
@@ -1770,7 +1855,12 @@ def _walk_forward_stability(
 
 
 def _feature_group_for_predictor(predictor: str) -> str:
-    if predictor in {"news_sentiment_mean_lag1", "fng_value_lag1", "vix_lag1"}:
+    if predictor in {
+        "news_sentiment_mean_lag1",
+        "fng_value_lag1",
+        "vix_lag1",
+        "vix_regime_score_lag1",
+    }:
         return "level"
     if predictor in {
         "sentiment_momentum_lag1",
@@ -1786,7 +1876,11 @@ def _feature_group_for_predictor(predictor: str) -> str:
         "funding_rate_x_bear_lag1",
     }:
         return "regime"
-    if predictor in {"full_hybrid_index_score_lag1", "core_hybrid_index_score_lag1"}:
+    if predictor in {
+        "full_hybrid_index_score_lag1",
+        "core_hybrid_index_score_lag1",
+        "vol_regime_filtered_full_hybrid_score_lag1",
+    }:
         return "hybrid"
     return "other"
 
@@ -2199,10 +2293,126 @@ def _horizon_metrics(
                     "fdr_ok": gate.fdr_ok,
                 }
             )
+            adaptive = _adaptive_threshold_hit_rate(
+                eval_df,
+                col,
+                inverted=cfg.get("inverted", False),
+                return_col=return_col,
+            )
+            hr_dict.update(adaptive)
             cell_pvalues.append((horizon_key, col, cell_p_value))
 
             metrics[horizon_key]["hit_rates"].append(hr_dict)
             metrics[horizon_key]["backtest"].append(bt_dict)
+
+    # Compound signal evaluation: vol_regime-filtered hybrid predictors
+    for horizon_days, return_col in _ALPHA_HORIZONS.items():
+        if return_col not in df.columns:
+            continue
+        eval_df = _with_direction_label_for_return(df, return_col)
+        horizon_key = str(horizon_days)
+        if horizon_key not in metrics:
+            continue
+        baseline_metrics_compound = {
+            name: evaluate_baseline(
+                eval_df, factory(eval_df), return_col=return_col, bootstrap=bootstrap_config
+            )
+            for name, factory in baseline_factories.items()
+        }
+        best_hit_bl_name, best_hit_bl = _best_baseline(baseline_metrics_compound, "hit_rate")
+        best_sh_bl_name, best_sh_bl = _best_baseline(baseline_metrics_compound, "sharpe")
+        vol_regime_m = baseline_metrics_compound.get("vol_regime", {})
+        for compound_cfg in _COMPOUND_PREDICTOR_CONFIGS:
+            src = compound_cfg["source_col"]
+            if src not in eval_df.columns or eval_df[src].isna().all():
+                continue
+            tmp = compound_cfg["tmp_col"]
+            label = compound_cfg["label"]
+            thr = compound_cfg["threshold"]
+            inv = compound_cfg["inverted"]
+            eval_df[tmp] = _compute_regime_filtered_compound(eval_df, src)
+            hr_c = compute_hit_rate(eval_df, tmp, thr, inverted=inv, bootstrap=bootstrap_config)
+            bt_c = compute_backtest(
+                eval_df, tmp, thr, return_col=return_col, inverted=inv, bootstrap=bootstrap_config
+            )
+            hr_c_dict = asdict(hr_c)
+            bt_c_dict = asdict(bt_c)
+            hr_c_dict["predictor"] = label
+            bt_c_dict["predictor"] = label
+            hr_c_dict["horizon_days"] = horizon_days
+            hr_c_dict["return_col"] = return_col
+            bt_c_dict["horizon_days"] = horizon_days
+            bt_c_dict["return_col"] = return_col
+            vr_hr_lift = _finite(hr_c_dict.get("hit_rate")) - _finite(
+                vol_regime_m.get("hit_rate") if isinstance(vol_regime_m, dict) else None
+            )
+            vr_sh_lift = _finite(bt_c_dict.get("sharpe_ratio")) - _finite(
+                vol_regime_m.get("sharpe") if isinstance(vol_regime_m, dict) else None
+            )
+            payoff_c = _payoff_diagnostics(eval_df, tmp, thr, return_col=return_col, inverted=inv)
+            mask_c = _mask_stats_for_predictor(src, outlier_mask_summary)
+            gate_c = evaluate_promotion_gate(
+                hit_rate_delta=_finite(hr_c_dict.get("hit_rate"))
+                - _finite(best_hit_bl.get("hit_rate")),
+                sharpe_delta=_finite(bt_c_dict.get("sharpe_ratio"))
+                - _finite(best_sh_bl.get("sharpe")),
+                coverage=float(hr_c.n_valid / len(eval_df)) if len(eval_df) else 0.0,
+                masked_ratio=_finite(mask_c.get("masked_ratio")),
+                stability=float("nan"),
+                hit_rate_ci_lower=hr_c.hit_rate_ci_lower,
+                hit_rate_ci_upper=hr_c.hit_rate_ci_upper,
+                sharpe_ci_lower=bt_c.sharpe_ci_lower,
+                sharpe_ci_upper=bt_c.sharpe_ci_upper,
+                baseline_hit_rate_ci_upper=_finite(best_hit_bl.get("hit_rate_ci_upper")),
+                baseline_sharpe_ci_upper=_finite(best_sh_bl.get("sharpe_ci_upper")),
+            )
+            adaptive_c = _adaptive_threshold_hit_rate(
+                eval_df, tmp, inverted=inv, return_col=return_col
+            )
+            hr_c_dict.update(
+                {
+                    "decision": gate_c.decision,
+                    "decision_strict": gate_c.decision_strict,
+                    "best_baseline": best_hit_bl_name,
+                    "best_hit_rate_baseline": best_hit_bl_name,
+                    "best_sharpe_baseline": best_sh_bl_name,
+                    "baseline_hit_rate": best_hit_bl.get("hit_rate"),
+                    "baseline_hit_rate_ci_upper": best_hit_bl.get("hit_rate_ci_upper"),
+                    "baseline_sharpe": best_sh_bl.get("sharpe"),
+                    "baseline_sharpe_ci_upper": best_sh_bl.get("sharpe_ci_upper"),
+                    "strategy_sharpe": bt_c.sharpe_ratio,
+                    "sharpe_ci_lower": bt_c.sharpe_ci_lower,
+                    "sharpe_ci_upper": bt_c.sharpe_ci_upper,
+                    "hit_rate_lift_vs_best_baseline": _finite(hr_c_dict.get("hit_rate"))
+                    - _finite(best_hit_bl.get("hit_rate")),
+                    "sharpe_lift_vs_best_baseline": _finite(bt_c_dict.get("sharpe_ratio"))
+                    - _finite(best_sh_bl.get("sharpe")),
+                    "vol_regime_hit_rate_lift": vr_hr_lift,
+                    "vol_regime_sharpe_lift": vr_sh_lift,
+                    "payoff_diagnostics": payoff_c,
+                    "coverage": gate_c.coverage,
+                    "masked_ratio": gate_c.masked_ratio,
+                    "masked_cells": mask_c["masked_cells"],
+                    "masked_denominator": mask_c["masked_denominator"],
+                    "masked_source_columns": mask_c["masked_source_columns"],
+                    "masked_ratio_source": mask_c["masked_ratio_source"],
+                    "stability": gate_c.stability,
+                    "hit_rate_ok": gate_c.hit_rate_ok,
+                    "sharpe_ok": gate_c.sharpe_ok,
+                    "coverage_ok": gate_c.coverage_ok,
+                    "masked_ratio_ok": gate_c.masked_ratio_ok,
+                    "stability_ok": gate_c.stability_ok,
+                    "hit_rate_ci_ok": gate_c.hit_rate_ci_ok,
+                    "sharpe_ci_ok": gate_c.sharpe_ci_ok,
+                    "fdr_ok": gate_c.fdr_ok,
+                    "pvalue_vs_baselines": float("nan"),
+                    "paired_baseline_alignment": {},
+                    **adaptive_c,
+                }
+            )
+            metrics[horizon_key]["hit_rates"].append(hr_c_dict)
+            metrics[horizon_key]["backtest"].append(bt_c_dict)
+            eval_df.drop(columns=[tmp], inplace=True)
 
     # BH-FDR across (predictor × horizon) family
     if cell_pvalues:

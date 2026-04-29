@@ -13,6 +13,7 @@ from morning_brief.analysis.sentiment_join.join import (
     _add_futures_lag_columns,
     _add_regime_interaction_features,
     _add_sentiment_lag_columns,
+    _add_vix_regime_feature,
     _apply_sentiment_quality_gate,
     detect_outliers_rolling_iqr,
     merge_sources,
@@ -616,3 +617,90 @@ def test_merge_sources_btc_quote_volume_missing_defense(
 
     assert "volume_change_pct" in result.columns
     assert result["volume_change_pct"].isna().all()
+
+
+# ---------------------------------------------------------------------------
+# vix_regime_score 파생 피처 테스트
+# ---------------------------------------------------------------------------
+
+
+def _base_df_with_vix(n: int = 70) -> pd.DataFrame:
+    dates = _date_range(n)
+    vix_vals = [20.0 + i * 0.1 for i in range(n)]
+    return pd.DataFrame({"date": dates, "vix": vix_vals})
+
+
+def test_add_vix_regime_feature_creates_columns():
+    df = _base_df_with_vix(70)
+    result = _add_vix_regime_feature(df.copy())
+    assert "vix_regime_score" in result.columns
+    assert "vix_regime_score_lag1" in result.columns
+
+
+def test_add_vix_regime_feature_score_clipped():
+    df = _base_df_with_vix(70)
+    result = _add_vix_regime_feature(df.copy())
+    score = result["vix_regime_score"].dropna()
+    assert (score >= -3.0).all() and (score <= 3.0).all()
+
+
+def test_add_vix_regime_feature_lag1_is_shifted():
+    df = _base_df_with_vix(70)
+    result = _add_vix_regime_feature(df.copy())
+    # 첫 행은 NaN (shift(1))
+    assert pd.isna(result["vix_regime_score_lag1"].iloc[0])
+    # 두 번째 행 이후는 score[i-1]과 일치
+    score = result["vix_regime_score"].values
+    lag1 = result["vix_regime_score_lag1"].values
+    for i in range(1, len(result)):
+        if not pd.isna(score[i - 1]):
+            assert abs(lag1[i] - score[i - 1]) < 1e-10
+
+
+def test_add_vix_regime_feature_vix_missing_fallback():
+    df = pd.DataFrame({"date": _date_range(5)})
+    result = _add_vix_regime_feature(df.copy())
+    assert result["vix_regime_score"].isna().all()
+    assert result["vix_regime_score_lag1"].isna().all()
+
+
+def test_add_vix_regime_feature_all_nan_vix():
+    df = pd.DataFrame({"date": _date_range(10), "vix": [float("nan")] * 10})
+    result = _add_vix_regime_feature(df.copy())
+    assert result["vix_regime_score"].isna().all()
+
+
+def test_merge_sources_includes_vix_regime_score():
+    n = 20
+    dates = _date_range(n)
+    sentiment_df = pd.DataFrame(
+        {
+            "date": dates,
+            "news_sentiment_mean": [0.1] * n,
+            "news_sentiment_std": [0.05] * n,
+            "n_articles": pd.array([5] * n, dtype="Int64"),
+            "sentiment_status": ["ok"] * n,
+            "is_backfill_valid": [True] * n,
+            "_backfill": [False] * n,
+        }
+    )
+    fng_df = pd.DataFrame({"date": dates, "fng_value": pd.array([50] * n, dtype="Int64")})
+    btc_df = pd.DataFrame(
+        {
+            "date": dates,
+            "btc_log_return": [0.01] * n,
+            "btc_return": [0.01] * n,
+            "btc_quote_volume": [1e9] * n,
+        }
+    )
+    usdkrw_df = pd.DataFrame(
+        {
+            "date": dates,
+            "usdkrw_log_return": [0.001] * n,
+            "usdkrw_return": [0.001] * n,
+        }
+    )
+    vix_df = pd.DataFrame({"date": dates, "vix": [20.0] * n})
+    result = merge_sources(sentiment_df, fng_df, btc_df, usdkrw_df, vix_df=vix_df)
+    assert "vix_regime_score" in result.columns
+    assert "vix_regime_score_lag1" in result.columns

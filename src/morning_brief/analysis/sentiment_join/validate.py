@@ -47,6 +47,8 @@ MASTER_SCHEMA = pa.DataFrameSchema(
         # §4 3-4: VIX optional feature. 수집 실패/키 미설정 시 전 행 NaN.
         "vix": pa.Column(float, nullable=True),
         "vix_lag1": pa.Column(float, nullable=True),
+        "vix_regime_score": pa.Column(float, nullable=True),
+        "vix_regime_score_lag1": pa.Column(float, nullable=True),
         "funding_source": pa.Column(str, nullable=True),
         "oi_source": pa.Column(str, nullable=True),
         "lsr_source": pa.Column(str, nullable=True),

@@ -68,6 +68,8 @@ def _valid_df() -> pd.DataFrame:
             # §4 3-4: VIX optional (수집 실패 시 NaN)
             "vix": [float("nan")],
             "vix_lag1": [float("nan")],
+            "vix_regime_score": [float("nan")],
+            "vix_regime_score_lag1": [float("nan")],
             "funding_source": ["empty"],
             "oi_source": ["empty"],
             "lsr_source": ["empty"],
