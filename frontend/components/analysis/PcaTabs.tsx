@@ -146,12 +146,12 @@ function PcaIndexView({ data }: { data: PcaIndex }) {
                   style={{
                     width: `${Math.max(8, pct)}%`,
                     ...(positive
-                      ? { left: "50%", background: "rgba(109,189,122,0.72)" }
-                      : { right: "50%", background: "rgba(224,82,82,0.62)" }),
+                      ? { left: "50%", background: "rgba(14,203,129,0.72)" }
+                      : { right: "50%", background: "rgba(246,70,93,0.62)" }),
                     boxShadow: active
                       ? positive
-                        ? "0 0 24px rgba(109,189,122,0.22)"
-                        : "0 0 24px rgba(224,82,82,0.22)"
+                        ? "0 0 24px rgba(14,203,129,0.22)"
+                        : "0 0 24px rgba(246,70,93,0.22)"
                       : "none",
                   }}
                 />
@@ -169,8 +169,8 @@ function PcaIndexView({ data }: { data: PcaIndex }) {
                 <p className="mt-1 font-mono text-[0.64rem] text-white/34">{share.toFixed(1)}%</p>
                 <p
                   className={`mt-1 text-[0.68rem] leading-5 ${
-                    positive ? "text-[var(--accent-green)]/72" : "text-[var(--accent-down)]/72"
-                  }`}
+                    positive ? "text-[var(--accent-green)]" : "text-[var(--accent-down)]"
+                  } opacity-80`}
                 >
                   {positive ? "raises" : "lowers"}
                 </p>
@@ -247,7 +247,7 @@ function MetricChip({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-[rgba(169,146,125,0.1)] bg-black/24 px-3 py-3">
       <p className="font-mono text-[0.58rem] uppercase tracking-[0.14em] text-white/28">{label}</p>
-      <p className="mt-1 font-mono text-[0.78rem] tabular-nums text-white/76">{value}</p>
+      <p className="numeric-sm mt-1 text-white/76">{value}</p>
     </div>
   );
 }

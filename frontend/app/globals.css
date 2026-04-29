@@ -44,9 +44,9 @@
   --text-muted: rgba(169, 146, 125, 0.58);
   --accent-primary: #49111c;
   --accent-primary-strong: #6a1a29;
-  --accent-green: #8aa078;
-  --accent-warning: #c79a54;
-  --accent-down: #a44852;
+  --accent-green: #0ecb81;
+  --accent-warning: #f0b90b;
+  --accent-down: #f6465d;
   --taupe: #a9927d;
   --smoke: #f2f4f3;
   --bordeaux: #49111c;
@@ -63,6 +63,7 @@
   --status-warning: var(--accent-warning);
   --status-negative: var(--accent-down);
   --meta-type: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  --numeric-type: var(--font-inter), "Inter", var(--font-dm-sans), "Pretendard", sans-serif;
 
   --card-radius-reading: 8px;
   --card-radius-data: 8px;
@@ -272,6 +273,35 @@ section[id] {
 }
 
 .numeric {
+  font-family: var(--numeric-type);
+  font-variant-numeric: tabular-nums;
+}
+
+/* DESIGN.md: number-display (40px / 700) */
+.numeric-display {
+  font-family: var(--numeric-type);
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.3px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* DESIGN.md: number-md (16px / 500) */
+.numeric-md {
+  font-family: var(--numeric-type);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+/* DESIGN.md: number-sm (14px / 500) */
+.numeric-sm {
+  font-family: var(--numeric-type);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
   font-variant-numeric: tabular-nums;
 }
 

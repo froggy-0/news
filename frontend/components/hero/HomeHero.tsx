@@ -154,10 +154,18 @@ export function HomeHero({
             {marketItems.map((item) => (
               <div key={item.symbol} className="rounded-md border border-[rgba(169,146,125,0.08)] bg-[rgba(242,244,243,0.03)] px-4 py-3">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-[12px] font-semibold text-[var(--smoke)]">{item.symbol}</span>
-                  <span className="text-[12px] font-medium text-[var(--accent-primary)]">{item.change ?? "N/A"}</span>
+                  <span className="numeric-sm font-semibold text-[var(--smoke)]">{item.symbol}</span>
+                  <span className={`numeric-sm font-medium ${
+                    item.trend === "up"
+                      ? "text-[var(--accent-green)]"
+                      : item.trend === "down"
+                        ? "text-[var(--accent-down)]"
+                        : "text-white/50"
+                  }`}>
+                    {item.change ?? "N/A"}
+                  </span>
                 </div>
-                <p className="mt-1 text-[10px] text-[var(--taupe)]/60">{item.label} · {item.value ?? "N/A"}</p>
+                <p className="numeric-sm mt-1 text-[10px] text-[var(--taupe)]/60">{item.label} · {item.value ?? "N/A"}</p>
               </div>
             ))}
           </div>
