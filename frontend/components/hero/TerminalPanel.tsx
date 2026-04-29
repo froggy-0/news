@@ -19,7 +19,7 @@ function statusToneClass(tone?: TerminalLine["tone"]): string {
   if (tone === "warning") {
     return "text-[var(--status-warning)]";
   }
-  return "text-[var(--accent-primary)]";
+  return "text-[var(--accent-green)]";
 }
 
 export function TerminalPanel({
@@ -63,7 +63,7 @@ export function TerminalPanel({
                 className={`shrink-0 font-bold opacity-80 ${
                   line.type === "ANALYSIS"
                     ? "text-[var(--status-positive)]"
-                    : "text-[var(--accent-primary)]"
+                    : "text-[var(--accent-green)]"
                 }`}
               >
                 [{line.type}]

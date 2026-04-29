@@ -71,10 +71,10 @@ function formatValue(value: JsonValue | undefined): string {
 }
 
 function toneClass(tone: Tone): string {
-  if (tone === "green") return "border-[var(--accent-green)]/24 bg-[var(--accent-green)]/7 text-[var(--accent-green)]";
-  if (tone === "yellow") return "border-[var(--accent-warning)]/28 bg-[var(--accent-warning)]/8 text-[var(--accent-warning)]";
-  if (tone === "red") return "border-[var(--accent-down)]/28 bg-[var(--accent-down)]/8 text-[var(--accent-down)]";
-  if (tone === "cyan") return "border-[var(--accent-primary)]/26 bg-[var(--accent-primary)]/8 text-[var(--accent-primary)]";
+  if (tone === "green") return "border-[var(--accent-green)]/30 bg-[var(--accent-green)]/8 text-[var(--accent-green)]";
+  if (tone === "yellow") return "border-[var(--accent-warning)]/30 bg-[var(--accent-warning)]/8 text-[var(--accent-warning)]";
+  if (tone === "red") return "border-[var(--accent-down)]/30 bg-[var(--accent-down)]/8 text-[var(--accent-down)]";
+  if (tone === "cyan") return "border-[var(--accent-green)]/26 bg-[var(--accent-green)]/6 text-[var(--accent-green)]";
   return "border-white/10 bg-white/[0.03] text-white/46";
 }
 
@@ -656,7 +656,7 @@ function MetricTile({ label, value, detail }: { label: string; value: string; de
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-3">
       <p className="font-mono text-[0.58rem] uppercase tracking-[0.14em] text-white/28">{label}</p>
-      <p className="mt-1 font-mono text-[0.86rem] tabular-nums text-white/78">{value}</p>
+      <p className="numeric-sm mt-1 text-white/78">{value}</p>
       <p className="mt-1 font-mono text-[0.62rem] text-white/32">{detail}</p>
     </div>
   );
@@ -680,7 +680,7 @@ function RatioRow({
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-white/8">
         <div
-          className="h-full rounded-full bg-[var(--accent-primary)] shadow-[0_0_18px_rgba(73,17,28,0.30)]"
+          className="h-full rounded-full bg-[var(--accent-green)] shadow-[0_0_18px_rgba(14,203,129,0.22)]"
           style={{ width: `${width}%` }}
         />
       </div>
@@ -714,7 +714,16 @@ function SignalMetricRow({
         </span>
       </div>
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/8">
-        <div className="h-full rounded-full bg-white/70" style={{ width: `${width}%` }} />
+        <div
+          className={`h-full rounded-full ${
+            tone === "green"
+              ? "bg-[var(--accent-green)]"
+              : tone === "red"
+                ? "bg-[var(--accent-down)]"
+                : "bg-white/50"
+          }`}
+          style={{ width: `${width}%` }}
+        />
       </div>
     </article>
   );

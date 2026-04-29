@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { DM_Sans, JetBrains_Mono } from "next/font/google";
+import { DM_Sans, Inter, JetBrains_Mono } from "next/font/google";
 
 import { AtmosphericCanvas } from "@/components/layout/AtmosphericCanvas";
 import { ScrollProgressBar } from "@/components/layout/ScrollProgressBar";
@@ -12,6 +12,13 @@ const dmSans = DM_Sans({
   variable: "--font-dm-sans",
   display: "swap",
   weight: ["400", "500", "600", "700", "800", "900"],
+});
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+  weight: ["400", "500", "600", "700"],
 });
 
 const jetBrainsMono = JetBrains_Mono({
@@ -35,7 +42,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${dmSans.variable} ${jetBrainsMono.variable}`}
+      className={`${dmSans.variable} ${inter.variable} ${jetBrainsMono.variable}`}
     >
       <body>
         <AtmosphericCanvas />

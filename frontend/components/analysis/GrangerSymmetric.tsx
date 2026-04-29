@@ -233,7 +233,7 @@ function SignalCard({
           <span
             className={`rounded-full px-2.5 py-1 ${
               group.optimal.significant
-                ? "border border-[var(--accent-primary)]/30 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]"
+                ? "border border-[var(--accent-green)]/30 bg-[var(--accent-green)]/10 text-[var(--accent-green)]"
                 : "border border-white/10 bg-white/[0.03] text-white/30"
             }`}
           >
@@ -274,9 +274,9 @@ function SignalCard({
                 }`}
                 style={{
                   background: lag.significant
-                    ? "var(--accent-primary)"
+                    ? "var(--accent-green)"
                     : "rgba(255,255,255,0.16)",
-                  boxShadow: lag.significant ? "0 0 18px rgba(73,17,28,0.36)" : "none",
+                  boxShadow: lag.significant ? "0 0 18px rgba(14,203,129,0.28)" : "none",
                   width: `${Math.max(16, pct)}%`,
                 }}
               />
@@ -326,7 +326,7 @@ function TooltipRow({
       <span className="font-mono text-[0.62rem] text-white/32">{label}</span>
       <span
         className={`font-mono text-[0.68rem] tabular-nums ${
-          highlight ? "text-[var(--accent-primary)]" : "text-white/68"
+          highlight ? "text-[var(--accent-green)]" : "text-white/68"
         }`}
       >
         {value}
