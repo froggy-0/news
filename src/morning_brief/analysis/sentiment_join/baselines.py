@@ -60,11 +60,15 @@ def evaluate_baseline(
     *,
     return_col: str = "btc_log_return",
     bootstrap: BootstrapConfig | None = None,
+    fee_per_leg_bps: float = 10.0,
 ) -> dict[str, Any]:
     """단일 baseline 의 hit_rate / Sharpe / coverage 산출.
 
     bootstrap 가 주어지면 hit_rate / Sharpe 의 block bootstrap CI 를 추가 필드로 반환:
     `hit_rate_ci_lower/upper`, `sharpe_ci_lower/upper`, `bootstrap_n/method/block_length`.
+    fee_per_leg_bps: 거래 1 leg(편도) 당 수수료 (bps).
+      - 진입 또는 청산: 1 leg = fee_per_leg_bps
+      - long↔short 직접 플립: 2 legs = 2 × fee_per_leg_bps
     """
     empty_ci: dict[str, Any] = {
         "hit_rate_ci_lower": float("nan"),
@@ -90,7 +94,40 @@ def evaluate_baseline(
     if active.empty:
         return {"hit_rate": float("nan"), "sharpe": float("nan"), "coverage": coverage, **empty_ci}
     hits = (np.sign(active["signal"].to_numpy()) == np.sign(active["ret"].to_numpy())).astype(float)
-    strategy_ret = np.sign(active["signal"].to_numpy()) * active["ret"].to_numpy()
+
+    # 전체 aligned 기준으로 legs 계산 후 active 날짜에 귀속
+    all_pos = np.sign(aligned["signal"].fillna(0).to_numpy(dtype=float))
+    all_ret = aligned["ret"].to_numpy(dtype=float)
+    strategy_ret_full = all_pos * all_ret  # flat 구간은 0 수익
+
+    if fee_per_leg_bps > 0.0 and len(all_pos) > 1:
+        prev_pos = np.concatenate([[0.0], all_pos[:-1]])
+        # 플립(±1→∓1): 2 legs / 진입·청산(0↔±1): 1 leg / 변화 없음: 0 legs
+        legs = np.where(
+            prev_pos * all_pos < 0,
+            2,
+            np.where(prev_pos != all_pos, 1, 0),
+        )
+        cost_per_leg = math.log(1 - fee_per_leg_bps / 10000)
+        # 청산(→0) 비용은 이전 active 날짜에 귀속 (flat 날짜는 Sharpe에서 제외되므로)
+        cost_adj = np.zeros(len(all_pos))
+        for i in range(len(all_pos)):
+            n = int(legs[i])
+            if n == 0:
+                continue
+            if all_pos[i] == 0:
+                j = i - 1
+                while j >= 0 and all_pos[j] == 0:
+                    j -= 1
+                if j >= 0:
+                    cost_adj[j] += n * cost_per_leg
+            else:
+                cost_adj[i] += n * cost_per_leg
+        strategy_ret_full = strategy_ret_full + cost_adj
+
+    active_idx = aligned["signal"] != 0
+    strategy_ret = strategy_ret_full[active_idx.to_numpy()]
+
     sigma = float(np.std(strategy_ret, ddof=1)) if len(strategy_ret) > 1 else 0.0
     sharpe = (
         float(np.mean(strategy_ret)) / sigma * math.sqrt(TRADING_DAYS_PER_YEAR)

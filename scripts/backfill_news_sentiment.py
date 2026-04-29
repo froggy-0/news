@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
 """BTC 뉴스 감성 백필 스크립트.
 
-CoinDesk Data API(무인증)와 Alpaca Markets News API(선택)로 과거 460일치
-BTC 뉴스를 수집하고 FinBERT로 감성 점수를 계산하여 R2에 업로드한다.
+CoinDesk Data API(무인증)와 Alpaca Markets News API(선택)로 과거 뉴스를
+수집하거나, 로컬 dataset/data/processed/ 를 사용해 FinBERT로 감성 점수를
+계산하여 R2에 업로드한다.
 
-Usage:
+Usage (API 모드 — 기본):
     python scripts/backfill_news_sentiment.py \\
         --start 2024-12-09 \\
         --end   2026-04-13 \\
         [--dry-run] [--force] [--batch-size 32] [--skip-alpaca]
+
+Usage (로컬 모드 — dataset/ 디렉터리 사용, API 불필요):
+    python scripts/backfill_news_sentiment.py \\
+        --source local \\
+        --start 2024-11-06 \\
+        --end   2024-12-31 \\
+        [--dry-run] [--force] [--batch-size 32]
 
 Required env (일반 모드):
     R2_S3_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_PUBLIC_BUCKET
@@ -45,13 +53,15 @@ from backfill.reporter import print_coverage_report, print_summary  # noqa: E402
 from backfill.scorer import score_and_aggregate  # noqa: E402
 from backfill.sources.alpaca import fetch_alpaca_articles  # noqa: E402
 from backfill.sources.coindesk import fetch_coindesk_articles  # noqa: E402
+from backfill.sources.local_dataset import fetch_local_articles  # noqa: E402
 from backfill.uploader import create_s3_client, upload_all  # noqa: E402
 from morning_brief.r2_env import load_public_r2_env  # noqa: E402
 from validate_credentials import BackfillCredentialValidator  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
-_MAX_BACKFILL_DAYS = 460
+_MAX_BACKFILL_DAYS_API = 460
+_MAX_BACKFILL_DAYS_LOCAL = 3650
 
 
 @dataclass
@@ -118,6 +128,7 @@ class _BackfillLiveUI:
         self.overall_task = self.steps.add_task("전체 단계", total=total_steps)
         self.coindesk_task = self.work.add_task("CoinDesk 수집", total=None)
         self.alpaca_task = self.work.add_task("Alpaca 수집", total=None)
+        self.local_task = self.work.add_task("로컬 데이터셋 로드", total=None)
         self.finbert_task = self.work.add_task("FinBERT 추론", total=100, completed=0)
         self.upload_task = self.work.add_task("R2 업로드", total=100, completed=0)
         self.current_stage = "초기화"
@@ -125,10 +136,12 @@ class _BackfillLiveUI:
         self.source_ranges = {
             "coindesk": _SourceRange(requested_start=requested_start, requested_end=requested_end),
             "alpaca": _SourceRange(requested_start=requested_start, requested_end=requested_end),
+            "local": _SourceRange(requested_start=requested_start, requested_end=requested_end),
         }
         self.snapshots = {
             "coindesk": _StageSnapshot("CoinDesk", f"요청 {requested_start} ~ {requested_end}"),
             "alpaca": _StageSnapshot("Alpaca", f"요청 {requested_start} ~ {requested_end}"),
+            "local": _StageSnapshot("로컬", f"요청 {requested_start} ~ {requested_end}"),
             "finbert": _StageSnapshot("FinBERT", "대기 중"),
             "upload": _StageSnapshot("업로드", "대기 중"),
         }
@@ -147,7 +160,7 @@ class _BackfillLiveUI:
         table.add_column()
         table.add_row("현재 단계", self.current_stage)
         table.add_row("상세", self.current_detail)
-        for key in ("coindesk", "alpaca", "finbert", "upload"):
+        for key in ("coindesk", "alpaca", "local", "finbert", "upload"):
             snapshot = self.snapshots[key]
             table.add_row(snapshot.label, snapshot.detail)
         return self._Panel(
@@ -173,6 +186,19 @@ class _BackfillLiveUI:
         self.snapshots[key].detail = detail
         if key == "alpaca":
             self.work.update(self.alpaca_task, completed=1, total=1)
+        self.refresh()
+
+    def update_local(self, event: dict[str, object]) -> None:
+        done = int(event.get("done_dates", 0))
+        total = max(int(event.get("total_dates", 1)), 1)
+        loaded = int(event.get("loaded", 0))
+        current_date = str(event.get("date", ""))
+        status = str(event.get("status", "running"))
+        self.work.update(self.local_task, total=total, completed=done)
+        if status == "completed":
+            self.snapshots["local"].detail = f"완료: {loaded}건, {total}일 로드"
+        else:
+            self.snapshots["local"].detail = f"{done}/{total}일, 현재 {current_date}, {loaded}건"
         self.refresh()
 
     def update_source(self, key: str, event: dict[str, object]) -> None:
@@ -267,6 +293,12 @@ def _parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
+        "--source",
+        choices=["api", "local"],
+        default="api",
+        help="데이터 소스: api=CoinDesk/Alpaca API (기본), local=dataset/data/processed/",
+    )
+    parser.add_argument(
         "--start",
         required=True,
         metavar="YYYY-MM-DD",
@@ -299,7 +331,7 @@ def _parse_args() -> argparse.Namespace:
         "--skip-alpaca",
         action="store_true",
         dest="skip_alpaca",
-        help="Alpaca 수집 건너뜀 (CoinDesk만 사용)",
+        help="Alpaca 수집 건너뜀 (CoinDesk만 사용, api 모드 전용)",
     )
     args = parser.parse_args()
 
@@ -307,14 +339,15 @@ def _parse_args() -> argparse.Namespace:
     start_dt = date.fromisoformat(args.start)
     end_dt = date.fromisoformat(args.end)
     days = (end_dt - start_dt).days
-    if days > _MAX_BACKFILL_DAYS:
-        raise ValueError(f"백필 최대 기간 {_MAX_BACKFILL_DAYS}일 초과 (요청: {days}일)")
+    max_days = _MAX_BACKFILL_DAYS_LOCAL if args.source == "local" else _MAX_BACKFILL_DAYS_API
+    if days > max_days:
+        raise ValueError(f"백필 최대 기간 {max_days}일 초과 (요청: {days}일, source={args.source})")
 
     return args
 
 
 def _validate_env(args: argparse.Namespace) -> None:
-    """필수 환경변수 검증 (dry-run 시 R2 변수 불필요)."""
+    """필수 환경변수 검증 (dry-run 또는 local 소스 시 R2 변수 불필요)."""
     if args.dry_run:
         return
 
@@ -354,8 +387,11 @@ def main() -> int:
 
     args = _parse_args()
 
-    # 인증정보 검증 (--skip-validation으로 건너뜀 가능)
-    if "--skip-validation" not in sys.argv and not args.dry_run:
+    # 인증정보 검증 (dry-run / local 소스 / --skip-validation 시 건너뜀)
+    if args.dry_run or args.source == "local":
+        reason = "--dry-run 모드" if args.dry_run else "--source local (API 불필요)"
+        print(f"⏭️  인증정보 검증 건너뜀 ({reason})\n")
+    elif "--skip-validation" not in sys.argv:
         print("\n[1/3] 인증정보 검증 중...\n")
         validator = BackfillCredentialValidator(verbose=False)
         if validator.validate_all() != 0:
@@ -363,8 +399,6 @@ def main() -> int:
             print("   python scripts/validate_credentials.py --backfill --verbose  # 자세한 정보\n")
             return 1
         print("[2/3] 백필 시작...\n")
-    elif args.dry_run:
-        print("⏭️  인증정보 검증 건너뜀 (--dry-run 모드)\n")
     else:
         print("⏭️  인증정보 검증 건너뜀 (--skip-validation)\n")
 
@@ -374,45 +408,64 @@ def main() -> int:
 
     logger.info(f"백필 시작: {args.start} ~ {args.end} (dry_run={args.dry_run})")
 
-    run_alpaca = not args.skip_alpaca and _alpaca_creds_present()
-    total_steps = 3 + (1 if run_alpaca else 0) + (0 if args.dry_run else 1)
+    use_local = args.source == "local"
+    run_alpaca = not use_local and not args.skip_alpaca and _alpaca_creds_present()
+    # 단계 수: 수집(1 or 2) + 병합(1) + FinBERT(1) + 업로드(0 or 1)
+    total_steps = (
+        (1 if use_local else (2 + (1 if run_alpaca else 0))) + 1 + 1 + (0 if args.dry_run else 1)
+    )
 
     with _BackfillLiveUI(
         total_steps=total_steps,
         requested_start=args.start,
         requested_end=args.end,
     ) as ui:
-        ui.set_stage("뉴스 수집 준비", f"기간 {args.start} ~ {args.end}")
+        ui.set_stage("뉴스 수집 준비", f"기간 {args.start} ~ {args.end}, 소스={args.source}")
 
-        # ── 1. CoinDesk 수집 ──────────────────────────────────
-        ui.set_stage("CoinDesk 수집", "페이지를 순차적으로 가져오는 중")
-        coindesk_articles = fetch_coindesk_articles(
-            args.start,
-            args.end,
-            progress_callback=lambda event: ui.update_source("coindesk", event),
-        )
-        ui.advance_step(f"CoinDesk 수집 완료: {len(coindesk_articles)}건")
-
-        # ── 2. Alpaca 수집 (선택) ─────────────────────────────
-        alpaca_articles = []
-        if run_alpaca:
-            ui.set_stage("Alpaca 수집", "보완 소스를 페이지 단위로 수집하는 중")
-            alpaca_articles = fetch_alpaca_articles(
+        if use_local:
+            # ── 1a. 로컬 데이터셋 로드 ────────────────────────
+            ui.set_stage("로컬 데이터셋 로드", "dataset/data/processed/ 에서 읽는 중")
+            ui.mark_skipped("coindesk", "건너뜀: --source local")
+            ui.mark_skipped("alpaca", "건너뜀: --source local")
+            local_articles = fetch_local_articles(
                 args.start,
                 args.end,
-                os.getenv("ALPACA_API_KEY_ID", ""),
-                os.getenv("ALPACA_API_SECRET_KEY", ""),
-                progress_callback=lambda event: ui.update_source("alpaca", event),
+                progress_callback=ui.update_local,
             )
-            ui.advance_step(f"Alpaca 수집 완료: {len(alpaca_articles)}건")
-        elif args.skip_alpaca:
-            ui.mark_skipped("alpaca", "건너뜀: --skip-alpaca")
+            ui.advance_step(f"로컬 로드 완료: {len(local_articles)}건")
+            articles_by_date = merge_articles(local_articles, [])
         else:
-            ui.mark_skipped("alpaca", "건너뜀: 자격증명 없음")
+            # ── 1b. CoinDesk 수집 ─────────────────────────────
+            ui.set_stage("CoinDesk 수집", "페이지를 순차적으로 가져오는 중")
+            ui.mark_skipped("local", "건너뜀: --source api")
+            coindesk_articles = fetch_coindesk_articles(
+                args.start,
+                args.end,
+                progress_callback=lambda event: ui.update_source("coindesk", event),
+            )
+            ui.advance_step(f"CoinDesk 수집 완료: {len(coindesk_articles)}건")
 
-        # ── 3. 병합 ──────────────────────────────────────────
-        ui.set_stage("기사 병합", "중복 제거 후 날짜별로 정리하는 중")
-        articles_by_date = merge_articles(coindesk_articles, alpaca_articles)
+            # ── 2. Alpaca 수집 (선택) ─────────────────────────
+            alpaca_articles = []
+            if run_alpaca:
+                ui.set_stage("Alpaca 수집", "보완 소스를 페이지 단위로 수집하는 중")
+                alpaca_articles = fetch_alpaca_articles(
+                    args.start,
+                    args.end,
+                    os.getenv("ALPACA_API_KEY_ID", ""),
+                    os.getenv("ALPACA_API_SECRET_KEY", ""),
+                    progress_callback=lambda event: ui.update_source("alpaca", event),
+                )
+                ui.advance_step(f"Alpaca 수집 완료: {len(alpaca_articles)}건")
+            elif args.skip_alpaca:
+                ui.mark_skipped("alpaca", "건너뜀: --skip-alpaca")
+            else:
+                ui.mark_skipped("alpaca", "건너뜀: 자격증명 없음")
+
+            # ── 3. 병합 ───────────────────────────────────────
+            ui.set_stage("기사 병합", "중복 제거 후 날짜별로 정리하는 중")
+            articles_by_date = merge_articles(coindesk_articles, alpaca_articles)
+
         deduped_count = sum(len(v) for v in articles_by_date.values())
         ui.advance_step(f"병합 완료: {len(articles_by_date)}일, {deduped_count}건")
 
