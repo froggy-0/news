@@ -22,7 +22,7 @@
 | 항목 | 값 | 파일:라인 |
 |------|-----|-----------|
 | 환경변수 | `SENTIMENT_JOIN_LOOKBACK_DAYS` | `config.py:54` |
-| 기본값 | `365`일 | `config.py:57` |
+| 기본값 | `540`일 | `config.py:57` |
 | 하드 상한 | `730`일 (초과 시 `ValueError`) | `config.py:61` |
 | 날짜 슬라이싱 | `today - timedelta(days=lookback_days)` | `pipeline.py:341-349` |
 | 실효 독립 N | `lookback_days / 7` | T+7 overlap 특성 |
@@ -31,7 +31,7 @@
 # config.py:54-61
 lookback_days = _env_bounded_int(
     "SENTIMENT_JOIN_LOOKBACK_DAYS",
-    default=365,
+    default=540,
     minimum=0,
     maximum=10_000,
 )
@@ -39,13 +39,11 @@ if lookback_days < 1 or lookback_days > 730:
     raise ValueError("SENTIMENT_JOIN_LOOKBACK_DAYS must be between 1 and 730")
 ```
 
-540일은 하드 상한(730) 이내이므로 코드 변경 없이 **환경변수 설정만으로 즉시 적용 가능**하다.
+540일은 하드 상한(730) 이내이며, 현재 파이프라인 기본값으로 적용된다.
 
 ### 구현
 
-```bash
-SENTIMENT_JOIN_LOOKBACK_DAYS=540
-```
+환경변수 미설정 시 기본 540일로 실행된다. 필요하면 `SENTIMENT_JOIN_LOOKBACK_DAYS`로 명시 override한다.
 
 ### Data Scientist 검토
 

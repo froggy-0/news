@@ -1733,6 +1733,65 @@ def _baseline_hits_series(
     return pd.Series(hits, index=active.index)
 
 
+def _alignment_keys_for_rows(df: pd.DataFrame, row_index: pd.Index) -> tuple[pd.Index, str]:
+    if "date" not in df.columns:
+        return pd.Index(row_index), "index"
+
+    date_values = df["date"].reindex(row_index)
+    if date_values.isna().any():
+        return pd.Index(row_index), "index"
+    return pd.Index(date_values.to_numpy(), name="date"), "date"
+
+
+def _paired_baseline_comparison(
+    df: pd.DataFrame,
+    signal_hits: pd.Series,
+    baseline_factories: dict[str, Any],
+    *,
+    return_col: str,
+    bootstrap_config: BootstrapConfig | None,
+) -> tuple[float, dict[str, Any]]:
+    signal_keys, signal_key_name = _alignment_keys_for_rows(df, signal_hits.index)
+    signal_frame = pd.DataFrame(
+        {
+            "alignment_key": signal_keys,
+            "signal": signal_hits.to_numpy(dtype=float),
+        }
+    )
+
+    baseline_p_values: list[float] = []
+    baseline_alignment: dict[str, Any] = {}
+    for baseline_name, factory in baseline_factories.items():
+        baseline_signal = factory(df)
+        baseline_hits = _baseline_hits_series(df, baseline_signal, return_col)
+        baseline_keys, baseline_key_name = _alignment_keys_for_rows(df, baseline_hits.index)
+        baseline_frame = pd.DataFrame(
+            {
+                "alignment_key": baseline_keys,
+                "baseline": baseline_hits.to_numpy(dtype=float),
+            }
+        )
+        paired = signal_frame.merge(baseline_frame, on="alignment_key", how="inner").dropna()
+        alignment_key = signal_key_name if signal_key_name == baseline_key_name else "index"
+        baseline_alignment[baseline_name] = {
+            "alignment_key": alignment_key,
+            "signal_rows": int(len(signal_hits)),
+            "baseline_rows": int(len(baseline_hits)),
+            "paired_rows": int(len(paired)),
+        }
+        if bootstrap_config is None or len(paired) < 2:
+            continue
+        sig_arr = paired["signal"].to_numpy(dtype=float)
+        base_arr = paired["baseline"].to_numpy(dtype=float)
+        sig_res, _ = bootstrap_paired(sig_arr, base_arr, np.mean, bootstrap_config)
+        if math.isfinite(sig_res.pvalue_one_sided):
+            baseline_p_values.append(sig_res.pvalue_one_sided)
+
+    if not baseline_p_values:
+        return float("nan"), baseline_alignment
+    return float(max(baseline_p_values)), baseline_alignment
+
+
 def _adaptive_threshold_hit_rate(
     df: pd.DataFrame,
     predictor_col: str,
@@ -2188,44 +2247,18 @@ def _horizon_metrics(
 
             # Paired bootstrap p-value vs each baseline → take MAX (signal must beat ALL baselines).
             # Hit-rate metric used as the gate signal; CI hard-separation 보강 데이터.
-            cell_p_value = float("nan")
-            baseline_alignment: dict[str, Any] = {}
-            if bootstrap_config is not None:
-                signal_hits = _signal_hits_series(
-                    eval_df, col, cfg["threshold"], inverted=cfg["inverted"]
-                )
-                if len(signal_hits) >= 2:
-                    baseline_p_values: list[float] = []
-                    for baseline_name, factory in baseline_factories.items():
-                        baseline_signal = factory(eval_df)
-                        baseline_hits = _baseline_hits_series(
-                            eval_df,
-                            baseline_signal,
-                            return_col,
-                        )
-                        paired = pd.concat(
-                            [
-                                signal_hits.rename("signal"),
-                                baseline_hits.rename("baseline"),
-                            ],
-                            axis=1,
-                            join="inner",
-                        ).dropna()
-                        baseline_alignment[baseline_name] = {
-                            "signal_rows": int(len(signal_hits)),
-                            "baseline_rows": int(len(baseline_hits)),
-                            "paired_rows": int(len(paired)),
-                        }
-                        if len(paired) < 2:
-                            continue
-                        sig_arr = paired["signal"].to_numpy(dtype=float)
-                        base_arr = paired["baseline"].to_numpy(dtype=float)
-                        sig_res, _ = bootstrap_paired(sig_arr, base_arr, np.mean, bootstrap_config)
-                        if math.isfinite(sig_res.pvalue_one_sided):
-                            baseline_p_values.append(sig_res.pvalue_one_sided)
-                    if baseline_p_values:
-                        cell_p_value = float(max(baseline_p_values))
+            signal_hits = _signal_hits_series(
+                eval_df, col, cfg["threshold"], inverted=cfg["inverted"]
+            )
+            cell_p_value, baseline_alignment = _paired_baseline_comparison(
+                eval_df,
+                signal_hits,
+                baseline_factories,
+                return_col=return_col,
+                bootstrap_config=bootstrap_config,
+            )
             hr_dict["pvalue_vs_baselines"] = cell_p_value
+            hr_dict["fdr_q"] = float("nan")
             hr_dict["paired_baseline_alignment"] = baseline_alignment
             hit_rate_lift = _finite(hr_dict.get("hit_rate")) - _finite(
                 best_hit_baseline.get("hit_rate")
@@ -2300,6 +2333,7 @@ def _horizon_metrics(
                     "hit_rate_ci_ok": gate.hit_rate_ci_ok,
                     "sharpe_ci_ok": gate.sharpe_ci_ok,
                     "fdr_ok": gate.fdr_ok,
+                    "fdr_q": float("nan"),
                 }
             )
             adaptive = _adaptive_threshold_hit_rate(
@@ -2364,6 +2398,14 @@ def _horizon_metrics(
             vr_sh_lift = _finite(bt_c_dict.get("sharpe_ratio")) - _finite(
                 vol_regime_m.get("sharpe") if isinstance(vol_regime_m, dict) else None
             )
+            signal_hits_c = _signal_hits_series(eval_df, tmp, thr, inverted=inv)
+            cell_p_value_c, baseline_alignment_c = _paired_baseline_comparison(
+                eval_df,
+                signal_hits_c,
+                baseline_factories,
+                return_col=return_col,
+                bootstrap_config=bootstrap_config,
+            )
             payoff_c = _payoff_diagnostics(eval_df, tmp, thr, return_col=return_col, inverted=inv)
             mask_c = _mask_stats_for_predictor(src, outlier_mask_summary)
             gate_c = evaluate_promotion_gate(
@@ -2420,13 +2462,15 @@ def _horizon_metrics(
                     "hit_rate_ci_ok": gate_c.hit_rate_ci_ok,
                     "sharpe_ci_ok": gate_c.sharpe_ci_ok,
                     "fdr_ok": gate_c.fdr_ok,
-                    "pvalue_vs_baselines": float("nan"),
-                    "paired_baseline_alignment": {},
+                    "pvalue_vs_baselines": cell_p_value_c,
+                    "fdr_q": float("nan"),
+                    "paired_baseline_alignment": baseline_alignment_c,
                     **adaptive_c,
                 }
             )
             metrics[horizon_key]["hit_rates"].append(hr_c_dict)
             metrics[horizon_key]["backtest"].append(bt_c_dict)
+            cell_pvalues.append((horizon_key, label, cell_p_value_c))
             eval_df.drop(columns=[tmp], inplace=True)
 
     # BH-FDR across (predictor × horizon) family

@@ -16,7 +16,7 @@ export function NewsFeedClient({
   const items = featuredItems.length > 0 ? featuredItems : allItems;
 
   return (
-    <section id="news" className="border-b border-white/10 px-6 py-16">
+    <section id="news" className="border-b border-white/10 px-6 py-20">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-10">
         <div className="flex flex-col gap-4">
           <div className="flex items-start gap-3">
@@ -34,7 +34,7 @@ export function NewsFeedClient({
         </div>
 
         {showInsufficientWarning && (
-          <p className="text-sm font-mono text-white/40">분析 기사가 충분하지 않습니다</p>
+          <p className="text-sm font-mono text-white/40">분석 기사가 충분하지 않습니다</p>
         )}
         <NewsFeedList
           items={items}

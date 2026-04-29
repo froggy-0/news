@@ -134,7 +134,34 @@ def _make_stats_bytes(
         "horizon_metrics": {
             "1": {
                 "return_col": "btc_log_return",
-                "hit_rates": [{"predictor": "news_sentiment_mean_lag1", "hit_rate": 0.53}],
+                "hit_rates": [
+                    {
+                        "predictor": "news_sentiment_mean_lag1",
+                        "hit_rate": 0.53,
+                        "decision": "research_only",
+                        "decision_strict": "research_only",
+                        "best_baseline": "always_up",
+                        "best_hit_rate_baseline": "always_up",
+                        "best_sharpe_baseline": "always_up",
+                        "baseline_hit_rate": 0.51,
+                        "baseline_hit_rate_ci_upper": 0.58,
+                        "baseline_sharpe": 0.1,
+                        "baseline_sharpe_ci_upper": 0.3,
+                        "strategy_sharpe": 0.2,
+                        "hit_rate_lift_vs_best_baseline": 0.02,
+                        "sharpe_lift_vs_best_baseline": 0.1,
+                        "pvalue_vs_baselines": 0.4,
+                        "fdr_q": 0.4,
+                        "paired_baseline_alignment": {
+                            "always_up": {
+                                "alignment_key": "date",
+                                "signal_rows": 100,
+                                "baseline_rows": 100,
+                                "paired_rows": 100,
+                            }
+                        },
+                    }
+                ],
                 "backtest": [],
             }
         },
@@ -282,6 +309,9 @@ def test_v2_artifact_exposes_dashboard_diagnostics_and_raw_stats():
     assert artifact["dataQuality"]["ffillBreakdown"] == {"btc": 0, "usdkrw": 117, "vix": 108}
     assert artifact["dataQuality"]["structuredSources"]["btc_etf"]["mode"] == "gold_history"
     assert artifact["alpha"]["baselineMetrics"]["1"]["always_up"]["hit_rate"] == 0.51
+    horizon_row = artifact["alpha"]["horizonMetrics"]["1"]["hit_rates"][0]
+    assert horizon_row["decision_strict"] == "research_only"
+    assert horizon_row["paired_baseline_alignment"]["always_up"]["alignment_key"] == "date"
     assert artifact["alpha"]["walkForwardLegacy1d"]["full"]["horizon_days"] == 1
     assert artifact["alpha"]["featureGroupSummary"]["7"]["stationary"]["avg_hit_rate"] == 0.54
     assert artifact["alpha"]["baselineGapSummary"]["7"]["best_baseline"] == "vol_regime"

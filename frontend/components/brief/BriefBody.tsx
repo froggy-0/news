@@ -60,14 +60,14 @@ export function BriefBody({
   const sanitizedBody = sanitizePublicBody(body);
 
   return (
-    <section className="border-b border-white/10 px-6 py-16">
+    <section className="border-b border-white/10 px-6 py-20">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="space-y-2">
-            <p className="section-title">전체 발행본</p>
-            <h2 className="section-headline">브리핑 본문</h2>
+            <p className="section-title">브리핑 본문</p>
+            <span className="eyebrow">Full Briefing</span>
             <p className="max-w-2xl text-sm leading-7 text-white/56">
-              홈에서 먼저 본 요약을 넘어, 판단의 근거와 전체 맥락을 정리한 장문 레이어입니다.
+              요약을 넘어, 판단의 근거와 전체 맥락을 정리한 장문 레이어입니다.
             </p>
           </div>
           <MarkdownDownloadButton body={body} date={date} />

@@ -687,43 +687,18 @@ def fetch_newsletter_display_data(
     cache_dir: Path | None = None,
     observer: PipelineObserver | None = None,
 ) -> dict:
-    """뉴스레터 렌더링 직전에만 호출하는 표시 전용 데이터 수집 함수.
+    """뉴스레터 렌더링 직전 표시 전용 데이터 호환 payload를 반환한다.
 
-    감성 분석 파이프라인(LLM 프롬프트)에서 제외된 항목:
-    - 빅테크 10종 가격 (tech_stocks)
-    - BTC ETF 가격 5종 (btc_etf_points)
-    - nq_futures / usdkrw (korea_watch)
+    public 화면은 KIS 주식·국내 지수·ETF 시세 보드를 더 이상 사용하지 않는다.
+    신규 crypto feature 수집 전까지 기존 packet 키만 유지해 호출 비용과 결측 UI를 제거한다.
     """
-    korea_watch = fetch_korea_investor_points(observer=observer)
-    korea_indices = fetch_korea_index_points(observer=observer)
-    tech_stocks = fetch_tech_stock_points(observer=observer)
-    btc_etf_points: list[MarketPoint] = []
-    for ticker in BTC_ETF_TICKERS:
-        point, _ = _safe_kis_point_and_volume(
-            label=ticker,
-            ticker=ticker,
-            observer=observer,
-        )
-        btc_etf_points.append(point)
-
-    effective_cache_dir = cache_dir or Path(".cache").resolve()
-    cache_file = _market_point_cache_file(effective_cache_dir)
-    previous_by_key = _load_market_point_cache(cache_file)
-
-    korea_watch = _resolve_points_from_cache(korea_watch, previous_by_key)
-    korea_indices = _resolve_points_from_cache(korea_indices, previous_by_key)
-    tech_stocks = _resolve_points_from_cache(tech_stocks, previous_by_key)
-    btc_etf_points = _resolve_points_from_cache(btc_etf_points, previous_by_key)
-    korea_watch, _ = _validate_market_points(korea_watch)
-    korea_indices, _ = _validate_market_points(korea_indices)
-    tech_stocks, _ = _validate_market_points(tech_stocks)
-    btc_etf_points, _ = _validate_market_points(btc_etf_points)
+    _ = cache_dir, observer
 
     return {
-        "korea_watch": [point.__dict__ for point in korea_watch],
-        "korea_indices": [point.__dict__ for point in korea_indices],
-        "tech_stocks": [point.__dict__ for point in tech_stocks],
-        "btc_etf_points": [point.__dict__ for point in btc_etf_points],
+        "korea_watch": [],
+        "korea_indices": [],
+        "tech_stocks": [],
+        "btc_etf_points": [],
     }
 
 

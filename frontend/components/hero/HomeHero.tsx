@@ -9,28 +9,28 @@ import { displayHeadline, formatPublicationDate, hasUsableHeadline } from "@/lib
 const operatingPrinciples = [
   {
     num: "01",
-    title: "기관 프레이밍 감지",
-    desc: "뉴스의 속도보다 월가가 어떤 언어로 시장을 해석하기 시작했는지를 먼저 봅니다.",
+    title: "시장 내러티브 감지",
+    desc: "속보보다 먼저, Bloomberg와 Reuters가 시장을 어떤 톤으로 읽기 시작했는지를 포착합니다.",
   },
   {
     num: "02",
     title: "가격 신호 교차 확인",
-    desc: "금리, 달러, 변동성, 비트코인, 기술주가 같은 방향을 가리키는지 함께 점검합니다.",
+    desc: "비트코인, ETF 자금 흐름, 변동성, 달러, 금리가 같은 방향을 가리키는지 함께 점검합니다.",
   },
   {
     num: "03",
-    title: "브리프 형성 예측",
+    title: "브리프 압축 정리",
     desc: "흩어진 데이터를 하나의 판단으로 묶어 다음 거래일 전에 읽을 수 있게 정리합니다.",
   },
 ];
 
 const comparisonRows = {
-  common: ["속보와 팩트 나열", "단일 뉴스 흐름 중심", "내러티브 형성 이후 해석", "모든 신호를 같은 무게로 취급"],
+  common: ["속보와 팩트 나열", "단일 뉴스 흐름 중심", "내러티브 형성 이후 해석", "중요한 것과 노이즈를 구분하지 않음"],
   sovereign: [
-    "탑티어 기관의 분석/전망/프레이밍 추적",
-    "복수 소스 수렴 + 가격 신호 교차 검증",
+    "Bloomberg, Reuters 보도를 실시간 추적",
+    "Binance, BlackRock 등 공식 데이터로 검증",
     "시장 내러티브 형성 이전에 판단",
-    "노이즈 엄격 필터링, 침묵도 신호로 처리",
+    "노이즈는 걸러내고, 시장이 조용할 때도 의미를 읽음",
   ],
 };
 
@@ -54,7 +54,7 @@ export function HomeHero({
       <section className="hero-stage px-6 md:px-20" data-hero-seed={heroSeed}>
         <div className="relative z-10 flex w-full max-w-3xl flex-col items-center text-center">
           <p className="text-[11px] font-medium uppercase tracking-[0.15em] text-[var(--accent-primary)] md:text-[13px]">
-            WALL STREET NARRATIVE INTELLIGENCE
+            MARKET NARRATIVE INTELLIGENCE
           </p>
 
           <h1 className="mt-6 text-4xl font-bold leading-[1.15] text-[var(--smoke)] md:mt-8 md:text-7xl md:leading-[1.14]">
@@ -65,7 +65,7 @@ export function HomeHero({
           </p>
 
           <p className="mt-7 max-w-xs break-keep text-[15px] leading-relaxed text-[var(--taupe)] md:mt-10 md:max-w-[560px] md:text-lg">
-            Goldman, Morgan Stanley, Bloomberg 흐름과 시장 데이터를 함께 스캔해 내러티브가 가격에 반영되기 전에 읽습니다.
+            Bloomberg, Reuters 보도와 Binance, BlackRock 공식 데이터를 교차해 내러티브가 가격에 반영되기 전에 정리합니다.
           </p>
 
           <div id="subscribe" className="mt-14 w-full max-w-md md:mt-16 md:max-w-[520px]">
@@ -154,7 +154,7 @@ export function HomeHero({
             {marketItems.map((item) => (
               <div key={item.symbol} className="rounded-md border border-[rgba(169,146,125,0.08)] bg-[rgba(242,244,243,0.03)] px-4 py-3">
                 <div className="flex items-baseline gap-2">
-                  <span className="numeric-sm font-semibold text-[var(--smoke)]">{item.symbol}</span>
+                  <span className="numeric-md font-semibold text-[var(--smoke)]">{item.symbol}</span>
                   <span className={`numeric-sm font-medium ${
                     item.trend === "up"
                       ? "text-[var(--accent-green)]"
@@ -165,7 +165,7 @@ export function HomeHero({
                     {item.change ?? "N/A"}
                   </span>
                 </div>
-                <p className="numeric-sm mt-1 text-[10px] text-[var(--taupe)]/60">{item.label} · {item.value ?? "N/A"}</p>
+                <p className="numeric-sm mt-1 text-[var(--taupe)]/60">{item.label} · {item.value ?? "N/A"}</p>
               </div>
             ))}
           </div>

@@ -166,18 +166,16 @@ class TestKisFallbackPreservation:
         assert "GBTC" in BTC_ETF_TICKERS
         assert "FBTC" not in BTC_ETF_TICKERS
 
-    def test_btc_etf_uses_safe_kis_point_and_volume(self):
-        """fetch_newsletter_display_data()에서 BTC ETF 가격·거래량이
-        _safe_kis_point_and_volume() 경로를 사용하는 구조를 유지한다.
-        (ETF 가격은 감성 파이프라인에서 제외 → 뉴스레터 렌더링 전용)
+    def test_newsletter_display_data_does_not_fetch_btc_etf_prices(self):
+        """fetch_newsletter_display_data()에서 BTC ETF 표시 전용 KIS 호출을 하지 않는다.
 
         **Validates: Requirements 3.3**
         """
         from morning_brief.data.market import fetch_newsletter_display_data
 
         source = textwrap.dedent(inspect.getsource(fetch_newsletter_display_data))
-        assert "_safe_kis_point_and_volume" in source
-        assert "BTC_ETF_TICKERS" in source
+        assert "_safe_kis_point_and_volume" not in source
+        assert "BTC_ETF_TICKERS" not in source
 
 
 # ===========================================================================

@@ -103,7 +103,7 @@ export function TopicGrid({
 
   if (visibleItems.length === 0) {
     return (
-      <RevealSection id="map" className="border-b border-white/10 px-6 py-16" threshold={0.25} delayMs={180}>
+      <RevealSection id="map" className="border-b border-white/10 px-6 py-20" threshold={0.25} delayMs={180}>
         <div className="mx-auto w-full max-w-6xl">
           <DataState
             title="테마 상태"
@@ -117,17 +117,15 @@ export function TopicGrid({
   }
 
   return (
-    <RevealSection id="map" className="border-b border-white/10 px-6 py-16" threshold={0.25} delayMs={180}>
+    <RevealSection id="map" className="border-b border-white/10 px-6 py-20" threshold={0.25} delayMs={180}>
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-10">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="flex flex-col gap-1">
-            <h2 className="text-[11px] font-mono uppercase tracking-[0.4em] text-white/60">오늘의 주요 테마</h2>
-            <span className="text-[9px] font-mono uppercase tracking-[0.26em] text-white/28">
-              Contextual Analysis
-            </span>
+            <h2 className="section-title">오늘의 주요 테마</h2>
+            <span className="eyebrow">Contextual Analysis</span>
           </div>
           <p className="max-w-md text-[15px] leading-7 text-white/66">
-            오늘 장을 해석하는 네 개의 축을 먼저 제시하고, 그 뒤에 숫자와 기사로 내려갑니다.
+            오늘 장을 해석하는 핵심 축을 먼저 제시하고, 그 뒤에 숫자와 기사로 내려갑니다.
           </p>
         </div>
         <div className="grid gap-6 md:grid-cols-2">

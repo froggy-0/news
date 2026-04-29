@@ -6,6 +6,7 @@ import type {
   BriefIndex,
   BriefIndexRun,
   BriefMeta,
+  CryptoIndicator,
   FearGreedIndex,
   MarketSnapshot,
   NewsItem,
@@ -240,6 +241,19 @@ function parseTechStock(value: unknown): TechStock {
   };
 }
 
+function parseCryptoIndicator(value: unknown): CryptoIndicator {
+  if (!isRecord(value)) {
+    throw new Error("crypto indicator must be an object");
+  }
+  return {
+    ...parseTickerItem(value),
+    description:
+      value.description === undefined
+        ? null
+        : asOptionalString(value.description, "cryptoIndicator.description"),
+  };
+}
+
 function parseFearGreed(value: unknown): FearGreedIndex {
   if (!isRecord(value) || typeof value.value !== "number") {
     throw new Error("fearGreedIndex must be an object with numeric value");
@@ -421,6 +435,7 @@ export function parseBriefData(value: unknown): BriefData {
   }
   const featuredNewsValue = Array.isArray(value.featuredNews) ? value.featuredNews : value.news;
   const allNewsValue = Array.isArray(value.allNews) ? value.allNews : value.news;
+  const cryptoIndicatorsValue = Array.isArray(value.cryptoIndicators) ? value.cryptoIndicators : [];
   if (
     !Array.isArray(value.topicSummaries) ||
     !Array.isArray(value.techStocks) ||
@@ -435,6 +450,7 @@ export function parseBriefData(value: unknown): BriefData {
     aiJudgment: parseAIJudgment(value.aiJudgment),
     topicSummaries: value.topicSummaries.map(parseTopicSummary),
     techStocks: value.techStocks.map(parseTechStock),
+    cryptoIndicators: cryptoIndicatorsValue.map(parseCryptoIndicator),
     bitcoin: parseBitcoin(value.bitcoin),
     featuredXSignals:
       featuredXSignalsValue === null || featuredXSignalsValue === undefined

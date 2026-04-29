@@ -255,20 +255,11 @@ def test_build_public_brief_matches_frontend_contract_shape() -> None:
     assert "오늘의 핵심" in payload["aiJudgment"]["body"]
     assert "4-2. 핵심 뉴스 5선" not in payload["aiJudgment"]["body"]
     symbols = {item["symbol"] for item in payload["marketSnapshot"]["items"]}
-    assert {
-        "US10Y",
-        "DXY",
-        "VIX",
-        "KRW",
-        "NQ1!",
-        "DJI",
-        "KOSPI",
-        "KOSDAQ",
-        "SPX",
-        "QQQ",
-        "SOXX",
-        "BTC",
-    } <= symbols
+    assert {"US10Y", "DXY", "VIX", "BTC"} <= symbols
+    assert {"KRW", "NQ1!", "DJI", "KOSPI", "KOSDAQ", "SPX", "QQQ", "SOXX"}.isdisjoint(symbols)
+    assert payload["techStocks"] == []
+    crypto_symbols = {item["symbol"] for item in payload["cryptoIndicators"]}
+    assert {"BTC", "F&G", "ETF BTC", "ETF AUM", "VIX", "DXY"} <= crypto_symbols
     assert payload["bitcoin"]["fearGreedIndex"]["label"] == "탐욕"
     assert payload["bitcoin"]["etf"]["totalHolding"] == "983,240.13 BTC"
     assert payload["featuredXSignals"][0]["sentiment"] == "bullish"

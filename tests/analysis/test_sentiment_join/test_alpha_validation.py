@@ -1559,6 +1559,27 @@ class TestWalkForwardCoreIndex:
         assert "7" in result["horizon_metrics"]
         assert result["horizon_metrics"]["7"]["return_col"] == "btc_fwd_ret_7d"
         first_hit_rate = result["horizon_metrics"]["7"]["hit_rates"][0]
+        required_contract_fields = {
+            "decision",
+            "decision_strict",
+            "best_baseline",
+            "best_hit_rate_baseline",
+            "best_sharpe_baseline",
+            "baseline_hit_rate",
+            "baseline_hit_rate_ci_upper",
+            "baseline_sharpe",
+            "baseline_sharpe_ci_upper",
+            "strategy_sharpe",
+            "hit_rate_lift_vs_best_baseline",
+            "sharpe_lift_vs_best_baseline",
+            "pvalue_vs_baselines",
+            "fdr_q",
+            "paired_baseline_alignment",
+        }
+        for row in result["horizon_metrics"]["7"]["hit_rates"]:
+            assert required_contract_fields <= set(row)
+            assert row["decision"] in {"promote", "research_only"}
+            assert row["decision_strict"] in {"promote", "research_only"}
         assert first_hit_rate["decision"] in {"promote", "research_only"}
         assert first_hit_rate["decision_strict"] in {"promote", "research_only"}
         assert "best_baseline" in first_hit_rate
@@ -1662,6 +1683,7 @@ class TestWalkForwardCoreIndex:
             if item["predictor"] == "news_sentiment_mean_lag1"
         )
         alignment = row["paired_baseline_alignment"]["fng_contrarian"]
+        assert alignment["alignment_key"] == "date"
         assert alignment["signal_rows"] == 19
         assert alignment["baseline_rows"] == 3
         assert alignment["paired_rows"] == 2
@@ -1771,3 +1793,7 @@ class TestAdaptiveThresholdAndCompound:
         assert row is not None
         assert "vol_regime_hit_rate_lift" in row
         assert "payoff_diagnostics" in row
+        assert "pvalue_vs_baselines" in row
+        assert "fdr_q" in row
+        assert row["paired_baseline_alignment"]
+        assert row["paired_baseline_alignment"]["vol_regime"]["alignment_key"] == "date"
