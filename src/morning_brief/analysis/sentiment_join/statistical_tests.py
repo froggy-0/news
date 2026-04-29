@@ -39,6 +39,7 @@ _PREDICTORS_RAW = [
     "btc_long_short_ratio",
     "oi_change_pct",
     "etf_net_inflow_usd",
+    "etf_net_inflow_usd_log1p",  # log1p 변환 — fat-tail 안정화, 원본과 병행 검정
     "usdkrw_log_return",
     "volume_change_pct",
     # 1-A: delta 피처 — level AR 구조 제거 후 독립적 신호
@@ -84,6 +85,7 @@ ADF_TARGETS = [
     "btc_long_short_ratio",
     "oi_change_pct",
     "etf_net_inflow_usd",
+    "etf_net_inflow_usd_log1p",
     "usdkrw_log_return",
     "volume_change_pct",
     # 1-A: delta 피처 추가
@@ -1328,7 +1330,7 @@ def walk_forward_validate(
                 score_lag1_col,
                 threshold=50.0,
                 return_col=return_col,
-                transaction_cost_bps=0.0,
+                transaction_cost_bps=10.0,
             )
             fold_cumret = bt_result.strategy_cumulative_return
             fold_alpha = bt_result.alpha
@@ -1477,6 +1479,10 @@ _ALPHA_PREDICTOR_CONFIGS: list[dict[str, Any]] = [
     {"col": "vix_regime_score_lag1", "threshold": 0.0, "inverted": False},
     {"col": "full_hybrid_index_score_lag1", "threshold": 50, "inverted": False},
     {"col": "core_hybrid_index_score_lag1", "threshold": 50, "inverted": False},
+    # etf_net_inflow_usd_log1p_lag1: 기관 포지셔닝 신호 (log1p 변환으로 fat-tail 안정화)
+    {"col": "etf_net_inflow_usd_log1p_lag1", "threshold": 0, "inverted": False},
+    # usdkrw_gap_flag_lag1: 공휴일·주말 갭 재개장 여부 (환율 급등락 맥락 보조 피처)
+    {"col": "usdkrw_gap_flag_lag1", "threshold": 0.5, "inverted": False},
 ]
 
 _ALPHA_HORIZONS: dict[int, str] = {
@@ -1495,6 +1501,8 @@ _PREDICTOR_SOURCE_COLUMNS: dict[str, list[str]] = {
     "funding_rate_x_bear_lag1": ["funding_rate"],
     "vix_lag1": ["vix"],
     "vix_regime_score_lag1": ["vix"],
+    "etf_net_inflow_usd_log1p_lag1": ["etf_net_inflow_usd"],
+    "usdkrw_gap_flag_lag1": ["usdkrw_return"],
 }
 
 
@@ -2169,6 +2177,7 @@ def _horizon_metrics(
                 inverted=cfg["inverted"],
                 granger_significant=granger_sig,
                 bootstrap=bootstrap_config,
+                transaction_cost_bps=10.0,
             )
             hr_dict = asdict(hr)
             bt_dict = asdict(bt)
@@ -2333,7 +2342,13 @@ def _horizon_metrics(
             eval_df[tmp] = _compute_regime_filtered_compound(eval_df, src)
             hr_c = compute_hit_rate(eval_df, tmp, thr, inverted=inv, bootstrap=bootstrap_config)
             bt_c = compute_backtest(
-                eval_df, tmp, thr, return_col=return_col, inverted=inv, bootstrap=bootstrap_config
+                eval_df,
+                tmp,
+                thr,
+                return_col=return_col,
+                inverted=inv,
+                bootstrap=bootstrap_config,
+                transaction_cost_bps=10.0,
             )
             hr_c_dict = asdict(hr_c)
             bt_c_dict = asdict(bt_c)
@@ -2526,6 +2541,7 @@ def run_alpha_validation(
             inverted=inverted,
             granger_significant=granger_sig,
             bootstrap=bootstrap_config,
+            transaction_cost_bps=10.0,
         )
         backtest_results.append(asdict(bt))
 

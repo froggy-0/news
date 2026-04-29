@@ -545,39 +545,64 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             )
             return 1
 
-        # §8-A: column 정책 — 이상치 셀만 NaN 마스킹, 행 전체는 보존.
-        # regime_stress(BTC 급락 등 시장 스트레스일)는 마스킹하지 않고 사유만 기록.
-        # IQR 적용 대상은 join.py detect_outliers_rolling_iqr 와 동일한 변화율·수익률 6개 컬럼.
+        # §8-A: 컬럼별 이상치 처리 — 값의 성격에 따라 정책을 분리한다.
+        #
+        # ① usdkrw_return: ColumnMaskPolicy (rolling IQR×3) — 공휴일 갭 여부로 추가 플래그 분리
+        # ② volume_change_pct, oi_change_pct: WinsorizePolicy (q01/q99 clip) — 방향 정보 보존
+        # ③ btc_return: 마스킹 제외 — 타겟 직결 변수, NaN=학습 구멍
+        # ④ etf_net_inflow_usd: 마스킹 제외 — 기관 포지셔닝 신호, fat-tail이 정상 동작
+        # ⑤ funding_rate: 마스킹 제외 — DATA_ERROR_RULES(abs>0.05)로만 오류 제거
         # level/bounded 컬럼(fng_value, news_sentiment_mean 등)은 false positive가 많아 제외.
-        _OUTLIER_IQR_COLS = [
-            c
-            for c in [
-                "btc_return",
-                "usdkrw_return",
-                "funding_rate",
-                "oi_change_pct",
-                "volume_change_pct",
-                "etf_net_inflow_usd",
-            ]
-            if c in master_df.columns
+
+        # ① usdkrw_return — 공휴일/주말 갭 이후 값은 regime_stress와 별도로 보존
+        _IQR_MASK_COLS = [c for c in ["usdkrw_return"] if c in master_df.columns]
+        _col_result = OutlierPolicyFactory.create("column").apply(master_df, _IQR_MASK_COLS)
+
+        # ② volume_change_pct, oi_change_pct — winsorize(q01/q99)
+        _WINSORIZE_COLS = [
+            c for c in ["volume_change_pct", "oi_change_pct"] if c in master_df.columns
         ]
-        _outlier_result = OutlierPolicyFactory.create("column").apply(master_df, _OUTLIER_IQR_COLS)
-        analysis_df = _outlier_result.df
+        _win_result = OutlierPolicyFactory.create("winsorize").apply(
+            _col_result.df, _WINSORIZE_COLS
+        )
+
+        analysis_df = _win_result.df
+
+        # ③ etf_net_inflow_usd → log1p 변환 파생 피처 (분포 안정화, 원본 보존)
+        if "etf_net_inflow_usd" in analysis_df.columns:
+            etf_raw = pd.to_numeric(analysis_df["etf_net_inflow_usd"], errors="coerce")
+            analysis_df["etf_net_inflow_usd_log1p"] = np.sign(etf_raw) * np.log1p(
+                np.abs(etf_raw).fillna(0)
+            )
+            analysis_df["etf_net_inflow_usd_log1p_lag1"] = analysis_df[
+                "etf_net_inflow_usd_log1p"
+            ].shift(1)
+
+        # ④ usdkrw_gap_flag — 날짜 갭 > 1일(공휴일·주말 재개장) 여부 플래그
+        if "date" in analysis_df.columns:
+            _dates = pd.to_datetime(analysis_df["date"])
+            _gap_days = _dates.diff().dt.days.fillna(1)
+            analysis_df["usdkrw_gap_flag"] = (_gap_days > 1).astype(float)
+            analysis_df["usdkrw_gap_flag_lag1"] = analysis_df["usdkrw_gap_flag"].shift(1)
+
         analysis_df, feature_exclusion_reasons = _apply_structured_source_gates(
             analysis_df,
             futures_attrs=futures_source_attrs,
             etf_attrs=etf_source_attrs,
         )
-        masked_count = int(_outlier_result.stats.get("masked_cells", 0))
+        masked_count = int(_col_result.stats.get("masked_cells", 0)) + int(
+            _win_result.stats.get("winsorized_cells", 0)
+        )
         masked_ratio = round(masked_count / max(len(analysis_df), 1), 4)
         log_structured(
             logger,
             event="stats.outlier_filter_applied",
-            message="통계 분석용 이상값을 NaN으로 마스킹했습니다. (행은 유지)",
+            message="컬럼별 이상치 처리 완료 (IQR마스크/윈저라이즈/보존 혼합 정책)",
             total_rows=len(analysis_df),
-            masked_cells=masked_count,
+            iqr_masked_cells=int(_col_result.stats.get("masked_cells", 0)),
+            winsorized_cells=int(_win_result.stats.get("winsorized_cells", 0)),
             masked_ratio=masked_ratio,
-            regime_stress_rows=int(_outlier_result.stats.get("regime_stress_rows", 0)),
+            regime_stress_rows=int(_col_result.stats.get("regime_stress_rows", 0)),
         )
 
         # Req 12: ADF·Granger 통계 검정 (로그만 남기고 파이프라인을 중단하지 않음)
@@ -642,8 +667,8 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             analysis_with_hybrid[lag1_col] = analysis_with_hybrid[score_col].shift(1)
 
         outlier_mask_summary = _build_outlier_mask_summary(
-            _outlier_result.flags,
-            _outlier_result.classification,
+            _col_result.flags,
+            _col_result.classification,
             hybrid_diagnostics=analysis_with_hybrid.attrs.get("hybrid_index_diagnostics", {}),
         )
 
