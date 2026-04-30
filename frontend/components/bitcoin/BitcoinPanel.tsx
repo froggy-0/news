@@ -292,7 +292,7 @@ function EtfSnapshotCard({ etf }: { etf: BitcoinSection["etf"] }) {
 
 export function BitcoinPanel({ bitcoin }: { bitcoin: BitcoinSection }) {
   return (
-    <RevealSection className="border-b border-white/10 px-6 py-16" threshold={0.25} delayMs={220}>
+    <RevealSection className="border-b border-white/10 px-6 py-16" revealAt={0.84} delayMs={80}>
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
 
         {/* 섹션 헤더 */}
