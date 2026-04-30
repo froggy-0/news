@@ -9,6 +9,7 @@ import { BitcoinPanel } from "../components/bitcoin/BitcoinPanel";
 import { TerminalPanel } from "../components/hero/TerminalPanel";
 import { NewsFeedList } from "../components/news/NewsFeedList";
 import { DataState } from "../components/ui/DataState";
+import { RevealSection } from "../components/ui/RevealSection";
 import { SectionSkeleton } from "../components/ui/SectionSkeleton";
 
 async function loadGlobalsCss() {
@@ -92,6 +93,26 @@ test("section skeleton reserves declared height for data boards", () => {
 
   assert.match(markup, /min-height:160px/);
   assert.match(markup, /section-skeleton-data/);
+});
+
+test("reveal section exposes standardized scroll timing controls", () => {
+  const markup = renderToStaticMarkup(
+    createElement(
+      RevealSection,
+      {
+        revealAt: 0.9,
+        delayMs: 40,
+        distancePx: 14,
+        durationMs: 320,
+      },
+      "소스 피드",
+    ),
+  );
+
+  assert.match(markup, /data-reveal-at="0.9"/);
+  assert.match(markup, /data-delay-ms="40"/);
+  assert.match(markup, /--reveal-distance:14px/);
+  assert.match(markup, /--reveal-duration:320ms/);
 });
 
 test("reading, data, and utility card families are rendered by home components", () => {

@@ -32,8 +32,8 @@ export function SourceFeed({
     <RevealSection
       id="sources"
       className="border-b border-white/10 px-6 py-20"
-      threshold={0.15}
-      delayMs={180}
+      revealAt={0.9}
+      delayMs={40}
     >
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-10">
         {/* section header */}

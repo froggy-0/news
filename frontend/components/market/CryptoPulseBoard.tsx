@@ -443,7 +443,7 @@ export function CryptoPulseBoard({
   bitcoin: BitcoinSection;
 }) {
   return (
-    <RevealSection className="border-b border-white/10 px-6 py-20" threshold={0.2} delayMs={180}>
+    <RevealSection className="border-b border-white/10 px-6 py-20" revealAt={0.88} delayMs={60}>
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-10">
         {/* ── Section header ─────────────────────────────────────────── */}
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
