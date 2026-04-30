@@ -179,7 +179,7 @@ def default_grid(
         "oi_divergence_all",
     ),
 ) -> list[ExperimentSpec]:
-    """2×4×1×2×5 = 80 기본 grid. T+7 단일 horizon."""
+    """scalers(2) × masks(4) × horizons(1) × indices(2) × feature_sets(5) = 80 기본 grid. T+7 단일 horizon."""
     return [
         ExperimentSpec(scaler=s, mask=m, horizon_days=h, index_name=i, feature_set=f)
         for s in scalers

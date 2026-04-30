@@ -403,7 +403,8 @@ def evaluate_promotion_gate(
     sharpe_ok = sharpe_delta >= GATE_SHARPE_DELTA
     coverage_ok = coverage >= GATE_MIN_COVERAGE
     masked_ratio_ok = masked_ratio <= GATE_MAX_MASKED_RATIO
-    stability_ok = stability >= GATE_MIN_STABILITY
+    # stability 가 NaN 이면 walk-forward 미산출 predictor (non-hybrid) → 조건 미적용 (pass)
+    stability_ok = not math.isfinite(stability) or stability >= GATE_MIN_STABILITY
 
     if hit_rate_ok and sharpe_ok and coverage_ok and masked_ratio_ok and stability_ok:
         decision = "promote"

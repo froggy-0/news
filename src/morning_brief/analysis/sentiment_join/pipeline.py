@@ -585,6 +585,10 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             analysis_df["etf_net_inflow_usd_log1p_lag1"] = analysis_df[
                 "etf_net_inflow_usd_log1p"
             ].shift(1)
+            # master_df에도 동기화 (parquet 저장용)
+            for _col in ("etf_net_inflow_usd_log1p", "etf_net_inflow_usd_log1p_lag1"):
+                _map = analysis_df.set_index("date")[_col].to_dict()
+                master_df[_col] = master_df["date"].map(_map)
 
         # ④ usdkrw_gap_flag — 날짜 갭 > 1일(공휴일·주말 재개장) 여부 플래그
         if "date" in analysis_df.columns:
@@ -592,6 +596,10 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             _gap_days = _dates.diff().dt.days.fillna(1)
             analysis_df["usdkrw_gap_flag"] = (_gap_days > 1).astype(float)
             analysis_df["usdkrw_gap_flag_lag1"] = analysis_df["usdkrw_gap_flag"].shift(1)
+            # master_df에도 동기화 (parquet 저장용)
+            for _col in ("usdkrw_gap_flag", "usdkrw_gap_flag_lag1"):
+                _map = analysis_df.set_index("date")[_col].to_dict()
+                master_df[_col] = master_df["date"].map(_map)
 
         analysis_df, feature_exclusion_reasons = _apply_structured_source_gates(
             analysis_df,

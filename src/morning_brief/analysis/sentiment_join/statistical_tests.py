@@ -1719,7 +1719,12 @@ def _baseline_hits_series(
     baseline_signal: pd.Series,
     return_col: str,
 ) -> pd.Series:
-    """evaluate_baseline 내부 hits 산출 로직을 index 보존 형태로 재사용한다."""
+    """evaluate_baseline 내부 hits 산출 로직을 index 보존 형태로 재사용한다.
+
+    btc_direction_label 이 df 에 있으면 _signal_hits_series 와 동일한
+    "flat 제외" 기준으로 active row 를 결정해 paired bootstrap 정렬성을 높인다.
+    없으면 signal != 0 기준으로 fallback.
+    """
     aligned = pd.DataFrame(
         {
             "signal": pd.to_numeric(baseline_signal, errors="coerce"),
@@ -1727,6 +1732,9 @@ def _baseline_hits_series(
         }
     ).dropna()
     active = aligned[aligned["signal"] != 0]
+    if "btc_direction_label" in df.columns:
+        not_flat = (df["btc_direction_label"] != "flat").reindex(active.index, fill_value=True)
+        active = active[not_flat]
     if active.empty:
         return pd.Series(dtype=float, name="baseline_hit")
     hits = (np.sign(active["signal"].to_numpy()) == np.sign(active["ret"].to_numpy())).astype(float)
@@ -1898,6 +1906,39 @@ def _best_baseline(
         return None, {}
     name, payload, _ = max(candidates, key=lambda item: item[2])
     return name, payload
+
+
+def _temporal_fold_stability(
+    df: pd.DataFrame,
+    predictor_col: str,
+    threshold: float,
+    *,
+    inverted: bool,
+    n_folds: int = 5,
+    min_fold_rows: int = 20,
+) -> float:
+    """시계열을 n_folds 구간으로 등분해 각 fold의 hit_rate 를 계산하고 stability 산출.
+
+    walk-forward 미산출 predictor 에 대한 시간적 안정성 proxy.
+    fold 수가 부족하거나 flat 행 제거 후 데이터 부족이면 NaN.
+    """
+    if predictor_col not in df.columns or "btc_direction_label" not in df.columns:
+        return float("nan")
+    work = df[[predictor_col, "btc_direction_label"]].copy()
+    work = work[work["btc_direction_label"] != "flat"].dropna(subset=[predictor_col])
+    if len(work) < n_folds * min_fold_rows:
+        return float("nan")
+    fold_size = len(work) // n_folds
+    hit_rates: list[float] = []
+    for i in range(n_folds):
+        fold = work.iloc[i * fold_size : (i + 1) * fold_size]
+        if len(fold) < min_fold_rows:
+            continue
+        pred_above = fold[predictor_col] > threshold
+        predicted_up = ~pred_above if inverted else pred_above
+        actual_up = fold["btc_direction_label"] == "up"
+        hit_rates.append(float((predicted_up == actual_up).mean()))
+    return _fold_stability(hit_rates)
 
 
 def _walk_forward_stability(
@@ -2277,6 +2318,11 @@ def _horizon_metrics(
                 col,
                 horizon_key,
             )
+            if not math.isfinite(stability):
+                # walk-forward 미산출 predictor: 시계열 fold 분할로 proxy 산출
+                stability = _temporal_fold_stability(
+                    eval_df, col, cfg["threshold"], inverted=cfg["inverted"]
+                )
             mask_stats = _mask_stats_for_predictor(col, outlier_mask_summary)
             payoff = _payoff_diagnostics(
                 eval_df,
@@ -2408,6 +2454,7 @@ def _horizon_metrics(
             )
             payoff_c = _payoff_diagnostics(eval_df, tmp, thr, return_col=return_col, inverted=inv)
             mask_c = _mask_stats_for_predictor(src, outlier_mask_summary)
+            stability_c = _temporal_fold_stability(eval_df, tmp, thr, inverted=inv)
             gate_c = evaluate_promotion_gate(
                 hit_rate_delta=_finite(hr_c_dict.get("hit_rate"))
                 - _finite(best_hit_bl.get("hit_rate")),
@@ -2415,7 +2462,7 @@ def _horizon_metrics(
                 - _finite(best_sh_bl.get("sharpe")),
                 coverage=float(hr_c.n_valid / len(eval_df)) if len(eval_df) else 0.0,
                 masked_ratio=_finite(mask_c.get("masked_ratio")),
-                stability=float("nan"),
+                stability=stability_c,
                 hit_rate_ci_lower=hr_c.hit_rate_ci_lower,
                 hit_rate_ci_upper=hr_c.hit_rate_ci_upper,
                 sharpe_ci_lower=bt_c.sharpe_ci_lower,
@@ -2503,6 +2550,7 @@ def _horizon_metrics(
                         "fdr_ok": gate.fdr_ok,
                         "hit_rate_ci_ok": gate.hit_rate_ci_ok,
                         "sharpe_ci_ok": gate.sharpe_ci_ok,
+                        "stability_ok": gate.stability_ok,
                     }
                 )
     return metrics
