@@ -79,11 +79,42 @@ def _circular_block_indices(n: int, block_length: int, rng: np.random.Generator)
     return raw.reshape(-1)[:n].astype(np.int64)
 
 
+def _batch_circular_block_indices(
+    n: int, block_length: int, n_bootstrap: int, rng: np.random.Generator
+) -> np.ndarray:
+    """circular block bootstrap 인덱스 행렬을 rng 호출 1회로 배치 생성.
+
+    shape = (n_bootstrap, n). 개별 호출 대신 이 함수를 쓰면 rng 오버헤드가
+    n_bootstrap 배 → 1 배로 줄어든다.
+    """
+    if block_length < 1:
+        raise ValueError(f"block_length must be ≥ 1, got {block_length}")
+    if n <= 0:
+        return np.empty((n_bootstrap, 0), dtype=np.int64)
+    block_length = min(block_length, n)
+    blocks_needed = math.ceil(n / block_length)
+    starts = rng.integers(low=0, high=n, size=(n_bootstrap, blocks_needed))
+    offsets = np.arange(block_length, dtype=np.int64)
+    raw = (starts[:, :, None] + offsets[None, None, :]) % n  # (B, blocks, L)
+    return raw.reshape(n_bootstrap, -1)[:, :n].astype(np.int64)  # (B, n)
+
+
 def _resample_indices(n: int, cfg: BootstrapConfig, rng: np.random.Generator) -> np.ndarray:
     if cfg.method == "iid":
         return rng.integers(low=0, high=n, size=n).astype(np.int64)
     if cfg.method == "circular":
         return _circular_block_indices(n, cfg.block_length, rng)
+    raise ValueError(f"unsupported bootstrap method: {cfg.method!r}")
+
+
+def _batch_resample_indices(
+    n: int, n_bootstrap: int, cfg: BootstrapConfig, rng: np.random.Generator
+) -> np.ndarray:
+    """(n_bootstrap, n) 인덱스 행렬을 rng 호출 1회로 생성한다."""
+    if cfg.method == "iid":
+        return rng.integers(low=0, high=n, size=(n_bootstrap, n)).astype(np.int64)
+    if cfg.method == "circular":
+        return _batch_circular_block_indices(n, cfg.block_length, n_bootstrap, rng)
     raise ValueError(f"unsupported bootstrap method: {cfg.method!r}")
 
 
@@ -120,10 +151,10 @@ def bootstrap_metric(
         )
     rng = np.random.default_rng(cfg.seed)
     point = float(metric_fn(arr))
+    all_idx = _batch_resample_indices(n, cfg.n_bootstrap, cfg, rng)
     boot: np.ndarray = np.empty(cfg.n_bootstrap, dtype=np.float64)
     for i in range(cfg.n_bootstrap):
-        idx = _resample_indices(n, cfg, rng)
-        boot[i] = float(metric_fn(arr[idx]))
+        boot[i] = float(metric_fn(arr[all_idx[i]]))
     lo, hi = _ci_bounds(boot, cfg.ci_alpha)
     return BootstrapResult(
         point=point,
@@ -169,11 +200,12 @@ def bootstrap_paired(
     rng = np.random.default_rng(cfg.seed)
     sig_point = float(metric_fn(sig))
     base_point = float(metric_fn(base))
+    all_idx = _batch_resample_indices(n, cfg.n_bootstrap, cfg, rng)
     boot_sig: np.ndarray = np.empty(cfg.n_bootstrap, dtype=np.float64)
     boot_base: np.ndarray = np.empty(cfg.n_bootstrap, dtype=np.float64)
     leq_count = 0
     for i in range(cfg.n_bootstrap):
-        idx = _resample_indices(n, cfg, rng)
+        idx = all_idx[i]
         s_val = float(metric_fn(sig[idx]))
         b_val = float(metric_fn(base[idx]))
         boot_sig[i] = s_val
@@ -242,4 +274,5 @@ __all__ = [
     "benjamini_hochberg",
     "bootstrap_metric",
     "bootstrap_paired",
+    "_batch_resample_indices",
 ]

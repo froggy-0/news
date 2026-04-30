@@ -109,6 +109,13 @@ MASTER_SCHEMA = pa.DataFrameSchema(
         "sentiment_momentum_x_bear_lag1": pa.Column(float, nullable=True),
         "fng_change_1d_x_bear_lag1": pa.Column(float, nullable=True),
         "funding_rate_x_bear_lag1": pa.Column(float, nullable=True),
+        # ETF inflow log1p 변환 피처 — fat-tail 안정화, analysis_df와 동기화
+        # required=False: pipeline이 생성하지만 기존 parquet/fixture에 없을 수 있음
+        "etf_net_inflow_usd_log1p": pa.Column(float, nullable=True, required=False),
+        "etf_net_inflow_usd_log1p_lag1": pa.Column(float, nullable=True, required=False),
+        # USDKRW 갭 플래그 — 공휴일·주말 재개장 여부
+        "usdkrw_gap_flag": pa.Column(float, nullable=True, required=False),
+        "usdkrw_gap_flag_lag1": pa.Column(float, nullable=True, required=False),
     },
     strict=True,
 )
