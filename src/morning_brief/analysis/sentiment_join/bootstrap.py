@@ -94,7 +94,7 @@ def _batch_circular_block_indices(
     block_length = min(block_length, n)
     blocks_needed = math.ceil(n / block_length)
     starts = rng.integers(low=0, high=n, size=(n_bootstrap, blocks_needed))
-    offsets = np.arange(block_length, dtype=np.int64)
+    offsets: np.ndarray = np.arange(block_length, dtype=np.int64)
     raw = (starts[:, :, None] + offsets[None, None, :]) % n  # (B, blocks, L)
     return raw.reshape(n_bootstrap, -1)[:, :n].astype(np.int64)  # (B, n)
 
