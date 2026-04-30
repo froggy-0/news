@@ -13,6 +13,10 @@ from morning_brief.analysis.sentiment_join.experiments import (
     FOLDS_SCHEMA_COLUMNS,
     ExperimentRunner,
     ExperimentSpec,
+    _build_custom_specs,
+    _frame_for_feature_set,
+    _mask_cols_from,
+    _outlier_mask_cols_for_policy,
     default_grid,
 )
 
@@ -71,6 +75,19 @@ def _make_raw_master(days: int = 300, *, seed: int = 42) -> pd.DataFrame:
             "btc_log_return": btc_log_return,
             "funding_rate": funding_rate,
             "oi_change_pct": rng.normal(0, 0.02, days),
+            "btc_return_7d": pd.Series(btc_log_return).rolling(7, min_periods=7).sum(),
+            "btc_return_7d_lag1": pd.Series(btc_log_return)
+            .rolling(7, min_periods=7)
+            .sum()
+            .shift(1),
+            "open_interest_change_7d": rng.normal(0, 0.03, days),
+            "open_interest_change_7d_lag1": pd.Series(rng.normal(0, 0.03, days)).shift(1),
+            "oi_price_divergence_flag_7d": rng.integers(0, 2, days).astype(float),
+            "oi_price_divergence_flag_7d_lag1": pd.Series(
+                rng.integers(0, 2, days).astype(float)
+            ).shift(1),
+            "oi_price_divergence_score_7d": rng.uniform(0, 0.01, days),
+            "oi_price_divergence_score_7d_lag1": pd.Series(rng.uniform(0, 0.01, days)).shift(1),
             "volume_change_pct": volume_change_pct,
             "etf_net_inflow_usd": etf_inflow,
             "open_interest_usd": rng.uniform(5e9, 2e10, days),
@@ -100,9 +117,9 @@ def _make_raw_master(days: int = 300, *, seed: int = 42) -> pd.DataFrame:
 
 
 def test_default_grid_cell_count() -> None:
-    """2 scaler × 4 mask × 1 horizon × 2 index = 16 (T+7 단일 horizon)."""
+    """2 scaler × 4 mask × 1 horizon × 2 index × 5 feature_set = 80."""
     grid = default_grid()
-    assert len(grid) == 16
+    assert len(grid) == 80
 
 
 def test_default_grid_all_unique_spec_ids() -> None:
@@ -138,6 +155,7 @@ def small_grid() -> list[ExperimentSpec]:
         masks=("row", "column"),
         horizons=(1, 3),
         indices=("full",),
+        feature_sets=("baseline",),
     )
 
 
@@ -155,6 +173,72 @@ def test_folds_schema(folds_df: pd.DataFrame) -> None:
     """folds.parquet 스키마: 모든 필수 컬럼 존재."""
     for col in FOLDS_SCHEMA_COLUMNS:
         assert col in folds_df.columns, f"컬럼 누락: {col}"
+
+
+def test_feature_set_spec_id_suffix() -> None:
+    spec = ExperimentSpec(
+        scaler="standard",
+        mask="row",
+        horizon_days=7,
+        index_name="full",
+        feature_set="oi_divergence_score_7d",
+    )
+
+    assert spec.spec_id == "standard-row-T7-full-oi_divergence_score_7d"
+
+
+def test_build_custom_specs_adds_only_active_oi_feature() -> None:
+    specs = _build_custom_specs("standard", "oi_divergence_flag_7d")
+    full = next(spec for spec in specs if spec.name == "full")
+    core = next(spec for spec in specs if spec.name == "core")
+
+    assert "oi_price_divergence_flag_7d_lag1" in full.candidates
+    assert "oi_price_divergence_flag_7d_lag1" in core.candidates
+    assert "oi_price_divergence_score_7d_lag1" not in full.candidates
+
+
+def test_inactive_oi_columns_do_not_enter_baseline_mask() -> None:
+    raw = _make_raw_master(days=40)
+    frame = _frame_for_feature_set(raw, "baseline")
+    mask_cols = _mask_cols_from(frame, "baseline")
+
+    assert "btc_return_7d_lag1" not in frame.columns
+    assert "oi_price_divergence_score_7d_lag1" not in frame.columns
+    assert not any(col.startswith("oi_price_divergence") for col in mask_cols)
+
+
+def test_row_policy_uses_baseline_mask_cols_for_treatment() -> None:
+    raw = _make_raw_master(days=40)
+    frame = _frame_for_feature_set(raw, "oi_divergence_score_7d")
+
+    row_cols = _outlier_mask_cols_for_policy(frame, "oi_divergence_score_7d", "row")
+    column_cols = _outlier_mask_cols_for_policy(frame, "oi_divergence_score_7d", "column")
+
+    assert "oi_price_divergence_score_7d_lag1" not in row_cols
+    assert "oi_price_divergence_score_7d_lag1" in column_cols
+
+
+def test_row_treatment_feature_does_not_change_masked_ratio(raw_master: pd.DataFrame) -> None:
+    raw = raw_master.copy()
+    raw.loc[200, "oi_price_divergence_score_7d_lag1"] = 999.0
+    runner = ExperimentRunner(raw, train_days=120, test_days=30)
+
+    baseline = runner.run(
+        ExperimentSpec(
+            scaler="standard", mask="row", horizon_days=1, index_name="full", feature_set="baseline"
+        )
+    )
+    treatment = runner.run(
+        ExperimentSpec(
+            scaler="standard",
+            mask="row",
+            horizon_days=1,
+            index_name="full",
+            feature_set="oi_divergence_score_7d",
+        )
+    )
+
+    assert treatment["masked_ratio"].iloc[0] == pytest.approx(baseline["masked_ratio"].iloc[0])
 
 
 def test_folds_spec_ids_match_grid(

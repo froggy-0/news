@@ -10,7 +10,7 @@ Output:
     {out_dir}/{run_id}/spec.json       — 실행 config · git sha
     {out_dir}/{run_id}/summary.md      — cell-level 요약 (hit_rate/Sharpe/coverage)
 
-Grid 기본값: 2 scaler × 4 mask × 3 horizon × 2 index = 48 cell.
+Grid 기본값: 2 scaler × 4 mask × 3 horizon × 2 index × 5 feature-set = 240 cell.
 """
 
 from __future__ import annotations
@@ -90,6 +90,16 @@ def main() -> int:
         default="full,core",
         help="full,core",
     )
+    parser.add_argument(
+        "--feature-sets",
+        type=str,
+        default=(
+            "baseline,oi_change_7d,oi_divergence_flag_7d,oi_divergence_score_7d,oi_divergence_all"
+        ),
+        help=(
+            "baseline,oi_change_7d,oi_divergence_flag_7d,oi_divergence_score_7d,oi_divergence_all"
+        ),
+    )
     args = parser.parse_args()
 
     if not args.master.exists():
@@ -105,13 +115,18 @@ def main() -> int:
     masks = tuple(m.strip() for m in args.masks.split(",") if m.strip())
     horizons = tuple(int(h) for h in args.horizons.split(",") if h.strip())
     indices = tuple(i.strip() for i in args.indices.split(",") if i.strip())
+    feature_sets = tuple(f.strip() for f in args.feature_sets.split(",") if f.strip())
     grid = default_grid(
         scalers=scalers,  # type: ignore[arg-type]
         masks=masks,  # type: ignore[arg-type]
         horizons=horizons,
         indices=indices,
+        feature_sets=feature_sets,  # type: ignore[arg-type]
     )
-    print(f"[2/4] grid: {len(grid)} cells ({scalers} × {masks} × {horizons} × {indices})")
+    print(
+        f"[2/4] grid: {len(grid)} cells "
+        f"({scalers} × {masks} × {horizons} × {indices} × {feature_sets})"
+    )
 
     # run_id
     ts = datetime.now().strftime("%Y%m%d-%H%M")
@@ -134,6 +149,7 @@ def main() -> int:
         "masks": list(masks),
         "horizons": list(horizons),
         "indices": list(indices),
+        "feature_sets": list(feature_sets),
         "n_cells": len(grid),
     }
     (run_dir / "spec.json").write_text(
@@ -168,7 +184,20 @@ def main() -> int:
 def _tracking_metrics(folds_df):  # type: ignore[no-untyped-def]
     if folds_df.empty:
         return {"rows": 0, "specs": 0}
-    numeric = folds_df[["hit_rate", "sharpe", "coverage", "masked_ratio", "stability"]]
+    metric_cols = [
+        col
+        for col in (
+            "hit_rate",
+            "net_sharpe",
+            "gross_sharpe",
+            "turnover",
+            "coverage",
+            "masked_ratio",
+            "stability",
+        )
+        if col in folds_df.columns
+    ]
+    numeric = folds_df[metric_cols]
     return {
         "rows": int(len(folds_df)),
         "specs": int(folds_df["spec_id"].nunique()),
@@ -196,10 +225,13 @@ def _build_summary(folds_df):  # type: ignore[no-untyped-def]
         folds_df.dropna(subset=["hit_rate"])
         .groupby("spec_id")
         .agg(
+            feature_set=("feature_set", "first"),
             n_folds=("fold", "count"),
             hit_rate=("hit_rate", "mean"),
             cumret=("cumret", "mean"),
-            sharpe=("sharpe", "mean"),
+            net_sharpe=("net_sharpe", "mean"),
+            gross_sharpe=("gross_sharpe", "mean"),
+            turnover=("turnover", "mean"),
             coverage=("coverage", "mean"),
             masked_ratio=("masked_ratio", "first"),
             stability=("stability", "first"),
@@ -210,13 +242,16 @@ def _build_summary(folds_df):  # type: ignore[no-untyped-def]
 
     lines = ["# Ablation Summary", "", f"Total cells: {len(agg)}", ""]
     lines.append(
-        "| spec_id | n_folds | hit_rate | sharpe | cumret | coverage | masked_ratio | stability |"
+        "| spec_id | feature_set | n_folds | hit_rate | net_sharpe | gross_sharpe | "
+        "turnover | cumret | coverage | masked_ratio | stability |"
     )
-    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|")
+    lines.append("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
     for _, r in agg.iterrows():
         lines.append(
-            f"| {r['spec_id']} | {int(r['n_folds'])} | {r['hit_rate']:.3f} | "
-            f"{r['sharpe']:.3f} | {r['cumret']:.3f} | {r['coverage']:.3f} | "
+            f"| {r['spec_id']} | {r['feature_set']} | {int(r['n_folds'])} | "
+            f"{r['hit_rate']:.3f} | {r['net_sharpe']:.3f} | "
+            f"{r['gross_sharpe']:.3f} | {r['turnover']:.3f} | "
+            f"{r['cumret']:.3f} | {r['coverage']:.3f} | "
             f"{r['masked_ratio']:.3f} | {r['stability']:.3f} |"
         )
     return "\n".join(lines) + "\n"

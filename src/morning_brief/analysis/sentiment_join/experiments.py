@@ -11,7 +11,7 @@ import logging
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -36,6 +36,37 @@ from morning_brief.logging_utils import log_structured
 
 logger = logging.getLogger(__name__)
 
+FeatureSet = Literal[
+    "baseline",
+    "oi_change_7d",
+    "oi_divergence_flag_7d",
+    "oi_divergence_score_7d",
+    "oi_divergence_all",
+]
+
+OI_DIVERGENCE_RAW_COLUMNS: tuple[str, ...] = (
+    "btc_return_7d",
+    "open_interest_change_7d",
+    "oi_price_divergence_flag_7d",
+    "oi_price_divergence_score_7d",
+)
+OI_DIVERGENCE_LAG_COLUMNS: tuple[str, ...] = (
+    "btc_return_7d_lag1",
+    "open_interest_change_7d_lag1",
+    "oi_price_divergence_flag_7d_lag1",
+    "oi_price_divergence_score_7d_lag1",
+)
+OI_DIVERGENCE_EXPERIMENT_COLUMNS: frozenset[str] = frozenset(
+    OI_DIVERGENCE_RAW_COLUMNS + OI_DIVERGENCE_LAG_COLUMNS
+)
+FEATURE_SET_ADDITIONS: dict[FeatureSet, tuple[str, ...]] = {
+    "baseline": (),
+    "oi_change_7d": ("open_interest_change_7d_lag1",),
+    "oi_divergence_flag_7d": ("oi_price_divergence_flag_7d_lag1",),
+    "oi_divergence_score_7d": ("oi_price_divergence_score_7d_lag1",),
+    "oi_divergence_all": OI_DIVERGENCE_LAG_COLUMNS,
+}
+
 
 FOLDS_SCHEMA_COLUMNS: tuple[str, ...] = (
     "spec_id",
@@ -43,6 +74,7 @@ FOLDS_SCHEMA_COLUMNS: tuple[str, ...] = (
     "mask",
     "horizon",
     "index_name",
+    "feature_set",
     "fold",
     "test_start",
     "test_end",
@@ -50,6 +82,9 @@ FOLDS_SCHEMA_COLUMNS: tuple[str, ...] = (
     "cumret",
     "alpha",
     "sharpe",
+    "gross_sharpe",
+    "net_sharpe",
+    "turnover",
     "coverage",
     "masked_ratio",
     "stability",
@@ -74,10 +109,13 @@ class ExperimentSpec:
     mask: PolicyName
     horizon_days: int
     index_name: str  # "full" | "core"
+    feature_set: FeatureSet = "baseline"
 
     @property
     def spec_id(self) -> str:
-        return f"{self.scaler}-{self.mask}-T{self.horizon_days}-{self.index_name}"
+        return (
+            f"{self.scaler}-{self.mask}-T{self.horizon_days}-{self.index_name}-{self.feature_set}"
+        )
 
     @property
     def return_col(self) -> str:
@@ -133,18 +171,36 @@ def default_grid(
     masks: tuple[PolicyName, ...] = ("row", "column", "winsorize", "none"),
     horizons: tuple[int, ...] = (7,),
     indices: tuple[str, ...] = ("full", "core"),
+    feature_sets: tuple[FeatureSet, ...] = (
+        "baseline",
+        "oi_change_7d",
+        "oi_divergence_flag_7d",
+        "oi_divergence_score_7d",
+        "oi_divergence_all",
+    ),
 ) -> list[ExperimentSpec]:
-    """2×4×1×2 = 16 기본 grid. T+7 단일 horizon."""
+    """2×4×1×2×5 = 80 기본 grid. T+7 단일 horizon."""
     return [
-        ExperimentSpec(scaler=s, mask=m, horizon_days=h, index_name=i)
+        ExperimentSpec(scaler=s, mask=m, horizon_days=h, index_name=i, feature_set=f)
         for s in scalers
         for m in masks
         for h in horizons
         for i in indices
+        for f in feature_sets
     ]
 
 
-def _mask_cols_from(df: pd.DataFrame) -> list[str]:
+def _active_feature_additions(feature_set: FeatureSet) -> tuple[str, ...]:
+    return FEATURE_SET_ADDITIONS[feature_set]
+
+
+def _frame_for_feature_set(df: pd.DataFrame, feature_set: FeatureSet) -> pd.DataFrame:
+    active = set(_active_feature_additions(feature_set))
+    inactive = [c for c in OI_DIVERGENCE_EXPERIMENT_COLUMNS if c in df.columns and c not in active]
+    return df.drop(columns=inactive, errors="ignore")
+
+
+def _mask_cols_from(df: pd.DataFrame, feature_set: FeatureSet = "baseline") -> list[str]:
     """NON_MASK_COLS · hybrid index · forward target 컬럼 제외한 마스킹 대상."""
     excluded = set(NON_MASK_COLS) | {
         "full_hybrid_index",
@@ -161,34 +217,82 @@ def _mask_cols_from(df: pd.DataFrame) -> list[str]:
         "btc_realized_vol_20d_lag1",
         "btc_large_move_3d_vol_adj",
     }
+    active = set(_active_feature_additions(feature_set))
+    excluded.update(c for c in OI_DIVERGENCE_EXPERIMENT_COLUMNS if c not in active)
     return [c for c in df.columns if c not in excluded]
 
 
-def _build_custom_specs(scaler: ScalerKind) -> tuple[IndexSpec, ...]:
+def _outlier_mask_cols_for_policy(
+    df: pd.DataFrame, feature_set: FeatureSet, mask: PolicyName
+) -> list[str]:
+    """정책별 outlier 판단 컬럼.
+
+    row-mask 는 컬럼 하나의 outlier 가 행 전체를 제거하므로 baseline 컬럼으로 고정한다.
+    이렇게 해야 treatment feature 추가 여부가 비교 표본 자체를 바꾸지 않는다.
+    """
+    if mask == "row":
+        return _mask_cols_from(df, "baseline")
+    return _mask_cols_from(df, feature_set)
+
+
+def _build_custom_specs(
+    scaler: ScalerKind, feature_set: FeatureSet = "baseline"
+) -> tuple[IndexSpec, ...]:
+    additions = list(_active_feature_additions(feature_set))
+    full_candidates = list(HYBRID_FEATURE_CANDIDATES_FULL) + additions
+    core_candidates = list(HYBRID_FEATURE_CANDIDATES_CORE) + additions
     return (
-        IndexSpec("full", HYBRID_FEATURE_CANDIDATES_FULL, VIF_THRESHOLD_FULL, scaler),
-        IndexSpec("core", HYBRID_FEATURE_CANDIDATES_CORE, None, scaler),
+        IndexSpec("full", full_candidates, VIF_THRESHOLD_FULL, scaler),
+        IndexSpec("core", core_candidates, None, scaler),
     )
 
 
-def _fold_sharpe(df: pd.DataFrame, return_col: str, signal_col: str) -> float:
-    """fold 내 strategy sharpe = mean / std * sqrt(TRADING_DAYS_PER_YEAR).
+def _strategy_metrics(
+    df: pd.DataFrame,
+    return_col: str,
+    signal_col: str,
+    *,
+    transaction_cost_bps: float = 10.0,
+) -> dict[str, float]:
+    """fold 내 gross/net Sharpe와 turnover를 계산한다.
 
     strategy 수익률 = sign(signal - 50) * return. NaN·flat 은 제외.
     BTC 24/7 → 365 일 기준 연환산 (baselines.py / statistical_tests.py 와 동일).
     """
     if signal_col not in df.columns or return_col not in df.columns:
-        return float("nan")
+        return {"gross_sharpe": float("nan"), "net_sharpe": float("nan"), "turnover": float("nan")}
     sub = df[[signal_col, return_col]].dropna()
     if len(sub) < 5:
-        return float("nan")
+        return {"gross_sharpe": float("nan"), "net_sharpe": float("nan"), "turnover": float("nan")}
     position = np.sign(sub[signal_col].to_numpy() - 50.0)
-    rets = position * sub[return_col].to_numpy()
-    mu = float(np.mean(rets))
-    sigma = float(np.std(rets, ddof=1))
-    if sigma < 1e-12:
+    gross_rets = position * sub[return_col].to_numpy()
+    changes = np.concatenate([[False], position[1:] != position[:-1]])
+    turnover = float(changes[1:].sum() / max(len(position) - 1, 1))
+    if transaction_cost_bps > 0.0:
+        cost_per_trade = math.log(1 - transaction_cost_bps / 10000)
+        net_rets = gross_rets + np.where(changes, cost_per_trade, 0.0)
+    else:
+        net_rets = gross_rets
+
+    def _sharpe(values: np.ndarray) -> float:
+        sigma = float(np.std(values, ddof=1))
+        if sigma < 1e-12:
+            return float("nan")
+        return float(np.mean(values)) / sigma * math.sqrt(TRADING_DAYS_PER_YEAR)
+
+    return {
+        "gross_sharpe": _sharpe(gross_rets),
+        "net_sharpe": _sharpe(net_rets),
+        "turnover": turnover,
+    }
+
+
+def _fold_sharpe(df: pd.DataFrame, return_col: str, signal_col: str) -> float:
+    """Backward-compatible alias for net Sharpe."""
+    net_sharpe = _strategy_metrics(df, return_col, signal_col)["net_sharpe"]
+    if not math.isfinite(net_sharpe):
         return float("nan")
-    return mu / sigma * math.sqrt(TRADING_DAYS_PER_YEAR)
+    return net_sharpe
 
 
 def _fold_payoff_decompose(
@@ -290,17 +394,18 @@ class ExperimentRunner:
     def _run_one(self, spec: ExperimentSpec) -> pd.DataFrame:
         # 1) policy 적용
         policy = OutlierPolicyFactory.create(spec.mask)
-        mask_cols = _mask_cols_from(self._raw)
-        outlier_result = policy.apply(self._raw, mask_cols)
+        raw_for_feature_set = _frame_for_feature_set(self._raw, spec.feature_set)
+        mask_cols = _outlier_mask_cols_for_policy(raw_for_feature_set, spec.feature_set, spec.mask)
+        outlier_result = policy.apply(raw_for_feature_set, mask_cols)
         masked_df = outlier_result.df
 
-        total_cells = max(len(masked_df) * len(mask_cols), 1)
+        total_cells = max(float(outlier_result.stats.get("maskable_cells", 0.0)), 1.0)
         masked_cells = int(outlier_result.stats.get("masked_cells", 0))
         winsorized = int(outlier_result.stats.get("winsorized_cells", 0))
         masked_ratio = (masked_cells + winsorized) / total_cells
 
         # 2) hybrid index 계산 (custom scaler 주입)
-        specs_custom = _build_custom_specs(spec.scaler)
+        specs_custom = _build_custom_specs(spec.scaler, spec.feature_set)
         enriched = compute_hybrid_indices(masked_df, specs=specs_custom)
 
         # score_lag1 컬럼 보강 (walk_forward_validate 는 내부에서 재계산하지만,
@@ -334,7 +439,7 @@ class ExperimentRunner:
                 if score_lag1_col in fold_df.columns and len(fold_df) > 0
                 else float("nan")
             )
-            sharpe = _fold_sharpe(fold_df, spec.return_col, score_lag1_col)
+            strategy = _strategy_metrics(fold_df, spec.return_col, score_lag1_col)
             payoff_decomp = _fold_payoff_decompose(fold_df, spec.return_col, score_lag1_col)
             rows.append(
                 {
@@ -343,13 +448,17 @@ class ExperimentRunner:
                     "mask": spec.mask,
                     "horizon": spec.horizon_days,
                     "index_name": spec.index_name,
+                    "feature_set": spec.feature_set,
                     "fold": fold.fold,
                     "test_start": fold.test_start,
                     "test_end": fold.test_end,
                     "hit_rate": fold.hit_rate,
                     "cumret": fold.cumulative_return,
                     "alpha": fold.alpha,
-                    "sharpe": sharpe,
+                    "sharpe": strategy["net_sharpe"],
+                    "gross_sharpe": strategy["gross_sharpe"],
+                    "net_sharpe": strategy["net_sharpe"],
+                    "turnover": strategy["turnover"],
                     "coverage": coverage,
                     "masked_ratio": masked_ratio,
                     "stability": wf.stability,
@@ -371,6 +480,7 @@ def _empty_fold_frame(spec: ExperimentSpec | None) -> pd.DataFrame:
                 "mask": spec.mask,
                 "horizon": spec.horizon_days,
                 "index_name": spec.index_name,
+                "feature_set": spec.feature_set,
             }
         )
     row.update(
@@ -385,6 +495,9 @@ def _empty_fold_frame(spec: ExperimentSpec | None) -> pd.DataFrame:
             "wrong_n": 0,
             "fold_payoff_ratio": float("nan"),
             "sharpe": float("nan"),
+            "gross_sharpe": float("nan"),
+            "net_sharpe": float("nan"),
+            "turnover": float("nan"),
             "coverage": float("nan"),
             "masked_ratio": float("nan"),
             "stability": float("nan"),
@@ -397,8 +510,10 @@ __all__ = [
     "ExperimentRunner",
     "ExperimentSpec",
     "ExperimentArtifact",
+    "FeatureSet",
     "FOLDS_SCHEMA_COLUMNS",
     "default_grid",
     "write_tracking_artifact",
     "_fold_payoff_decompose",
+    "_strategy_metrics",
 ]

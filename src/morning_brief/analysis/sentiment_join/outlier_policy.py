@@ -87,6 +87,10 @@ def _maskable_cols(df: pd.DataFrame) -> list[str]:
     return [c for c in df.columns if c not in NON_MASK_COLS]
 
 
+def _maskable_cell_count(df: pd.DataFrame) -> float:
+    return float(len(df) * len(_maskable_cols(df)))
+
+
 def _data_error_mask(df: pd.DataFrame) -> pd.DataFrame:
     """부호 불가능값·provider 오염 셀을 True 로 표시."""
     flags = pd.DataFrame(False, index=df.index, columns=df.columns)
@@ -205,6 +209,7 @@ class RowMaskPolicy:
         stats: dict[str, float] = {
             "masked_row_ratio": float(int(is_row_outlier.sum())) / total,
             "masked_cells": float(int(flags.to_numpy().sum())),
+            "maskable_cells": _maskable_cell_count(result),
             "data_error_cells": float(int(de.to_numpy().sum())),
             "regime_stress_rows": 0.0,
             "winsorized_cells": 0.0,
@@ -262,6 +267,7 @@ class ColumnMaskPolicy:
         stats: dict[str, float] = {
             "masked_row_ratio": 0.0,
             "masked_cells": float(int(flags.to_numpy().sum())),
+            "maskable_cells": _maskable_cell_count(result),
             "data_error_cells": float(int(de.to_numpy().sum())),
             "regime_stress_rows": float(int(regime_rows.sum())),
             "winsorized_cells": 0.0,
@@ -293,7 +299,7 @@ class WinsorizePolicy:
         for col in cols:
             if col not in result.columns:
                 continue
-            series = pd.to_numeric(result[col], errors="coerce")
+            series = pd.to_numeric(result[col], errors="coerce").astype("float64")
             if series.dropna().empty:
                 continue
             q_low = series.quantile(WINSOR_LOW_Q)
@@ -303,7 +309,7 @@ class WinsorizePolicy:
             if changed.any():
                 flags.loc[changed, col] = True
                 classification.loc[changed, col] = "iqr_single"
-            result[col] = clipped
+            result[col] = clipped.astype("float64")
 
         winsorized_cells = int(flags.to_numpy().sum())
         maskables = _maskable_cols(result)
@@ -313,6 +319,7 @@ class WinsorizePolicy:
         stats: dict[str, float] = {
             "masked_row_ratio": 0.0,
             "masked_cells": float(int(de.to_numpy().sum())),
+            "maskable_cells": _maskable_cell_count(result),
             "data_error_cells": float(int(de.to_numpy().sum())),
             "regime_stress_rows": 0.0,
             "winsorized_cells": float(winsorized_cells),
@@ -346,6 +353,7 @@ class NoMaskPolicy:
         stats: dict[str, float] = {
             "masked_row_ratio": 0.0,
             "masked_cells": float(int(flags.to_numpy().sum())),
+            "maskable_cells": _maskable_cell_count(result),
             "data_error_cells": float(int(de.to_numpy().sum())),
             "regime_stress_rows": 0.0,
             "winsorized_cells": 0.0,
