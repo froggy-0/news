@@ -675,6 +675,34 @@ def test_run_sentiment_join_gates_degraded_structured_features_from_analysis(
     assert stats["structured_sources"]["futures"]["lsr_quality_status"] == "degraded"
 
 
+def test_structured_source_gate_masks_oi_divergence_features() -> None:
+    df = pd.DataFrame(
+        {
+            "open_interest_usd": [100.0],
+            "oi_change_pct": [0.1],
+            "oi_change_pct_lag1": [0.05],
+            "btc_return_7d": [0.2],
+            "btc_return_7d_lag1": [0.1],
+            "open_interest_change_7d": [-0.2],
+            "open_interest_change_7d_lag1": [-0.1],
+            "oi_price_divergence_flag_7d": [1.0],
+            "oi_price_divergence_flag_7d_lag1": [1.0],
+            "oi_price_divergence_score_7d": [0.04],
+            "oi_price_divergence_score_7d_lag1": [0.02],
+        }
+    )
+
+    gated, reasons = pipeline._apply_structured_source_gates(
+        df,
+        futures_attrs={"oi_recent_quality_status": "degraded", "funding_quality_status": "ok"},
+        etf_attrs={"source_mode": "gold_history", "history_quality_status": "ok"},
+    )
+
+    for column in df.columns:
+        assert pd.isna(gated.loc[0, column])
+        assert reasons[column] == "futures_oi_incomplete"
+
+
 def test_run_sentiment_join_gates_degraded_funding_from_analysis(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -13,7 +13,10 @@ from morning_brief.analysis.sentiment_join.hybrid_index import (
     INDEX_SPECS,
     compute_hybrid_indices,
 )
-from morning_brief.analysis.sentiment_join.join import merge_sources
+from morning_brief.analysis.sentiment_join.join import (
+    OI_PRICE_DIVERGENCE_COLUMNS,
+    merge_sources,
+)
 from morning_brief.analysis.sentiment_join.outlier_policy import OutlierPolicyFactory
 from morning_brief.analysis.sentiment_join.quality import STRUCTURED_SOURCE_MIN_COVERAGE_RATIO
 from morning_brief.analysis.sentiment_join.signals import hybrid_signal_label
@@ -265,7 +268,12 @@ def _apply_structured_source_gates(
         "oi_quality_status", "degraded"
     )
     if oi_gate_status != "ok":
-        for column in ("open_interest_usd", "oi_change_pct", "oi_change_pct_lag1"):
+        for column in (
+            "open_interest_usd",
+            "oi_change_pct",
+            "oi_change_pct_lag1",
+            *OI_PRICE_DIVERGENCE_COLUMNS,
+        ):
             if column in gated.columns:
                 gated[column] = np.nan
                 feature_exclusion_reasons[column] = "futures_oi_incomplete"

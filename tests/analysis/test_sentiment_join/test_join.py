@@ -11,6 +11,7 @@ from hypothesis import strategies as st
 from morning_brief.analysis.sentiment_join.join import (
     _add_btc_direction_label,
     _add_futures_lag_columns,
+    _add_oi_price_divergence_features,
     _add_regime_interaction_features,
     _add_sentiment_lag_columns,
     _add_vix_regime_feature,
@@ -525,6 +526,64 @@ def test_add_futures_lag_columns_oi_raw_and_lag1_consistent() -> None:
         result["oi_change_pct"].iloc[1:-1].reset_index(drop=True),
         check_names=False,
     )
+
+
+@pytest.mark.parametrize(
+    ("btc_multiplier", "oi_start", "oi_end", "expected_flag"),
+    [
+        (2.0, 100.0, 200.0, 0.0),
+        (2.0, 100.0, 50.0, 1.0),
+        (0.5, 100.0, 200.0, 1.0),
+        (0.5, 100.0, 50.0, 0.0),
+    ],
+)
+def test_add_oi_price_divergence_features_direction_cases(
+    btc_multiplier: float,
+    oi_start: float,
+    oi_end: float,
+    expected_flag: float,
+) -> None:
+    log_step = float(np.log(btc_multiplier) / 7)
+    df = pd.DataFrame(
+        {
+            "btc_log_return": [log_step] * 8,
+            "open_interest_usd": [oi_start] * 7 + [oi_end],
+        }
+    )
+
+    result = _add_oi_price_divergence_features(df)
+
+    assert result.loc[7, "btc_return_7d"] == pytest.approx(btc_multiplier - 1.0)
+    assert result.loc[7, "open_interest_change_7d"] == pytest.approx(oi_end / oi_start - 1.0)
+    assert result.loc[7, "oi_price_divergence_flag_7d"] == pytest.approx(expected_flag)
+    expected_score = (
+        abs(btc_multiplier - 1.0) * abs(oi_end / oi_start - 1.0) if expected_flag == 1.0 else 0.0
+    )
+    assert result.loc[7, "oi_price_divergence_score_7d"] == pytest.approx(expected_score)
+
+
+def test_add_oi_price_divergence_features_lag1_alignment() -> None:
+    df = pd.DataFrame(
+        {
+            "btc_log_return": [float(np.log(2.0) / 7)] * 9,
+            "open_interest_usd": [100.0] * 7 + [50.0, 25.0],
+        }
+    )
+
+    result = _add_oi_price_divergence_features(df)
+
+    assert pd.isna(result.loc[0, "btc_return_7d_lag1"])
+    for col in (
+        "btc_return_7d",
+        "open_interest_change_7d",
+        "oi_price_divergence_flag_7d",
+        "oi_price_divergence_score_7d",
+    ):
+        pd.testing.assert_series_equal(
+            result[f"{col}_lag1"].iloc[1:].reset_index(drop=True),
+            result[col].iloc[:-1].reset_index(drop=True),
+            check_names=False,
+        )
 
 
 def test_add_futures_lag_columns_volume_with_btc_quote_volume() -> None:

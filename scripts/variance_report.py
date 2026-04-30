@@ -26,8 +26,16 @@ if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
 
-BASELINE_SPEC_ID = "standard-row-T1-full"
-METRICS = ["hit_rate", "sharpe", "coverage", "masked_ratio", "stability"]
+BASELINE_SPEC_ID = "standard-row-T1-full-baseline"
+METRICS = [
+    "hit_rate",
+    "net_sharpe",
+    "gross_sharpe",
+    "turnover",
+    "coverage",
+    "masked_ratio",
+    "stability",
+]
 BOOTSTRAP_N = 500
 
 
@@ -42,17 +50,30 @@ def _load_folds(run_dir: Path) -> Any:
 
 def _cell_means(folds: Any) -> Any:
     """spec_id 별 fold 평균."""
+    work = folds.copy()
+    if "feature_set" not in work.columns:
+        work["feature_set"] = "baseline"
+    if "net_sharpe" not in work.columns and "sharpe" in work.columns:
+        work["net_sharpe"] = work["sharpe"]
+    if "gross_sharpe" not in work.columns and "net_sharpe" in work.columns:
+        work["gross_sharpe"] = work["net_sharpe"]
+    if "turnover" not in work.columns:
+        work["turnover"] = float("nan")
     return (
-        folds.dropna(subset=["hit_rate"])
+        work.dropna(subset=["hit_rate"])
         .groupby("spec_id")
         .agg(
             scaler=("scaler", "first"),
             mask=("mask", "first"),
             horizon=("horizon", "first"),
             index_name=("index_name", "first"),
+            feature_set=("feature_set", "first"),
             n_folds=("fold", "count"),
             hit_rate=("hit_rate", "mean"),
-            sharpe=("sharpe", "mean"),
+            net_sharpe=("net_sharpe", "mean"),
+            gross_sharpe=("gross_sharpe", "mean"),
+            worst_fold_sharpe=("net_sharpe", "min"),
+            turnover=("turnover", "mean"),
             coverage=("coverage", "mean"),
             masked_ratio=("masked_ratio", "first"),
             stability=("stability", "first"),
@@ -98,10 +119,13 @@ def _build_anova_json(folds: Any) -> dict:
         run_horizon_anova,
     )
 
+    work = folds.copy()
+    if "net_sharpe" not in work.columns and "sharpe" in work.columns:
+        work["net_sharpe"] = work["sharpe"]
     out: dict = {}
-    for metric in ["hit_rate", "sharpe", "coverage"]:
-        anova = run_anova(folds, metric)
-        horizon_anova = run_horizon_anova(folds, metric)
+    for metric in ["hit_rate", "net_sharpe", "coverage"]:
+        anova = run_anova(work, metric)
+        horizon_anova = run_horizon_anova(work, metric)
 
         p_vals = list(anova.f_pvalue.values())
         q_vals = bh_correct(p_vals)
@@ -149,7 +173,8 @@ def _evaluate_gate(
         return []
 
     base_hit = float(baseline["hit_rate"].iloc[0])
-    base_sharpe = float(baseline["sharpe"].iloc[0])
+    base_sharpe = float(baseline["net_sharpe"].iloc[0])
+    base_worst = float(baseline["worst_fold_sharpe"].iloc[0])
 
     # hit_rate ANOVA 에서 scaler+mask 결합 q-value (보수적: 최대 q)
     hit_anova = anova_data.get("hit_rate", {}).get("scaler_mask_anova", {})
@@ -165,7 +190,8 @@ def _evaluate_gate(
         if spec_id == baseline_id:
             continue
         hit_delta = float(row["hit_rate"]) - base_hit
-        sharpe_delta = float(row["sharpe"]) - base_sharpe
+        sharpe_delta = float(row["net_sharpe"]) - base_sharpe
+        worst_fold_delta = float(row["worst_fold_sharpe"]) - base_worst
         coverage = float(row["coverage"])
         masked = float(row["masked_ratio"])
         stability = float(row["stability"])
@@ -181,17 +207,22 @@ def _evaluate_gate(
             hit_rate_ci_lower=ci_lower_delta,
             fdr_q=treatment_q,
         )
+        decision = gate.decision
+        if decision == "promote" and worst_fold_delta < 0.0:
+            decision = "research_only"
         results.append(
             {
                 "spec_id": spec_id,
+                "feature_set": str(row.get("feature_set", "baseline")),
                 "hit_rate_delta": hit_delta,
-                "sharpe_delta": sharpe_delta,
+                "net_sharpe_delta": sharpe_delta,
+                "worst_fold_sharpe_delta": worst_fold_delta,
                 "coverage": coverage,
                 "masked_ratio": masked,
                 "stability": stability,
                 "fdr_q": treatment_q,
                 "ci_lower_delta": ci_lower_delta,
-                "decision": gate.decision,
+                "decision": decision,
             }
         )
     return sorted(results, key=lambda r: -r["hit_rate_delta"])
@@ -204,6 +235,7 @@ def _build_report_md(
     anova_data: dict,
     baseline_id: str,
 ) -> str:
+    cell_means = _ensure_report_columns(cell_means)
     lines = ["# Ablation Variance Report", ""]
     lines.append(f"**run_dir**: `{run_dir}`  ")
     lines.append(f"**baseline**: `{baseline_id}`  ")
@@ -222,12 +254,16 @@ def _build_report_md(
     if promote:
         lines.append("### Promoted Treatments")
         lines.append("")
-        lines.append("| spec_id | hit_rate Δ | sharpe Δ | coverage | masked | stability | q |")
-        lines.append("|---|---:|---:|---:|---:|---:|---:|")
+        lines.append(
+            "| spec_id | feature_set | hit_rate Δ | net_sharpe Δ | "
+            "worst_fold Δ | coverage | masked | stability | q |"
+        )
+        lines.append("|---|---|---:|---:|---:|---:|---:|---:|---:|")
         for r in promote:
             lines.append(
-                f"| {r['spec_id']} | {r['hit_rate_delta']:+.4f} | "
-                f"{r['sharpe_delta']:+.4f} | {r['coverage']:.3f} | "
+                f"| {r['spec_id']} | {r['feature_set']} | {r['hit_rate_delta']:+.4f} | "
+                f"{r['net_sharpe_delta']:+.4f} | "
+                f"{r['worst_fold_sharpe_delta']:+.4f} | {r['coverage']:.3f} | "
                 f"{r['masked_ratio']:.3f} | {r['stability']:.3f} | {r['fdr_q']:.4f} |"
             )
         lines.append("")
@@ -235,13 +271,18 @@ def _build_report_md(
     # 전체 cell 테이블
     lines.append("## All Cells (sorted by hit_rate Δ)")
     lines.append("")
-    lines.append("| spec_id | hit_rate | sharpe | coverage | masked_ratio | stability | decision |")
-    lines.append("|---|---:|---:|---:|---:|---:|---|")
+    lines.append(
+        "| spec_id | feature_set | hit_rate | net_sharpe | gross_sharpe | "
+        "worst_fold_sharpe | turnover | coverage | masked_ratio | stability | decision |"
+    )
+    lines.append("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|")
     for _, row in cell_means.sort_values("hit_rate", ascending=False).iterrows():
         sid = str(row["spec_id"])
         dec = next((r["decision"] for r in gate_results if r["spec_id"] == sid), "baseline")
         lines.append(
-            f"| {sid} | {row['hit_rate']:.4f} | {row['sharpe']:.4f} | "
+            f"| {sid} | {row.get('feature_set', 'baseline')} | {row['hit_rate']:.4f} | "
+            f"{row['net_sharpe']:.4f} | {row['gross_sharpe']:.4f} | "
+            f"{row['worst_fold_sharpe']:.4f} | {row['turnover']:.4f} | "
             f"{row['coverage']:.4f} | {row['masked_ratio']:.4f} | "
             f"{row['stability']:.4f} | {dec} |"
         )
@@ -260,6 +301,7 @@ def _build_report_md(
             )
         lines.append("")
 
+    lines.extend(_build_feature_set_section(cell_means))
     lines.extend(_build_index_family_section(cell_means))
     lines.extend(_build_approach_section(cell_means))
     lines.extend(_build_lineage_section(run_dir))
@@ -269,7 +311,7 @@ def _build_report_md(
     lines.append("")
     lines.append("| metric | scaler η² | mask η² | interaction η² | horizon η² |")
     lines.append("|---|---:|---:|---:|---:|")
-    for metric in ["hit_rate", "sharpe", "coverage"]:
+    for metric in ["hit_rate", "net_sharpe", "coverage"]:
         sm = anova_data.get(metric, {}).get("scaler_mask_anova", {})
         ha = anova_data.get(metric, {}).get("horizon_anova", {})
         eta = sm.get("eta_sq", {})
@@ -285,6 +327,54 @@ def _build_report_md(
     return "\n".join(lines)
 
 
+def _ensure_report_columns(cell_means: Any) -> Any:
+    work = cell_means.copy()
+    if "feature_set" not in work.columns:
+        work["feature_set"] = "baseline"
+    if "net_sharpe" not in work.columns and "sharpe" in work.columns:
+        work["net_sharpe"] = work["sharpe"]
+    if "gross_sharpe" not in work.columns:
+        work["gross_sharpe"] = work["net_sharpe"]
+    if "worst_fold_sharpe" not in work.columns:
+        work["worst_fold_sharpe"] = work["net_sharpe"]
+    if "turnover" not in work.columns:
+        work["turnover"] = 0.0
+    return work
+
+
+def _build_feature_set_section(cell_means: Any) -> list[str]:
+    if "feature_set" not in cell_means.columns or cell_means.empty:
+        return []
+    grouped = (
+        cell_means.groupby("feature_set")
+        .agg(
+            cells=("spec_id", "count"),
+            hit_rate=("hit_rate", "mean"),
+            net_sharpe=("net_sharpe", "mean"),
+            worst_fold_sharpe=("worst_fold_sharpe", "min"),
+            turnover=("turnover", "mean"),
+            coverage=("coverage", "mean"),
+            masked_ratio=("masked_ratio", "mean"),
+        )
+        .reset_index()
+        .sort_values("hit_rate", ascending=False)
+    )
+    lines = ["## Feature Set Comparison", ""]
+    lines.append(
+        "| feature_set | cells | hit_rate | net_sharpe | worst_fold_sharpe | "
+        "turnover | coverage | masked_ratio |"
+    )
+    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|")
+    for _, row in grouped.iterrows():
+        lines.append(
+            f"| {row['feature_set']} | {int(row['cells'])} | {row['hit_rate']:.4f} | "
+            f"{row['net_sharpe']:.4f} | {row['worst_fold_sharpe']:.4f} | "
+            f"{row['turnover']:.4f} | {row['coverage']:.4f} | {row['masked_ratio']:.4f} |"
+        )
+    lines.append("")
+    return lines
+
+
 def _build_index_family_section(cell_means: Any) -> list[str]:
     if "index_name" not in cell_means.columns or cell_means.empty:
         return []
@@ -293,19 +383,19 @@ def _build_index_family_section(cell_means: Any) -> list[str]:
         .agg(
             cells=("spec_id", "count"),
             hit_rate=("hit_rate", "mean"),
-            sharpe=("sharpe", "mean"),
+            net_sharpe=("net_sharpe", "mean"),
             coverage=("coverage", "mean"),
         )
         .reset_index()
         .sort_values("hit_rate", ascending=False)
     )
     lines = ["## Index Family Comparison", ""]
-    lines.append("| index | cells | hit_rate | sharpe | coverage |")
+    lines.append("| index | cells | hit_rate | net_sharpe | coverage |")
     lines.append("|---|---:|---:|---:|---:|")
     for _, row in grouped.iterrows():
         lines.append(
             f"| {row['index_name']} | {int(row['cells'])} | {row['hit_rate']:.4f} | "
-            f"{row['sharpe']:.4f} | {row['coverage']:.4f} |"
+            f"{row['net_sharpe']:.4f} | {row['coverage']:.4f} |"
         )
     lines.append("")
     return lines
@@ -324,19 +414,19 @@ def _build_approach_section(cell_means: Any) -> list[str]:
         .agg(
             cells=("spec_id", "count"),
             hit_rate=("hit_rate", "mean"),
-            sharpe=("sharpe", "mean"),
+            net_sharpe=("net_sharpe", "mean"),
             stability=("stability", "mean"),
         )
         .reset_index()
         .sort_values("hit_rate", ascending=False)
     )
     lines = ["## Baseline / Model Comparison", ""]
-    lines.append("| approach | cells | hit_rate | sharpe | stability |")
+    lines.append("| approach | cells | hit_rate | net_sharpe | stability |")
     lines.append("|---|---:|---:|---:|---:|")
     for _, row in grouped.iterrows():
         lines.append(
             f"| {row['approach']} | {int(row['cells'])} | {row['hit_rate']:.4f} | "
-            f"{row['sharpe']:.4f} | {row['stability']:.4f} |"
+            f"{row['net_sharpe']:.4f} | {row['stability']:.4f} |"
         )
     lines.append("")
     return lines

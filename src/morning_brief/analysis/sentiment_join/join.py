@@ -3,11 +3,23 @@ from __future__ import annotations
 import logging
 import math
 
+import numpy as np
 import pandas as pd
 
 from morning_brief.logging_utils import log_structured
 
 logger = logging.getLogger(__name__)
+
+OI_PRICE_DIVERGENCE_COLUMNS: tuple[str, ...] = (
+    "btc_return_7d",
+    "btc_return_7d_lag1",
+    "open_interest_change_7d",
+    "open_interest_change_7d_lag1",
+    "oi_price_divergence_flag_7d",
+    "oi_price_divergence_flag_7d_lag1",
+    "oi_price_divergence_score_7d",
+    "oi_price_divergence_score_7d_lag1",
+)
 
 
 def _compute_sources_used(dfs: dict[str, pd.DataFrame]) -> list[str]:
@@ -75,6 +87,48 @@ def detect_outliers_rolling_iqr(
     return flagged
 
 
+def _add_oi_price_divergence_features(df: pd.DataFrame) -> pd.DataFrame:
+    """BTC 7일 수익률과 OI 7일 변화율의 방향 불일치 feature를 생성한다."""
+    result = df.copy()
+    if "btc_log_return" in result.columns:
+        btc_log_return = pd.to_numeric(result["btc_log_return"], errors="coerce")
+        result["btc_return_7d"] = np.expm1(btc_log_return.rolling(7, min_periods=7).sum())
+    else:
+        result["btc_return_7d"] = float("nan")
+
+    if "open_interest_usd" in result.columns:
+        oi = pd.to_numeric(result["open_interest_usd"], errors="coerce").where(
+            lambda values: values > 0
+        )
+        result["open_interest_change_7d"] = oi.pct_change(periods=7, fill_method=None)
+    else:
+        result["open_interest_change_7d"] = float("nan")
+
+    btc_7d = pd.to_numeric(result["btc_return_7d"], errors="coerce")
+    oi_7d = pd.to_numeric(result["open_interest_change_7d"], errors="coerce")
+    valid = btc_7d.notna() & oi_7d.notna()
+    diverged = valid & ((btc_7d * oi_7d) < 0)
+
+    flag = pd.Series(np.nan, index=result.index, dtype="float64")
+    flag.loc[valid] = 0.0
+    flag.loc[diverged] = 1.0
+    result["oi_price_divergence_flag_7d"] = flag
+
+    score = pd.Series(np.nan, index=result.index, dtype="float64")
+    score.loc[valid] = 0.0
+    score.loc[diverged] = btc_7d.loc[diverged].abs() * oi_7d.loc[diverged].abs()
+    result["oi_price_divergence_score_7d"] = score
+
+    for col in (
+        "btc_return_7d",
+        "open_interest_change_7d",
+        "oi_price_divergence_flag_7d",
+        "oi_price_divergence_score_7d",
+    ):
+        result[f"{col}_lag1"] = result[col].shift(1)
+    return result
+
+
 def _add_futures_lag_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Req 11.3: 선물 지표에 Lag-1 처리를 적용해 미래 오염을 방지합니다.
 
@@ -116,6 +170,7 @@ def _add_futures_lag_columns(df: pd.DataFrame) -> pd.DataFrame:
     else:
         result["vix"] = float("nan")
         result["vix_lag1"] = float("nan")
+    result = _add_oi_price_divergence_features(result)
     return result
 
 
@@ -549,8 +604,10 @@ def merge_sources(
 
 
 __all__ = [
+    "OI_PRICE_DIVERGENCE_COLUMNS",
     "detect_outliers_rolling_iqr",
     "merge_sources",
+    "_add_oi_price_divergence_features",
     "_add_futures_lag_columns",
     "_add_sentiment_lag_columns",
     "_add_delta_features",

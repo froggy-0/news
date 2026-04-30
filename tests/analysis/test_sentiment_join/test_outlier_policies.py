@@ -95,6 +95,9 @@ def test_row_mask_stats_shape() -> None:
     result = RowMaskPolicy().apply(df, MASK_COLS)
     assert result.stats["masked_row_ratio"] > 0
     assert result.stats["masked_cells"] > 0
+    assert result.stats["maskable_cells"] == len(df) * len(
+        [c for c in df.columns if c not in NON_MASK_COLS]
+    )
     assert result.stats["winsorized_cells"] == 0
 
 
@@ -195,6 +198,18 @@ def test_winsorize_below_q01_is_also_clipped() -> None:
     clipped = float(result.df.loc[45, "btc_return"])
     assert clipped > -50.0
     assert not pd.isna(clipped)
+
+
+def test_winsorize_handles_nullable_int_columns() -> None:
+    df = _make_base_df(days=60)
+    df["fng_value"] = pd.Series(range(60), dtype="Int64")
+    df.loc[45, "fng_value"] = 10_000
+
+    result = WinsorizePolicy().apply(df, MASK_COLS + ["fng_value"])
+
+    assert float(result.df.loc[45, "fng_value"]) < 10_000.0
+    assert result.df["fng_value"].dtype == "float64"
+    assert result.stats["winsorized_cells"] >= 1
 
 
 # ─────────────────────────────────────────────────────────────────────────────
