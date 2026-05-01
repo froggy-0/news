@@ -220,6 +220,29 @@ test("parseSentimentInsight: alpha.gateStats and meta are parsed", () => {
   assert.equal(result.meta?.sharpeBasisChangeDate, "2026-04-30");
 });
 
+test("parseSentimentInsight: alpha.promotionGate is parsed", () => {
+  const payload = {
+    ...validPayload,
+    alpha: {
+      ...validPayload.alpha,
+      promotionGate: {
+        volRegimeV2Overlay: {
+          decision: "promote",
+          hit_rate: 0.615,
+          coverage: 0.562,
+          pvalue: 0.0137,
+          records: 20,
+        },
+      },
+    },
+  };
+  const result = parseSentimentInsight(payload);
+  const overlay = result.alpha?.promotionGate?.volRegimeV2Overlay;
+  assert.equal(typeof overlay, "object");
+  assert.equal((overlay as Record<string, unknown>).decision, "promote");
+  assert.equal((overlay as Record<string, unknown>).records, 20);
+});
+
 test("parseSentimentInsight: meta 누락 시 undefined 반환", () => {
   const result = parseSentimentInsight(validPayload);
   assert.equal(result.meta, undefined);
