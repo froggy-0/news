@@ -386,6 +386,59 @@ test("AlphaValidationBoard renders gate stats when gateStats present in horizonM
   assert.match(markup, /2 promote/);
 });
 
+test("AlphaValidationBoard renders promoted overlay gate context", () => {
+  const alphaPromoted = {
+    ...artifact.alpha!,
+    promotionGate: {
+      volRegimeV2Overlay: {
+        decision: "promote",
+        rollingHitRate: 0.615,
+        rollingCoverage: 0.562,
+        rollingPMedian: 0.0137,
+        nRecords: 20,
+      },
+    },
+    horizonMetrics: {
+      "7": {
+        return_col: "btc_fwd_ret_7d",
+        hit_rates: [
+          {
+            predictor: "vol_regime_v2_vix_realized_vol_2of2",
+            hit_rate: 0.616,
+            decision: "promote",
+            decision_strict: "hold",
+            research_rule: false,
+            promoted_from_research_rule: true,
+            promotion_basis: "vol_regime_v2_overlay_gate_14d",
+            promotionGate: {
+              decision: "promote",
+              rollingHitRate: 0.615,
+              rollingCoverage: 0.562,
+              rollingPMedian: 0.0137,
+              nRecords: 20,
+            },
+          },
+        ],
+        backtest: [],
+      },
+    },
+  };
+  const markup = renderToStaticMarkup(
+    createElement(AlphaValidationBoard, {
+      alpha: alphaPromoted as unknown as import("@schema/analysis.types").AlphaSection,
+      summary: artifact.summary,
+      diagnosticsReady: true,
+    }),
+  );
+
+  assert.match(markup, /Overlay gate · vol_regime_v2/);
+  assert.match(markup, /pilot promoted/);
+  assert.match(markup, /promoted/);
+  assert.match(markup, /61\.5%/);
+  assert.match(markup, /56\.2%/);
+  assert.match(markup, /gate p=0\.014/);
+});
+
 test("AlphaValidationBoard renders Sharpe annualization change notice when meta present", () => {
   const meta = {
     annualizationFactor: 365,
@@ -418,4 +471,3 @@ test("AlphaValidationBoard does not render Sharpe notice when meta absent", () =
 
   assert.doesNotMatch(markup, /Sharpe basis changed/i);
 });
-

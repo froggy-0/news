@@ -48,6 +48,18 @@ def test_nan_ci_lower_produces_error() -> None:
     assert any("hit_rate_ci_lower" in e for e in vla._ERRORS)
 
 
+def test_nan_sharpe_ci_with_zero_exposure_produces_warning_not_error() -> None:
+    _reset()
+    row = _make_good_row()
+    row["strategy_sharpe"] = None
+    row["sharpe_ci_lower"] = None
+    row["sharpe_ci_upper"] = None
+    row["payoff_diagnostics"] = {"exposure_ratio": 0.0}
+    vla.check_hit_rate_rows([row])
+    assert vla._ERRORS == []
+    assert any("exposure=0" in w for w in vla._WARNINGS)
+
+
 def test_hit_rate_outside_ci_produces_error() -> None:
     _reset()
     row = _make_good_row()
@@ -98,6 +110,12 @@ def test_bootstrap_config_wrong_method_produces_warning() -> None:
 def test_bootstrap_config_correct_produces_no_warning() -> None:
     _reset()
     vla.check_bootstrap_config({"method": "circular", "block_length": 14, "n_bootstrap": 1000})
+    assert vla._WARNINGS == []
+
+
+def test_bootstrap_config_accepts_frontend_camel_case() -> None:
+    _reset()
+    vla.check_bootstrap_config({"method": "circular", "blockLength": 14, "nBootstrap": 1000})
     assert vla._WARNINGS == []
 
 

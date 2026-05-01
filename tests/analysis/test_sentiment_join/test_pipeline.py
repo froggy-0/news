@@ -5,6 +5,7 @@ import inspect
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 import pyarrow.parquet as pq
@@ -122,6 +123,61 @@ def test_build_outlier_mask_summary_preserves_column_and_hybrid_sources() -> Non
         "news_sentiment_mean",
         "fng_value",
     ]
+
+
+def test_overlay_gate_promotes_vol_regime_v2_sparse_row() -> None:
+    artifact = {
+        "alpha": {
+            "horizonMetrics": {
+                "7": {
+                    "hit_rates": [
+                        {
+                            "predictor": "vol_regime_v2_vix_realized_vol_2of2",
+                            "research_rule": True,
+                            "decision": "research_only",
+                            "decision_strict": "research_only",
+                        },
+                        {
+                            "predictor": "vote_vix_fng_2of2",
+                            "research_rule": True,
+                            "decision": "research_only",
+                            "decision_strict": "research_only",
+                        },
+                    ]
+                }
+            },
+            "gateStats": {
+                "totalPredictors": 2,
+                "decisionPromoteCount": 0,
+                "decisionStrictPromoteCount": 0,
+                "gap": 0,
+                "gapRatio": 0.0,
+            },
+        }
+    }
+    gate = SimpleNamespace(
+        decision="promote",
+        n_records=14,
+        rolling_hit_rate=0.61,
+        rolling_coverage=0.56,
+        rolling_p_median=0.02,
+        hit_rate_ok=True,
+        coverage_ok=True,
+        p_value_ok=True,
+        message="3개 rolling 기준 충족",
+    )
+
+    pipeline._apply_vol_regime_v2_overlay_promotion(artifact, gate)
+
+    rows = artifact["alpha"]["horizonMetrics"]["7"]["hit_rates"]
+    promoted = rows[0]
+    research = rows[1]
+    assert promoted["research_rule"] is False
+    assert promoted["promoted_from_research_rule"] is True
+    assert promoted["decision"] == "promote"
+    assert promoted["promotionGate"]["nRecords"] == 14
+    assert research["research_rule"] is True
+    assert artifact["alpha"]["gateStats"]["decisionPromoteCount"] == 1
 
 
 def _etf_df(main_dates: list[str]) -> pd.DataFrame:

@@ -99,7 +99,11 @@ def main() -> None:
         sys.exit(1)
 
     # 일반 baseline hit_rates (bestBaseline 계산용)
-    baseline_rows = [r for r in hit_rates if not r.get("research_rule")]
+    baseline_rows = [
+        r
+        for r in hit_rates
+        if not r.get("research_rule") and not r.get("promoted_from_research_rule")
+    ]
     best_baseline = max(
         (_safe_float(r.get("hit_rate")) or 0.0 for r in baseline_rows),
         default=None,

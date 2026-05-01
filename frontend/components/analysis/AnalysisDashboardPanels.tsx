@@ -40,6 +40,14 @@ function numberField(record: JsonObject | undefined, key: string): number | null
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function firstNumberField(record: JsonObject | undefined, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = numberField(record, key);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
 function stringField(record: JsonObject | undefined, key: string): string {
   const value = record?.[key];
   return typeof value === "string" ? value : "";
@@ -335,6 +343,7 @@ export function AlphaValidationBoard({
 
   const regularRows = allHitRates.filter((r) => !r.research_rule);
   const researchRows = allHitRates.filter((r) => r.research_rule === true);
+  const promotedRows = regularRows.filter((r) => r.promoted_from_research_rule === true);
   const topSignals = [...regularRows]
     .sort((a, b) => (numberField(b, "hit_rate") ?? -1) - (numberField(a, "hit_rate") ?? -1))
     .slice(0, 5);
@@ -345,6 +354,9 @@ export function AlphaValidationBoard({
   const decisionPromote = typeof gateStats?.decisionPromoteCount === "number" ? gateStats.decisionPromoteCount : null;
   const strictPromote = typeof gateStats?.decisionStrictPromoteCount === "number" ? gateStats.decisionStrictPromoteCount : null;
   const gapRatio = typeof gateStats?.gapRatio === "number" ? gateStats.gapRatio : null;
+  const overlayPromotionGate = isJsonObject(alpha?.promotionGate?.volRegimeV2Overlay)
+    ? alpha?.promotionGate?.volRegimeV2Overlay
+    : undefined;
 
   const sharpeChangeDate = typeof meta?.sharpeBasisChangeDate === "string" ? meta.sharpeBasisChangeDate : null;
   const annualizationNote = typeof meta?.annualizationNote === "string" ? meta.annualizationNote : null;
@@ -448,6 +460,30 @@ export function AlphaValidationBoard({
         </div>
       )}
 
+      {overlayPromotionGate && (
+        <div className="rounded-2xl border border-[var(--accent-green)]/22 bg-[var(--accent-green)]/6 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-[var(--accent-green)]/82">
+                Overlay gate · vol_regime_v2
+              </p>
+              <p className="mt-1 font-mono text-[0.68rem] leading-5 text-white/46">
+                replayed 14d drift window passed the pilot promotion gate; strict CI gate remains visible separately.
+              </p>
+            </div>
+            <span className={`w-fit rounded-full border px-3 py-1 font-mono text-[0.58rem] uppercase tracking-[0.12em] ${toneClass("green")}`}>
+              pilot promoted
+            </span>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-4">
+            <MetricTile label="Hit rate" value={formatPercent(firstNumberField(overlayPromotionGate, ["rollingHitRate", "hit_rate"]), 1)} detail="rolling mean" />
+            <MetricTile label="Coverage" value={formatPercent(firstNumberField(overlayPromotionGate, ["rollingCoverage", "coverage"]), 1)} detail="rolling mean" />
+            <MetricTile label="p-value" value={formatNumber(firstNumberField(overlayPromotionGate, ["rollingPMedian", "pvalue"]), 4)} detail="median gate" />
+            <MetricTile label="Records" value={formatNumber(firstNumberField(overlayPromotionGate, ["nRecords", "records"]), 0)} detail={`${promotedRows.length} promoted row`} />
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-2xl border border-white/10 bg-black/24 p-4">
           <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-white/58">Top signal hit rates</p>
@@ -471,6 +507,8 @@ export function AlphaValidationBoard({
                     ciUpper={numberField(row, "hit_rate_ci_upper")}
                     decisionStrict={decisionStrict}
                     fdrQ={fdrQ}
+                    isPromoted={row.promoted_from_research_rule === true}
+                    promotionGate={isJsonObject(row.promotionGate) ? row.promotionGate : undefined}
                   />
                 );
               })
@@ -798,6 +836,8 @@ function SignalMetricRow({
   decisionStrict,
   fdrQ,
   isResearch,
+  isPromoted,
+  promotionGate,
 }: {
   label: string;
   value: string;
@@ -809,11 +849,14 @@ function SignalMetricRow({
   decisionStrict?: string;
   fdrQ?: number | null;
   isResearch?: boolean;
+  isPromoted?: boolean;
+  promotionGate?: JsonObject;
 }) {
   const barWidth = typeof ratio === "number" && Number.isFinite(ratio) ? Math.min(Math.max(ratio * 100, 4), 100) : 4;
   const loPct = typeof ciLower === "number" && Number.isFinite(ciLower) ? Math.min(Math.max(ciLower * 100, 0), 100) : null;
   const hiPct = typeof ciUpper === "number" && Number.isFinite(ciUpper) ? Math.min(Math.max(ciUpper * 100, 0), 100) : null;
   const hasCI = loPct !== null && hiPct !== null;
+  const gatePvalue = firstNumberField(promotionGate, ["rollingPMedian", "pvalue"]);
   return (
     <article className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
       <div className="flex items-center justify-between gap-4">
@@ -825,6 +868,11 @@ function SignalMetricRow({
                 research
               </span>
             )}
+            {isPromoted && (
+              <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[0.54rem] uppercase tracking-[0.1em] ${toneClass("green")}`}>
+                promoted
+              </span>
+            )}
           </div>
           <div className="mt-1 flex items-center gap-2 font-mono text-[0.62rem] text-white/34">
             <span>{detail}</span>
@@ -832,6 +880,9 @@ function SignalMetricRow({
               <span className={fdrQ <= 0.10 ? "text-[var(--accent-green)]/70" : "text-[var(--accent-warning)]/70"}>
                 q={fdrQ.toFixed(3)}
               </span>
+            )}
+            {gatePvalue !== null && (
+              <span className="text-[var(--accent-green)]/70">gate p={gatePvalue.toFixed(3)}</span>
             )}
           </div>
         </div>

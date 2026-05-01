@@ -104,6 +104,8 @@ export interface AlphaSection {
   bootstrapConfig?: JsonObject;
   // decision vs decision_strict gap summary (added in T4).
   gateStats?: JsonObject;
+  // Research-rule promotion gate results, keyed by overlay/signal family.
+  promotionGate?: JsonObject;
 }
 
 export interface TargetsSection {

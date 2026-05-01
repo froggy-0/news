@@ -51,6 +51,8 @@ from morning_brief.logging_utils import log_structured
 
 logger = logging.getLogger(__name__)
 
+_VOL_REGIME_V2_OVERLAY_LABEL = "vol_regime_v2_vix_realized_vol_2of2"
+
 
 def _date_strings(start_date: str, end_date: str) -> list[str]:
     start = datetime.fromisoformat(start_date).date()
@@ -398,7 +400,7 @@ def _append_vol_regime_v2_drift(
         )
 
 
-def _evaluate_and_log_overlay_gate(output_dir: "Path") -> None:
+def _evaluate_and_log_overlay_gate(output_dir: "Path") -> Any | None:
     """drift JSONL을 읽어 overlay gate를 평가하고 결과를 structured log로 출력한다."""
     try:
         from morning_brief.analysis.sentiment_join.storage import read_drift_records
@@ -417,6 +419,7 @@ def _evaluate_and_log_overlay_gate(output_dir: "Path") -> None:
             rolling_p_median=result.rolling_p_median,
             message_detail=result.message,
         )
+        return result
     except Exception as exc:
         log_structured(
             logger,
@@ -425,6 +428,80 @@ def _evaluate_and_log_overlay_gate(output_dir: "Path") -> None:
             level=logging.WARNING,
             reason=str(exc),
         )
+        return None
+
+
+def _apply_vol_regime_v2_overlay_promotion(fe_artifact: dict, gate_result: Any | None) -> None:
+    """overlay gate 통과 시 vol_regime_v2 sparse row를 production 후보로 승격한다."""
+    if gate_result is None or getattr(gate_result, "decision", None) != "promote":
+        return
+
+    alpha = fe_artifact.get("alpha")
+    if not isinstance(alpha, dict):
+        return
+    horizon_metrics = alpha.get("horizonMetrics")
+    if not isinstance(horizon_metrics, dict):
+        return
+    horizon_7 = horizon_metrics.get("7")
+    if not isinstance(horizon_7, dict):
+        return
+    rows = horizon_7.get("hit_rates")
+    if not isinstance(rows, list):
+        return
+
+    promotion_payload = {
+        "decision": gate_result.decision,
+        "nRecords": gate_result.n_records,
+        "rollingHitRate": gate_result.rolling_hit_rate,
+        "rollingCoverage": gate_result.rolling_coverage,
+        "rollingPMedian": gate_result.rolling_p_median,
+        "hitRateOk": gate_result.hit_rate_ok,
+        "coverageOk": gate_result.coverage_ok,
+        "pValueOk": gate_result.p_value_ok,
+        "message": gate_result.message,
+    }
+
+    promoted = False
+    for row in rows:
+        if not isinstance(row, dict) or row.get("predictor") != _VOL_REGIME_V2_OVERLAY_LABEL:
+            continue
+        row["research_rule"] = False
+        row["promoted_from_research_rule"] = True
+        row["promotion_basis"] = "vol_regime_v2_overlay_gate_14d"
+        row["promotionGate"] = promotion_payload
+        row["decision"] = "promote"
+        promoted = True
+        break
+
+    if not promoted:
+        return
+
+    alpha["promotionGate"] = {
+        "volRegimeV2Overlay": promotion_payload,
+    }
+    _refresh_alpha_gate_stats(alpha)
+
+
+def _refresh_alpha_gate_stats(alpha: dict) -> None:
+    horizon_metrics = alpha.get("horizonMetrics")
+    horizon_7 = horizon_metrics.get("7") if isinstance(horizon_metrics, dict) else {}
+    rows = horizon_7.get("hit_rates") if isinstance(horizon_7, dict) else []
+    if not isinstance(rows, list):
+        return
+    decision_promote = sum(
+        1 for row in rows if isinstance(row, dict) and row.get("decision") == "promote"
+    )
+    strict_promote = sum(
+        1 for row in rows if isinstance(row, dict) and row.get("decision_strict") == "promote"
+    )
+    gap = decision_promote - strict_promote
+    alpha["gateStats"] = {
+        "totalPredictors": len(rows),
+        "decisionPromoteCount": decision_promote,
+        "decisionStrictPromoteCount": strict_promote,
+        "gap": gap,
+        "gapRatio": round(gap / max(decision_promote, 1), 4),
+    }
 
 
 def run_sentiment_join(settings: SentimentJoinSettings) -> int:
@@ -1027,7 +1104,8 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
 
             # vol_regime_v2 드리프트 추적 레코드 append + overlay gate 평가
             _append_vol_regime_v2_drift(fe_artifact, settings.output_dir, run_date)
-            _evaluate_and_log_overlay_gate(settings.output_dir)
+            overlay_gate = _evaluate_and_log_overlay_gate(settings.output_dir)
+            _apply_vol_regime_v2_overlay_promotion(fe_artifact, overlay_gate)
 
             if not should_skip_artifact(fe_artifact):
                 latest_path, dated_path = write_frontend_artifact(

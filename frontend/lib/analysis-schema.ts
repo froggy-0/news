@@ -233,6 +233,7 @@ function parseAlphaSection(value: unknown): AlphaSection {
   const raw = isRecord(value) ? value : {};
   const bootstrapRaw = raw.bootstrapConfig ?? raw.bootstrap_config;
   const gateStatsRaw = raw.gateStats ?? raw.gate_stats;
+  const promotionGateRaw = raw.promotionGate ?? raw.promotion_gate;
   return {
     hitRates: toJsonArray(raw.hitRates),
     correlations: toJsonArray(raw.correlations),
@@ -243,6 +244,7 @@ function parseAlphaSection(value: unknown): AlphaSection {
     walkForwardHorizons: toJsonObject(raw.walkForwardHorizons),
     bootstrapConfig: bootstrapRaw === undefined ? undefined : toJsonObject(bootstrapRaw),
     gateStats: gateStatsRaw === undefined ? undefined : toJsonObject(gateStatsRaw),
+    promotionGate: promotionGateRaw === undefined ? undefined : toJsonObject(promotionGateRaw),
   };
 }
 

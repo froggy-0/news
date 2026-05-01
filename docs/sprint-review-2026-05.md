@@ -147,7 +147,7 @@ artifact의 `meta.sharpeBasisChangeDate` 필드가 있으면 프론트엔드 알
 ```bash
 # 1. 파이프라인 실행 후 artifact 검증
 python scripts/validate_latest_artifact.py \
-    --artifact data/sentiment_join/latest.json
+    --path data/sentiment_join/latest.json
 
 # 2. vol_regime_v2 드리프트 모니터링
 python scripts/analysis/check_vol_regime_v2_drift.py \
@@ -162,7 +162,7 @@ python scripts/analysis/vol_regime_v2_cost_sensitivity.py \
     --parquet data/sentiment_join/master_latest.parquet
 
 # 5. bootstrap block length ACF 검증 (데이터 업데이트 시마다)
-python scripts/analysis/check_bootstrap_block_length.py \
+python scripts/analysis/check_acf_block_length.py \
     --parquet data/sentiment_join/master_latest.parquet
 
 # 6. 테스트 전체 실행

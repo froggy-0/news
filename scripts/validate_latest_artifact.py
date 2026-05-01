@@ -59,19 +59,55 @@ def _is_nan(v: object) -> bool:
         return False
 
 
+def _get_bootstrap_cfg(cfg: dict, key: str) -> object:
+    aliases = {
+        "block_length": "blockLength",
+        "n_bootstrap": "nBootstrap",
+    }
+    return cfg.get(key, cfg.get(aliases.get(key, key)))
+
+
+def _get_gate_value(gate: dict, key: str) -> object:
+    aliases = {
+        "decision_promote_count": "decisionPromoteCount",
+        "decision_strict_promote_count": "decisionStrictPromoteCount",
+    }
+    return gate.get(key, gate.get(aliases.get(key, key), 0))
+
+
+def _as_int(value: object) -> int:
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0
+
+
+def _has_no_exposure(row: dict) -> bool:
+    payoff = row.get("payoff_diagnostics")
+    if not isinstance(payoff, dict):
+        return False
+    exposure = payoff.get("exposure_ratio")
+    try:
+        return float(exposure) == 0.0  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return False
+
+
 def check_hit_rate_rows(rows: list[dict]) -> None:
     """개별 hit_rate row에 대해 5개 항목 검증."""
     for row in rows:
         pred = row.get("predictor", "?")
 
         # Check 1: CI 필드가 None/NaN이 아닌지
-        for field in (
-            "hit_rate_ci_lower",
-            "hit_rate_ci_upper",
-            "sharpe_ci_lower",
-            "sharpe_ci_upper",
-        ):
+        for field in ("hit_rate_ci_lower", "hit_rate_ci_upper"):
             if _is_nan(row.get(field)):
+                _err(f"{pred}: {field}가 NaN — bootstrap 미실행 또는 데이터 부족 가능성")
+        for field in ("sharpe_ci_lower", "sharpe_ci_upper"):
+            if not _is_nan(row.get(field)):
+                continue
+            if _is_nan(row.get("strategy_sharpe")) and _has_no_exposure(row):
+                _warn(f"{pred}: {field}=NaN — exposure=0이라 Sharpe CI 정의 불가")
+            else:
                 _err(f"{pred}: {field}가 NaN — bootstrap 미실행 또는 데이터 부족 가능성")
 
         # Check 2: 점추정이 CI 내부에 있는지
@@ -113,7 +149,7 @@ def check_hit_rate_rows(rows: list[dict]) -> None:
 def check_bootstrap_config(cfg: dict) -> None:
     """bootstrap_config 설정값 검증."""
     for key, expected in EXPECTED_BOOTSTRAP_CONFIG.items():
-        actual = cfg.get(key)
+        actual = _get_bootstrap_cfg(cfg, key)
         if actual != expected:
             _warn(f"bootstrap_config.{key}={actual!r} (기대값: {expected!r})")
 
@@ -123,9 +159,9 @@ def check_gate_stats(data: dict) -> None:
     gate = data.get("alpha", {}).get("gateStats", {})
     if not gate:
         return
-    gap = gate.get("gap", 0)
-    decision_n = gate.get("decision_promote_count", 0)
-    strict_n = gate.get("decision_strict_promote_count", 0)
+    gap = _as_int(_get_gate_value(gate, "gap"))
+    decision_n = _as_int(_get_gate_value(gate, "decision_promote_count"))
+    strict_n = _as_int(_get_gate_value(gate, "decision_strict_promote_count"))
     print(
         f"[INFO]  gateStats: decision_promote={decision_n}, decision_strict_promote={strict_n}, gap={gap}"
     )

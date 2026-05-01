@@ -352,7 +352,12 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: sentiment-join-artifacts
-          path: data/sentiment_join/master_*.parquet
+          path: |
+            data/sentiment_join/master_*.parquet
+            data/sentiment_join/latest.json
+            data/sentiment_join/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].json
+            data/sentiment_join/vol_regime_v2_drift.jsonl
+            data/sentiment_join/backfill_manifest.json
           if-no-files-found: warn
 
   deploy-frontend:
