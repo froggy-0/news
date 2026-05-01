@@ -237,6 +237,42 @@ def bootstrap_paired(
     return sig_result, base_result
 
 
+def auto_block_length(values: np.ndarray, fallback: int = DEFAULT_BLOCK_LENGTH) -> int:
+    """시계열의 ACF 구조를 기반으로 적정 block length를 자동 계산한다.
+
+    Politis & White (2004) 규칙을 단순화한 휴리스틱:
+      b* ≈ 첫 번째로 Bartlett 95% 신뢰구간 내로 들어오는 lag
+    statsmodels 없이 동작하도록 직접 구현한다.
+
+    Parameters
+    ----------
+    values : np.ndarray
+        hits 시계열 (0/1 배열).
+    fallback : int
+        ACF 계산 불가 시 사용할 기본값.
+
+    Returns
+    -------
+    int
+        권장 block length. 최소 1, 최대 len(values) // 3 으로 클램핑.
+    """
+    n = len(values)
+    if n < 10:
+        return fallback
+    max_lag = min(35, n // 2)
+    mean = float(np.mean(values))
+    var = float(np.var(values, ddof=0))
+    if var < 1e-15:
+        return fallback
+    centered = values - mean
+    threshold = 1.96 / math.sqrt(n)
+    for lag in range(1, max_lag + 1):
+        acf_lag = float(np.sum(centered[lag:] * centered[:-lag])) / (n * var)
+        if abs(acf_lag) < threshold:
+            return max(1, min(lag, n // 3))
+    return max(1, min(max_lag, n // 3))
+
+
 def benjamini_hochberg(pvalues: np.ndarray, alpha: float = 0.10) -> np.ndarray:
     """BH-FDR q-value 산출.
 
@@ -271,6 +307,7 @@ __all__ = [
     "BootstrapResult",
     "DEFAULT_BLOCK_LENGTH",
     "DEFAULT_N_BOOTSTRAP",
+    "auto_block_length",
     "benjamini_hochberg",
     "bootstrap_metric",
     "bootstrap_paired",

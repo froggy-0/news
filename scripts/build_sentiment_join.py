@@ -32,4 +32,16 @@ if __name__ == "__main__":
 
     settings = load_sentiment_join_settings()
     setup_logging(output_dir=settings.output_dir)
-    sys.exit(run_sentiment_join(settings))
+    exit_code = run_sentiment_join(settings)
+
+    # 파이프라인 성공 시 artifact sanity check 자동 실행
+    if exit_code == 0:
+        from validate_latest_artifact import run_checks
+
+        artifact_path = settings.output_dir / "latest.json"
+        check_code = run_checks(artifact_path)
+        if check_code != 0:
+            print("\n⚠️  Artifact sanity check 실패. latest.json을 확인하세요.", file=sys.stderr)
+            sys.exit(check_code)
+
+    sys.exit(exit_code)

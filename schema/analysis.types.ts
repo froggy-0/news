@@ -102,6 +102,8 @@ export interface AlphaSection {
   // Block bootstrap CI / BH-FDR run-time metadata (run_alpha_validation 산출).
   // 셀별 hit_rate_ci_*, sharpe_ci_*, pvalue_vs_baselines, fdr_q 는 hitRates / horizonMetrics 안에 nested.
   bootstrapConfig?: JsonObject;
+  // decision vs decision_strict gap summary (added in T4).
+  gateStats?: JsonObject;
 }
 
 export interface TargetsSection {
@@ -125,4 +127,6 @@ export interface SentimentInsightArtifact {
   targets?: TargetsSection;
   stationarity?: StationaritySection;
   rawStats?: JsonObject;
+  // Annualization / Sharpe basis change notice (added in T4).
+  meta?: JsonObject;
 }

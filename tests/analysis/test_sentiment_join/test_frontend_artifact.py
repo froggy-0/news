@@ -392,3 +392,54 @@ def test_write_creates_two_files(tmp_path: Path):
     assert dated.name == "20260421.json"
     # 두 파일의 내용이 동일한지 확인
     assert json.loads(latest.read_text()) == json.loads(dated.read_text())
+
+
+# ─── gateStats / meta / bootstrapConfig ─────────────────────────────────────
+
+
+def test_artifact_contains_gate_stats() -> None:
+    """alpha.gateStats 필드가 존재하고 필수 키를 포함해야 한다."""
+    artifact = build_frontend_artifact(
+        stats_metadata_bytes=_make_stats_bytes(),
+        reference_date="2026-04-30",
+    )
+    gate = artifact.get("alpha", {}).get("gateStats", {})
+    assert "totalPredictors" in gate
+    assert "decisionPromoteCount" in gate
+    assert "decisionStrictPromoteCount" in gate
+    assert "gap" in gate
+    assert "gapRatio" in gate
+
+
+def test_gate_stats_gap_equals_promote_difference() -> None:
+    """gap = decisionPromoteCount - decisionStrictPromoteCount."""
+    artifact = build_frontend_artifact(
+        stats_metadata_bytes=_make_stats_bytes(),
+        reference_date="2026-04-30",
+    )
+    gate = artifact["alpha"]["gateStats"]
+    assert gate["gap"] == gate["decisionPromoteCount"] - gate["decisionStrictPromoteCount"]
+
+
+def test_artifact_contains_meta_with_annualization_info() -> None:
+    """meta 필드에 annualizationFactor, annualizationNote, sharpeBasisChangeDate가 있어야 한다."""
+    artifact = build_frontend_artifact(
+        stats_metadata_bytes=_make_stats_bytes(),
+        reference_date="2026-04-30",
+    )
+    meta = artifact.get("meta", {})
+    assert meta.get("annualizationFactor") == 365
+    assert "2026-04-30" in str(meta.get("sharpeBasisChangeDate", ""))
+    assert "365" in str(meta.get("annualizationNote", ""))
+
+
+def test_artifact_contains_bootstrap_config() -> None:
+    """bootstrapConfig 필드가 method, blockLength, nBootstrap을 포함해야 한다."""
+    artifact = build_frontend_artifact(
+        stats_metadata_bytes=_make_stats_bytes(),
+        reference_date="2026-04-30",
+    )
+    cfg = artifact.get("bootstrapConfig", {})
+    assert "method" in cfg
+    assert "blockLength" in cfg
+    assert "nBootstrap" in cfg

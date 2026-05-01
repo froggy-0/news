@@ -258,7 +258,32 @@ def _build_data_quality(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _compute_gate_stats(horizon_metrics: dict[str, Any]) -> dict[str, Any]:
+    """decision vs decision_strict 갭 통계를 계산한다.
+
+    horizon_metrics["7"]["hit_rates"] 기준으로 promote 셀 수와 갭을 집계한다.
+    """
+    rows = _as_list(_as_record(horizon_metrics.get("7")).get("hit_rates"))
+    total = len(rows)
+    decision_promote = sum(
+        1 for r in rows if isinstance(r, dict) and r.get("decision") == "promote"
+    )
+    strict_promote = sum(
+        1 for r in rows if isinstance(r, dict) and r.get("decision_strict") == "promote"
+    )
+    gap = decision_promote - strict_promote
+    return {
+        "totalPredictors": total,
+        "decisionPromoteCount": decision_promote,
+        "decisionStrictPromoteCount": strict_promote,
+        "gap": gap,
+        "gapRatio": round(gap / max(decision_promote, 1), 4),
+    }
+
+
 def _build_alpha(payload: dict[str, Any]) -> dict[str, Any]:
+    horizon_metrics = _as_record(payload.get("horizon_metrics"))
+    gate_stats = _compute_gate_stats(horizon_metrics)
     return {
         "hitRates": _json_safe(_as_list(payload.get("hit_rates"))),
         "correlations": _json_safe(_as_list(payload.get("correlations"))),
@@ -266,11 +291,12 @@ def _build_alpha(payload: dict[str, Any]) -> dict[str, Any]:
         "walkForward": _json_safe(_as_record(payload.get("walk_forward"))),
         "walkForwardLegacy1d": _json_safe(_as_record(payload.get("walk_forward_legacy_1d"))),
         "baselineMetrics": _json_safe(_as_record(payload.get("baseline_metrics"))),
-        "horizonMetrics": _json_safe(_as_record(payload.get("horizon_metrics"))),
+        "horizonMetrics": _json_safe(horizon_metrics),
         "walkForwardHorizons": _json_safe(_as_record(payload.get("walk_forward_horizons"))),
         "featureGroupSummary": _json_safe(_as_record(payload.get("feature_group_summary"))),
         "baselineGapSummary": _json_safe(_as_record(payload.get("baseline_gap_summary"))),
         "nextResearchCandidates": _json_safe(_as_record(payload.get("next_research_candidates"))),
+        "gateStats": gate_stats,
     }
 
 
@@ -325,11 +351,28 @@ def build_frontend_artifact(
     full_raw = _as_record(hybrid_indices.get("full"))
     core_raw = _as_record(hybrid_indices.get("core"))
 
+    # bootstrap_config 메타데이터 추출
+    bootstrap_cfg_raw = _as_record(payload.get("bootstrap_config"))
+    bootstrap_config_meta = {
+        "method": str(bootstrap_cfg_raw.get("method", "circular")),
+        "blockLength": _as_int(bootstrap_cfg_raw.get("block_length")) or 14,
+        "nBootstrap": _as_int(bootstrap_cfg_raw.get("n_bootstrap")) or 1000,
+    }
+
     return {
         "schemaVersion": ARTIFACT_SCHEMA_VERSION,
         "generatedAtUtc": generated_at_utc,
         "referenceDate": reference_date,
         "runId": run_id,
+        "meta": {
+            "annualizationFactor": 365,
+            "annualizationNote": (
+                "Sharpe는 sqrt(365) 기준으로 연환산됩니다. "
+                "2026-04-30 이전 산출물은 sqrt(252) 기준이므로 직접 비교 불가합니다."
+            ),
+            "sharpeBasisChangeDate": "2026-04-30",
+        },
+        "bootstrapConfig": bootstrap_config_meta,
         "summary": _build_summary(payload, granger_results=granger_results),
         "dataQuality": _build_data_quality(payload),
         "granger": {

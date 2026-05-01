@@ -114,4 +114,66 @@ def upload_to_r2(
         )
 
 
-__all__ = ["cleanup_old_files", "save_parquet", "upload_to_r2", "write_backfill_manifest"]
+def append_drift_record(
+    output_dir: Path,
+    run_date: str,
+    record: dict,
+    *,
+    filename: str = "vol_regime_v2_drift.jsonl",
+) -> Path:
+    """드리프트 추적 레코드를 output_dir/{filename}에 한 줄씩 append한다.
+
+    run_date와 generated_at_utc가 자동으로 추가된다. 파일이 없으면 새로 생성한다.
+
+    Parameters
+    ----------
+    output_dir : Path
+        저장 디렉터리.
+    run_date : str
+        파이프라인 실행일 (YYYY-MM-DD 또는 YYYYMMDD).
+    record : dict
+        저장할 지표 딕셔너리.
+    filename : str
+        JSONL 파일명 (기본 vol_regime_v2_drift.jsonl).
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / filename
+    entry = {
+        "run_date": run_date,
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        **record,
+    }
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
+    return path
+
+
+def read_drift_records(
+    output_dir: Path,
+    *,
+    filename: str = "vol_regime_v2_drift.jsonl",
+) -> list[dict]:
+    """드리프트 JSONL을 읽어 레코드 리스트로 반환한다. 파일이 없으면 빈 리스트."""
+    path = output_dir / filename
+    if not path.exists():
+        return []
+    records = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            records.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return records
+
+
+__all__ = [
+    "append_drift_record",
+    "cleanup_old_files",
+    "read_drift_records",
+    "save_parquet",
+    "upload_to_r2",
+    "write_backfill_manifest",
+]

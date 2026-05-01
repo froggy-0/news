@@ -4,7 +4,7 @@ import logging
 import math
 from collections import Counter
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
@@ -711,10 +711,14 @@ def compute_hit_rate(
     inverted: bool = False,
     granger_significant: bool | None = None,
     bootstrap: BootstrapConfig | None = None,
+    threshold_fn: Callable[[pd.Series], pd.Series] | None = None,
+    predictor_name: str | None = None,
 ) -> HitRateResult:
     """단일 Predictor의 방향 적중률 및 분류 성능을 산출한다.
 
     - predictor > threshold → "up" (inverted=True이면 "down")
+    - threshold_fn 이 주어지면 고정 threshold 대신 per-row rolling threshold 를 사용.
+    - predictor_name 이 주어지면 결과 predictor 필드를 override (variant 구분용).
     - btc_direction_label == "flat" 행 제외
     - NaN 행 제외
     - 유효 행 0건 시 모든 지표 NaN, CM 모두 0
@@ -722,6 +726,7 @@ def compute_hit_rate(
     """
     import numpy as np
 
+    result_name = predictor_name if predictor_name is not None else predictor_col
     work = df[[predictor_col, "btc_direction_label"]].copy()
 
     # flat 라벨 행 제외
@@ -734,7 +739,7 @@ def compute_hit_rate(
 
     if n_valid == 0:
         return HitRateResult(
-            predictor=predictor_col,
+            predictor=result_name,
             threshold=threshold,
             hit_rate=float("nan"),
             tp=0,
@@ -750,7 +755,11 @@ def compute_hit_rate(
         )
 
     # 예측 방향 결정
-    pred_above = work[predictor_col] > threshold
+    if threshold_fn is not None:
+        thr_series = threshold_fn(df[predictor_col]).reindex(work.index)
+        pred_above = work[predictor_col] > thr_series
+    else:
+        pred_above = work[predictor_col] > threshold
     if inverted:
         predicted_up = ~pred_above  # inverted: > threshold → "down", <= threshold → "up"
     else:
@@ -793,7 +802,7 @@ def compute_hit_rate(
         boot_block_length = boot_res.block_length
 
     return HitRateResult(
-        predictor=predictor_col,
+        predictor=result_name,
         threshold=threshold,
         hit_rate=hit_rate,
         tp=tp,
@@ -992,16 +1001,21 @@ def compute_backtest(
     inverted: bool = False,
     granger_significant: bool | None = None,
     bootstrap: BootstrapConfig | None = None,
+    threshold_fn: Callable[[pd.Series], pd.Series] | None = None,
+    predictor_name: str | None = None,
 ) -> BacktestResult:
     """단일 전략의 누적 수익 백테스트를 수행한다.
 
     전략: signal > threshold → 매수(당일 수익률 적용), 이하 → 현금(0)
     inverted: signal <= threshold → 매수, > threshold → 현금
     거래 비용: 포지션 전환 시 편도 transaction_cost_bps / 10000 차감 (log return)
+    threshold_fn: callable(pd.Series) → pd.Series 형태의 per-row rolling threshold.
+    predictor_name: 결과 predictor 필드 override (variant 구분용).
     bootstrap 가 주어지면 strategy_returns 위에서 Sharpe / cumulative return CI 산출.
     """
     import numpy as np
 
+    result_name = predictor_name if predictor_name is not None else signal_col
     work = df[[signal_col, return_col]].copy()
     work = work.dropna(subset=[signal_col, return_col])
 
@@ -1009,7 +1023,7 @@ def compute_backtest(
 
     if n_valid == 0:
         return BacktestResult(
-            predictor=signal_col,
+            predictor=result_name,
             threshold=threshold,
             strategy_cumulative_return=float("nan"),
             bnh_cumulative_return=float("nan"),
@@ -1027,7 +1041,13 @@ def compute_backtest(
     returns = work[return_col].to_numpy(dtype=float)
 
     # 포지션 결정: buy (True) or cash (False)
-    if inverted:
+    if threshold_fn is not None:
+        thr_arr = threshold_fn(df[signal_col]).reindex(work.index).to_numpy(dtype=float)
+        if inverted:
+            buy = signal <= thr_arr
+        else:
+            buy = signal > thr_arr
+    elif inverted:
         buy = signal <= threshold
     else:
         buy = signal > threshold
@@ -1098,7 +1118,7 @@ def compute_backtest(
         boot_block_length = sharpe_boot.block_length
 
     return BacktestResult(
-        predictor=signal_col,
+        predictor=result_name,
         threshold=threshold,
         strategy_cumulative_return=strategy_cumret,
         bnh_cumulative_return=bnh_cumret,
@@ -1481,6 +1501,30 @@ _ALPHA_PREDICTOR_CONFIGS: list[dict[str, Any]] = [
     {"col": "core_hybrid_index_score_lag1", "threshold": 50, "inverted": False},
     # etf_net_inflow_usd_log1p_lag1: 기관 포지셔닝 신호 (log1p 변환으로 fat-tail 안정화)
     {"col": "etf_net_inflow_usd_log1p_lag1", "threshold": 0, "inverted": False},
+    # --- etf_net_inflow_usd_log1p_lag1 threshold 3-variant 재설계 ---
+    # Variant A: inverted — 순유출(음수 inflow) 구간에서 매수 신호
+    {
+        "col": "etf_net_inflow_usd_log1p_lag1",
+        "threshold": 0,
+        "inverted": True,
+        "predictor_name": "etf_net_inflow_usd_log1p_lag1_inverted",
+    },
+    # Variant B: rolling q75 — 상위 25% 대규모 순유입 구간만 신호 (high-conviction long)
+    {
+        "col": "etf_net_inflow_usd_log1p_lag1",
+        "threshold": 0,
+        "inverted": False,
+        "threshold_fn": lambda s: s.rolling(90, min_periods=30).quantile(0.75),
+        "predictor_name": "etf_net_inflow_usd_log1p_lag1_q75",
+    },
+    # Variant C: rolling q80 — 더 selective한 상위 20% 구간 필터
+    {
+        "col": "etf_net_inflow_usd_log1p_lag1",
+        "threshold": 0,
+        "inverted": False,
+        "threshold_fn": lambda s: s.rolling(90, min_periods=30).quantile(0.80),
+        "predictor_name": "etf_net_inflow_usd_log1p_lag1_q80",
+    },
     # usdkrw_gap_flag_lag1: 공휴일·주말 갭 재개장 여부 (환율 급등락 맥락 보조 피처)
     {"col": "usdkrw_gap_flag_lag1", "threshold": 0.5, "inverted": False},
 ]
@@ -1502,6 +1546,9 @@ _PREDICTOR_SOURCE_COLUMNS: dict[str, list[str]] = {
     "vix_lag1": ["vix"],
     "vix_regime_score_lag1": ["vix"],
     "etf_net_inflow_usd_log1p_lag1": ["etf_net_inflow_usd"],
+    "etf_net_inflow_usd_log1p_lag1_inverted": ["etf_net_inflow_usd"],
+    "etf_net_inflow_usd_log1p_lag1_q75": ["etf_net_inflow_usd"],
+    "etf_net_inflow_usd_log1p_lag1_q80": ["etf_net_inflow_usd"],
     "usdkrw_gap_flag_lag1": ["usdkrw_return"],
 }
 
@@ -1804,11 +1851,31 @@ def _paired_baseline_comparison(
         )
         paired = signal_frame.merge(baseline_frame, on="alignment_key", how="inner").dropna()
         alignment_key = signal_key_name if signal_key_name == baseline_key_name else "index"
+
+        signal_n = int(len(signal_hits))
+        baseline_n = int(len(baseline_hits))
+        paired_n = int(len(paired))
+        dropped = max(signal_n, baseline_n) - paired_n
+        if dropped > 0:
+            log_structured(
+                logger,
+                event="paired_bootstrap.alignment_drop",
+                message="paired bootstrap alignment: 일부 날짜가 inner join에서 제거됨",
+                level=logging.DEBUG,
+                baseline=baseline_name,
+                signal_n=signal_n,
+                baseline_n=baseline_n,
+                paired_n=paired_n,
+                dropped=dropped,
+                alignment_key=alignment_key,
+            )
+
         baseline_alignment[baseline_name] = {
             "alignment_key": alignment_key,
-            "signal_rows": int(len(signal_hits)),
-            "baseline_rows": int(len(baseline_hits)),
-            "paired_rows": int(len(paired)),
+            "signal_rows": signal_n,
+            "baseline_rows": baseline_n,
+            "paired_rows": paired_n,
+            "dropped_rows": dropped,
         }
         if bootstrap_config is None or len(paired) < 2:
             continue
@@ -1972,6 +2039,8 @@ def _compute_sparse_research_signal(
     realized_vol = _rolling_low_high_signal_from_col(df, "btc_realized_vol_20d_lag1")
     trend = _ma200_trend_signal(df)
 
+    fng_value = _directional_signal_from_col(df, "fng_value_lag1", threshold=50.0)
+
     if label == "vix_low_long_only":
         return vix.where(vix > 0, 0.0).rename(label)
     if label == "vote_vol_sent_fng5_2of3":
@@ -1982,6 +2051,9 @@ def _compute_sparse_research_signal(
         return _vol_regime_v2(df).rename(label)
     if label == "vol_regime_v3_vix_realized_vol_ma200_2of3":
         return _vote_signal([vol, realized_vol, trend], min_abs_vote=2, name=label)
+    if label == "vote_vix_fng_2of2":
+        # vix_regime_score 및 fng_value 합의 구간: 둘 다 같은 방향일 때만 거래
+        return _vote_signal([vix, fng_value], min_abs_vote=2, name=label)
     return pd.Series(0.0, index=df.index, name=label)
 
 
@@ -2197,6 +2269,11 @@ _SPARSE_RESEARCH_RULE_CONFIGS: list[dict[str, Any]] = [
     },
     {
         "label": "vol_regime_v3_vix_realized_vol_ma200_2of3",
+        "group": "research_sparse",
+    },
+    {
+        # vix_regime_score + fng_value 합의 구간: 둘 다 일치할 때만 거래 (T9)
+        "label": "vote_vix_fng_2of2",
         "group": "research_sparse",
     },
 ]
@@ -3112,12 +3189,14 @@ def run_alpha_validation(
         col = cfg["col"]
         threshold = cfg["threshold"]
         inverted = cfg["inverted"]
+        threshold_fn = cfg.get("threshold_fn")
+        predictor_name: str | None = cfg.get("predictor_name")
 
         # VIX 전 행 NaN → skip
         if col not in df.columns or df[col].isna().all():
             continue
 
-        # Granger 신뢰도 플래그 결정
+        # Granger 신뢰도 플래그 결정 (variant들은 원본 col 기반)
         granger_raw = _PREDICTOR_TO_GRANGER_RAW.get(col)
         if not granger_executed or granger_results is None or granger_raw is None:
             granger_sig = None
@@ -3132,6 +3211,8 @@ def run_alpha_validation(
             inverted=inverted,
             granger_significant=granger_sig,
             bootstrap=bootstrap_config,
+            threshold_fn=threshold_fn,
+            predictor_name=predictor_name,
         )
         hit_rates.append(asdict(hr))
 
@@ -3144,6 +3225,8 @@ def run_alpha_validation(
             granger_significant=granger_sig,
             bootstrap=bootstrap_config,
             transaction_cost_bps=10.0,
+            threshold_fn=threshold_fn,
+            predictor_name=predictor_name,
         )
         backtest_results.append(asdict(bt))
 

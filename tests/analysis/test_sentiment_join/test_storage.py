@@ -7,7 +7,9 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 from morning_brief.analysis.sentiment_join.storage import (
+    append_drift_record,
     cleanup_old_files,
+    read_drift_records,
     save_parquet,
     upload_to_r2,
     write_backfill_manifest,
@@ -181,3 +183,48 @@ def test_upload_to_r2_swallows_exception(tmp_path: Path) -> None:
             r2_secret_access_key="secret",
             r2_public_bucket="my-bucket",
         )
+
+
+# ─── append_drift_record / read_drift_records ────────────────────────────────
+
+
+def test_append_drift_record_creates_file(tmp_path: Path) -> None:
+    record = {"vol_regime_v2_hit_rate": 0.61, "vol_regime_v2_coverage": 0.56}
+    path = append_drift_record(tmp_path, "2026-05-01", record)
+    assert path.exists()
+    assert path.name == "vol_regime_v2_drift.jsonl"
+
+
+def test_append_drift_record_writes_valid_json(tmp_path: Path) -> None:
+    import json
+
+    record = {"vol_regime_v2_hit_rate": 0.61, "kept_gt_dropped_pvalue": 0.08}
+    append_drift_record(tmp_path, "2026-05-01", record)
+    lines = (tmp_path / "vol_regime_v2_drift.jsonl").read_text().splitlines()
+    assert len(lines) == 1
+    parsed = json.loads(lines[0])
+    assert parsed["run_date"] == "2026-05-01"
+    assert parsed["vol_regime_v2_hit_rate"] == 0.61
+    assert "generated_at_utc" in parsed
+
+
+def test_append_drift_record_appends_multiple_records(tmp_path: Path) -> None:
+    append_drift_record(tmp_path, "2026-05-01", {"hit_rate": 0.60})
+    append_drift_record(tmp_path, "2026-05-02", {"hit_rate": 0.62})
+    append_drift_record(tmp_path, "2026-05-03", {"hit_rate": 0.58})
+    records = read_drift_records(tmp_path)
+    assert len(records) == 3
+    assert records[0]["run_date"] == "2026-05-01"
+    assert records[2]["run_date"] == "2026-05-03"
+
+
+def test_read_drift_records_returns_empty_list_when_no_file(tmp_path: Path) -> None:
+    records = read_drift_records(tmp_path)
+    assert records == []
+
+
+def test_append_drift_record_custom_filename(tmp_path: Path) -> None:
+    append_drift_record(tmp_path, "2026-05-01", {"x": 1}, filename="custom_drift.jsonl")
+    assert (tmp_path / "custom_drift.jsonl").exists()
+    records = read_drift_records(tmp_path, filename="custom_drift.jsonl")
+    assert len(records) == 1
