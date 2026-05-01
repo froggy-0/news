@@ -270,3 +270,152 @@ test("legacy v1 artifact renders pending diagnostics instead of false zeroes", (
   assert.match(markup, /2 significant/);
   assert.match(markup, /Alpha metrics are waiting for v2 artifact/);
 });
+
+test("AlphaValidationBoard renders CI error bar markers when ci fields present", () => {
+  const alphaWithCI = {
+    ...artifact.alpha!,
+    horizonMetrics: {
+      "7": {
+        return_col: "btc_log_return",
+        hit_rates: [
+          {
+            predictor: "news_sentiment_mean_lag1",
+            hit_rate: 0.61,
+            hit_rate_ci_lower: 0.54,
+            hit_rate_ci_upper: 0.68,
+            decision: "promote",
+            decision_strict: "promote",
+            fdr_q: 0.07,
+          },
+        ],
+        backtest: [],
+      },
+    },
+  };
+  const markup = renderToStaticMarkup(
+    createElement(AlphaValidationBoard, {
+      alpha: alphaWithCI,
+      summary: artifact.summary,
+      diagnosticsReady: true,
+    }),
+  );
+
+  assert.match(markup, /61\.0%/);
+  assert.match(markup, /q=0\.070/);
+});
+
+test("AlphaValidationBoard renders decision_strict badge on signal rows", () => {
+  const alphaStrict = {
+    ...artifact.alpha!,
+    horizonMetrics: {
+      "7": {
+        return_col: "btc_log_return",
+        hit_rates: [
+          {
+            predictor: "funding_rate_lag1",
+            hit_rate: 0.58,
+            decision: "promote",
+            decision_strict: "hold",
+            fdr_q: 0.15,
+          },
+        ],
+        backtest: [],
+      },
+    },
+  };
+  const markup = renderToStaticMarkup(
+    createElement(AlphaValidationBoard, {
+      alpha: alphaStrict,
+      summary: artifact.summary,
+      diagnosticsReady: true,
+    }),
+  );
+
+  assert.match(markup, /strict/);
+  assert.match(markup, /q=0\.150/);
+});
+
+test("AlphaValidationBoard renders research rules section separately", () => {
+  const alphaResearch = {
+    ...artifact.alpha!,
+    horizonMetrics: {
+      "7": {
+        return_col: "btc_log_return",
+        hit_rates: [
+          { predictor: "news_sentiment_mean_lag1", hit_rate: 0.61, decision: "promote", research_rule: false },
+          { predictor: "etf_net_inflow_usd_log1p_lag1", hit_rate: 0.56, research_rule: true, fdr_q: 0.09, decision: "hold" },
+        ] as unknown as import("@schema/analysis.types").JsonValue[],
+        backtest: [],
+      },
+    },
+  };
+  const markup = renderToStaticMarkup(
+    createElement(AlphaValidationBoard, {
+      alpha: alphaResearch as unknown as import("@schema/analysis.types").AlphaSection,
+      summary: artifact.summary,
+      diagnosticsReady: true,
+    }),
+  );
+
+  assert.match(markup, /Research rules/);
+  assert.match(markup, /research/);
+  assert.match(markup, /etf.net.inflow/i);
+});
+
+test("AlphaValidationBoard renders gate stats when gateStats present in horizonMetrics", () => {
+  const alphaGate = {
+    ...artifact.alpha!,
+    gateStats: {
+      totalPredictors: 8,
+      decisionPromoteCount: 3,
+      decisionStrictPromoteCount: 2,
+      gap: 1,
+      gapRatio: 0.3333,
+    },
+  };
+  const markup = renderToStaticMarkup(
+    createElement(AlphaValidationBoard, {
+      alpha: alphaGate,
+      summary: artifact.summary,
+      diagnosticsReady: true,
+    }),
+  );
+
+  assert.match(markup, /decision.*strict/i);
+  assert.match(markup, /3 promote/);
+  assert.match(markup, /2 promote/);
+});
+
+test("AlphaValidationBoard renders Sharpe annualization change notice when meta present", () => {
+  const meta = {
+    annualizationFactor: 365,
+    annualizationNote:
+      "Sharpe는 sqrt(365) 기준으로 연환산됩니다. 2026-04-30 이전 산출물은 sqrt(252) 기준이므로 직접 비교 불가합니다.",
+    sharpeBasisChangeDate: "2026-04-30",
+  };
+  const markup = renderToStaticMarkup(
+    createElement(AlphaValidationBoard, {
+      alpha: artifact.alpha,
+      summary: artifact.summary,
+      diagnosticsReady: true,
+      meta,
+    }),
+  );
+
+  assert.match(markup, /Sharpe basis changed/i);
+  assert.match(markup, /2026-04-30/);
+  assert.match(markup, /sqrt\(252\)/);
+});
+
+test("AlphaValidationBoard does not render Sharpe notice when meta absent", () => {
+  const markup = renderToStaticMarkup(
+    createElement(AlphaValidationBoard, {
+      alpha: artifact.alpha,
+      summary: artifact.summary,
+      diagnosticsReady: true,
+    }),
+  );
+
+  assert.doesNotMatch(markup, /Sharpe basis changed/i);
+});
+

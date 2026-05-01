@@ -203,3 +203,24 @@ test("parseSentimentInsight: excludedFeatures dict 형식 파싱", () => {
   assert.equal(result.pca.full.excludedFeatures[0].feature, "volume_lag1");
   assert.equal(result.pca.full.excludedFeatures[0].reason, "vif>10");
 });
+
+test("parseSentimentInsight: alpha.gateStats and meta are parsed", () => {
+  const payload = {
+    ...validPayload,
+    alpha: {
+      ...validPayload.alpha,
+      gateStats: { decisionPromoteCount: 4, decisionStrictPromoteCount: 3, gap: 1, gapRatio: 0.25 },
+    },
+    meta: { annualizationFactor: 365, sharpeBasisChangeDate: "2026-04-30" },
+  };
+  const result = parseSentimentInsight(payload);
+  assert.equal(result.alpha?.gateStats?.decisionPromoteCount, 4);
+  assert.equal(result.alpha?.gateStats?.gapRatio, 0.25);
+  assert.equal(result.meta?.annualizationFactor, 365);
+  assert.equal(result.meta?.sharpeBasisChangeDate, "2026-04-30");
+});
+
+test("parseSentimentInsight: meta 누락 시 undefined 반환", () => {
+  const result = parseSentimentInsight(validPayload);
+  assert.equal(result.meta, undefined);
+});

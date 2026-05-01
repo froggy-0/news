@@ -113,3 +113,51 @@ def test_bootstrap_config_default_block_length_for_t7() -> None:
     assert cfg.block_length == 14
     assert cfg.method == "circular"
     assert cfg.n_bootstrap == 1000
+
+
+class TestAutoBlockLength:
+    """auto_block_length() 동작 검증."""
+
+    def test_returns_fallback_for_short_series(self) -> None:
+        from morning_brief.analysis.sentiment_join.bootstrap import auto_block_length
+
+        arr = np.array([1.0, 0.0, 1.0])
+        result = auto_block_length(arr, fallback=14)
+        assert result == 14
+
+    def test_returns_int_in_valid_range(self) -> None:
+        from morning_brief.analysis.sentiment_join.bootstrap import auto_block_length
+
+        rng = np.random.default_rng(42)
+        arr = rng.choice([0.0, 1.0], size=100)
+        result = auto_block_length(arr)
+        assert isinstance(result, int)
+        assert 1 <= result <= len(arr) // 3
+
+    def test_iid_and_correlated_both_return_valid_int(self) -> None:
+        """iid와 AR(1) 시리즈 모두 유효한 int block length를 반환해야 한다."""
+        from morning_brief.analysis.sentiment_join.bootstrap import auto_block_length
+
+        n = 200
+        rng = np.random.default_rng(0)
+        iid = rng.choice([0.0, 1.0], size=n)
+
+        ar = np.zeros(n)
+        ar[0] = 0.5
+        noise = rng.normal(0, 0.1, n)
+        for i in range(1, n):
+            ar[i] = 0.8 * ar[i - 1] + noise[i]
+        ar_hits = (ar > 0).astype(float)
+
+        block_iid = auto_block_length(iid)
+        block_ar = auto_block_length(ar_hits)
+        assert isinstance(block_iid, int) and block_iid >= 1
+        assert isinstance(block_ar, int) and block_ar >= 1
+
+    def test_constant_series_returns_fallback(self) -> None:
+        """분산이 0인 상수 시리즈는 fallback을 반환해야 한다."""
+        from morning_brief.analysis.sentiment_join.bootstrap import auto_block_length
+
+        arr = np.ones(50)
+        result = auto_block_length(arr, fallback=14)
+        assert result == 14

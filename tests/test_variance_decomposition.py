@@ -409,3 +409,94 @@ def test_decision_strict_never_promote_when_decision_research_only() -> None:
     )
     assert result.decision == "research_only"
     assert result.decision_strict == "research_only"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# evaluate_regime_overlay_gate tests (P4-T11)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _make_drift_records(
+    n: int,
+    *,
+    hit_rate: float = 0.62,
+    coverage: float = 0.56,
+    pvalue: float = 0.06,
+) -> list[dict]:
+    from datetime import date, timedelta
+
+    today = date(2026, 5, 1)
+    return [
+        {
+            "run_date": (today - timedelta(days=n - 1 - i)).isoformat(),
+            "vol_regime_v2_hit_rate": hit_rate,
+            "vol_regime_v2_coverage": coverage,
+            "kept_gt_dropped_pvalue": pvalue,
+        }
+        for i in range(n)
+    ]
+
+
+def test_overlay_gate_insufficient_data_when_below_window() -> None:
+    from morning_brief.analysis.sentiment_join.variance import evaluate_regime_overlay_gate
+
+    records = _make_drift_records(10)
+    result = evaluate_regime_overlay_gate(records, window=14)
+    assert result.decision == "insufficient_data"
+    assert result.n_records == 10
+
+
+def test_overlay_gate_promote_when_all_criteria_met() -> None:
+    from morning_brief.analysis.sentiment_join.variance import evaluate_regime_overlay_gate
+
+    records = _make_drift_records(14, hit_rate=0.63, coverage=0.56, pvalue=0.05)
+    result = evaluate_regime_overlay_gate(records, window=14)
+    assert result.decision == "promote"
+    assert result.hit_rate_ok is True
+    assert result.coverage_ok is True
+    assert result.p_value_ok is True
+
+
+def test_overlay_gate_monitor_when_hit_rate_below_threshold() -> None:
+    from morning_brief.analysis.sentiment_join.variance import evaluate_regime_overlay_gate
+
+    records = _make_drift_records(14, hit_rate=0.52, coverage=0.56, pvalue=0.05)
+    result = evaluate_regime_overlay_gate(records, window=14)
+    assert result.decision == "monitor"
+    assert result.hit_rate_ok is False
+
+
+def test_overlay_gate_monitor_when_coverage_out_of_range() -> None:
+    from morning_brief.analysis.sentiment_join.variance import evaluate_regime_overlay_gate
+
+    records = _make_drift_records(14, hit_rate=0.62, coverage=0.80, pvalue=0.05)
+    result = evaluate_regime_overlay_gate(records, window=14)
+    assert result.decision == "monitor"
+    assert result.coverage_ok is False
+
+
+def test_overlay_gate_monitor_when_pvalue_too_high() -> None:
+    from morning_brief.analysis.sentiment_join.variance import evaluate_regime_overlay_gate
+
+    records = _make_drift_records(14, hit_rate=0.62, coverage=0.56, pvalue=0.15)
+    result = evaluate_regime_overlay_gate(records, window=14)
+    assert result.decision == "monitor"
+    assert result.p_value_ok is False
+
+
+def test_overlay_gate_uses_only_recent_window_records() -> None:
+    from morning_brief.analysis.sentiment_join.variance import evaluate_regime_overlay_gate
+
+    # 30 records: first 16 bad, last 14 good
+    bad = _make_drift_records(16, hit_rate=0.40, coverage=0.80, pvalue=0.30)
+    good = _make_drift_records(14, hit_rate=0.62, coverage=0.56, pvalue=0.05)
+    result = evaluate_regime_overlay_gate(bad + good, window=14)
+    assert result.decision == "promote"
+
+
+def test_overlay_gate_empty_records_insufficient_data() -> None:
+    from morning_brief.analysis.sentiment_join.variance import evaluate_regime_overlay_gate
+
+    result = evaluate_regime_overlay_gate([])
+    assert result.decision == "insufficient_data"
+    assert result.n_records == 0

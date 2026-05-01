@@ -107,6 +107,7 @@ export default async function AnalysisPage() {
                 alpha={artifact.alpha}
                 summary={artifact.summary}
                 diagnosticsReady={diagnosticsReady}
+                meta={artifact.meta}
               />
             </div>
           </section>

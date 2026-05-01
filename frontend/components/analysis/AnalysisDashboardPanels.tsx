@@ -313,10 +313,12 @@ export function AlphaValidationBoard({
   alpha,
   summary,
   diagnosticsReady,
+  meta,
 }: {
   alpha?: AlphaSection;
   summary?: ArtifactSummary;
   diagnosticsReady: boolean;
+  meta?: JsonObject;
 }) {
   const horizons = useMemo(
     () => objectEntries(alpha?.horizonMetrics).map(([key]) => key).sort((a, b) => Number(a) - Number(b)),
@@ -325,14 +327,27 @@ export function AlphaValidationBoard({
   const [activeHorizon, setActiveHorizon] = useState(horizons[0] ?? "1");
   const horizonRaw = alpha?.horizonMetrics?.[activeHorizon];
   const horizon = isJsonObject(horizonRaw) ? horizonRaw : undefined;
-  const horizonHitRates = objectArray(isJsonObject(horizon) && Array.isArray(horizon.hit_rates) ? horizon.hit_rates : alpha?.hitRates);
+  const allHitRates = objectArray(isJsonObject(horizon) && Array.isArray(horizon.hit_rates) ? horizon.hit_rates : alpha?.hitRates);
   const horizonBacktest = objectArray(isJsonObject(horizon) && Array.isArray(horizon.backtest) ? horizon.backtest : alpha?.backtest);
   const baselineRaw = alpha?.baselineMetrics?.[activeHorizon];
   const baselines = isJsonObject(baselineRaw) ? baselineRaw : undefined;
   const bestBaseline = bestBaselineHitRate(baselines);
-  const topSignals = [...horizonHitRates]
+
+  const regularRows = allHitRates.filter((r) => !r.research_rule);
+  const researchRows = allHitRates.filter((r) => r.research_rule === true);
+  const topSignals = [...regularRows]
     .sort((a, b) => (numberField(b, "hit_rate") ?? -1) - (numberField(a, "hit_rate") ?? -1))
     .slice(0, 5);
+
+  // Gate stats: prefer horizon-level gateStats if present, fall back to alpha.gateStats
+  const horizonGateStats = isJsonObject(horizon?.gateStats) ? (horizon.gateStats as JsonObject) : undefined;
+  const gateStats = horizonGateStats ?? (isJsonObject(alpha?.gateStats) ? alpha?.gateStats : undefined);
+  const decisionPromote = typeof gateStats?.decisionPromoteCount === "number" ? gateStats.decisionPromoteCount : null;
+  const strictPromote = typeof gateStats?.decisionStrictPromoteCount === "number" ? gateStats.decisionStrictPromoteCount : null;
+  const gapRatio = typeof gateStats?.gapRatio === "number" ? gateStats.gapRatio : null;
+
+  const sharpeChangeDate = typeof meta?.sharpeBasisChangeDate === "string" ? meta.sharpeBasisChangeDate : null;
+  const annualizationNote = typeof meta?.annualizationNote === "string" ? meta.annualizationNote : null;
 
   return (
     <div className="space-y-5">
@@ -341,6 +356,16 @@ export function AlphaValidationBoard({
           title="Alpha metrics are waiting for v2 artifact"
           detail="The parquet contains baseline_metrics, horizon_metrics, and walk_forward_horizons, but the current latest.json is legacy v1 — alpha panel left empty until re-run."
         />
+      )}
+      {sharpeChangeDate && annualizationNote && (
+        <div className="rounded-xl border border-[var(--accent-warning)]/30 bg-[var(--accent-warning)]/8 px-4 py-3" role="note" aria-label="Sharpe annualization change notice">
+          <p className="font-mono text-[0.66rem] uppercase tracking-[0.14em] text-[var(--accent-warning)]">
+            Sharpe basis changed · {sharpeChangeDate}
+          </p>
+          <p className="mt-1 font-mono text-[0.70rem] leading-5 text-white/60">
+            {annualizationNote}
+          </p>
+        </div>
       )}
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
@@ -393,6 +418,36 @@ export function AlphaValidationBoard({
         />
       </div>
 
+      {/* Gate stats: decision vs decision_strict gap */}
+      {gateStats && decisionPromote !== null && strictPromote !== null && (
+        <div className="rounded-2xl border border-white/10 bg-black/24 p-4">
+          <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-white/58">Gate · decision vs strict</p>
+          <div className="mt-3 flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-3">
+              <span className={`rounded-full border px-3 py-1 font-mono text-[0.62rem] ${toneClass("green")}`}>
+                decision: {decisionPromote} promote
+              </span>
+              <span className={`rounded-full border px-3 py-1 font-mono text-[0.62rem] ${strictPromote === decisionPromote ? toneClass("green") : toneClass("yellow")}`}>
+                strict: {strictPromote} promote
+              </span>
+            </div>
+            {gapRatio !== null && (
+              <span className="font-mono text-[0.64rem] text-white/42">
+                gap ratio {(gapRatio * 100).toFixed(1)}%
+                {gapRatio > 0.3 && (
+                  <span className="ml-2 text-[var(--accent-warning)]">— CI 미달 신호 다수</span>
+                )}
+              </span>
+            )}
+            {alpha?.bootstrapConfig && (
+              <span className="ml-auto rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 font-mono text-[0.58rem] text-white/36">
+                {stringField(alpha.bootstrapConfig as JsonObject, "method") || "circular-block"} · B={numberField(alpha.bootstrapConfig as JsonObject, "n_bootstrap") ?? "?"} · b={numberField(alpha.bootstrapConfig as JsonObject, "block_length") ?? "?"}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-2xl border border-white/10 bg-black/24 p-4">
           <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-white/58">Top signal hit rates</p>
@@ -401,6 +456,9 @@ export function AlphaValidationBoard({
               topSignals.map((row) => {
                 const hitRate = numberField(row, "hit_rate");
                 const uplift = hitRate !== null && bestBaseline !== null ? hitRate - bestBaseline : null;
+                const decision = typeof row.decision === "string" ? row.decision : undefined;
+                const decisionStrict = typeof row.decision_strict === "string" ? row.decision_strict : undefined;
+                const fdrQ = numberField(row, "fdr_q");
                 return (
                   <SignalMetricRow
                     key={`${stringField(row, "predictor")}-${stringField(row, "return_col")}`}
@@ -408,7 +466,11 @@ export function AlphaValidationBoard({
                     value={formatPercent(hitRate, 1)}
                     detail={uplift === null ? "baseline n/a" : `uplift ${(uplift * 100).toFixed(1)}pp`}
                     ratio={hitRate}
-                    tone={uplift !== null && uplift > 0.02 ? "green" : uplift !== null && uplift < 0 ? "red" : "yellow"}
+                    tone={decision === "promote" ? "green" : uplift !== null && uplift < 0 ? "red" : "yellow"}
+                    ciLower={numberField(row, "hit_rate_ci_lower")}
+                    ciUpper={numberField(row, "hit_rate_ci_upper")}
+                    decisionStrict={decisionStrict}
+                    fdrQ={fdrQ}
                   />
                 );
               })
@@ -429,12 +491,49 @@ export function AlphaValidationBoard({
                 detail={`alpha ${formatPercent(numberField(row, "alpha"), 2)}`}
                 ratio={Math.min(Math.max((numberField(row, "sharpe_ratio") ?? 0) / 2, 0), 1)}
                 tone={(numberField(row, "sharpe_ratio") ?? 0) > 0.5 ? "green" : "muted"}
+                ciLower={typeof numberField(row, "sharpe_ci_lower") === "number" ? Math.min(Math.max((numberField(row, "sharpe_ci_lower") ?? 0) / 2, 0), 1) : null}
+                ciUpper={typeof numberField(row, "sharpe_ci_upper") === "number" ? Math.min(Math.max((numberField(row, "sharpe_ci_upper") ?? 0) / 2, 0), 1) : null}
               />
             ))}
             <WalkForwardRows alpha={alpha} activeHorizon={activeHorizon} />
           </div>
         </div>
       </div>
+
+      {/* Research rules section */}
+      {researchRows.length > 0 && (
+        <div className="rounded-2xl border border-purple-400/20 bg-purple-400/[0.04] p-4">
+          <div className="flex items-center justify-between gap-4">
+            <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-purple-400/80">
+              Research rules · not yet in production gate
+            </p>
+            <span className="rounded-full border border-purple-400/20 bg-purple-400/8 px-3 py-1 font-mono text-[0.6rem] text-purple-400/70">
+              {researchRows.length} signals
+            </span>
+          </div>
+          <div className="mt-4 space-y-3">
+            {researchRows.map((row) => {
+              const hitRate = numberField(row, "hit_rate");
+              const uplift = hitRate !== null && bestBaseline !== null ? hitRate - bestBaseline : null;
+              return (
+                <SignalMetricRow
+                  key={`${stringField(row, "predictor")}-${stringField(row, "return_col")}-research`}
+                  label={formatFeatureLabel(stringField(row, "predictor"))}
+                  value={formatPercent(hitRate, 1)}
+                  detail={uplift === null ? "baseline n/a" : `uplift ${(uplift * 100).toFixed(1)}pp`}
+                  ratio={hitRate}
+                  tone={uplift !== null && uplift > 0.02 ? "green" : uplift !== null && uplift < 0 ? "red" : "yellow"}
+                  ciLower={numberField(row, "hit_rate_ci_lower")}
+                  ciUpper={numberField(row, "hit_rate_ci_upper")}
+                  decisionStrict={typeof row.decision_strict === "string" ? row.decision_strict : undefined}
+                  fdrQ={numberField(row, "fdr_q")}
+                  isResearch
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -694,36 +793,85 @@ function SignalMetricRow({
   detail,
   ratio,
   tone,
+  ciLower,
+  ciUpper,
+  decisionStrict,
+  fdrQ,
+  isResearch,
 }: {
   label: string;
   value: string;
   detail: string;
   ratio: number | null;
   tone: Tone;
+  ciLower?: number | null;
+  ciUpper?: number | null;
+  decisionStrict?: string;
+  fdrQ?: number | null;
+  isResearch?: boolean;
 }) {
-  const width = typeof ratio === "number" && Number.isFinite(ratio) ? Math.min(Math.max(ratio * 100, 4), 100) : 4;
+  const barWidth = typeof ratio === "number" && Number.isFinite(ratio) ? Math.min(Math.max(ratio * 100, 4), 100) : 4;
+  const loPct = typeof ciLower === "number" && Number.isFinite(ciLower) ? Math.min(Math.max(ciLower * 100, 0), 100) : null;
+  const hiPct = typeof ciUpper === "number" && Number.isFinite(ciUpper) ? Math.min(Math.max(ciUpper * 100, 0), 100) : null;
+  const hasCI = loPct !== null && hiPct !== null;
   return (
     <article className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
       <div className="flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <p className="truncate text-[0.82rem] font-semibold text-white/82">{label}</p>
-          <p className="mt-1 font-mono text-[0.62rem] text-white/34">{detail}</p>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-[0.82rem] font-semibold text-white/82">{label}</p>
+            {isResearch && (
+              <span className="shrink-0 rounded-full border border-purple-400/30 bg-purple-400/8 px-2 py-0.5 font-mono text-[0.54rem] uppercase tracking-[0.1em] text-purple-400/80">
+                research
+              </span>
+            )}
+          </div>
+          <div className="mt-1 flex items-center gap-2 font-mono text-[0.62rem] text-white/34">
+            <span>{detail}</span>
+            {typeof fdrQ === "number" && (
+              <span className={fdrQ <= 0.10 ? "text-[var(--accent-green)]/70" : "text-[var(--accent-warning)]/70"}>
+                q={fdrQ.toFixed(3)}
+              </span>
+            )}
+          </div>
         </div>
-        <span className={`shrink-0 rounded-full border px-2.5 py-1 font-mono text-[0.62rem] ${toneClass(tone)}`}>
-          {value}
-        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          {decisionStrict !== undefined && (
+            <span
+              className={`rounded-full border px-2 py-0.5 font-mono text-[0.56rem] uppercase tracking-[0.1em] ${
+                decisionStrict === "promote" ? toneClass("green") : toneClass("muted")
+              }`}
+              title="decision_strict (CI hard-separation + FDR q≤0.10)"
+            >
+              strict
+            </span>
+          )}
+          <span className={`rounded-full border px-2.5 py-1 font-mono text-[0.62rem] ${toneClass(tone)}`}>
+            {value}
+          </span>
+        </div>
       </div>
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/8">
+      <div className="relative mt-3 h-1.5 rounded-full bg-white/8">
         <div
-          className={`h-full rounded-full ${
+          className={`absolute h-full rounded-full ${
             tone === "green"
               ? "bg-[var(--accent-green)]"
               : tone === "red"
                 ? "bg-[var(--accent-down)]"
                 : "bg-white/50"
           }`}
-          style={{ width: `${width}%` }}
+          style={{ width: `${barWidth}%` }}
         />
+        {hasCI && (
+          <>
+            <div
+              className="absolute top-0 h-full rounded-full bg-white/20"
+              style={{ left: `${loPct}%`, width: `${(hiPct ?? 0) - (loPct ?? 0)}%` }}
+            />
+            <div className="absolute top-0 h-full w-px bg-white/60" style={{ left: `${loPct}%` }} />
+            <div className="absolute top-0 h-full w-px bg-white/60" style={{ left: `${hiPct}%` }} />
+          </>
+        )}
       </div>
     </article>
   );

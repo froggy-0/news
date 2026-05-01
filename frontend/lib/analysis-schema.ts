@@ -232,6 +232,7 @@ function parseDataQualitySection(value: unknown): DataQualitySection {
 function parseAlphaSection(value: unknown): AlphaSection {
   const raw = isRecord(value) ? value : {};
   const bootstrapRaw = raw.bootstrapConfig ?? raw.bootstrap_config;
+  const gateStatsRaw = raw.gateStats ?? raw.gate_stats;
   return {
     hitRates: toJsonArray(raw.hitRates),
     correlations: toJsonArray(raw.correlations),
@@ -241,6 +242,7 @@ function parseAlphaSection(value: unknown): AlphaSection {
     horizonMetrics: toJsonObject(raw.horizonMetrics),
     walkForwardHorizons: toJsonObject(raw.walkForwardHorizons),
     bootstrapConfig: bootstrapRaw === undefined ? undefined : toJsonObject(bootstrapRaw),
+    gateStats: gateStatsRaw === undefined ? undefined : toJsonObject(gateStatsRaw),
   };
 }
 
@@ -269,6 +271,8 @@ export function parseSentimentInsight(value: unknown): SentimentInsightArtifact 
   const stationarity = parseStationaritySection(raw.stationarity);
   const rawStats = toJsonObject(raw.rawStats);
 
+  const meta = isRecord(raw.meta) ? toJsonObject(raw.meta) : undefined;
+
   return {
     schemaVersion,
     generatedAtUtc,
@@ -282,5 +286,6 @@ export function parseSentimentInsight(value: unknown): SentimentInsightArtifact 
     targets,
     stationarity,
     rawStats,
+    meta,
   };
 }

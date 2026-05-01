@@ -32,6 +32,7 @@ from morning_brief.analysis.sentiment_join.statistical_tests import (
     run_statistical_tests,
 )
 from morning_brief.analysis.sentiment_join.storage import (
+    append_drift_record,
     cleanup_old_files,
     save_parquet,
     upload_to_r2,
@@ -344,6 +345,86 @@ def _target_diagnostics(df: pd.DataFrame) -> dict[str, dict[str, object]]:
             record["std"] = float(valid.std(ddof=1)) if len(valid) > 1 else None
         diagnostics[col] = record
     return diagnostics
+
+
+def _append_vol_regime_v2_drift(
+    fe_artifact: dict,
+    output_dir: "Path",
+    run_date: str,
+) -> None:
+    """vol_regime_v2 드리프트 지표를 JSONL에 append한다.
+
+    fe_artifact에서 baseline_metrics와 research_rule sparse row를 추출해
+    output_dir/vol_regime_v2_drift.jsonl에 기록한다.
+    지표 추출 실패 시 로깅 후 조용히 건너뜀.
+    """
+    try:
+        alpha = fe_artifact.get("alpha") or {}
+        baseline_metrics_all = (alpha.get("baselineMetrics") or {}).get("7") or {}
+        v2 = baseline_metrics_all.get("vol_regime_v2") or {}
+
+        hit_rates = ((alpha.get("horizonMetrics") or {}).get("7") or {}).get("hit_rates") or []
+        sparse_row = next(
+            (
+                r
+                for r in hit_rates
+                if isinstance(r, dict)
+                and r.get("predictor") == "vol_regime_v2_vix_realized_vol_2of2"
+            ),
+            {},
+        )
+
+        record: dict = {
+            "vol_regime_v2_hit_rate": v2.get("hit_rate"),
+            "vol_regime_v2_coverage": v2.get("coverage"),
+            "vol_regime_v2_sharpe": v2.get("sharpe"),
+            "vol_regime_v2_hit_rate_ci_lower": v2.get("hit_rate_ci_lower"),
+            "vol_regime_v2_hit_rate_ci_upper": v2.get("hit_rate_ci_upper"),
+            "kept_baseline_hit_rate": sparse_row.get("kept_baseline_hit_rate"),
+            "dropped_baseline_hit_rate": sparse_row.get("dropped_baseline_hit_rate"),
+            "kept_baseline_hit_rate_lift": sparse_row.get("kept_baseline_hit_rate_lift"),
+            "kept_gt_dropped_pvalue": sparse_row.get("kept_gt_dropped_pvalue"),
+            "kept_n": sparse_row.get("kept_n"),
+            "dropped_n": sparse_row.get("dropped_n"),
+        }
+        append_drift_record(output_dir, run_date, record)
+    except Exception as exc:
+        log_structured(
+            logger,
+            event="drift.append_failed",
+            message="vol_regime_v2 드리프트 기록 실패",
+            level=logging.WARNING,
+            reason=str(exc),
+        )
+
+
+def _evaluate_and_log_overlay_gate(output_dir: "Path") -> None:
+    """drift JSONL을 읽어 overlay gate를 평가하고 결과를 structured log로 출력한다."""
+    try:
+        from morning_brief.analysis.sentiment_join.storage import read_drift_records
+        from morning_brief.analysis.sentiment_join.variance import evaluate_regime_overlay_gate
+
+        records = read_drift_records(output_dir)
+        result = evaluate_regime_overlay_gate(records)
+        log_structured(
+            logger,
+            event="overlay_gate.evaluated",
+            message=f"vol_regime_v2 overlay gate: {result.decision}",
+            decision=result.decision,
+            n_records=result.n_records,
+            rolling_hit_rate=result.rolling_hit_rate,
+            rolling_coverage=result.rolling_coverage,
+            rolling_p_median=result.rolling_p_median,
+            message_detail=result.message,
+        )
+    except Exception as exc:
+        log_structured(
+            logger,
+            event="overlay_gate.failed",
+            message="overlay gate 평가 실패",
+            level=logging.WARNING,
+            reason=str(exc),
+        )
 
 
 def run_sentiment_join(settings: SentimentJoinSettings) -> int:
@@ -943,6 +1024,11 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
                 stats_metadata_bytes=stats_metadata,
                 reference_date=today.strftime("%Y-%m-%d"),
             )
+
+            # vol_regime_v2 드리프트 추적 레코드 append + overlay gate 평가
+            _append_vol_regime_v2_drift(fe_artifact, settings.output_dir, run_date)
+            _evaluate_and_log_overlay_gate(settings.output_dir)
+
             if not should_skip_artifact(fe_artifact):
                 latest_path, dated_path = write_frontend_artifact(
                     settings.output_dir, fe_artifact, run_date
@@ -954,6 +1040,18 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
                     upload_to_r2(
                         local_path,
                         r2_key,
+                        r2_s3_endpoint=settings.r2_s3_endpoint,
+                        r2_access_key_id=settings.r2_access_key_id,
+                        r2_secret_access_key=settings.r2_secret_access_key,
+                        r2_public_bucket=settings.r2_public_bucket,
+                    )
+
+                # drift JSONL도 R2에 업로드
+                drift_path = settings.output_dir / "vol_regime_v2_drift.jsonl"
+                if drift_path.exists():
+                    upload_to_r2(
+                        drift_path,
+                        "analytics/sentiment/vol_regime_v2_drift.jsonl",
                         r2_s3_endpoint=settings.r2_s3_endpoint,
                         r2_access_key_id=settings.r2_access_key_id,
                         r2_secret_access_key=settings.r2_secret_access_key,

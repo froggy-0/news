@@ -453,9 +453,126 @@ def evaluate_promotion_gate(
     )
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# vol_regime_v2 Overlay Promotion Gate (P4-T11)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# 승격 기준 (check_vol_regime_v2_drift.py와 동기화)
+_OVERLAY_GATE_MIN_HIT_RATE = 0.55
+_OVERLAY_GATE_P_MAX = 0.10
+_OVERLAY_GATE_COV_MIN = 0.45
+_OVERLAY_GATE_COV_MAX = 0.70
+_OVERLAY_GATE_MIN_RECORDS = 14  # rolling window 최소 일수
+
+
+@dataclass
+class OverlayGateResult:
+    """vol_regime_v2 승격 게이트 평가 결과."""
+
+    decision: str  # "promote" | "monitor" | "insufficient_data"
+    n_records: int
+    rolling_hit_rate: float
+    rolling_coverage: float
+    rolling_p_median: float
+    hit_rate_ok: bool
+    coverage_ok: bool
+    p_value_ok: bool
+    message: str
+
+
+def evaluate_regime_overlay_gate(
+    records: list[dict],
+    *,
+    window: int = _OVERLAY_GATE_MIN_RECORDS,
+) -> OverlayGateResult:
+    """vol_regime_v2 drift JSONL 레코드를 분석해 승격 여부를 결정한다.
+
+    records : read_drift_records() 반환값 (시간순 정렬).
+    window  : rolling 분석 window (일수). 기본 14일.
+
+    기준:
+      - hit_rate mean ≥ 0.55
+      - coverage mean ∈ [0.45, 0.70]
+      - kept_gt_dropped_pvalue rolling median < 0.10
+      → 3개 조건 모두 충족 시 decision="promote"
+    """
+    n = len(records)
+    if n < window:
+        return OverlayGateResult(
+            decision="insufficient_data",
+            n_records=n,
+            rolling_hit_rate=float("nan"),
+            rolling_coverage=float("nan"),
+            rolling_p_median=float("nan"),
+            hit_rate_ok=False,
+            coverage_ok=False,
+            p_value_ok=False,
+            message=f"롤링 분석에 최소 {window}일 필요 — 현재 {n}일 기록",
+        )
+
+    recent = records[-window:]
+
+    def _vals(key: str) -> list[float]:
+        result = []
+        for r in recent:
+            v = r.get(key)
+            if v is None:
+                continue
+            try:
+                f = float(v)
+                if math.isfinite(f):
+                    result.append(f)
+            except (TypeError, ValueError):
+                pass
+        return result
+
+    hr_vals = _vals("vol_regime_v2_hit_rate")
+    cov_vals = _vals("vol_regime_v2_coverage")
+    p_vals = _vals("kept_gt_dropped_pvalue")
+
+    rolling_hr = sum(hr_vals) / len(hr_vals) if hr_vals else float("nan")
+    rolling_cov = sum(cov_vals) / len(cov_vals) if cov_vals else float("nan")
+    rolling_p = sorted(p_vals)[len(p_vals) // 2] if p_vals else float("nan")
+
+    hit_rate_ok = math.isfinite(rolling_hr) and rolling_hr >= _OVERLAY_GATE_MIN_HIT_RATE
+    coverage_ok = (
+        math.isfinite(rolling_cov) and _OVERLAY_GATE_COV_MIN <= rolling_cov <= _OVERLAY_GATE_COV_MAX
+    )
+    p_value_ok = math.isfinite(rolling_p) and rolling_p < _OVERLAY_GATE_P_MAX
+
+    if hit_rate_ok and coverage_ok and p_value_ok:
+        decision = "promote"
+        message = "3개 rolling 기준 충족 — 승격 검토 가능"
+    else:
+        decision = "monitor"
+        failed = []
+        if not hit_rate_ok:
+            failed.append(f"hit_rate={rolling_hr:.3f} < {_OVERLAY_GATE_MIN_HIT_RATE}")
+        if not coverage_ok:
+            failed.append(
+                f"coverage={rolling_cov:.3f} not in [{_OVERLAY_GATE_COV_MIN},{_OVERLAY_GATE_COV_MAX}]"
+            )
+        if not p_value_ok:
+            failed.append(f"p={rolling_p:.4f} ≥ {_OVERLAY_GATE_P_MAX}")
+        message = "조건 미충족: " + "; ".join(failed)
+
+    return OverlayGateResult(
+        decision=decision,
+        n_records=n,
+        rolling_hit_rate=rolling_hr,
+        rolling_coverage=rolling_cov,
+        rolling_p_median=rolling_p,
+        hit_rate_ok=hit_rate_ok,
+        coverage_ok=coverage_ok,
+        p_value_ok=p_value_ok,
+        message=message,
+    )
+
+
 __all__ = [
     "AnovaResult",
     "BootstrapCI",
+    "OverlayGateResult",
     "PromotionGateResult",
     "PowerAnalysisResult",
     "GATE_HIT_RATE_DELTA_PP",
@@ -466,6 +583,7 @@ __all__ = [
     "bh_correct",
     "bootstrap_ci",
     "evaluate_promotion_gate",
+    "evaluate_regime_overlay_gate",
     "fisher_z",
     "estimate_min_sample_size",
     "power_analysis",

@@ -1830,3 +1830,138 @@ class TestAdaptiveThresholdAndCompound:
             assert "kept_gt_dropped_pvalue" in row
             assert "pvalue_vs_baselines" in row
             assert "fdr_q" in row
+
+
+# ---------------------------------------------------------------------------
+# threshold_fn + predictor_name tests (P3-T7)
+# ---------------------------------------------------------------------------
+
+
+class TestThresholdFnAndPredictorName:
+    """compute_hit_rate / compute_backtest의 threshold_fn / predictor_name 확장 검증."""
+
+    def _make_df(self) -> "pd.DataFrame":
+        import numpy as np
+        import pandas as pd
+
+        n = 120
+        rng = np.random.default_rng(42)
+        # etf_net_inflow_usd_log1p_lag1: 절반은 양수, 절반은 음수
+        signal = rng.normal(0, 1, n)
+        returns = rng.normal(0.0005, 0.02, n)
+        label = pd.Series(["up" if r > 0 else "down" for r in returns], name="btc_direction_label")
+        return pd.DataFrame(
+            {
+                "etf_net_inflow_usd_log1p_lag1": signal,
+                "btc_log_return": returns,
+                "btc_direction_label": label,
+            }
+        )
+
+    def test_compute_hit_rate_threshold_fn_produces_different_result(self) -> None:
+        import pandas as pd
+
+        from morning_brief.analysis.sentiment_join.statistical_tests import compute_hit_rate
+
+        df = self._make_df()
+        # Fixed threshold=0 (baseline)
+        hr_fixed = compute_hit_rate(df, "etf_net_inflow_usd_log1p_lag1", threshold=0.0)
+        # Rolling q75 threshold
+        hr_q75 = compute_hit_rate(
+            df,
+            "etf_net_inflow_usd_log1p_lag1",
+            threshold=0.0,
+            threshold_fn=lambda s: s.rolling(30, min_periods=10).quantile(0.75),
+            predictor_name="etf_net_inflow_usd_log1p_lag1_q75",
+        )
+        # With rolling threshold, fewer rows qualify → n_valid should be ≤ fixed
+        assert hr_q75.predictor == "etf_net_inflow_usd_log1p_lag1_q75"
+        assert hr_q75.n_valid <= hr_fixed.n_valid
+        # Result is a valid HitRateResult
+        assert 0.0 <= hr_q75.hit_rate <= 1.0 or pd.isna(hr_q75.hit_rate)
+
+    def test_compute_hit_rate_predictor_name_override(self) -> None:
+        from morning_brief.analysis.sentiment_join.statistical_tests import compute_hit_rate
+
+        df = self._make_df()
+        hr = compute_hit_rate(
+            df,
+            "etf_net_inflow_usd_log1p_lag1",
+            threshold=0.0,
+            inverted=True,
+            predictor_name="etf_net_inflow_usd_log1p_lag1_inverted",
+        )
+        assert hr.predictor == "etf_net_inflow_usd_log1p_lag1_inverted"
+        assert hr.inverted is True
+
+    def test_compute_backtest_threshold_fn_matches_manual(self) -> None:
+        import numpy as np
+
+        from morning_brief.analysis.sentiment_join.statistical_tests import compute_backtest
+
+        df = self._make_df()
+        fn = lambda s: s.rolling(30, min_periods=10).quantile(0.75)  # noqa: E731
+
+        result = compute_backtest(
+            df,
+            "etf_net_inflow_usd_log1p_lag1",
+            threshold=0.0,
+            threshold_fn=fn,
+            predictor_name="etf_net_inflow_usd_log1p_lag1_q75",
+            transaction_cost_bps=0.0,
+        )
+        assert result.predictor == "etf_net_inflow_usd_log1p_lag1_q75"
+        # Strategy return should be finite (not all-cash)
+        assert result.n_valid > 0
+
+        # Manual verification: recompute signal and buy mask
+        signal = df["etf_net_inflow_usd_log1p_lag1"]
+        thr = fn(signal)
+        buy_mask = (signal > thr).fillna(False)
+        active_returns = df.loc[buy_mask, "btc_log_return"].to_numpy()
+        expected_strategy = float(np.sum(active_returns))
+        # Cumulative returns should be close (minor difference from cost=0 and NaN warmup)
+        assert abs(result.strategy_cumulative_return - expected_strategy) < 1e-6
+
+    def test_compute_hit_rate_no_name_override_uses_col(self) -> None:
+        from morning_brief.analysis.sentiment_join.statistical_tests import compute_hit_rate
+
+        df = self._make_df()
+        hr = compute_hit_rate(df, "etf_net_inflow_usd_log1p_lag1", threshold=0.0)
+        assert hr.predictor == "etf_net_inflow_usd_log1p_lag1"
+
+    def test_etf_variants_in_run_alpha_validation_output(self) -> None:
+        """run_alpha_validation 결과에 3 variant predictor 이름이 모두 존재해야 한다."""
+        import numpy as np
+        import pandas as pd
+
+        from morning_brief.analysis.sentiment_join.statistical_tests import run_alpha_validation
+
+        n = 200
+        rng = np.random.default_rng(7)
+        signal = rng.normal(0, 1, n)
+        returns = rng.normal(0.0005, 0.02, n)
+        label = ["up" if r > 0 else "down" for r in returns]
+        # Provide all required columns so the pipeline doesn't skip
+        df = pd.DataFrame(
+            {
+                "etf_net_inflow_usd_log1p_lag1": signal,
+                "btc_log_return": returns,
+                "btc_fwd_ret_7d": returns,
+                "btc_direction_label": label,
+            }
+        )
+
+        results = run_alpha_validation(df)
+        hr_rows = results.get("hit_rates", [])
+        bt_rows = results.get("backtest", [])
+        hr_names = {r["predictor"] for r in hr_rows}
+        bt_names = {r["predictor"] for r in bt_rows}
+
+        for variant in (
+            "etf_net_inflow_usd_log1p_lag1_inverted",
+            "etf_net_inflow_usd_log1p_lag1_q75",
+            "etf_net_inflow_usd_log1p_lag1_q80",
+        ):
+            assert variant in hr_names, f"{variant} missing from hit_rates"
+            assert variant in bt_names, f"{variant} missing from backtest"

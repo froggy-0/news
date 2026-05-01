@@ -169,6 +169,11 @@ def evaluate_baseline(
         else float("nan")
     )
 
+    # Max Drawdown: strategy_ret_full 기준 (flat 구간 포함)
+    cumcurve = np.cumsum(strategy_ret_full)
+    running_max = np.maximum.accumulate(cumcurve)
+    max_drawdown = float(np.min(cumcurve - running_max)) if len(cumcurve) > 0 else float("nan")
+
     ci_payload = dict(empty_ci)
     if bootstrap is not None and len(strategy_ret) > 1:
         ann_factor = math.sqrt(TRADING_DAYS_PER_YEAR)
@@ -197,6 +202,7 @@ def evaluate_baseline(
         "hit_rate": float(np.mean(hits)),
         "sharpe": sharpe,
         "coverage": coverage,
+        "max_drawdown": max_drawdown,
         **ci_payload,
     }
 
