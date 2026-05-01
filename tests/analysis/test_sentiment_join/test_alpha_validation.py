@@ -1734,6 +1734,8 @@ class TestAdaptiveThresholdAndCompound:
                 "funding_rate_x_bear_lag1": rng.uniform(-0.002, 0.002, n),
                 "vix_lag1": rng.uniform(15, 35, n),
                 "vix_regime_score_lag1": rng.uniform(-1.5, 1.5, n),
+                "btc_realized_vol_20d_lag1": rng.uniform(0.01, 0.08, n),
+                "btc_above_ma200_lag1": rng.choice([0.0, 1.0], n),
                 "full_hybrid_index_score_lag1": rng.uniform(30, 70, n),
                 "core_hybrid_index_score_lag1": rng.uniform(30, 70, n),
             }
@@ -1797,3 +1799,34 @@ class TestAdaptiveThresholdAndCompound:
         assert "fdr_q" in row
         assert row["paired_baseline_alignment"]
         assert row["paired_baseline_alignment"]["vol_regime"]["alignment_key"] == "date"
+
+    def test_sparse_research_rules_are_present_with_abstain_diagnostics(self) -> None:
+        from morning_brief.analysis.sentiment_join.statistical_tests import run_alpha_validation
+
+        df = self._make_df()
+        results = run_alpha_validation(df)
+        hit_rates = results["horizon_metrics"]["7"]["hit_rates"]
+        predictors = {r["predictor"] for r in hit_rates}
+
+        expected = {
+            "vix_low_long_only",
+            "vote_vol_sent_fng5_2of3",
+            "vote_vol_vix_sent_fng5_3of4",
+            "vol_regime_v2_vix_realized_vol_2of2",
+            "vol_regime_v3_vix_realized_vol_ma200_2of3",
+        }
+        assert expected <= predictors
+
+        for predictor in expected:
+            row = next(r for r in hit_rates if r["predictor"] == predictor)
+            assert row["research_rule"] is True
+            assert row["research_rule_family"] == "sparse_abstain_filter"
+            assert row["decision"] == "research_only"
+            assert row["decision_strict"] == "research_only"
+            assert row["masked_ratio_source"] == "research_rule"
+            assert row["abstain_filter_diagnostics"]["baseline_name"] == "vol_regime"
+            assert "kept_baseline_hit_rate" in row
+            assert "dropped_baseline_hit_rate" in row
+            assert "kept_gt_dropped_pvalue" in row
+            assert "pvalue_vs_baselines" in row
+            assert "fdr_q" in row

@@ -9,6 +9,7 @@ from morning_brief.analysis.sentiment_join.baselines import (
     evaluate_baseline,
     fng_contrarian,
     vol_regime,
+    vol_regime_v2,
 )
 
 
@@ -18,13 +19,20 @@ def _frame(rows: int = 80) -> pd.DataFrame:
             "btc_log_return": np.sin(np.arange(rows) / 5) * 0.01,
             "fng_value_lag1": [20, 80, 50, 10] * (rows // 4),
             "vix_lag1": np.linspace(12, 30, rows),
+            "btc_realized_vol_20d_lag1": np.sin(np.arange(rows) / 8) * 0.01 + 0.04,
         }
     )
 
 
 def test_baseline_signals_have_input_length() -> None:
     df = _frame()
-    for signal in (always_up(df), fng_contrarian(df), btc_momo_20d(df), vol_regime(df)):
+    for signal in (
+        always_up(df),
+        fng_contrarian(df),
+        btc_momo_20d(df),
+        vol_regime(df),
+        vol_regime_v2(df),
+    ):
         assert len(signal) == len(df)
 
 
@@ -50,3 +58,12 @@ def test_evaluate_baseline_missing_return_col_degrades() -> None:
 
     assert pd.isna(metrics["hit_rate"])
     assert metrics["coverage"] == 0.0
+
+
+def test_vol_regime_v2_is_sparse_confirmed_regime() -> None:
+    df = _frame()
+    signal = vol_regime_v2(df)
+
+    assert set(signal.dropna().unique()) <= {-1.0, 0.0, 1.0}
+    assert (signal == 0).any()
+    assert (signal != 0).any()
