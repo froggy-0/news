@@ -211,3 +211,106 @@ usdkrw_gap_flag = (gap_days > 1).astype(float)
 | `src/morning_brief/analysis/sentiment_join/baselines.py` | 수정 | `fee_per_leg_bps=10`, 플립 2 legs, exit 비용 귀속 로직 |
 | `src/morning_brief/analysis/sentiment_join/statistical_tests.py` | 수정 | 10bps 통일, 신규 피처 등록 (predictor/ADF/source 매핑) |
 | `tests/analysis/test_sentiment_join/test_statistical_tests.py` | 수정 | Granger pair 수 업데이트 (TARGET 10→11, 총 23→24) |
+
+---
+
+## 8. 추가 분석: VIX threshold + realized-vol threshold 2D grid
+
+**작성일**: 2026-05-01<br>
+**기준 데이터**: `data/sentiment_join/master_20260430.parquet`<br>
+**목표**: T+7 hit rate 개선을 위해 `vol_regime` 계열 신호의 trade/abstain 조건 최적화
+
+### 8.1 결론
+
+VIX threshold + BTC realized-vol threshold의 2D grid는 타당했다. 신규 피처를 더 늘리는 것보다, volatility regime에서 **확신이 낮은 구간을 버리는 sparse abstain filter**가 hit rate 개선에 더 직접적으로 작동했다.
+
+최종 채택:
+
+```text
+vol_regime_v2 = VIX 90D q40 방향 AND BTC realized-vol 45D q45 방향 일치
+```
+
+| 지표 | 최신 로컬 산출물 기준 |
+|---|---:|
+| hit rate | 61.64% |
+| coverage | 56.48% |
+| Sharpe | 5.71 |
+| kept > dropped p-value | 0.0107 |
+
+### 8.2 검정 방식
+
+2D grid는 아래 축으로 실행했다.
+
+| 축 | 후보 |
+|---|---|
+| VIX rolling window | 30, 45, 60, 90, 120 |
+| VIX quantile | 0.40, 0.45, 0.50, 0.55, 0.60 |
+| realized-vol rolling window | 30, 45, 60, 90, 120 |
+| realized-vol quantile | 0.40, 0.45, 0.50, 0.55, 0.60 |
+
+선택 기준은 최신 full-sample 성과만 보지 않고, expanding replay에서 다음 조건을 함께 봤다.
+
+| 기준 | 이유 |
+|---|---|
+| latest hit/sharpe | 현재 artifact 개선 여부 |
+| median hit/sharpe lift | 과거 as-of 날짜에서의 중앙 성능 |
+| positive lift 비율 | 특정 구간 과최적화 방지 |
+| 최근 60회 tail median | 최신 regime에서 유지되는지 확인 |
+| coverage >= 45% | 너무 희소한 rule 제외 |
+
+### 8.3 주요 결과
+
+최종 선택된 `VIX 90D q40 + realized-vol 45D q45`는 robust replay 기준으로 다음 특성을 보였다.
+
+| 항목 | 값 |
+|---|---:|
+| latest hit rate | 61.64% |
+| latest coverage | 56.48% |
+| latest Sharpe | 5.76 |
+| latest hit lift | +6.73%p |
+| latest Sharpe lift | +3.20 |
+| median hit lift | +4.50%p |
+| median Sharpe lift | +2.71 |
+| hit lift positive 비율 | 90.00% |
+| Sharpe lift positive 비율 | 89.44% |
+| 최근 60회 median hit lift | +6.43%p |
+| 최근 60회 median Sharpe lift | +3.14 |
+
+기존 후보였던 `VIX 60D q50 + realized-vol 45D q50`도 나쁘지 않았지만, robust replay에서 최종 채택 조합보다 약했다.
+
+| 조합 | latest hit | coverage | latest Sharpe | median Sharpe lift |
+|---|---:|---:|---:|---:|
+| VIX 60D q50 + RV 45D q50 | 60.14% | 54.81% | 4.57 | +0.76 |
+| VIX 90D q40 + RV 45D q45 | 61.64% | 56.48% | 5.76 | +2.71 |
+
+### 8.4 코드 반영
+
+| 파일 | 내용 |
+|---|---|
+| `src/morning_brief/analysis/sentiment_join/baselines.py` | `vol_regime_v2` baseline 추가 |
+| `src/morning_brief/analysis/sentiment_join/statistical_tests.py` | baseline metrics와 research artifact에 sparse rules 추가 |
+| `tests/analysis/test_sentiment_join/test_baselines.py` | `vol_regime_v2` sparse 동작 검증 |
+| `tests/analysis/test_sentiment_join/test_alpha_validation.py` | research artifact 계약 검증 |
+
+`vol_regime_v2`는 baseline metrics에 들어가고, 동일 rule은 `vol_regime_v2_vix_realized_vol_2of2` 이름으로 research artifact에도 들어간다. 따라서 frontend 계약상 다음 경로에서 조회 가능하다.
+
+```text
+alpha.baselineMetrics["7"].vol_regime_v2
+alpha.horizonMetrics["7"].hit_rates[]
+alpha.horizonMetrics["7"].backtest[]
+```
+
+### 8.5 왜 아직 `research_only`인가
+
+`vol_regime_v2`는 hit rate 개선이 뚜렷하지만 coverage가 56.48%다. 이는 전체 시장 예측기가 아니라 high-confidence regime overlay에 가깝다.
+
+또한 `vol_regime_v2_vix_realized_vol_2of2` research row는 자기 자신이 best baseline이 되므로 best baseline 대비 lift가 0에 가까울 수 있다. 이 때문에 strict promotion으로 바로 올리는 대신, kept/dropped 검정을 누적 확인하는 것이 맞다.
+
+### 8.6 앞으로 할 일
+
+1. Frontend analysis 화면에서 `vol_regime_v2`를 baseline 카드 또는 high-confidence regime 카드로 노출한다.
+2. `research_rule == true` 행은 일반 alpha 후보와 분리해 표시한다.
+3. 매일 `kept_gt_dropped_pvalue`, `kept_baseline_hit_rate`, `dropped_baseline_hit_rate`를 기록해 drift를 추적한다.
+4. 2~4주 동안 coverage 50~65%, p-value 0.10 이하, Sharpe CI 개선이 유지되는지 본다.
+5. 운영 적용 시 단독 신호가 아니라 기존 decision 위에 confidence overlay로 먼저 사용한다.
+6. 다음 grid는 VIX/RV threshold를 더 세분화하기보다, transaction cost sensitivity와 drawdown 안정성을 먼저 확인한다.

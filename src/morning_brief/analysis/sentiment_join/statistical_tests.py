@@ -1672,6 +1672,7 @@ def _baseline_metrics_by_horizon(
         evaluate_baseline,
         fng_contrarian,
         vol_regime,
+        vol_regime_v2,
     )
 
     baseline_factories = {
@@ -1679,6 +1680,7 @@ def _baseline_metrics_by_horizon(
         "fng_contrarian": fng_contrarian,
         "btc_momo_20d": btc_momo_20d,
         "vol_regime": vol_regime,
+        "vol_regime_v2": vol_regime_v2,
     }
     metrics: dict[str, Any] = {}
     for horizon_days, return_col in _ALPHA_HORIZONS.items():
@@ -1739,6 +1741,27 @@ def _baseline_hits_series(
         return pd.Series(dtype=float, name="baseline_hit")
     hits = (np.sign(active["signal"].to_numpy()) == np.sign(active["ret"].to_numpy())).astype(float)
     return pd.Series(hits, index=active.index)
+
+
+def _signal_hits_series_from_signal(
+    df: pd.DataFrame,
+    signal: pd.Series,
+    return_col: str,
+) -> pd.Series:
+    aligned = pd.DataFrame(
+        {
+            "signal": pd.to_numeric(signal, errors="coerce"),
+            "ret": pd.to_numeric(df[return_col], errors="coerce"),
+        }
+    ).dropna()
+    active = aligned[aligned["signal"] != 0]
+    if "btc_direction_label" in df.columns:
+        not_flat = (df["btc_direction_label"] != "flat").reindex(active.index, fill_value=True)
+        active = active[not_flat]
+    if active.empty:
+        return pd.Series(dtype=float, name="signal_hit")
+    hits = (np.sign(active["signal"].to_numpy()) == np.sign(active["ret"].to_numpy())).astype(float)
+    return pd.Series(hits, index=active.index, name="signal_hit")
 
 
 def _alignment_keys_for_rows(df: pd.DataFrame, row_index: pd.Index) -> tuple[pd.Index, str]:
@@ -1871,6 +1894,279 @@ def _compute_regime_filtered_compound(
     return score.where(regime >= 0, neutral_score)
 
 
+def _directional_signal_from_col(
+    df: pd.DataFrame,
+    col: str,
+    *,
+    threshold: float = 0.0,
+    inverted: bool = False,
+) -> pd.Series:
+    values = pd.to_numeric(df.get(col, pd.Series(dtype=float, index=df.index)), errors="coerce")
+    signal = pd.Series(0.0, index=df.index, name=col)
+    valid = values.notna()
+    if inverted:
+        signal.loc[valid & (values <= threshold)] = 1.0
+        signal.loc[valid & (values > threshold)] = -1.0
+    else:
+        signal.loc[valid & (values > threshold)] = 1.0
+        signal.loc[valid & (values <= threshold)] = -1.0
+    return signal
+
+
+def _rolling_low_high_signal_from_col(
+    df: pd.DataFrame,
+    col: str,
+    *,
+    window: int = 60,
+    min_periods: int = 20,
+) -> pd.Series:
+    values = pd.to_numeric(df.get(col, pd.Series(dtype=float, index=df.index)), errors="coerce")
+    threshold = values.rolling(window, min_periods=min_periods).median()
+    threshold = threshold.fillna(values.median())
+    signal = pd.Series(0.0, index=df.index, name=col)
+    valid = values.notna() & threshold.notna()
+    signal.loc[valid & (values <= threshold)] = 1.0
+    signal.loc[valid & (values > threshold)] = -1.0
+    return signal
+
+
+def _ma200_trend_signal(df: pd.DataFrame) -> pd.Series:
+    col = "btc_above_ma200_lag1" if "btc_above_ma200_lag1" in df.columns else "btc_above_ma200"
+    values = pd.to_numeric(df.get(col, pd.Series(dtype=float, index=df.index)), errors="coerce")
+    signal = pd.Series(0.0, index=df.index, name="ma200_trend")
+    signal.loc[values >= 0.5] = 1.0
+    signal.loc[values < 0.5] = -1.0
+    return signal
+
+
+def _vote_signal(
+    signals: list[pd.Series],
+    *,
+    min_abs_vote: int,
+    name: str,
+) -> pd.Series:
+    if not signals:
+        return pd.Series(dtype=float, name=name)
+    votes = pd.concat(signals, axis=1).fillna(0.0).sum(axis=1)
+    signal = pd.Series(0.0, index=votes.index, name=name)
+    signal.loc[votes >= min_abs_vote] = 1.0
+    signal.loc[votes <= -min_abs_vote] = -1.0
+    return signal
+
+
+def _compute_sparse_research_signal(
+    df: pd.DataFrame,
+    label: str,
+) -> pd.Series:
+    from morning_brief.analysis.sentiment_join.baselines import (
+        vol_regime as _vol_regime,
+    )
+    from morning_brief.analysis.sentiment_join.baselines import (
+        vol_regime_v2 as _vol_regime_v2,
+    )
+
+    vol = _vol_regime(df)
+    vix = _directional_signal_from_col(df, "vix_regime_score_lag1")
+    sentiment = _directional_signal_from_col(df, "sentiment_momentum_lag1")
+    fng5 = _directional_signal_from_col(df, "fng_change_5d_lag1")
+    realized_vol = _rolling_low_high_signal_from_col(df, "btc_realized_vol_20d_lag1")
+    trend = _ma200_trend_signal(df)
+
+    if label == "vix_low_long_only":
+        return vix.where(vix > 0, 0.0).rename(label)
+    if label == "vote_vol_sent_fng5_2of3":
+        return _vote_signal([vol, sentiment, fng5], min_abs_vote=2, name=label)
+    if label == "vote_vol_vix_sent_fng5_3of4":
+        return _vote_signal([vol, vix, sentiment, fng5], min_abs_vote=3, name=label)
+    if label == "vol_regime_v2_vix_realized_vol_2of2":
+        return _vol_regime_v2(df).rename(label)
+    if label == "vol_regime_v3_vix_realized_vol_ma200_2of3":
+        return _vote_signal([vol, realized_vol, trend], min_abs_vote=2, name=label)
+    return pd.Series(0.0, index=df.index, name=label)
+
+
+def _kept_dropped_baseline_diagnostic(
+    df: pd.DataFrame,
+    signal: pd.Series,
+    baseline_signal: pd.Series,
+    return_col: str,
+) -> dict[str, Any]:
+    aligned = pd.DataFrame(
+        {
+            "signal": pd.to_numeric(signal, errors="coerce"),
+            "baseline": pd.to_numeric(baseline_signal, errors="coerce"),
+            "ret": pd.to_numeric(df[return_col], errors="coerce"),
+        }
+    ).dropna()
+    active_baseline = aligned[aligned["baseline"] != 0]
+    if "btc_direction_label" in df.columns:
+        not_flat = (df["btc_direction_label"] != "flat").reindex(
+            active_baseline.index, fill_value=True
+        )
+        active_baseline = active_baseline[not_flat]
+
+    kept = active_baseline[active_baseline["signal"] != 0]
+    dropped = active_baseline[active_baseline["signal"] == 0]
+
+    def _baseline_hit_rate(frame: pd.DataFrame) -> float:
+        if frame.empty:
+            return float("nan")
+        hits = np.sign(frame["baseline"].to_numpy(dtype=float)) == np.sign(
+            frame["ret"].to_numpy(dtype=float)
+        )
+        return float(np.mean(hits))
+
+    kept_hit_rate = _baseline_hit_rate(kept)
+    dropped_hit_rate = _baseline_hit_rate(dropped)
+    pvalue = float("nan")
+    if not kept.empty and not dropped.empty:
+        from scipy.stats import fisher_exact
+
+        kept_hits = int(
+            (
+                np.sign(kept["baseline"].to_numpy(dtype=float))
+                == np.sign(kept["ret"].to_numpy(dtype=float))
+            ).sum()
+        )
+        dropped_hits = int(
+            (
+                np.sign(dropped["baseline"].to_numpy(dtype=float))
+                == np.sign(dropped["ret"].to_numpy(dtype=float))
+            ).sum()
+        )
+        _, pvalue = fisher_exact(
+            [
+                [kept_hits, len(kept) - kept_hits],
+                [dropped_hits, len(dropped) - dropped_hits],
+            ],
+            alternative="greater",
+        )
+        pvalue = float(pvalue)
+
+    return {
+        "baseline_name": "vol_regime",
+        "kept_n": int(len(kept)),
+        "dropped_n": int(len(dropped)),
+        "kept_baseline_hit_rate": kept_hit_rate,
+        "dropped_baseline_hit_rate": dropped_hit_rate,
+        "kept_baseline_hit_rate_lift": kept_hit_rate - dropped_hit_rate,
+        "kept_gt_dropped_pvalue": pvalue,
+    }
+
+
+def _payoff_diagnostics_for_signal(
+    df: pd.DataFrame,
+    signal: pd.Series,
+    return_col: str,
+) -> dict[str, Any]:
+    aligned = pd.DataFrame(
+        {
+            "signal": pd.to_numeric(signal, errors="coerce"),
+            "ret": pd.to_numeric(df[return_col], errors="coerce"),
+        }
+    ).dropna()
+    active = aligned[aligned["signal"] != 0]
+    if "btc_direction_label" in df.columns:
+        not_flat = (df["btc_direction_label"] != "flat").reindex(active.index, fill_value=True)
+        active = active[not_flat]
+    if active.empty:
+        return {
+            "avg_return_when_correct": float("nan"),
+            "avg_return_when_wrong": float("nan"),
+            "median_return_when_correct": float("nan"),
+            "median_return_when_wrong": float("nan"),
+            "payoff_ratio": float("nan"),
+            "correct_count": 0,
+            "wrong_count": 0,
+            "exposure_ratio": 0.0,
+            "turnover_ratio": float("nan"),
+            "avg_strategy_return": float("nan"),
+            "avg_bnh_return": float("nan"),
+        }
+
+    signal_arr = active["signal"].to_numpy(dtype=float)
+    returns = active["ret"].to_numpy(dtype=float)
+    correct_mask = np.sign(signal_arr) == np.sign(returns)
+    wrong_mask = ~correct_mask
+    strategy_returns = signal_arr * returns
+    avg_correct = (
+        float(np.mean(returns[correct_mask])) if bool(correct_mask.any()) else float("nan")
+    )
+    avg_wrong = float(np.mean(returns[wrong_mask])) if bool(wrong_mask.any()) else float("nan")
+    payoff_ratio = (
+        abs(avg_correct / avg_wrong)
+        if math.isfinite(avg_correct) and math.isfinite(avg_wrong) and avg_wrong != 0.0
+        else float("nan")
+    )
+    all_pos = np.sign(aligned["signal"].fillna(0).to_numpy(dtype=float))
+    turnover = float(np.mean(all_pos[1:] != all_pos[:-1])) if len(all_pos) > 1 else float("nan")
+    return {
+        "avg_return_when_correct": avg_correct,
+        "avg_return_when_wrong": avg_wrong,
+        "median_return_when_correct": (
+            float(np.median(returns[correct_mask])) if bool(correct_mask.any()) else float("nan")
+        ),
+        "median_return_when_wrong": (
+            float(np.median(returns[wrong_mask])) if bool(wrong_mask.any()) else float("nan")
+        ),
+        "payoff_ratio": payoff_ratio,
+        "correct_count": int(correct_mask.sum()),
+        "wrong_count": int(wrong_mask.sum()),
+        "exposure_ratio": float(len(active) / len(aligned)) if len(aligned) else 0.0,
+        "turnover_ratio": turnover,
+        "avg_strategy_return": float(np.mean(strategy_returns)),
+        "avg_bnh_return": float(np.mean(returns)),
+    }
+
+
+def _backtest_payload_for_signal(
+    df: pd.DataFrame,
+    signal: pd.Series,
+    return_col: str,
+    *,
+    transaction_cost_bps: float = 10.0,
+) -> dict[str, Any]:
+    aligned = pd.DataFrame(
+        {
+            "signal": pd.to_numeric(signal, errors="coerce"),
+            "ret": pd.to_numeric(df[return_col], errors="coerce"),
+        }
+    ).dropna()
+    if aligned.empty:
+        return {
+            "strategy_cumulative_return": float("nan"),
+            "bnh_cumulative_return": float("nan"),
+            "alpha": float("nan"),
+            "max_drawdown": float("nan"),
+            "n_trades": 0,
+        }
+
+    pos = np.sign(aligned["signal"].fillna(0).to_numpy(dtype=float))
+    returns = aligned["ret"].to_numpy(dtype=float)
+    strategy_returns = pos * returns
+    n_trades = 0
+    if len(pos) > 1:
+        position_changes = pos[1:] != pos[:-1]
+        n_trades = int(position_changes.sum())
+        if transaction_cost_bps > 0.0 and n_trades > 0:
+            prev_pos = np.concatenate([[0.0], pos[:-1]])
+            legs = np.where(prev_pos * pos < 0, 2, np.where(prev_pos != pos, 1, 0))
+            strategy_returns = strategy_returns + legs * math.log(1 - transaction_cost_bps / 10000)
+
+    strategy_cumret = float(np.sum(strategy_returns))
+    bnh_cumret = float(np.sum(returns))
+    cumulative_curve = np.cumsum(strategy_returns)
+    running_max = np.maximum.accumulate(cumulative_curve)
+    max_drawdown = float(np.min(cumulative_curve - running_max))
+    return {
+        "strategy_cumulative_return": strategy_cumret,
+        "bnh_cumulative_return": bnh_cumret,
+        "alpha": strategy_cumret - bnh_cumret,
+        "max_drawdown": max_drawdown,
+        "n_trades": n_trades,
+    }
+
+
 _COMPOUND_PREDICTOR_CONFIGS: list[dict[str, Any]] = [
     {
         "source_col": "full_hybrid_index_score_lag1",
@@ -1879,6 +2175,29 @@ _COMPOUND_PREDICTOR_CONFIGS: list[dict[str, Any]] = [
         "threshold": 50.0,
         "inverted": False,
         "group": "hybrid",
+    },
+]
+
+_SPARSE_RESEARCH_RULE_CONFIGS: list[dict[str, Any]] = [
+    {
+        "label": "vix_low_long_only",
+        "group": "research_sparse",
+    },
+    {
+        "label": "vote_vol_sent_fng5_2of3",
+        "group": "research_sparse",
+    },
+    {
+        "label": "vote_vol_vix_sent_fng5_3of4",
+        "group": "research_sparse",
+    },
+    {
+        "label": "vol_regime_v2_vix_realized_vol_2of2",
+        "group": "research_sparse",
+    },
+    {
+        "label": "vol_regime_v3_vix_realized_vol_ma200_2of3",
+        "group": "research_sparse",
     },
 ]
 
@@ -1990,6 +2309,8 @@ def _feature_group_for_predictor(predictor: str) -> str:
         "vol_regime_filtered_full_hybrid_score_lag1",
     }:
         return "hybrid"
+    if predictor in {cfg["label"] for cfg in _SPARSE_RESEARCH_RULE_CONFIGS}:
+        return "research_sparse"
     return "other"
 
 
@@ -2215,6 +2536,7 @@ def _horizon_metrics(
         evaluate_baseline,
         fng_contrarian,
         vol_regime,
+        vol_regime_v2,
     )
     from morning_brief.analysis.sentiment_join.variance import evaluate_promotion_gate
 
@@ -2223,6 +2545,7 @@ def _horizon_metrics(
         "fng_contrarian": fng_contrarian,
         "btc_momo_20d": btc_momo_20d,
         "vol_regime": vol_regime,
+        "vol_regime_v2": vol_regime_v2,
     }
 
     metrics: dict[str, Any] = {}
@@ -2519,6 +2842,193 @@ def _horizon_metrics(
             metrics[horizon_key]["backtest"].append(bt_c_dict)
             cell_pvalues.append((horizon_key, label, cell_p_value_c))
             eval_df.drop(columns=[tmp], inplace=True)
+
+    # Research-only sparse rules: abstain filters around vol_regime / stationary signals.
+    # These are intentionally added to artifacts for daily monitoring, not promotion.
+    for horizon_days, return_col in _ALPHA_HORIZONS.items():
+        if return_col not in df.columns:
+            continue
+        eval_df = _with_direction_label_for_return(df, return_col)
+        horizon_key = str(horizon_days)
+        if horizon_key not in metrics:
+            continue
+        baseline_metrics_sparse = {
+            name: evaluate_baseline(
+                eval_df, factory(eval_df), return_col=return_col, bootstrap=bootstrap_config
+            )
+            for name, factory in baseline_factories.items()
+        }
+        best_hit_sparse_name, best_hit_sparse = _best_baseline(baseline_metrics_sparse, "hit_rate")
+        best_sh_sparse_name, best_sh_sparse = _best_baseline(baseline_metrics_sparse, "sharpe")
+        vol_sparse = baseline_metrics_sparse.get("vol_regime", {})
+        vol_signal = vol_regime(eval_df)
+
+        for sparse_cfg in _SPARSE_RESEARCH_RULE_CONFIGS:
+            label = sparse_cfg["label"]
+            signal = _compute_sparse_research_signal(eval_df, label)
+            signal_metrics = evaluate_baseline(
+                eval_df, signal, return_col=return_col, bootstrap=bootstrap_config
+            )
+            signal_hits = _signal_hits_series_from_signal(eval_df, signal, return_col)
+            cell_p_value_s, baseline_alignment_s = _paired_baseline_comparison(
+                eval_df,
+                signal_hits,
+                baseline_factories,
+                return_col=return_col,
+                bootstrap_config=bootstrap_config,
+            )
+
+            active_frame = pd.DataFrame(
+                {
+                    "signal": pd.to_numeric(signal, errors="coerce"),
+                    "ret": pd.to_numeric(eval_df[return_col], errors="coerce"),
+                }
+            ).dropna()
+            active_frame = active_frame[active_frame["signal"] != 0]
+            if "btc_direction_label" in eval_df.columns:
+                not_flat = (eval_df["btc_direction_label"] != "flat").reindex(
+                    active_frame.index, fill_value=True
+                )
+                active_frame = active_frame[not_flat]
+            predicted_up = active_frame["signal"] > 0
+            actual_up = active_frame["ret"] > 0
+            tp = int((predicted_up & actual_up).sum())
+            fp = int((predicted_up & ~actual_up).sum())
+            tn = int((~predicted_up & ~actual_up).sum())
+            fn = int((~predicted_up & actual_up).sum())
+            precision = tp / (tp + fp) if (tp + fp) > 0 else float("nan")
+            recall = tp / (tp + fn) if (tp + fn) > 0 else float("nan")
+            f1 = (
+                2 * precision * recall / (precision + recall)
+                if math.isfinite(precision) and math.isfinite(recall) and (precision + recall) > 0
+                else float("nan")
+            )
+
+            hit_lift_s = _finite(signal_metrics.get("hit_rate")) - _finite(
+                best_hit_sparse.get("hit_rate")
+            )
+            sharpe_lift_s = _finite(signal_metrics.get("sharpe")) - _finite(
+                best_sh_sparse.get("sharpe")
+            )
+            vol_hit_lift_s = _finite(signal_metrics.get("hit_rate")) - _finite(
+                vol_sparse.get("hit_rate") if isinstance(vol_sparse, dict) else None
+            )
+            vol_sharpe_lift_s = _finite(signal_metrics.get("sharpe")) - _finite(
+                vol_sparse.get("sharpe") if isinstance(vol_sparse, dict) else None
+            )
+            kept_dropped = _kept_dropped_baseline_diagnostic(
+                eval_df, signal, vol_signal, return_col
+            )
+            payoff_s = _payoff_diagnostics_for_signal(eval_df, signal, return_col)
+            backtest_s = _backtest_payload_for_signal(eval_df, signal, return_col)
+            gate_s = evaluate_promotion_gate(
+                hit_rate_delta=hit_lift_s,
+                sharpe_delta=sharpe_lift_s,
+                coverage=_finite(signal_metrics.get("coverage")),
+                masked_ratio=0.0,
+                stability=float("nan"),
+                hit_rate_ci_lower=_finite(signal_metrics.get("hit_rate_ci_lower")),
+                hit_rate_ci_upper=_finite(signal_metrics.get("hit_rate_ci_upper")),
+                sharpe_ci_lower=_finite(signal_metrics.get("sharpe_ci_lower")),
+                sharpe_ci_upper=_finite(signal_metrics.get("sharpe_ci_upper")),
+                baseline_hit_rate_ci_upper=_finite(best_hit_sparse.get("hit_rate_ci_upper")),
+                baseline_sharpe_ci_upper=_finite(best_sh_sparse.get("sharpe_ci_upper")),
+            )
+
+            hr_s_dict = {
+                "predictor": label,
+                "threshold": 0.0,
+                "hit_rate": signal_metrics.get("hit_rate"),
+                "tp": tp,
+                "fp": fp,
+                "tn": tn,
+                "fn": fn,
+                "precision": precision,
+                "recall": recall,
+                "f1": f1,
+                "n_valid": int(len(active_frame)),
+                "inverted": False,
+                "granger_significant": None,
+                "hit_rate_ci_lower": signal_metrics.get("hit_rate_ci_lower"),
+                "hit_rate_ci_upper": signal_metrics.get("hit_rate_ci_upper"),
+                "bootstrap_n": signal_metrics.get("bootstrap_n"),
+                "bootstrap_method": signal_metrics.get("bootstrap_method"),
+                "bootstrap_block_length": signal_metrics.get("bootstrap_block_length"),
+                "horizon_days": horizon_days,
+                "return_col": return_col,
+                "research_rule": True,
+                "research_rule_family": "sparse_abstain_filter",
+                "decision": gate_s.decision,
+                "decision_strict": gate_s.decision_strict,
+                "best_baseline": best_hit_sparse_name,
+                "best_hit_rate_baseline": best_hit_sparse_name,
+                "best_sharpe_baseline": best_sh_sparse_name,
+                "baseline_hit_rate": best_hit_sparse.get("hit_rate"),
+                "baseline_hit_rate_ci_upper": best_hit_sparse.get("hit_rate_ci_upper"),
+                "baseline_sharpe": best_sh_sparse.get("sharpe"),
+                "baseline_sharpe_ci_upper": best_sh_sparse.get("sharpe_ci_upper"),
+                "strategy_sharpe": signal_metrics.get("sharpe"),
+                "sharpe_ci_lower": signal_metrics.get("sharpe_ci_lower"),
+                "sharpe_ci_upper": signal_metrics.get("sharpe_ci_upper"),
+                "hit_rate_lift_vs_best_baseline": hit_lift_s,
+                "sharpe_lift_vs_best_baseline": sharpe_lift_s,
+                "vol_regime_hit_rate_lift": vol_hit_lift_s,
+                "vol_regime_sharpe_lift": vol_sharpe_lift_s,
+                "payoff_diagnostics": payoff_s,
+                "abstain_filter_diagnostics": kept_dropped,
+                "kept_baseline_hit_rate": kept_dropped["kept_baseline_hit_rate"],
+                "dropped_baseline_hit_rate": kept_dropped["dropped_baseline_hit_rate"],
+                "kept_baseline_hit_rate_lift": kept_dropped["kept_baseline_hit_rate_lift"],
+                "kept_gt_dropped_pvalue": kept_dropped["kept_gt_dropped_pvalue"],
+                "kept_n": kept_dropped["kept_n"],
+                "dropped_n": kept_dropped["dropped_n"],
+                "coverage": gate_s.coverage,
+                "masked_ratio": gate_s.masked_ratio,
+                "masked_cells": 0,
+                "masked_denominator": 0,
+                "masked_source_columns": [],
+                "masked_ratio_source": "research_rule",
+                "stability": gate_s.stability,
+                "hit_rate_ok": gate_s.hit_rate_ok,
+                "sharpe_ok": gate_s.sharpe_ok,
+                "coverage_ok": gate_s.coverage_ok,
+                "masked_ratio_ok": gate_s.masked_ratio_ok,
+                "stability_ok": gate_s.stability_ok,
+                "hit_rate_ci_ok": gate_s.hit_rate_ci_ok,
+                "sharpe_ci_ok": gate_s.sharpe_ci_ok,
+                "fdr_ok": gate_s.fdr_ok,
+                "pvalue_vs_baselines": cell_p_value_s,
+                "fdr_q": float("nan"),
+                "paired_baseline_alignment": baseline_alignment_s,
+                "adaptive_hit_rate": float("nan"),
+                "adaptive_sharpe": float("nan"),
+            }
+            bt_s_dict = {
+                "predictor": label,
+                "threshold": 0.0,
+                "strategy_cumulative_return": backtest_s["strategy_cumulative_return"],
+                "bnh_cumulative_return": backtest_s["bnh_cumulative_return"],
+                "alpha": backtest_s["alpha"],
+                "sharpe_ratio": signal_metrics.get("sharpe"),
+                "max_drawdown": backtest_s["max_drawdown"],
+                "n_trades": backtest_s["n_trades"],
+                "n_valid": int(len(active_frame)),
+                "transaction_cost_bps": 10.0,
+                "inverted": False,
+                "granger_significant": None,
+                "sharpe_ci_lower": signal_metrics.get("sharpe_ci_lower"),
+                "sharpe_ci_upper": signal_metrics.get("sharpe_ci_upper"),
+                "cumulative_return_ci_lower": float("nan"),
+                "cumulative_return_ci_upper": float("nan"),
+                "bootstrap_n": signal_metrics.get("bootstrap_n"),
+                "bootstrap_method": signal_metrics.get("bootstrap_method"),
+                "bootstrap_block_length": signal_metrics.get("bootstrap_block_length"),
+                "horizon_days": horizon_days,
+                "return_col": return_col,
+            }
+            metrics[horizon_key]["hit_rates"].append(hr_s_dict)
+            metrics[horizon_key]["backtest"].append(bt_s_dict)
+            cell_pvalues.append((horizon_key, label, cell_p_value_s))
 
     # BH-FDR across (predictor × horizon) family
     if cell_pvalues:

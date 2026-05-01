@@ -54,6 +54,40 @@ def vol_regime(df: pd.DataFrame) -> pd.Series:
     return signal
 
 
+def _rolling_low_high_signal(
+    df: pd.DataFrame,
+    col: str,
+    *,
+    window: int = 60,
+    min_periods: int = 20,
+    quantile: float = 0.5,
+) -> pd.Series:
+    if col not in df.columns:
+        return pd.Series(0.0, index=df.index, name=col)
+    values = pd.to_numeric(df[col], errors="coerce")
+    threshold = values.rolling(window, min_periods=min_periods).quantile(quantile)
+    threshold = threshold.fillna(values.quantile(quantile))
+    signal = pd.Series(0.0, index=df.index, name=col)
+    valid = values.notna() & threshold.notna()
+    signal.loc[valid & (values <= threshold)] = 1.0
+    signal.loc[valid & (values > threshold)] = -1.0
+    return signal
+
+
+def vol_regime_v2(df: pd.DataFrame) -> pd.Series:
+    """VIX 90D q40 방향을 BTC 45D realized-vol q45 regime이 확인할 때만 거래한다."""
+
+    vix_col = "vix_lag1" if "vix_lag1" in df.columns else "vix"
+    base = _rolling_low_high_signal(df, vix_col, window=90, min_periods=30, quantile=0.40)
+    realized = _rolling_low_high_signal(
+        df, "btc_realized_vol_20d_lag1", window=45, min_periods=20, quantile=0.45
+    )
+    signal = pd.Series(0.0, index=df.index, name="vol_regime_v2")
+    signal.loc[(base > 0) & (realized > 0)] = 1.0
+    signal.loc[(base < 0) & (realized < 0)] = -1.0
+    return signal
+
+
 def evaluate_baseline(
     df: pd.DataFrame,
     signal: pd.Series,
@@ -173,4 +207,5 @@ __all__ = [
     "evaluate_baseline",
     "fng_contrarian",
     "vol_regime",
+    "vol_regime_v2",
 ]
