@@ -32,13 +32,20 @@ def _parse_kline_row(row: list[Any]) -> dict[str, Any]:
     Binance klines 응답 인덱스:
       [0] open_time (int, ms, UTC 자정) → date
       [4] close (str) → float
-      [7] quote_asset_volume (str) → float (btc_quote_volume)
+      [7] quote_asset_volume (str) → float (btc_quote_volume, USDT 기준 전체 거래대금)
+      [10] taker_buy_quote_asset_volume (str) → float (taker 매수 USDT 거래대금)
     """
     open_time_ms = int(row[0])
     date = datetime.fromtimestamp(open_time_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
     close = float(row[4])
     btc_quote_volume = float(row[7])
-    return {"date": date, "close": close, "btc_quote_volume": btc_quote_volume}
+    btc_taker_buy_quote_volume = float(row[10])
+    return {
+        "date": date,
+        "close": close,
+        "btc_quote_volume": btc_quote_volume,
+        "btc_taker_buy_quote_volume": btc_taker_buy_quote_volume,
+    }
 
 
 def _empty_binance_frame() -> pd.DataFrame:
@@ -47,6 +54,7 @@ def _empty_binance_frame() -> pd.DataFrame:
             "date": pd.Series(dtype="object"),
             "close": pd.Series(dtype="float64"),
             "btc_quote_volume": pd.Series(dtype="float64"),
+            "btc_taker_buy_quote_volume": pd.Series(dtype="float64"),
         }
     )
 
@@ -59,6 +67,7 @@ def _klines_to_frame(rows: list[list[Any]]) -> pd.DataFrame:
     df = pd.DataFrame(parsed)
     df["close"] = df["close"].astype("float64")
     df["btc_quote_volume"] = df["btc_quote_volume"].astype("float64")
+    df["btc_taker_buy_quote_volume"] = df["btc_taker_buy_quote_volume"].astype("float64")
 
     # 중복 날짜: 같은 날짜의 마지막 항목 사용
     df = df.groupby("date", as_index=False).last().sort_values("date").reset_index(drop=True)
@@ -168,6 +177,7 @@ def fetch_btc_close_binance(
 
     fallback_df = btc_prices.fetch_btc_close_yfinance(start_date, end_date)
     fallback_df["btc_quote_volume"] = float("nan")
+    fallback_df["btc_taker_buy_quote_volume"] = float("nan")
     fallback_df.attrs["btc_source"] = "yfinance"
     fallback_df.attrs["fallback_used"] = True
     return fallback_df

@@ -350,6 +350,30 @@ def _add_vix_regime_feature(result: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def _add_taker_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Taker buy pressure: 30d z-score 및 7d rolling ratio 파생.
+
+    btc_taker_buy_ratio_7d          : 7일 rolling taker buy ratio (mean)
+    btc_taker_imbalance_zscore_30d  : (daily_ratio - 30d_mean) / 30d_std, 매수 치우침 정도
+    _lag1 버전은 look-ahead bias 차단용.
+    """
+    result = df.copy()
+    taker_buy = pd.to_numeric(result.get("btc_taker_buy_quote_volume"), errors="coerce")
+    total_vol = pd.to_numeric(result.get("btc_quote_volume"), errors="coerce").replace(0, pd.NA)
+    daily_ratio = taker_buy / total_vol
+
+    result["btc_taker_buy_ratio_7d"] = daily_ratio.rolling(7, min_periods=4).mean()
+
+    roll30 = daily_ratio.rolling(30, min_periods=20)
+    result["btc_taker_imbalance_zscore_30d"] = (daily_ratio - roll30.mean()) / roll30.std()
+
+    result["btc_taker_imbalance_zscore_30d_lag1"] = result["btc_taker_imbalance_zscore_30d"].shift(
+        1
+    )
+    result["btc_taker_buy_ratio_7d_lag1"] = result["btc_taker_buy_ratio_7d"].shift(1)
+    return result
+
+
 def _add_btc_direction_label(df: pd.DataFrame) -> pd.DataFrame:
     """Req 8: btc_log_return 부호 기준으로 up/down/flat 라벨을 부여한다."""
     result = df.copy()
@@ -499,6 +523,23 @@ def merge_sources(
     else:
         merged["vix"] = float("nan")
 
+    # TODO(exchange-outflow): BTC 거래소 순유출 온체인 피처 연결 지점
+    # exchange_outflow.py 구현 완료 후 아래 주석을 해제하고 merge_sources() 시그니처에
+    # outflow_df: pd.DataFrame | None = None 파라미터를 추가하세요.
+    #
+    # from morning_brief.analysis.sentiment_join.sources.exchange_outflow import (
+    #     fetch_exchange_outflow,
+    # )
+    # if outflow_df is not None and not outflow_df.empty:
+    #     merged = merged.merge(
+    #         outflow_df[["date", "btc_exchange_net_outflow_usd"]], on="date", how="left"
+    #     )
+    # else:
+    #     merged["btc_exchange_net_outflow_usd"] = float("nan")
+    # merged["btc_exchange_net_outflow_usd_lag1"] = (
+    #     pd.to_numeric(merged.get("btc_exchange_net_outflow_usd"), errors="coerce").shift(1)
+    # )
+
     # 1-B: BTC 레짐 피처 — 200일 MA 기반 bull/bear 조건 변수
     if regime_df is not None and not regime_df.empty:
         regime_cols = [c for c in regime_df.columns if c != "date"]
@@ -536,12 +577,15 @@ def merge_sources(
     # §7: btc_quote_volume 누락 방어 — _empty_return_frame fallback 경로에서 컬럼이 없을 수 있음
     if "btc_quote_volume" not in merged.columns:
         merged["btc_quote_volume"] = float("nan")
+    if "btc_taker_buy_quote_volume" not in merged.columns:
+        merged["btc_taker_buy_quote_volume"] = float("nan")
 
     merged = _add_futures_lag_columns(merged)
     merged = _add_sentiment_lag_columns(merged)
     merged = _add_delta_features(merged)
     merged = _add_regime_interaction_features(merged)
     merged = _add_vix_regime_feature(merged)
+    merged = _add_taker_features(merged)
     merged = _add_btc_direction_label(merged)
     merged = _add_forward_target_columns(merged)
 
@@ -612,6 +656,7 @@ __all__ = [
     "_add_sentiment_lag_columns",
     "_add_delta_features",
     "_add_regime_interaction_features",
+    "_add_taker_features",
     "_add_btc_direction_label",
     "_add_forward_target_columns",
     "_apply_sentiment_quality_gate",

@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 import logging
 import re
+import tempfile
+from collections.abc import Generator
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -114,6 +117,88 @@ def upload_to_r2(
         )
 
 
+def download_from_r2(
+    r2_key: str,
+    *,
+    r2_s3_endpoint: str,
+    r2_access_key_id: str,
+    r2_secret_access_key: str,
+    r2_public_bucket: str,
+) -> bytes:
+    """R2 키를 bytes로 다운로드한다. 키가 없으면 FileNotFoundError."""
+    import boto3
+    from botocore.exceptions import ClientError
+
+    client = boto3.client(
+        "s3",
+        endpoint_url=r2_s3_endpoint,
+        aws_access_key_id=r2_access_key_id,
+        aws_secret_access_key=r2_secret_access_key,
+        region_name="auto",
+    )
+    try:
+        return client.get_object(Bucket=r2_public_bucket, Key=r2_key)["Body"].read()
+    except ClientError as exc:
+        if exc.response["Error"]["Code"] in ("NoSuchKey", "404"):
+            raise FileNotFoundError(r2_key) from exc
+        raise
+
+
+def list_r2_keys(
+    prefix: str,
+    *,
+    r2_s3_endpoint: str,
+    r2_access_key_id: str,
+    r2_secret_access_key: str,
+    r2_public_bucket: str,
+) -> list[str]:
+    """prefix 아래 R2 키 목록을 오름차순으로 반환한다."""
+    import boto3
+
+    client = boto3.client(
+        "s3",
+        endpoint_url=r2_s3_endpoint,
+        aws_access_key_id=r2_access_key_id,
+        aws_secret_access_key=r2_secret_access_key,
+        region_name="auto",
+    )
+    paginator = client.get_paginator("list_objects_v2")
+    keys: list[str] = []
+    for page in paginator.paginate(Bucket=r2_public_bucket, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            keys.append(obj["Key"])
+    return sorted(keys)
+
+
+@contextmanager
+def r2_tempfile(
+    r2_key: str,
+    suffix: str = "",
+    *,
+    r2_s3_endpoint: str,
+    r2_access_key_id: str,
+    r2_secret_access_key: str,
+    r2_public_bucket: str,
+) -> Generator[Path, None, None]:
+    """R2 키를 임시 파일로 내려받고 Path를 yield한다. 블록 종료 시 자동 삭제."""
+    data = download_from_r2(
+        r2_key,
+        r2_s3_endpoint=r2_s3_endpoint,
+        r2_access_key_id=r2_access_key_id,
+        r2_secret_access_key=r2_secret_access_key,
+        r2_public_bucket=r2_public_bucket,
+    )
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    tmp_path = Path(tmp.name)
+    try:
+        tmp.write(data)
+        tmp.flush()
+        tmp.close()
+        yield tmp_path
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
 def append_drift_record(
     output_dir: Path,
     run_date: str,
@@ -172,6 +257,9 @@ def read_drift_records(
 __all__ = [
     "append_drift_record",
     "cleanup_old_files",
+    "download_from_r2",
+    "list_r2_keys",
+    "r2_tempfile",
     "read_drift_records",
     "save_parquet",
     "upload_to_r2",

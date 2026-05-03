@@ -31,8 +31,14 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
+# 주 평가 horizon (BH 보정 기준, drift 추적 타깃)
 _TARGET_HORIZONS: dict[int, str] = {
     7: "btc_fwd_ret_7d",
+}
+# 보조 horizon (경향 확인용, BH 보정 미적용)
+_AUX_HORIZONS: dict[int, str] = {
+    1: "btc_fwd_ret_1d",
+    3: "btc_fwd_ret_3d",
 }
 _SPARSE_LABEL = "vol_regime_v2_vix_realized_vol_2of2"
 
@@ -220,7 +226,7 @@ def _extract_drift_record(artifact: dict[str, Any], run_date: str) -> dict[str, 
         ),
         {},
     )
-    return {
+    record: dict[str, Any] = {
         "run_date": run_date,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "vol_regime_v2_hit_rate": v2.get("hit_rate"),
@@ -235,6 +241,21 @@ def _extract_drift_record(artifact: dict[str, Any], run_date: str) -> dict[str, 
         "kept_n": sparse_row.get("kept_n"),
         "dropped_n": sparse_row.get("dropped_n"),
     }
+    # 보조 horizon 지표 (1d, 3d) — BH 보정 미적용, 경향 확인 전용
+    horizon_metrics = alpha.get("horizonMetrics") or {}
+    for h_days in _AUX_HORIZONS:
+        h_key = str(h_days)
+        h_cell = horizon_metrics.get(h_key) or {}
+        v2_aux = ((alpha.get("baselineMetrics") or {}).get(h_key) or {}).get("vol_regime_v2") or {}
+        aux_rows = h_cell.get("hit_rates") or []
+        aux_sparse = next(
+            (r for r in aux_rows if isinstance(r, dict) and r.get("predictor") == _SPARSE_LABEL),
+            {},
+        )
+        record[f"vol_regime_v2_hit_rate_{h_days}d"] = v2_aux.get("hit_rate")
+        record[f"vol_regime_v2_coverage_{h_days}d"] = v2_aux.get("coverage")
+        record[f"sparse_hit_rate_{h_days}d"] = aux_sparse.get("hit_rate")
+    return record
 
 
 def _is_valid_record(record: dict[str, Any]) -> bool:
