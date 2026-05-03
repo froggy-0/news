@@ -116,6 +116,14 @@ MASTER_SCHEMA = pa.DataFrameSchema(
         # USDKRW 갭 플래그 — 공휴일·주말 재개장 여부
         "usdkrw_gap_flag": pa.Column(float, nullable=True, required=False),
         "usdkrw_gap_flag_lag1": pa.Column(float, nullable=True, required=False),
+        # Taker buy pressure — Binance klines [10] 기반, 추가 API 호출 없음
+        "btc_taker_buy_quote_volume": pa.Column(
+            float, pa.Check.ge(0), nullable=True, required=False
+        ),
+        "btc_taker_buy_ratio_7d": pa.Column(float, nullable=True, required=False),
+        "btc_taker_buy_ratio_7d_lag1": pa.Column(float, nullable=True, required=False),
+        "btc_taker_imbalance_zscore_30d": pa.Column(float, nullable=True, required=False),
+        "btc_taker_imbalance_zscore_30d_lag1": pa.Column(float, nullable=True, required=False),
     },
     strict=True,
 )

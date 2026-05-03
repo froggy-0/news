@@ -40,16 +40,17 @@ def test_parse_kline_row_open_time_as_date() -> None:
 def test_klines_to_frame_structure() -> None:
     df = binance._klines_to_frame([SAMPLE_ROW])
 
-    assert list(df.columns) == ["date", "close", "btc_quote_volume"]
+    assert list(df.columns) == ["date", "close", "btc_quote_volume", "btc_taker_buy_quote_volume"]
     assert str(df["close"].dtype) == "float64"
     assert str(df["btc_quote_volume"].dtype) == "float64"
+    assert str(df["btc_taker_buy_quote_volume"].dtype) == "float64"
     assert df.loc[0, "date"] == "2026-04-10"
 
 
 def test_klines_to_frame_empty_returns_empty_frame() -> None:
     df = binance._klines_to_frame([])
 
-    assert list(df.columns) == ["date", "close", "btc_quote_volume"]
+    assert list(df.columns) == ["date", "close", "btc_quote_volume", "btc_taker_buy_quote_volume"]
     assert df.empty
 
 
