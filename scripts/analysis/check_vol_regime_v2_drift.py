@@ -6,10 +6,17 @@
   - coverage 안정성 (0.45 ~ 0.70이면 정상)
   - hit_rate trend
 
-사용법:
+사용법 (로컬):
     python scripts/analysis/check_vol_regime_v2_drift.py \\
         --jsonl data/sentiment_join/vol_regime_v2_drift.jsonl \\
         --window 14
+
+사용법 (R2):
+    python scripts/analysis/check_vol_regime_v2_drift.py --from-r2
+    python scripts/analysis/check_vol_regime_v2_drift.py --from-r2 --r2-key analytics/sentiment/vol_regime_v2_drift.jsonl
+
+로컬 → R2 백필 (최초 1회):
+    python scripts/analysis/check_vol_regime_v2_drift.py --sync-to-r2
 """
 
 from __future__ import annotations
@@ -24,19 +31,11 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
+_DEFAULT_R2_KEY = "analytics/sentiment/vol_regime_v2_drift.jsonl"
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="vol_regime_v2 drift 분석")
-    parser.add_argument(
-        "--jsonl",
-        type=Path,
-        default=PROJECT_ROOT / "data" / "sentiment_join" / "vol_regime_v2_drift.jsonl",
-        help="drift JSONL 파일 경로",
-    )
-    parser.add_argument("--window", type=int, default=14, help="rolling window 일수")
-    args = parser.parse_args()
 
-    if not args.jsonl.exists():
+def _run(args: argparse.Namespace) -> None:
+    if not args.from_r2 and not args.jsonl.exists():
         print(f"[WARN] drift 파일 없음: {args.jsonl}")
         print("       파이프라인이 최소 1회 실행되어야 생성됩니다.")
         sys.exit(0)
@@ -52,7 +51,8 @@ def main() -> None:
             continue
 
     n = len(records)
-    print(f"총 {n}일 기록 (파일: {args.jsonl})\n")
+    src_label = f"r2://{args.r2_key or _DEFAULT_R2_KEY}" if args.from_r2 else str(args.jsonl)
+    print(f"총 {n}일 기록 (소스: {src_label})\n")
 
     def _safe_float(v: object) -> float | None:
         if v is None:
@@ -72,24 +72,27 @@ def main() -> None:
         cov = _safe_float(r.get("vol_regime_v2_coverage"))
         p = _safe_float(r.get("kept_gt_dropped_pvalue"))
         lift = _safe_float(r.get("kept_baseline_hit_rate_lift"))
-        print(
-            f"{str(r.get('run_date', '?')):<12} {hr:>9.3f}" if hr is not None else f"{'N/A':>9}",
-            end="",
-        )
-        print(
-            f" {cov:>9.3f}" if cov is not None else f" {'N/A':>9}",
-            end="",
-        )
-        print(
-            f" {p:>10.4f}" if p is not None else f" {'N/A':>10}",
-            end="",
-        )
-        print(
-            f" {lift:>10.4f}" if lift is not None else f" {'N/A':>10}",
-        )
+        date_str = str(r.get("run_date", "?"))
+        hr_str = f"{hr:>9.3f}" if hr is not None else f"{'N/A':>9}"
+        cov_str = f" {cov:>9.3f}" if cov is not None else f" {'N/A':>9}"
+        p_str = f" {p:>10.4f}" if p is not None else f" {'N/A':>10}"
+        lift_str = f" {lift:>10.4f}" if lift is not None else f" {'N/A':>10}"
+        print(f"{date_str:<12} {hr_str}{cov_str}{p_str}{lift_str}")
 
     if n < args.window:
         print(f"\n[INFO] {n}일 기록 — rolling 분석에 {args.window}일 이상 필요")
+        if args.from_r2:
+            local_path = PROJECT_ROOT / "data" / "sentiment_join" / "vol_regime_v2_drift.jsonl"
+            if local_path.exists():
+                local_n = sum(
+                    1 for ln in local_path.read_text(encoding="utf-8").splitlines() if ln.strip()
+                )
+                if local_n >= args.window:
+                    print(
+                        f"\n[TIP] 로컬 파일에 {local_n}일치 기록이 있습니다. "
+                        "다음 명령으로 R2에 백필하세요:\n"
+                        f"      python scripts/analysis/check_vol_regime_v2_drift.py --sync-to-r2"
+                    )
         sys.exit(0)
 
     # Rolling 분석
@@ -140,6 +143,69 @@ def main() -> None:
         print("[PROMOTE 후보] 모든 rolling 기준 충족. evaluate_regime_overlay_gate() 실행 고려.")
     else:
         print("[MONITOR] 아직 모든 조건 미충족 — 추적 계속.")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="vol_regime_v2 drift 분석")
+    parser.add_argument(
+        "--jsonl",
+        type=Path,
+        default=PROJECT_ROOT / "data" / "sentiment_join" / "vol_regime_v2_drift.jsonl",
+        help="drift JSONL 파일 경로 (로컬)",
+    )
+    parser.add_argument("--window", type=int, default=14, help="rolling window 일수")
+    parser.add_argument("--from-r2", action="store_true", help="R2에서 직접 읽기")
+    parser.add_argument(
+        "--r2-key",
+        default=None,
+        help=f"R2 키 오버라이드 (기본값: {_DEFAULT_R2_KEY})",
+    )
+    parser.add_argument(
+        "--sync-to-r2",
+        action="store_true",
+        help="로컬 JSONL을 R2에 업로드 후 R2 기준으로 분석 실행 (최초 백필 용도)",
+    )
+    args = parser.parse_args()
+
+    if args.sync_to_r2:
+        from morning_brief.analysis.sentiment_join.storage import upload_to_r2
+        from morning_brief.r2_env import load_public_r2_env
+
+        r2 = load_public_r2_env()
+        local_path = args.jsonl
+        if not local_path.exists():
+            print(f"[ERROR] 로컬 JSONL 없음: {local_path}")
+            sys.exit(1)
+        r2_key = args.r2_key or _DEFAULT_R2_KEY
+        upload_to_r2(
+            local_path,
+            r2_key,
+            r2_s3_endpoint=r2.s3_endpoint,
+            r2_access_key_id=r2.access_key_id,
+            r2_secret_access_key=r2.secret_access_key,
+            r2_public_bucket=r2.public_bucket,
+        )
+        print(f"[OK] {local_path} → r2://{r2_key} 업로드 완료")
+        args.from_r2 = True  # 이후 R2에서 읽어 분석
+
+    if args.from_r2:
+        from morning_brief.analysis.sentiment_join.storage import r2_tempfile
+        from morning_brief.r2_env import load_public_r2_env
+
+        r2 = load_public_r2_env()
+        r2_key = args.r2_key or _DEFAULT_R2_KEY
+        with r2_tempfile(
+            r2_key,
+            suffix=".jsonl",
+            r2_s3_endpoint=r2.s3_endpoint,
+            r2_access_key_id=r2.access_key_id,
+            r2_secret_access_key=r2.secret_access_key,
+            r2_public_bucket=r2.public_bucket,
+        ) as tmp:
+            args.jsonl = tmp
+            _run(args)
+    else:
+        _run(args)
 
 
 if __name__ == "__main__":

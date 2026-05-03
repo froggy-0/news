@@ -4,10 +4,14 @@
 latest.json artifact의 horizon_metrics[7].hit_rates에서 research_rule 행을 추출해
 voting rule 성능 요약 테이블을 출력한다.
 
-사용법:
+사용법 (로컬):
     python scripts/analysis/eval_voting_rules.py \\
         --artifact data/sentiment_join/latest.json \\
         --horizon 7
+
+사용법 (R2):
+    python scripts/analysis/eval_voting_rules.py --from-r2
+    python scripts/analysis/eval_voting_rules.py --from-r2 --r2-key analytics/sentiment/latest.json
 """
 
 from __future__ import annotations
@@ -22,12 +26,12 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
+_DEFAULT_R2_KEY = "analytics/sentiment/latest.json"
+
 _VOTING_LABELS = {
     "vote_vol_sent_fng5_2of3",
     "vote_vol_vix_sent_fng5_3of4",
-    "vote_vix_fng_2of2",
     "vol_regime_v2_vix_realized_vol_2of2",
-    "vol_regime_v3_vix_realized_vol_ma200_2of3",
     "vix_low_long_only",
 }
 
@@ -64,19 +68,8 @@ def _fmt_decision(d: str | None) -> str:
     return f"[{d}]"
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Voting rule 성능 평가")
-    parser.add_argument(
-        "--artifact",
-        type=Path,
-        default=PROJECT_ROOT / "data" / "sentiment_join" / "latest.json",
-        help="latest.json 경로",
-    )
-    parser.add_argument("--horizon", type=int, default=7, help="평가 horizon (days)")
-    parser.add_argument("--all-rules", action="store_true", help="research_rule=True 행 모두 출력")
-    args = parser.parse_args()
-
-    if not args.artifact.exists():
+def _run(args: argparse.Namespace) -> None:
+    if not args.from_r2 and not args.artifact.exists():
         print(f"[ERROR] artifact 파일 없음: {args.artifact}")
         sys.exit(1)
 
@@ -85,6 +78,9 @@ def main() -> None:
     except json.JSONDecodeError as e:
         print(f"[ERROR] JSON 파싱 실패: {e}")
         sys.exit(1)
+
+    src_label = f"r2://{args.r2_key or _DEFAULT_R2_KEY}" if args.from_r2 else str(args.artifact)
+    print(f"소스: {src_label}")
 
     horizon_metrics = artifact.get("alpha", {}).get("horizonMetrics", {})
     horizon_key = str(args.horizon)
@@ -142,11 +138,46 @@ def main() -> None:
         decision = row.get("decision")
         strict = row.get("decision_strict")
 
+        # coverage 30% 미만 경고
+        cov_warn = " ⚠ low-cov" if cov is not None and cov < 0.30 else ""
+
         print(
             f"{predictor:<46} {_fmt_pct(hr)} {_fmt_pct(uplift):>7} "
             f"{_fmt_pct(ci_lo):>7} {_fmt_pct(ci_hi):>7} {_fmt_pct(cov):>9} "
             f"{_fmt_f(fdr_q, 3):>7} {_fmt_decision(decision):<12} {_fmt_decision(strict):<12}"
+            f"{cov_warn}"
         )
+
+    # 보조 horizon 비교 (--multi-horizon 플래그 또는 artifact에 1d/3d 있을 때)
+    if args.multi_horizon:
+        aux_horizons = [h for h in (1, 3) if h != args.horizon]
+        available = [h for h in aux_horizons if str(h) in horizon_metrics]
+        if available:
+            print("\n=== 보조 Horizon 비교 (경향 확인, BH 보정 미적용) ===")
+            for h in available:
+                h_cell = horizon_metrics.get(str(h), {})
+                h_hit_rates = h_cell.get("hit_rates", [])
+                h_baseline_rows = [
+                    r
+                    for r in h_hit_rates
+                    if not r.get("research_rule") and not r.get("promoted_from_research_rule")
+                ]
+                h_best = max(
+                    (_safe_float(r.get("hit_rate")) or 0.0 for r in h_baseline_rows),
+                    default=None,
+                )
+                print(f"\n  horizon={h}d  best_baseline={_fmt_pct(h_best)}")
+                for row in rows_sorted:
+                    pred = str(row.get("predictor", "?"))
+                    h_row = next((r for r in h_hit_rates if r.get("predictor") == pred), {})
+                    h_hr = _safe_float(h_row.get("hit_rate"))
+                    h_uplift = (h_hr - h_best) if h_hr is not None and h_best is not None else None
+                    h_cov = _safe_float(h_row.get("coverage"))
+                    print(
+                        f"    {pred[:44]:<44}  hr={_fmt_pct(h_hr)}  uplift={_fmt_pct(h_uplift)}  cov={_fmt_pct(h_cov)}"
+                    )
+        else:
+            print("\n[INFO] 보조 horizon 데이터 없음 — replay 스크립트로 재생성 필요")
 
     # kept/dropped diagnostics 요약
     print("\n=== Abstain Filter Diagnostics ===")
@@ -167,6 +198,49 @@ def main() -> None:
         )
 
     print()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Voting rule 성능 평가")
+    parser.add_argument(
+        "--artifact",
+        type=Path,
+        default=PROJECT_ROOT / "data" / "sentiment_join" / "latest.json",
+        help="latest.json 경로 (로컬)",
+    )
+    parser.add_argument("--horizon", type=int, default=7, help="평가 horizon (days)")
+    parser.add_argument("--all-rules", action="store_true", help="research_rule=True 행 모두 출력")
+    parser.add_argument(
+        "--multi-horizon",
+        action="store_true",
+        help="1d/3d 보조 horizon도 함께 출력 (경향 확인용, BH 보정 미적용)",
+    )
+    parser.add_argument("--from-r2", action="store_true", help="R2에서 직접 읽기")
+    parser.add_argument(
+        "--r2-key",
+        default=None,
+        help=f"R2 키 오버라이드 (기본값: {_DEFAULT_R2_KEY})",
+    )
+    args = parser.parse_args()
+
+    if args.from_r2:
+        from morning_brief.analysis.sentiment_join.storage import r2_tempfile
+        from morning_brief.r2_env import load_public_r2_env
+
+        r2 = load_public_r2_env()
+        r2_key = args.r2_key or _DEFAULT_R2_KEY
+        with r2_tempfile(
+            r2_key,
+            suffix=".json",
+            r2_s3_endpoint=r2.s3_endpoint,
+            r2_access_key_id=r2.access_key_id,
+            r2_secret_access_key=r2.secret_access_key,
+            r2_public_bucket=r2.public_bucket,
+        ) as tmp:
+            args.artifact = tmp
+            _run(args)
+    else:
+        _run(args)
 
 
 if __name__ == "__main__":

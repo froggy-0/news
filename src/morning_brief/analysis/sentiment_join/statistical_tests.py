@@ -45,6 +45,8 @@ _PREDICTORS_RAW = [
     # 1-A: delta 피처 — level AR 구조 제거 후 독립적 신호
     "fng_change_1d",
     "sentiment_momentum",
+    # taker imbalance z-score — Binance klines index[10] 기반, 추가 API 호출 없음
+    "btc_taker_imbalance_zscore_30d",
 ]
 
 GRANGER_PAIRS_TARGET = [(p, _TARGET) for p in _PREDICTORS_RAW]  # 10쌍
@@ -1527,6 +1529,8 @@ _ALPHA_PREDICTOR_CONFIGS: list[dict[str, Any]] = [
     },
     # usdkrw_gap_flag_lag1: 공휴일·주말 갭 재개장 여부 (환율 급등락 맥락 보조 피처)
     {"col": "usdkrw_gap_flag_lag1", "threshold": 0.5, "inverted": False},
+    # btc_taker_imbalance_zscore_30d_lag1: taker 매수 치우침 z-score (양수 = 매수 우세)
+    {"col": "btc_taker_imbalance_zscore_30d_lag1", "threshold": 0, "inverted": False},
 ]
 
 _ALPHA_HORIZONS: dict[int, str] = {
@@ -1550,6 +1554,7 @@ _PREDICTOR_SOURCE_COLUMNS: dict[str, list[str]] = {
     "etf_net_inflow_usd_log1p_lag1_q75": ["etf_net_inflow_usd"],
     "etf_net_inflow_usd_log1p_lag1_q80": ["etf_net_inflow_usd"],
     "usdkrw_gap_flag_lag1": ["usdkrw_return"],
+    "btc_taker_imbalance_zscore_30d_lag1": ["btc_taker_buy_quote_volume"],
 }
 
 
@@ -2036,11 +2041,6 @@ def _compute_sparse_research_signal(
     vix = _directional_signal_from_col(df, "vix_regime_score_lag1")
     sentiment = _directional_signal_from_col(df, "sentiment_momentum_lag1")
     fng5 = _directional_signal_from_col(df, "fng_change_5d_lag1")
-    realized_vol = _rolling_low_high_signal_from_col(df, "btc_realized_vol_20d_lag1")
-    trend = _ma200_trend_signal(df)
-
-    fng_value = _directional_signal_from_col(df, "fng_value_lag1", threshold=50.0)
-
     if label == "vix_low_long_only":
         return vix.where(vix > 0, 0.0).rename(label)
     if label == "vote_vol_sent_fng5_2of3":
@@ -2049,11 +2049,6 @@ def _compute_sparse_research_signal(
         return _vote_signal([vol, vix, sentiment, fng5], min_abs_vote=3, name=label)
     if label == "vol_regime_v2_vix_realized_vol_2of2":
         return _vol_regime_v2(df).rename(label)
-    if label == "vol_regime_v3_vix_realized_vol_ma200_2of3":
-        return _vote_signal([vol, realized_vol, trend], min_abs_vote=2, name=label)
-    if label == "vote_vix_fng_2of2":
-        # vix_regime_score 및 fng_value 합의 구간: 둘 다 같은 방향일 때만 거래
-        return _vote_signal([vix, fng_value], min_abs_vote=2, name=label)
     return pd.Series(0.0, index=df.index, name=label)
 
 
@@ -2250,6 +2245,10 @@ _COMPOUND_PREDICTOR_CONFIGS: list[dict[str, Any]] = [
     },
 ]
 
+# 가설 집합 (2026-05: BH 보정 부담 완화를 위해 효과 없는 rule 제거)
+# 제거 기준: 21일 drift에서 HR delta ≤ 0 또는 coverage < 30%로 구조적 문제 확인
+# 제거됨: vol_regime_v3_vix_realized_vol_ma200_2of3 (HR delta -0.1%, 검정력 5%)
+# 제거됨: vote_vix_fng_2of2 (HR delta -1.5%, 검정력 2%)
 _SPARSE_RESEARCH_RULE_CONFIGS: list[dict[str, Any]] = [
     {
         "label": "vix_low_long_only",
@@ -2265,15 +2264,6 @@ _SPARSE_RESEARCH_RULE_CONFIGS: list[dict[str, Any]] = [
     },
     {
         "label": "vol_regime_v2_vix_realized_vol_2of2",
-        "group": "research_sparse",
-    },
-    {
-        "label": "vol_regime_v3_vix_realized_vol_ma200_2of3",
-        "group": "research_sparse",
-    },
-    {
-        # vix_regime_score + fng_value 합의 구간: 둘 다 일치할 때만 거래 (T9)
-        "label": "vote_vix_fng_2of2",
         "group": "research_sparse",
     },
 ]

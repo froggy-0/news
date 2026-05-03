@@ -1813,7 +1813,6 @@ class TestAdaptiveThresholdAndCompound:
             "vote_vol_sent_fng5_2of3",
             "vote_vol_vix_sent_fng5_3of4",
             "vol_regime_v2_vix_realized_vol_2of2",
-            "vol_regime_v3_vix_realized_vol_ma200_2of3",
         }
         assert expected <= predictors
 

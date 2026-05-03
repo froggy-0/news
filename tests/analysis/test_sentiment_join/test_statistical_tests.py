@@ -127,9 +127,9 @@ def test_run_statistical_tests_granger_runs_at_180_rows(
 
     results = statistical_tests.run_statistical_tests(_sample_df(rows=180))
 
-    # forward(19: TARGET 11 + CROSS 8) + reverse(5) = 24쌍, 각 3 lag → 72 entry
-    assert len(pair_calls) == 24
-    assert len(results["granger"]) == 72
+    # forward(20: TARGET 12 + CROSS 8) + reverse(5) = 25쌍, 각 3 lag → 75 entry
+    assert len(pair_calls) == 25
+    assert len(results["granger"]) == 75
     assert results["granger_executed"] is True
     assert results["granger_eligible_rows"] == 180
 
@@ -154,8 +154,8 @@ def test_run_statistical_tests_records_granger_pair_skips(
 
     results = statistical_tests.run_statistical_tests(_sample_df(rows=180))
 
-    assert len(results["granger_skips"]) == 24
-    assert results["granger_skip_summary"] == {"unit_test_skip": 24}
+    assert len(results["granger_skips"]) == 25
+    assert results["granger_skip_summary"] == {"unit_test_skip": 25}
     assert {row["direction"] for row in results["granger_skips"]} == {"forward", "reverse"}
 
 
@@ -504,10 +504,10 @@ def test_granger_pairs_use_raw_predictors() -> None:
 
 
 def test_granger_pairs_count() -> None:
-    """GRANGER_PAIRS = TARGET(11) + CROSS(8) = 19쌍."""
-    assert len(statistical_tests.GRANGER_PAIRS_TARGET) == 11
+    """GRANGER_PAIRS = TARGET(12) + CROSS(8) = 20쌍."""
+    assert len(statistical_tests.GRANGER_PAIRS_TARGET) == 12
     assert len(statistical_tests.GRANGER_PAIRS_CROSS) == 8
-    assert len(statistical_tests.GRANGER_PAIRS) == 19
+    assert len(statistical_tests.GRANGER_PAIRS) == 20
 
 
 def test_granger_pairs_reverse_has_btc_as_predictor() -> None:
