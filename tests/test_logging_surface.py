@@ -16,6 +16,7 @@ EXPECTED_GET_LOGGER_FILES = {
     "src/morning_brief/analysis/sentiment_join/outlier_policy.py",
     "src/morning_brief/analysis/sentiment_join/pipeline.py",
     "src/morning_brief/analysis/sentiment_join/sources/binance.py",
+    "src/morning_brief/analysis/sentiment_join/sources/exchange_outflow.py",
     "src/morning_brief/analysis/sentiment_join/sources/btc_prices.py",
     "src/morning_brief/analysis/sentiment_join/sources/etf_flows.py",
     "src/morning_brief/analysis/sentiment_join/sources/fng.py",
