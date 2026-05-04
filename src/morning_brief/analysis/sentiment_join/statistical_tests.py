@@ -1537,6 +1537,63 @@ _ALPHA_HORIZONS: dict[int, str] = {
     7: "btc_fwd_ret_7d",
 }
 
+_COMPOSITE_TRAIN_DAYS = 240
+_COMPOSITE_TEST_DAYS = 45
+_COMPOSITE_STEP_DAYS = 30
+_COMPOSITE_EMBARGO_DAYS = 7
+_COMPOSITE_MIN_FEATURE_ROWS = 30
+_COMPOSITE_MIN_OOS_ROWS = 250
+_COMPOSITE_MIN_HIT_RATE_DELTA = 0.02
+_COMPOSITE_MIN_SHARPE_DELTA = 0.10
+_COMPOSITE_MIN_AUC = 0.53
+_COMPOSITE_MIN_TOP_SIGN_STABILITY = 0.70
+
+_COMPOSITE_NEW_FEATURES: tuple[str, ...] = (
+    "funding_rate_zscore_30d_lag1",
+    "long_short_ratio_zscore_30d_lag1",
+    "binance_top10_up_ratio_7d_lag1",
+    "binance_top10_ew_return_7d_lag1",
+    "usdt_usdc_supply_change_7d_lag1",
+    "usd_broad_index_change_7d_lag1",
+    "usd_broad_index_zscore_30d_lag1",
+    "us10y_change_7d_lag1",
+    "nasdaq_return_7d_lag1",
+)
+
+_COMPOSITE_MACRO_LIQUIDITY_RISK_FEATURES: tuple[str, ...] = (
+    "nasdaq_return_7d_lag1",
+    "us10y_change_7d_lag1",
+    "usd_broad_index_zscore_30d_lag1",
+    "usdt_usdc_supply_change_7d_lag1",
+    "btc_taker_imbalance_zscore_30d_lag1",
+    "binance_top10_ew_return_7d_lag1",
+    "funding_rate_zscore_30d_lag1",
+    "long_short_ratio_zscore_30d_lag1",
+    "vix_regime_score_lag1",
+)
+
+
+def _alpha_predictor_feature_columns() -> tuple[str, ...]:
+    seen: list[str] = []
+    for cfg in _ALPHA_PREDICTOR_CONFIGS:
+        col = str(cfg["col"])
+        if col not in seen:
+            seen.append(col)
+    return tuple(seen)
+
+
+def _composite_feature_sets() -> dict[str, tuple[str, ...]]:
+    old = _alpha_predictor_feature_columns()
+    new = _COMPOSITE_NEW_FEATURES
+    old_plus_new = tuple(dict.fromkeys((*old, *new)))
+    return {
+        "old_alpha_set": old,
+        "new_features_only": new,
+        "old_plus_new": old_plus_new,
+        "macro_liquidity_risk": _COMPOSITE_MACRO_LIQUIDITY_RISK_FEATURES,
+    }
+
+
 _PREDICTOR_SOURCE_COLUMNS: dict[str, list[str]] = {
     "news_sentiment_mean_lag1": ["news_sentiment_mean"],
     "sentiment_momentum_lag1": ["news_sentiment_mean"],
@@ -3133,6 +3190,280 @@ def _horizon_metrics(
     return metrics
 
 
+def _composite_folds(
+    n_rows: int,
+    *,
+    train_days: int = _COMPOSITE_TRAIN_DAYS,
+    test_days: int = _COMPOSITE_TEST_DAYS,
+    step_days: int = _COMPOSITE_STEP_DAYS,
+    embargo_days: int = _COMPOSITE_EMBARGO_DAYS,
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    folds: list[tuple[np.ndarray, np.ndarray]] = []
+    start = train_days + embargo_days
+    while start + test_days <= n_rows:
+        train_end = start - embargo_days
+        train_idx = np.arange(train_end - train_days, train_end)
+        test_idx = np.arange(start, start + test_days)
+        folds.append((train_idx, test_idx))
+        start += step_days
+    return folds
+
+
+def _safe_balanced_accuracy(actual: pd.Series, predicted: np.ndarray) -> float:
+    try:
+        from sklearn.metrics import balanced_accuracy_score
+
+        return float(balanced_accuracy_score(actual.astype(bool), predicted))
+    except Exception:
+        return float("nan")
+
+
+def _safe_auc(actual: pd.Series, proba: np.ndarray) -> float:
+    try:
+        if actual.nunique(dropna=True) < 2:
+            return float("nan")
+        from sklearn.metrics import roc_auc_score
+
+        return float(roc_auc_score(actual.astype(bool), proba))
+    except Exception:
+        return float("nan")
+
+
+def _strategy_sharpe(values: np.ndarray, *, horizon_days: int) -> float:
+    if values.size < 2:
+        return float("nan")
+    sigma = float(np.std(values, ddof=1))
+    if sigma <= 1e-12:
+        return float("nan")
+    return float(np.mean(values)) / sigma * math.sqrt(ANNUALIZATION_FACTOR / horizon_days)
+
+
+def _format_date_value(value: Any) -> str:
+    if isinstance(value, pd.Timestamp):
+        return value.date().isoformat()
+    return str(value)
+
+
+def _weight_summary(coef_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not coef_rows:
+        return []
+    weights = pd.DataFrame(coef_rows)
+    rows: list[dict[str, Any]] = []
+    for feature, group in weights.groupby("feature"):
+        coef = pd.to_numeric(group["coef"], errors="coerce").dropna()
+        if coef.empty:
+            continue
+        mean_coef = float(coef.mean())
+        sign = math.copysign(1.0, mean_coef) if mean_coef != 0 else 0.0
+        if sign == 0.0:
+            sign_stability = 0.0
+        else:
+            sign_stability = float((np.sign(coef.to_numpy()) == sign).mean())
+        rows.append(
+            {
+                "feature": str(feature),
+                "mean_coef": mean_coef,
+                "abs_mean_coef": float(coef.abs().mean()),
+                "sign_stability": sign_stability,
+                "fold_count": int(len(coef)),
+            }
+        )
+    return sorted(rows, key=lambda item: float(item["abs_mean_coef"]), reverse=True)
+
+
+def _promotion_candidate_payload(
+    row: dict[str, Any],
+    *,
+    old_alpha_row: dict[str, Any] | None,
+) -> dict[str, Any]:
+    old_hit = _finite(old_alpha_row.get("hit_rate") if old_alpha_row else None)
+    old_sharpe = _finite(old_alpha_row.get("strategy_sharpe") if old_alpha_row else None)
+    hit_delta = _finite(row.get("hit_rate")) - old_hit
+    sharpe_delta = _finite(row.get("strategy_sharpe")) - old_sharpe
+    raw_weights = row.get("weights")
+    weights: list[Any] = raw_weights if isinstance(raw_weights, list) else []
+    top_weights = weights[:3]
+    top_stabilities = [
+        _finite(item.get("sign_stability"))
+        for item in top_weights
+        if isinstance(item, dict) and math.isfinite(_finite(item.get("sign_stability")))
+    ]
+    top_sign_stability = float(np.mean(top_stabilities)) if top_stabilities else float("nan")
+    checks = {
+        "hit_rate_delta_ok": hit_delta >= _COMPOSITE_MIN_HIT_RATE_DELTA,
+        "sharpe_delta_ok": sharpe_delta >= _COMPOSITE_MIN_SHARPE_DELTA,
+        "auc_ok": _finite(row.get("auc")) >= _COMPOSITE_MIN_AUC,
+        "top_sign_stability_ok": top_sign_stability >= _COMPOSITE_MIN_TOP_SIGN_STABILITY,
+        "n_oos_ok": int(row.get("n_oos") or 0) >= _COMPOSITE_MIN_OOS_ROWS,
+    }
+    return {
+        "hit_rate_delta_vs_old_alpha": hit_delta,
+        "sharpe_delta_vs_old_alpha": sharpe_delta,
+        "top_sign_stability": top_sign_stability,
+        "promotion_candidate": all(checks.values()),
+        "promotion_checks": checks,
+    }
+
+
+def _composite_score_metrics(df: pd.DataFrame) -> dict[str, Any]:
+    """Research-only composite score walk-forward metrics.
+
+    모든 fit/impute/scale은 fold의 train 구간에서만 수행한다. 반환 결과는 metadata와
+    latest.json 진단용이며 production signal 승격은 별도 drift gate에서만 다룬다.
+    """
+    from sklearn.impute import SimpleImputer
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import StandardScaler
+
+    metrics: dict[str, Any] = {}
+    feature_sets = _composite_feature_sets()
+    for horizon_days, return_col in _ALPHA_HORIZONS.items():
+        horizon_key = str(horizon_days)
+        if return_col not in df.columns:
+            metrics[horizon_key] = []
+            continue
+        target_ret = pd.to_numeric(df[return_col], errors="coerce")
+        target_up = target_ret > 0
+        valid_target = target_ret.notna()
+        rows: list[dict[str, Any]] = []
+        folds = _composite_folds(len(df), embargo_days=horizon_days)
+        for set_name, configured_features in feature_sets.items():
+            available_features = [
+                col
+                for col in configured_features
+                if col in df.columns and col.endswith("_lag1") and not df[col].isna().all()
+            ]
+            pred_rows: list[dict[str, Any]] = []
+            coef_rows: list[dict[str, Any]] = []
+            fold_payloads: list[dict[str, Any]] = []
+            for fold_id, (train_idx, test_idx) in enumerate(folds):
+                train_idx = train_idx[valid_target.iloc[train_idx].to_numpy()]
+                test_idx = test_idx[valid_target.iloc[test_idx].to_numpy()]
+                if len(train_idx) < 80 or len(test_idx) < 10:
+                    continue
+                X_train_all = df.loc[train_idx, available_features].apply(
+                    pd.to_numeric, errors="coerce"
+                )
+                X_test_all = df.loc[test_idx, available_features].apply(
+                    pd.to_numeric, errors="coerce"
+                )
+                usable_features = [
+                    col
+                    for col in available_features
+                    if X_train_all[col].notna().sum() >= _COMPOSITE_MIN_FEATURE_ROWS
+                    and X_test_all[col].notna().any()
+                ]
+                if not usable_features:
+                    continue
+                X_train = X_train_all[usable_features]
+                X_test = X_test_all[usable_features]
+                y_train = target_up.iloc[train_idx].astype(int)
+                y_test = target_up.iloc[test_idx].astype(bool)
+                model = make_pipeline(
+                    SimpleImputer(strategy="median"),
+                    StandardScaler(),
+                    LogisticRegression(
+                        C=0.3,
+                        solver="liblinear",
+                        class_weight="balanced",
+                        random_state=0,
+                    ),
+                )
+                model.fit(X_train, y_train)
+                proba = model.predict_proba(X_test)[:, 1]
+                predicted = proba >= 0.5
+                fold_ret = target_ret.iloc[test_idx].to_numpy(dtype=float)
+                fold_strategy_ret = np.where(predicted, 1.0, -1.0) * fold_ret
+                for idx, p, pred in zip(test_idx, proba, predicted):
+                    pred_rows.append(
+                        {
+                            "idx": int(idx),
+                            "proba": float(p),
+                            "predicted": bool(pred),
+                            "actual": bool(target_up.iloc[idx]),
+                            "return": float(target_ret.iloc[idx]),
+                            "fold": fold_id,
+                        }
+                    )
+                estimator = model.steps[-1][1]
+                for feature, coef in zip(usable_features, estimator.coef_.ravel()):
+                    coef_rows.append({"fold": fold_id, "feature": feature, "coef": float(coef)})
+                fold_payloads.append(
+                    {
+                        "fold": fold_id,
+                        "train_start": _format_date_value(df.loc[int(train_idx[0]), "date"]),
+                        "train_end": _format_date_value(df.loc[int(train_idx[-1]), "date"]),
+                        "test_start": _format_date_value(df.loc[int(test_idx[0]), "date"]),
+                        "test_end": _format_date_value(df.loc[int(test_idx[-1]), "date"]),
+                        "n_test": int(len(test_idx)),
+                        "feature_count": int(len(usable_features)),
+                        "hit_rate": float((predicted == y_test.to_numpy()).mean()),
+                        "auc": _safe_auc(y_test, proba),
+                        "strategy_sharpe": _strategy_sharpe(
+                            fold_strategy_ret, horizon_days=horizon_days
+                        ),
+                        "long_ratio": float(predicted.mean()),
+                    }
+                )
+
+            predictions = pd.DataFrame(pred_rows)
+            if predictions.empty:
+                row = {
+                    "name": set_name,
+                    "feature_count": len(available_features),
+                    "features": available_features,
+                    "n_oos": 0,
+                    "hit_rate": float("nan"),
+                    "balanced_accuracy": float("nan"),
+                    "auc": float("nan"),
+                    "strategy_sharpe": float("nan"),
+                    "long_ratio": float("nan"),
+                    "avg_strategy_return": float("nan"),
+                    "folds": [],
+                    "weights": [],
+                    "unstable_weight_features": [],
+                    "decision": "research_only",
+                }
+                rows.append(row)
+                continue
+
+            predictions = predictions.drop_duplicates("idx")
+            actual = predictions["actual"].astype(bool)
+            predicted = predictions["predicted"].astype(bool).to_numpy()
+            strategy_ret = np.where(predicted, 1.0, -1.0) * predictions["return"].to_numpy(
+                dtype=float
+            )
+            weights = _weight_summary(coef_rows)
+            row = {
+                "name": set_name,
+                "feature_count": len(available_features),
+                "features": available_features,
+                "n_oos": int(len(predictions)),
+                "hit_rate": float((predicted == actual.to_numpy()).mean()),
+                "balanced_accuracy": _safe_balanced_accuracy(actual, predicted),
+                "auc": _safe_auc(actual, predictions["proba"].to_numpy(dtype=float)),
+                "strategy_sharpe": _strategy_sharpe(strategy_ret, horizon_days=horizon_days),
+                "long_ratio": float(predicted.mean()),
+                "avg_strategy_return": float(np.mean(strategy_ret)),
+                "folds": fold_payloads,
+                "weights": weights,
+                "unstable_weight_features": [
+                    str(item["feature"])
+                    for item in weights
+                    if _finite(item.get("sign_stability")) < 0.70
+                ],
+                "decision": "research_only",
+            }
+            rows.append(row)
+
+        old_alpha_row = next((row for row in rows if row.get("name") == "old_alpha_set"), None)
+        for row in rows:
+            row.update(_promotion_candidate_payload(row, old_alpha_row=old_alpha_row))
+        metrics[horizon_key] = rows
+    return _sanitize_nan(metrics)
+
+
 def _walk_forward_horizons(df: pd.DataFrame) -> dict[str, Any]:
     results: dict[str, Any] = {}
     for idx_name in ("full", "core"):
@@ -3262,6 +3593,10 @@ def run_alpha_validation(
         bootstrap_config=bootstrap_config,
         outlier_mask_summary=outlier_mask_summary,
     )
+    composite_metrics = _composite_score_metrics(df)
+    for horizon_key, rows in composite_metrics.items():
+        if horizon_key in horizon_metrics and isinstance(horizon_metrics[horizon_key], dict):
+            horizon_metrics[horizon_key]["composite_scores"] = rows
     baseline_metrics = _baseline_metrics_by_horizon(df, bootstrap_config=bootstrap_config)
     feature_group_summary = _feature_group_summary(horizon_metrics)
     baseline_gap_summary = _baseline_gap_summary(horizon_metrics, baseline_metrics)
@@ -3280,6 +3615,7 @@ def run_alpha_validation(
             "feature_group_summary": feature_group_summary,
             "baseline_gap_summary": baseline_gap_summary,
             "next_research_candidates": next_research_candidates,
+            "composite_metrics": composite_metrics,
             "outlier_mask_summary": outlier_mask_summary or {},
             "bootstrap_config": {
                 "n_bootstrap": bootstrap_config.n_bootstrap,

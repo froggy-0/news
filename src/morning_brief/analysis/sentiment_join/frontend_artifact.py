@@ -281,6 +281,46 @@ def _compute_gate_stats(horizon_metrics: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _build_composite_scores(payload: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    composite_metrics = _as_record(payload.get("composite_metrics"))
+    rendered: dict[str, list[dict[str, Any]]] = {}
+    for horizon_key, rows in composite_metrics.items():
+        rendered_rows: list[dict[str, Any]] = []
+        for row in _as_list(rows):
+            if not isinstance(row, dict):
+                continue
+            weights = _as_list(row.get("weights"))
+            top_weights = []
+            for item in weights[:5]:
+                if not isinstance(item, dict):
+                    continue
+                top_weights.append(
+                    {
+                        "feature": str(item.get("feature", "")),
+                        "meanCoef": _as_float(item.get("mean_coef")),
+                        "absMeanCoef": _as_float(item.get("abs_mean_coef")),
+                        "signStability": _as_float(item.get("sign_stability")),
+                        "foldCount": _as_int(item.get("fold_count")),
+                    }
+                )
+            rendered_rows.append(
+                {
+                    "name": str(row.get("name", "")),
+                    "hitRate": _as_float(row.get("hit_rate")),
+                    "auc": _as_float(row.get("auc")),
+                    "strategySharpe": _as_float(row.get("strategy_sharpe")),
+                    "longRatio": _as_float(row.get("long_ratio")),
+                    "decision": str(row.get("decision", "research_only")),
+                    "topWeights": top_weights,
+                    "unstableWeightFeatures": [
+                        str(feature) for feature in _as_list(row.get("unstable_weight_features"))
+                    ],
+                }
+            )
+        rendered[str(horizon_key)] = rendered_rows
+    return rendered
+
+
 def _build_alpha(payload: dict[str, Any]) -> dict[str, Any]:
     horizon_metrics = _as_record(payload.get("horizon_metrics"))
     gate_stats = _compute_gate_stats(horizon_metrics)
@@ -296,6 +336,7 @@ def _build_alpha(payload: dict[str, Any]) -> dict[str, Any]:
         "featureGroupSummary": _json_safe(_as_record(payload.get("feature_group_summary"))),
         "baselineGapSummary": _json_safe(_as_record(payload.get("baseline_gap_summary"))),
         "nextResearchCandidates": _json_safe(_as_record(payload.get("next_research_candidates"))),
+        "compositeScores": _json_safe(_build_composite_scores(payload)),
         "gateStats": gate_stats,
     }
 

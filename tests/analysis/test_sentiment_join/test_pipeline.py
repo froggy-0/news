@@ -41,6 +41,44 @@ def _core_dates(settings: SentimentJoinSettings) -> tuple[str, str, str, list[st
     return start_date, end_date, btc_start, main_dates, btc_dates
 
 
+def test_append_composite_score_v1_drift(tmp_path: Path) -> None:
+    artifact = {
+        "alpha": {
+            "compositeScores": {
+                "7": [
+                    {
+                        "name": "old_alpha_set",
+                        "hitRate": 0.49,
+                        "auc": 0.52,
+                        "strategySharpe": 0.1,
+                        "longRatio": 0.45,
+                        "topWeights": [],
+                        "unstableWeightFeatures": [],
+                        "decision": "research_only",
+                    },
+                    {
+                        "name": "old_plus_new",
+                        "hitRate": 0.53,
+                        "auc": 0.54,
+                        "strategySharpe": 0.5,
+                        "longRatio": 0.44,
+                        "topWeights": [{"feature": "nasdaq_return_7d_lag1"}],
+                        "unstableWeightFeatures": ["binance_top10_ew_return_7d_lag1"],
+                        "decision": "research_only",
+                    },
+                ]
+            }
+        }
+    }
+    pipeline._append_composite_score_v1_drift(artifact, tmp_path, "20260504")
+
+    path = tmp_path / "composite_score_v1_drift.jsonl"
+    row = json.loads(path.read_text(encoding="utf-8").splitlines()[0])
+    assert row["best_composite_name"] == "old_plus_new"
+    assert row["hit_rate"] == 0.53
+    assert row["decision"] == "research_only"
+
+
 def _sentiment_df(main_dates: list[str]) -> pd.DataFrame:
     return pd.DataFrame(
         {
