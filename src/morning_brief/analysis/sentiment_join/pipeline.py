@@ -405,6 +405,50 @@ def _append_vol_regime_v2_drift(
         )
 
 
+def _append_composite_score_v1_drift(
+    fe_artifact: dict,
+    output_dir: "Path",
+    run_date: str,
+) -> None:
+    """composite score v1 research metrics를 JSONL에 append한다."""
+    try:
+        alpha = fe_artifact.get("alpha") or {}
+        composite_scores = ((alpha.get("compositeScores") or {}).get("7")) or []
+        if not isinstance(composite_scores, list) or not composite_scores:
+            return
+        best = max(
+            (row for row in composite_scores if isinstance(row, dict)),
+            key=lambda row: float(row.get("hitRate") or 0.0),
+            default=None,
+        )
+        if best is None:
+            return
+        record: dict = {
+            "best_composite_name": best.get("name"),
+            "hit_rate": best.get("hitRate"),
+            "auc": best.get("auc"),
+            "strategy_sharpe": best.get("strategySharpe"),
+            "long_ratio": best.get("longRatio"),
+            "top_weights": best.get("topWeights"),
+            "unstable_weight_features": best.get("unstableWeightFeatures"),
+            "decision": best.get("decision"),
+        }
+        append_drift_record(
+            output_dir,
+            run_date,
+            record,
+            filename="composite_score_v1_drift.jsonl",
+        )
+    except Exception as exc:
+        log_structured(
+            logger,
+            event="drift.append_failed",
+            message="composite_score_v1 드리프트 기록 실패",
+            level=logging.WARNING,
+            reason=str(exc),
+        )
+
+
 def _evaluate_and_log_overlay_gate(output_dir: "Path") -> Any | None:
     """drift JSONL을 읽어 overlay gate를 평가하고 결과를 structured log로 출력한다."""
     try:
@@ -1062,6 +1106,12 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             and isinstance(alpha_validation_results.get("next_research_candidates"), dict)
             else None
         )
+        alpha_composite_metrics = (
+            cast(dict[str, Any], alpha_validation_results.get("composite_metrics"))
+            if isinstance(alpha_validation_results, dict)
+            and isinstance(alpha_validation_results.get("composite_metrics"), dict)
+            else None
+        )
         alpha_outlier_mask_summary = (
             cast(dict[str, Any], alpha_validation_results.get("outlier_mask_summary"))
             if isinstance(alpha_validation_results, dict)
@@ -1101,6 +1151,7 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             feature_group_summary=alpha_feature_group_summary,
             baseline_gap_summary=alpha_baseline_gap_summary,
             next_research_candidates=alpha_next_research_candidates,
+            composite_metrics=alpha_composite_metrics,
             outlier_mask_summary=alpha_outlier_mask_summary,
             ffill_breakdown=ffill_breakdown,
             target_diagnostics=_target_diagnostics(master_df),
@@ -1155,6 +1206,7 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
 
             # vol_regime_v2 드리프트 추적 레코드 append + overlay gate 평가
             _append_vol_regime_v2_drift(fe_artifact, settings.output_dir, run_date)
+            _append_composite_score_v1_drift(fe_artifact, settings.output_dir, run_date)
             overlay_gate = _evaluate_and_log_overlay_gate(settings.output_dir)
             _apply_vol_regime_v2_overlay_promotion(fe_artifact, overlay_gate)
 
@@ -1181,6 +1233,16 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
                     upload_to_r2(
                         drift_path,
                         "analytics/sentiment/vol_regime_v2_drift.jsonl",
+                        r2_s3_endpoint=settings.r2_s3_endpoint,
+                        r2_access_key_id=settings.r2_access_key_id,
+                        r2_secret_access_key=settings.r2_secret_access_key,
+                        r2_public_bucket=settings.r2_public_bucket,
+                    )
+                composite_drift_path = settings.output_dir / "composite_score_v1_drift.jsonl"
+                if composite_drift_path.exists():
+                    upload_to_r2(
+                        composite_drift_path,
+                        "analytics/sentiment/composite_score_v1_drift.jsonl",
                         r2_s3_endpoint=settings.r2_s3_endpoint,
                         r2_access_key_id=settings.r2_access_key_id,
                         r2_secret_access_key=settings.r2_secret_access_key,

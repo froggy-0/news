@@ -1964,3 +1964,86 @@ class TestThresholdFnAndPredictorName:
         ):
             assert variant in hr_names, f"{variant} missing from hit_rates"
             assert variant in bt_names, f"{variant} missing from backtest"
+
+
+def _composite_test_frame(n: int = 340) -> pd.DataFrame:
+    rng = np.random.default_rng(42)
+    base = rng.normal(0, 1, n)
+    returns = 0.004 * np.roll(base, 1) + rng.normal(0, 0.03, n)
+    returns[-7:] = np.nan
+    return pd.DataFrame(
+        {
+            "date": pd.date_range("2025-01-01", periods=n, freq="D"),
+            "news_sentiment_mean_lag1": base,
+            "fng_value_lag1": 50 + base * 10,
+            "sentiment_momentum_lag1": rng.normal(0, 0.1, n),
+            "sentiment_accel_lag1": rng.normal(0, 0.1, n),
+            "fng_change_1d_lag1": rng.normal(0, 5, n),
+            "fng_change_5d_lag1": rng.normal(0, 5, n),
+            "btc_bear_regime_lag1": rng.integers(0, 2, n).astype(float),
+            "sentiment_momentum_x_bear_lag1": rng.normal(0, 0.1, n),
+            "fng_change_1d_x_bear_lag1": rng.normal(0, 5, n),
+            "funding_rate_x_bear_lag1": rng.normal(0, 0.001, n),
+            "vix_lag1": rng.uniform(12, 35, n),
+            "vix_regime_score_lag1": rng.normal(0, 1, n),
+            "full_hybrid_index_score_lag1": rng.uniform(0, 100, n),
+            "core_hybrid_index_score_lag1": rng.uniform(0, 100, n),
+            "etf_net_inflow_usd_log1p_lag1": rng.normal(0, 1, n),
+            "usdkrw_gap_flag_lag1": rng.integers(0, 2, n).astype(float),
+            "btc_taker_imbalance_zscore_30d_lag1": rng.normal(0, 1, n),
+            "funding_rate_zscore_30d_lag1": rng.normal(0, 1, n),
+            "long_short_ratio_zscore_30d_lag1": rng.normal(0, 1, n),
+            "binance_top10_up_ratio_7d_lag1": rng.uniform(0, 1, n),
+            "binance_top10_ew_return_7d_lag1": rng.normal(0, 0.05, n),
+            "usdt_usdc_supply_change_7d_lag1": rng.normal(0, 0.01, n),
+            "usd_broad_index_change_7d_lag1": rng.normal(0, 0.01, n),
+            "usd_broad_index_zscore_30d_lag1": rng.normal(0, 1, n),
+            "us10y_change_7d_lag1": rng.normal(0, 0.1, n),
+            "nasdaq_return_7d_lag1": base + rng.normal(0, 0.2, n),
+            "all_nan_feature_lag1": np.nan,
+            "btc_log_return": rng.normal(0, 0.02, n),
+            "btc_fwd_ret_7d": returns,
+            "btc_direction_label": ["up" if x > 0 else "down" for x in np.nan_to_num(returns)],
+        }
+    )
+
+
+def test_composite_folds_apply_embargo() -> None:
+    from morning_brief.analysis.sentiment_join.statistical_tests import _composite_folds
+
+    train_idx, test_idx = _composite_folds(340)[0]
+    assert test_idx[0] - train_idx[-1] - 1 == 7
+    assert len(train_idx) == 240
+    assert len(test_idx) == 45
+
+
+def test_composite_score_metrics_generate_research_only_sets() -> None:
+    from morning_brief.analysis.sentiment_join.statistical_tests import _composite_score_metrics
+
+    metrics = _composite_score_metrics(_composite_test_frame())
+    rows = {row["name"]: row for row in metrics["7"]}
+    assert {"old_alpha_set", "new_features_only", "old_plus_new", "macro_liquidity_risk"} <= set(
+        rows
+    )
+    assert rows["old_plus_new"]["decision"] == "research_only"
+    assert rows["old_plus_new"]["n_oos"] > 0
+    assert rows["old_plus_new"]["weights"]
+    assert "all_nan_feature_lag1" not in rows["old_plus_new"]["features"]
+    assert (
+        rows["old_plus_new"]["folds"][0]["test_start"]
+        > rows["old_plus_new"]["folds"][0]["train_end"]
+    )
+
+
+def test_run_alpha_validation_includes_composite_metrics() -> None:
+    from morning_brief.analysis.sentiment_join.bootstrap import BootstrapConfig
+    from morning_brief.analysis.sentiment_join.statistical_tests import run_alpha_validation
+
+    result = run_alpha_validation(
+        _composite_test_frame(),
+        bootstrap_config=BootstrapConfig(n_bootstrap=5, block_length=3, seed=7),
+    )
+    assert "composite_metrics" in result
+    assert "7" in result["composite_metrics"]
+    assert result["horizon_metrics"]["7"]["composite_scores"] == result["composite_metrics"]["7"]
+    assert all(row["decision"] == "research_only" for row in result["composite_metrics"]["7"])

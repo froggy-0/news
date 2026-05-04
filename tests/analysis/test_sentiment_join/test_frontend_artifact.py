@@ -170,6 +170,28 @@ def _make_stats_bytes(
         "feature_group_summary": {"7": {"stationary": {"avg_hit_rate": 0.54}}},
         "baseline_gap_summary": {"7": {"best_baseline": "vol_regime"}},
         "next_research_candidates": {"7": [{"predictor": "sentiment_momentum_lag1"}]},
+        "composite_metrics": {
+            "7": [
+                {
+                    "name": "old_plus_new",
+                    "hit_rate": 0.5158,
+                    "auc": 0.5336,
+                    "strategy_sharpe": 0.5359,
+                    "long_ratio": 0.4491,
+                    "decision": "research_only",
+                    "weights": [
+                        {
+                            "feature": "nasdaq_return_7d_lag1",
+                            "mean_coef": 0.7,
+                            "abs_mean_coef": 0.7,
+                            "sign_stability": 1.0,
+                            "fold_count": 9,
+                        }
+                    ],
+                    "unstable_weight_features": ["binance_top10_ew_return_7d_lag1"],
+                }
+            ]
+        },
         # 원본 metadata — v2 artifact에서는 rawStats에 보존되어야 함
         "walk_forward": {"index": "full", "folds": 3},
         "correlations": [{"feature": "fng_value", "pearson_r": 0.5}],
@@ -419,6 +441,19 @@ def test_gate_stats_gap_equals_promote_difference() -> None:
     )
     gate = artifact["alpha"]["gateStats"]
     assert gate["gap"] == gate["decisionPromoteCount"] - gate["decisionStrictPromoteCount"]
+
+
+def test_artifact_contains_composite_scores() -> None:
+    artifact = build_frontend_artifact(
+        stats_metadata_bytes=_make_stats_bytes(),
+        reference_date="2026-04-30",
+    )
+    rows = artifact["alpha"]["compositeScores"]["7"]
+    assert rows[0]["name"] == "old_plus_new"
+    assert rows[0]["hitRate"] == 0.5158
+    assert rows[0]["decision"] == "research_only"
+    assert rows[0]["topWeights"][0]["feature"] == "nasdaq_return_7d_lag1"
+    assert rows[0]["unstableWeightFeatures"] == ["binance_top10_ew_return_7d_lag1"]
 
 
 def test_artifact_contains_meta_with_annualization_info() -> None:
