@@ -35,8 +35,8 @@ _TARGET = "btc_log_return"
 _PREDICTORS_RAW = [
     "news_sentiment_mean",
     "fng_value",
-    "funding_rate",
-    "btc_long_short_ratio",
+    "funding_rate_zscore_30d",
+    "long_short_ratio_zscore_30d",
     "oi_change_pct",
     "etf_net_inflow_usd",
     "etf_net_inflow_usd_log1p",  # log1p 변환 — fat-tail 안정화, 원본과 병행 검정
@@ -56,12 +56,12 @@ GRANGER_PAIRS_CROSS = [
     # §6: pairwise 결과는 직접 인과의 증거가 아니라 상관 구조의 지표 (omitted variable bias 주의)
     ("news_sentiment_mean", "fng_value"),
     ("fng_value", "news_sentiment_mean"),
-    ("news_sentiment_mean", "funding_rate"),
+    ("news_sentiment_mean", "funding_rate_zscore_30d"),
     ("news_sentiment_mean", "etf_net_inflow_usd"),
-    ("fng_value", "btc_long_short_ratio"),
+    ("fng_value", "long_short_ratio_zscore_30d"),
     ("fng_value", "etf_net_inflow_usd"),
     ("usdkrw_log_return", "volume_change_pct"),
-    ("funding_rate", "etf_net_inflow_usd"),
+    ("funding_rate_zscore_30d", "etf_net_inflow_usd"),
 ]  # 8쌍
 
 GRANGER_PAIRS = GRANGER_PAIRS_TARGET + GRANGER_PAIRS_CROSS  # 18쌍 × 3 lag = 54 검정
@@ -70,9 +70,9 @@ GRANGER_PAIRS = GRANGER_PAIRS_TARGET + GRANGER_PAIRS_CROSS  # 18쌍 × 3 lag = 5
 # target은 raw 컬럼 (double-lag 방지와 동일한 이유)
 GRANGER_PAIRS_REVERSE = [
     ("btc_log_return", "news_sentiment_mean"),
-    ("btc_log_return", "funding_rate"),
+    ("btc_log_return", "funding_rate_zscore_30d"),
     ("btc_log_return", "fng_value"),
-    ("btc_log_return", "btc_long_short_ratio"),
+    ("btc_log_return", "long_short_ratio_zscore_30d"),
     ("btc_log_return", "etf_net_inflow_usd"),
 ]  # 5쌍 × 3 lag = 15 검정
 
@@ -83,8 +83,8 @@ ADF_TARGETS = [
     "btc_log_return",
     "news_sentiment_mean",
     "fng_value",
-    "funding_rate",
-    "btc_long_short_ratio",
+    "funding_rate_zscore_30d",
+    "long_short_ratio_zscore_30d",
     "oi_change_pct",
     "etf_net_inflow_usd",
     "etf_net_inflow_usd_log1p",

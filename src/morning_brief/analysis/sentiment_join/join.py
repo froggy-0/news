@@ -151,6 +151,24 @@ def _add_futures_lag_columns(df: pd.DataFrame) -> pd.DataFrame:
         result["btc_long_short_ratio_lag1"] = result["btc_long_short_ratio"].shift(1)
     else:
         result["btc_long_short_ratio_lag1"] = float("nan")
+    # funding_rate z-score: rolling stats는 t-1까지만 사용해 look-ahead bias 차단
+    if "funding_rate" in result.columns:
+        fr = pd.to_numeric(result["funding_rate"], errors="coerce")
+        fr_roll = fr.shift(1).rolling(30, min_periods=20)
+        result["funding_rate_zscore_30d"] = (fr - fr_roll.mean()) / fr_roll.std()
+        result["funding_rate_zscore_30d_lag1"] = result["funding_rate_zscore_30d"].shift(1)
+    else:
+        result["funding_rate_zscore_30d"] = float("nan")
+        result["funding_rate_zscore_30d_lag1"] = float("nan")
+    # long_short_ratio z-score: 동일 패턴
+    if "btc_long_short_ratio" in result.columns:
+        lsr = pd.to_numeric(result["btc_long_short_ratio"], errors="coerce")
+        lsr_roll = lsr.shift(1).rolling(30, min_periods=20)
+        result["long_short_ratio_zscore_30d"] = (lsr - lsr_roll.mean()) / lsr_roll.std()
+        result["long_short_ratio_zscore_30d_lag1"] = result["long_short_ratio_zscore_30d"].shift(1)
+    else:
+        result["long_short_ratio_zscore_30d"] = float("nan")
+        result["long_short_ratio_zscore_30d_lag1"] = float("nan")
     if "etf_net_inflow_usd" in result.columns:
         result["etf_net_inflow_usd_lag1"] = result["etf_net_inflow_usd"].shift(1)
     else:
@@ -350,6 +368,81 @@ def _add_vix_regime_feature(result: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def _add_macro_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Macro feature 파생: USD 광의지수·US10Y·Nasdaq 7일 변화 + zscore.
+
+    usd_broad_index_change_7d   : DTWEXBGS 7일 pct_change (주별 ffill 기반)
+    usd_broad_index_zscore_30d  : change_7d의 shift(1).rolling(30) z-score
+    us10y_change_7d             : DGS10 7일 level diff (%p)
+    nasdaq_return_7d            : NASDAQCOM 7일 pct_change
+    _lag1 버전은 look-ahead bias 차단용.
+    """
+    result = df.copy()
+
+    # USD 광의지수 (DTWEXBGS, 주별 → ffill 후 입력됨)
+    if "usd_broad_index" in result.columns:
+        idx = pd.to_numeric(result["usd_broad_index"], errors="coerce")
+        result["usd_broad_index_change_7d"] = idx.pct_change(periods=7, fill_method=None)
+        chg = result["usd_broad_index_change_7d"]
+        roll = chg.shift(1).rolling(30, min_periods=20)
+        result["usd_broad_index_zscore_30d"] = (chg - roll.mean()) / roll.std()
+    else:
+        result["usd_broad_index_change_7d"] = float("nan")
+        result["usd_broad_index_zscore_30d"] = float("nan")
+
+    # US 10년물 (DGS10, 단위: %)
+    if "us10y" in result.columns:
+        y10 = pd.to_numeric(result["us10y"], errors="coerce")
+        result["us10y_change_7d"] = y10.diff(periods=7)
+    else:
+        result["us10y_change_7d"] = float("nan")
+
+    # Nasdaq (NASDAQCOM)
+    if "nasdaq" in result.columns:
+        ndx = pd.to_numeric(result["nasdaq"], errors="coerce")
+        result["nasdaq_return_7d"] = ndx.pct_change(periods=7, fill_method=None)
+    else:
+        result["nasdaq_return_7d"] = float("nan")
+
+    for col in (
+        "usd_broad_index_change_7d",
+        "usd_broad_index_zscore_30d",
+        "us10y_change_7d",
+        "nasdaq_return_7d",
+    ):
+        result[f"{col}_lag1"] = result[col].shift(1)
+
+    return result
+
+
+def _add_breadth_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Market breadth: Binance top10 alt 7일 수익률 기반 지표 파생.
+
+    binance_top10_up_ratio_7d   : 10개 중 7일 수익률 > 0인 비율 (0.0 ~ 1.0)
+    binance_top10_ew_return_7d  : 10개 7일 수익률 단순 평균
+    _lag1 버전은 look-ahead bias 차단용.
+    breadth_df가 merge되지 않은 경우(컬럼 없음) NaN 컬럼만 생성.
+    """
+    from morning_brief.analysis.sentiment_join.sources.binance_breadth import BREADTH_SYMBOLS
+
+    result = df.copy()
+    close_cols = [f"{sym}_close" for sym in BREADTH_SYMBOLS]
+    present = [c for c in close_cols if c in result.columns]
+
+    if present:
+        closes = result[present]
+        ret7 = closes.pct_change(periods=7, fill_method=None)
+        result["binance_top10_up_ratio_7d"] = (ret7 > 0).sum(axis=1) / len(present)
+        result["binance_top10_ew_return_7d"] = ret7.mean(axis=1)
+    else:
+        result["binance_top10_up_ratio_7d"] = float("nan")
+        result["binance_top10_ew_return_7d"] = float("nan")
+
+    result["binance_top10_up_ratio_7d_lag1"] = result["binance_top10_up_ratio_7d"].shift(1)
+    result["binance_top10_ew_return_7d_lag1"] = result["binance_top10_ew_return_7d"].shift(1)
+    return result
+
+
 def _add_taker_features(df: pd.DataFrame) -> pd.DataFrame:
     """Taker buy pressure: 30d z-score 및 7d rolling ratio 파생.
 
@@ -482,6 +575,17 @@ def _add_forward_target_columns(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def _add_stablecoin_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Stablecoin supply feature lag1 파생.
+
+    usdt_usdc_supply_change_7d 컬럼이 merge된 경우에만 lag1을 계산합니다.
+    """
+    if "usdt_usdc_supply_change_7d" in df.columns:
+        df = df.copy()
+        df["usdt_usdc_supply_change_7d_lag1"] = df["usdt_usdc_supply_change_7d"].shift(1)
+    return df
+
+
 def merge_sources(
     sentiment_df: pd.DataFrame,
     fng_df: pd.DataFrame,
@@ -491,6 +595,9 @@ def merge_sources(
     etf_df: pd.DataFrame | None = None,
     vix_df: pd.DataFrame | None = None,
     regime_df: pd.DataFrame | None = None,
+    macro_df: pd.DataFrame | None = None,
+    breadth_df: pd.DataFrame | None = None,
+    stablecoin_df: pd.DataFrame | None = None,
     *,
     record_source_lineage: bool = True,
 ) -> pd.DataFrame:
@@ -552,6 +659,25 @@ def merge_sources(
         merged.get("btc_above_ma200"), errors="coerce"
     ).shift(1)
 
+    # Macro feature 조인 (usd_broad_index / us10y / nasdaq)
+    if macro_df is not None and not macro_df.empty:
+        macro_cols = [c for c in macro_df.columns if c != "date"]
+        merged = merged.merge(macro_df[["date"] + macro_cols], on="date", how="left")
+    else:
+        for col in ("usd_broad_index", "us10y", "nasdaq"):
+            if col not in merged.columns:
+                merged[col] = float("nan")
+
+    # Breadth feature 조인 (ETHUSDT_close, BNBUSDT_close, ...)
+    if breadth_df is not None and not breadth_df.empty:
+        breadth_cols = [c for c in breadth_df.columns if c != "date"]
+        merged = merged.merge(breadth_df[["date"] + breadth_cols], on="date", how="left")
+
+    # Stablecoin supply feature 조인 (usdt_usdc_supply_change_7d)
+    if stablecoin_df is not None and not stablecoin_df.empty:
+        sc_cols = [c for c in stablecoin_df.columns if c != "date"]
+        merged = merged.merge(stablecoin_df[["date"] + sc_cols], on="date", how="left")
+
     if record_source_lineage:
         futures_source = (
             str(futures_df.attrs.get("futures_source", "unknown"))
@@ -586,6 +712,15 @@ def merge_sources(
     merged = _add_regime_interaction_features(merged)
     merged = _add_vix_regime_feature(merged)
     merged = _add_taker_features(merged)
+    merged = _add_macro_features(merged)
+    merged = _add_breadth_features(merged)
+    merged = _add_stablecoin_features(merged)
+    # raw close 컬럼은 파생 피처 계산 후 제거 (MASTER_SCHEMA strict=True)
+    from morning_brief.analysis.sentiment_join.sources.binance_breadth import BREADTH_SYMBOLS
+
+    _close_cols = [f"{s}_close" for s in BREADTH_SYMBOLS if f"{s}_close" in merged.columns]
+    if _close_cols:
+        merged = merged.drop(columns=_close_cols)
     merged = _add_btc_direction_label(merged)
     merged = _add_forward_target_columns(merged)
 
@@ -657,6 +792,9 @@ __all__ = [
     "_add_delta_features",
     "_add_regime_interaction_features",
     "_add_taker_features",
+    "_add_macro_features",
+    "_add_breadth_features",
+    "_add_stablecoin_features",
     "_add_btc_direction_label",
     "_add_forward_target_columns",
     "_apply_sentiment_quality_gate",

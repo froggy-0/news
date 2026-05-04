@@ -124,6 +124,31 @@ MASTER_SCHEMA = pa.DataFrameSchema(
         "btc_taker_buy_ratio_7d_lag1": pa.Column(float, nullable=True, required=False),
         "btc_taker_imbalance_zscore_30d": pa.Column(float, nullable=True, required=False),
         "btc_taker_imbalance_zscore_30d_lag1": pa.Column(float, nullable=True, required=False),
+        # Futures z-score features: rolling stats는 t-1까지만 사용 (look-ahead 차단)
+        "funding_rate_zscore_30d": pa.Column(float, nullable=True, required=False),
+        "funding_rate_zscore_30d_lag1": pa.Column(float, nullable=True, required=False),
+        "long_short_ratio_zscore_30d": pa.Column(float, nullable=True, required=False),
+        "long_short_ratio_zscore_30d_lag1": pa.Column(float, nullable=True, required=False),
+        # Market breadth: Binance top10 alt 7일 수익률 기반 (수집 실패 시 전 행 NaN)
+        "binance_top10_up_ratio_7d": pa.Column(float, nullable=True, required=False),
+        "binance_top10_up_ratio_7d_lag1": pa.Column(float, nullable=True, required=False),
+        "binance_top10_ew_return_7d": pa.Column(float, nullable=True, required=False),
+        "binance_top10_ew_return_7d_lag1": pa.Column(float, nullable=True, required=False),
+        # Stablecoin supply expansion — USDT+USDC 7d pct change (수집 실패 시 전 행 NaN)
+        "usdt_usdc_supply_change_7d": pa.Column(float, nullable=True, required=False),
+        "usdt_usdc_supply_change_7d_lag1": pa.Column(float, nullable=True, required=False),
+        # Macro features: FRED DTWEXBGS / DGS10 / NASDAQCOM (FRED_API_KEY 미설정 시 전 행 NaN)
+        "usd_broad_index": pa.Column(float, nullable=True, required=False),
+        "us10y": pa.Column(float, nullable=True, required=False),
+        "nasdaq": pa.Column(float, nullable=True, required=False),
+        "usd_broad_index_change_7d": pa.Column(float, nullable=True, required=False),
+        "usd_broad_index_change_7d_lag1": pa.Column(float, nullable=True, required=False),
+        "usd_broad_index_zscore_30d": pa.Column(float, nullable=True, required=False),
+        "usd_broad_index_zscore_30d_lag1": pa.Column(float, nullable=True, required=False),
+        "us10y_change_7d": pa.Column(float, nullable=True, required=False),
+        "us10y_change_7d_lag1": pa.Column(float, nullable=True, required=False),
+        "nasdaq_return_7d": pa.Column(float, nullable=True, required=False),
+        "nasdaq_return_7d_lag1": pa.Column(float, nullable=True, required=False),
     },
     strict=True,
 )

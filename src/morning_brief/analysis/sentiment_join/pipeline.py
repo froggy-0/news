@@ -21,9 +21,14 @@ from morning_brief.analysis.sentiment_join.outlier_policy import OutlierPolicyFa
 from morning_brief.analysis.sentiment_join.quality import STRUCTURED_SOURCE_MIN_COVERAGE_RATIO
 from morning_brief.analysis.sentiment_join.signals import hybrid_signal_label
 from morning_brief.analysis.sentiment_join.sources.binance import fetch_btc_close_binance
+from morning_brief.analysis.sentiment_join.sources.binance_breadth import fetch_breadth_data
+from morning_brief.analysis.sentiment_join.sources.defillama_stablecoins import (
+    fetch_stablecoin_supply,
+)
 from morning_brief.analysis.sentiment_join.sources.etf_flows import fetch_etf_flow_features
 from morning_brief.analysis.sentiment_join.sources.fng import fetch_fng
 from morning_brief.analysis.sentiment_join.sources.futures import fetch_futures_data
+from morning_brief.analysis.sentiment_join.sources.macro_history import fetch_macro_history
 from morning_brief.analysis.sentiment_join.sources.r2_sentiment import fetch_r2_sentiment
 from morning_brief.analysis.sentiment_join.sources.usdkrw_prices import fetch_usdkrw_close
 from morning_brief.analysis.sentiment_join.sources.vix import fetch_vix_history
@@ -599,6 +604,44 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
         else:
             vix_ffill_days = 0
 
+        # Macro: FRED DTWEXBGS / DGS10 / NASDAQCOM (FRED_API_KEY 미설정 시 빈 DataFrame)
+        _usd_df = fetch_macro_history("usd_broad_index", returns_start_date, end_date)
+        _us10y_df = fetch_macro_history("us10y", returns_start_date, end_date)
+        _nasdaq_df = fetch_macro_history("nasdaq", returns_start_date, end_date)
+        macro_ffill_days = 0
+        if not _usd_df.empty:
+            _usd_df = normalize_dates(_usd_df)
+            _usd_df = reindex_to_calendar(_usd_df, returns_start_date, end_date)
+            _usd_df, _usd_ffill = forward_fill_prices(_usd_df, ["usd_broad_index"], max_periods=7)
+            macro_ffill_days += _usd_ffill
+        if not _us10y_df.empty:
+            _us10y_df = normalize_dates(_us10y_df)
+            _us10y_df = reindex_to_calendar(_us10y_df, returns_start_date, end_date)
+            _us10y_df, _us10y_ffill = forward_fill_prices(_us10y_df, ["us10y"], max_periods=2)
+            macro_ffill_days += _us10y_ffill
+        if not _nasdaq_df.empty:
+            _nasdaq_df = normalize_dates(_nasdaq_df)
+            _nasdaq_df = reindex_to_calendar(_nasdaq_df, returns_start_date, end_date)
+            _nasdaq_df, _nasdaq_ffill = forward_fill_prices(_nasdaq_df, ["nasdaq"], max_periods=2)
+            macro_ffill_days += _nasdaq_ffill
+        _macro_parts = [df for df in [_usd_df, _us10y_df, _nasdaq_df] if not df.empty]
+        macro_df: pd.DataFrame | None = None
+        if _macro_parts:
+            macro_df = _macro_parts[0]
+            for _part in _macro_parts[1:]:
+                macro_df = macro_df.merge(_part, on="date", how="outer")
+            macro_df = macro_df.sort_values("date").reset_index(drop=True)
+
+        # Breadth: Binance top10 alt 종가 (로컬 직접 / Lambda 분기)
+        breadth_df = fetch_breadth_data(settings.lookback_days, settings.futures_lambda_arn)
+        if not breadth_df.empty:
+            breadth_df = normalize_dates(breadth_df)
+
+        # Stablecoin supply: USDT+USDC 7일 변화율 (Supabase 캐시 우선, 미스 시 DefiLlama)
+        stablecoin_df = fetch_stablecoin_supply(start_date, end_date)
+        if not stablecoin_df.empty:
+            stablecoin_df = normalize_dates(stablecoin_df)
+
         total_ffill_days = 0
         btc_close_df, btc_ffill_days = forward_fill_prices(btc_close_df, ["close"])
         # USDKRW는 외환시장이 주말 휴장이라 Sat/Sun 행이 비어 있다.
@@ -609,7 +652,7 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
         usdkrw_close_df, usdkrw_ffill_days = forward_fill_prices(
             usdkrw_close_df, ["close"], max_periods=3
         )
-        total_ffill_days += btc_ffill_days + usdkrw_ffill_days + vix_ffill_days
+        total_ffill_days += btc_ffill_days + usdkrw_ffill_days + vix_ffill_days + macro_ffill_days
         ffill_breakdown = {
             "btc": {
                 "filled_days": btc_ffill_days,
@@ -626,6 +669,11 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             "vix": {
                 "filled_days": vix_ffill_days,
                 "max_periods": 2,
+                "start_date": returns_start_date,
+                "end_date": end_date,
+            },
+            "macro": {
+                "filled_days": macro_ffill_days,
                 "start_date": returns_start_date,
                 "end_date": end_date,
             },
@@ -673,6 +721,9 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             etf_df,
             vix_df,
             regime_df,
+            macro_df=macro_df,
+            breadth_df=breadth_df if not breadth_df.empty else None,
+            stablecoin_df=stablecoin_df if not stablecoin_df.empty else None,
         )
 
         exclusion_counts = master_df.attrs.get("exclusion_counts", {})

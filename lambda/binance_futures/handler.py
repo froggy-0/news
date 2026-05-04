@@ -1,10 +1,11 @@
-"""Binance 선물 데이터 수집 Lambda 핸들러.
+"""Binance 선물 + Spot breadth 데이터 수집 Lambda 핸들러.
 
 GitHub Actions(US IP)에서 fapi.binance.com이 HTTP 451로 차단되므로
 ap-northeast-2(Seoul) Lambda를 프록시로 사용합니다.
 
 외부 의존성 없음 — urllib 표준 라이브러리만 사용.
 Binance fapi 공개 엔드포인트(인증 불필요): fundingRate, openInterestHist, globalLongShortAccountRatio
+Binance spot 공개 엔드포인트(인증 불필요): data-api.binance.vision klines
 
 입력:
     event["lookback_days"]: int  수집할 기간(일), 기본값 30
@@ -13,7 +14,12 @@ Binance fapi 공개 엔드포인트(인증 불필요): fundingRate, openInterest
     {
         "funding_rate":        {"YYYY-MM-DD": float, ...},
         "open_interest_usd":   {"YYYY-MM-DD": float, ...},
-        "btc_long_short_ratio": {"YYYY-MM-DD": float, ...}
+        "btc_long_short_ratio": {"YYYY-MM-DD": float, ...},
+        "spot_breadth": {
+            "ETHUSDT":  {"YYYY-MM-DD": float, ...},
+            "BNBUSDT":  {"YYYY-MM-DD": float, ...},
+            ...
+        }
     }
 
 출력 (실패):
@@ -37,7 +43,24 @@ SYMBOL = "BTCUSDT"
 FUNDING_URL = "https://fapi.binance.com/fapi/v1/fundingRate"
 OI_URL = "https://fapi.binance.com/futures/data/openInterestHist"
 LSR_URL = "https://fapi.binance.com/futures/data/globalLongShortAccountRatio"
+SPOT_KLINES_URL = "https://data-api.binance.vision/api/v3/klines"
+SPOT_KLINES_URL_FALLBACK = "https://api.binance.com/api/v3/klines"
 TIMEOUT = 20
+
+# Binance USDT spot 거래량 기준 상위 10개 (BTC 제외, 정적 고정)
+# MATICUSDT는 2024-09-10 상장폐지 → POLUSDT(Polygon 리브랜딩)로 교체
+BREADTH_SYMBOLS: list[str] = [
+    "ETHUSDT",
+    "BNBUSDT",
+    "SOLUSDT",
+    "XRPUSDT",
+    "DOGEUSDT",
+    "ADAUSDT",
+    "AVAXUSDT",
+    "LINKUSDT",
+    "DOTUSDT",
+    "POLUSDT",
+]
 
 
 def _get(url: str, params: dict[str, str]) -> Any:
@@ -179,6 +202,67 @@ def _parse_lsr(rows: list[dict]) -> dict[str, float]:
 
 
 # ---------------------------------------------------------------------------
+# Spot klines (breadth)
+# ---------------------------------------------------------------------------
+
+
+def _fetch_spot_klines(symbol: str, start_ms: int, end_ms: int) -> list[list]:
+    """단일 심볼 일봉 klines를 data-api.binance.vision에서 수집합니다.
+
+    547일(limit=1000 내) 단발 호출로 충분. 실패 시 빈 리스트 반환.
+    """
+    params = {
+        "symbol": symbol,
+        "interval": "1d",
+        "startTime": str(start_ms),
+        "endTime": str(end_ms),
+        "limit": "1000",
+    }
+    for url in (SPOT_KLINES_URL, SPOT_KLINES_URL_FALLBACK):
+        try:
+            data = _get(url, params)
+            if isinstance(data, list):
+                return data
+        except urllib.error.HTTPError as exc:
+            logger.warning("spot klines %s HTTP %s (url=%s)", symbol, exc.code, url)
+            if url == SPOT_KLINES_URL_FALLBACK:
+                return []
+        except Exception as exc:
+            logger.warning("spot klines %s error: %s (url=%s)", symbol, exc, url)
+            if url == SPOT_KLINES_URL_FALLBACK:
+                return []
+    return []
+
+
+def _parse_spot_closes(rows: list[list]) -> dict[str, float]:
+    """klines 응답 → {YYYY-MM-DD: close} 딕셔너리."""
+    closes: dict[str, float] = {}
+    for row in rows:
+        if not isinstance(row, (list, tuple)) or len(row) < 5:
+            continue
+        try:
+            day = _day(int(row[0]))
+            closes[day] = float(row[4])
+        except (TypeError, ValueError, IndexError):
+            continue
+    return closes
+
+
+def _fetch_spot_breadth(start_ms: int, end_ms: int) -> dict[str, dict[str, float]]:
+    """BREADTH_SYMBOLS 전체 일봉 종가를 수집합니다.
+
+    실패 심볼은 빈 dict로 포함 (부분 실패 허용).
+    반환: {"ETHUSDT": {"YYYY-MM-DD": float, ...}, ...}
+    """
+    result: dict[str, dict[str, float]] = {}
+    for symbol in BREADTH_SYMBOLS:
+        rows = _fetch_spot_klines(symbol, start_ms, end_ms)
+        result[symbol] = _parse_spot_closes(rows)
+        logger.info("spot breadth %s: %d days collected", symbol, len(result[symbol]))
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Handler
 # ---------------------------------------------------------------------------
 
@@ -227,6 +311,13 @@ def lambda_handler(event: dict, context: object) -> dict:
         len(lsr),
         list(lsr.values())[-1] if lsr else float("nan"),
     )
+
+    # Spot breadth: 실패해도 futures 결과는 반환 (부분 실패 허용)
+    spot_breadth = _fetch_spot_breadth(start_ms, end_ms)
+    breadth_days = {sym: len(closes) for sym, closes in spot_breadth.items()}
+    logger.info("spot_breadth collected: %s", breadth_days)
+    result["spot_breadth"] = spot_breadth
+
     return result
 
 
