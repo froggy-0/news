@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import pandas as pd
 
@@ -108,7 +109,7 @@ def _fetch_chart(stablecoin_id: str, cutoff_date: str) -> dict[str, float]:
 # ---------------------------------------------------------------------------
 
 
-def _get_supabase_client():
+def _get_supabase_client() -> Any:
     supabase_url = os.getenv("SUPABASE_URL", "").strip()
     service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
     if not supabase_url or not service_role_key:
