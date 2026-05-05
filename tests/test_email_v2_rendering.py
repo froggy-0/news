@@ -61,7 +61,7 @@ SAMPLE_CONTEXT = {
             "status_text": "",
         },
         {
-            "label": "나스닥 선물",
+            "label": "성장주 참고 지표",
             "value": "20,150",
             "change": "-0.4%",
             "direction": "down",
@@ -81,7 +81,7 @@ SAMPLE_CONTEXT = {
     "hero_alerts": ["VIX가 평소보다 높아요"],
     "hero_verdict": "오늘은 관망 국면입니다.",
     "hero_reason": "VIX가 평소보다 높아 변동성이 남아 있습니다.",
-    "hero_kospi_impact": "미국 장세가 엇갈려 코스피는 종목별 차별화가 커질 수 있습니다.",
+    "hero_kospi_impact": "전통시장 흐름이 엇갈려 BTC 투자 심리는 추가 확인이 필요합니다.",
     "hero_tone": "flat",
     "macro_indicators": [
         {
@@ -97,7 +97,7 @@ SAMPLE_CONTEXT = {
     "stock_indices": [
         {
             "ticker": "SPY",
-            "name": "S&P 500",
+            "name": "BTC 참고 지표",
             "price": "510.25",
             "change_pct": "+0.5%",
             "direction": "up",
@@ -134,15 +134,15 @@ SAMPLE_CONTEXT = {
         "official_total_aum": "",
         "status_text": "",
     },
-    "issue_briefings": [{"topic": "AI 투자", "body": "엔비디아가 새 칩을 발표했어요."}],
+    "issue_briefings": [{"topic": "ETF 자금 흐름", "body": "비트코인 ETF 자금 유입이 늘었어요."}],
     "news_items": [
         {
             "number": "①",
-            "headline": "엔비디아 AI 칩 발표",
-            "body": "AI 반도체 시장에서 큰 변화가 예상돼요.",
+            "headline": "비트코인 ETF 자금 유입",
+            "body": "ETF 자금 유입이 BTC 투자 심리에 힘을 보탰어요.",
             "source_name": "Reuters",
             "source_url": "https://reuters.com/example",
-            "tldr": "엔비디아 AI 칩 신제품 발표",
+            "tldr": "비트코인 ETF 자금 유입 확대",
             "source_tier": 1,
             "source_kind": "원문 기사",
             "source_label": "원문 기사 · Reuters",
@@ -150,15 +150,15 @@ SAMPLE_CONTEXT = {
     ],
     "news_source_items": [
         {
-            "headline": "엔비디아 AI 칩 발표",
+            "headline": "비트코인 ETF 자금 유입",
             "source_name": "Reuters",
             "source_kind": "원문 기사",
             "safe_url": "https://reuters.com/example",
         }
     ],
     "market_source_lines": [
-        "거시 지표: FRED, yfinance",
-        "미국 지수/기술주: KIS",
+        "크립토 돈 흐름: FRED, yfinance",
+        "전통시장 참고 지표: KIS",
         "비트코인: CoinGecko",
         "X 시그널: Grok",
     ],
@@ -566,7 +566,7 @@ class TestSnapshotFullHtmlOutput:
     def test_contains_header_section(self, rendered_html: str) -> None:
         """헤더 섹션 콘텐츠가 포함되어 있다."""
         assert "SOVEREIGN BRIEF" in rendered_html
-        assert "미국 기술주·비트코인" in rendered_html
+        assert "비트코인·거시 시장" in rendered_html
         assert "시장 브리핑" in rendered_html
         assert "뉴욕 마감 기준" in rendered_html
         assert SAMPLE_CONTEXT["display_date"] in rendered_html

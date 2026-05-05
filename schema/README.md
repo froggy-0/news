@@ -11,8 +11,9 @@
 | `generated_at_utc` | `meta.generatedAt` |
 | `data_footer_notes` | `meta.qualityNotes` |
 | `macro`, `bitcoin.spot` | `marketSnapshot.items` |
+| `risk_overlay` | `riskOverlay` |
 | `bitcoin.spot`, `bitcoin.fear_greed_*`, `bitcoin.official_etf_*`, `macro.dxy`, `macro.vix` | `cryptoIndicators` |
-| `tech_stocks` | `techStocks` (legacy empty array) |
+| `tech_stocks` | `techStocks` (legacy field; crypto-related reference equities) |
 | `bitcoin.fear_greed_value`, `bitcoin.fear_greed_label` | `bitcoin.fearGreedIndex` |
 | `bitcoin.official_etf_total_btc`, `bitcoin.official_etf_total_aum_usd` | `bitcoin.etf.totalHolding`, `bitcoin.etf.totalAum` |
 | `bitcoin.official_etf_snapshots` | `bitcoin.etf.issuers` |

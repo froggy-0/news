@@ -8,10 +8,10 @@ import { RelativeTime } from "@/components/ui/RelativeTime";
 import { containsKorean, filterMeaningless } from "@/lib/text";
 
 function categoryLabel(value: NewsItem["category"]): string {
-  if (value === "macro") return "거시";
-  if (value === "bigtech") return "빅테크";
+  if (value === "macro") return "돈 흐름";
+  if (value === "bigtech") return "크립토 기반";
   if (value === "bitcoin") return "비트코인";
-  return "미국 증시";
+  return "시장 참고 흐름";
 }
 
 export function NewsFeedList({
@@ -103,7 +103,7 @@ export function NewsFeedList({
               {interpretation ? (
                 <div className="border-t border-white/8 pt-4">
                   <span className="label-meta text-white/30">
-                    시장 함의
+                    왜 중요한가
                   </span>
                   <p className="mt-2 text-[12px] leading-6 text-white/68">{interpretation}</p>
                 </div>

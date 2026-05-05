@@ -42,14 +42,14 @@ async function writeStaticAssets(): Promise<void> {
   <channel>
     <title>SOVEREIGN BRIEF</title>
     <link>${siteBaseUrl}/</link>
-    <description>미국 시장 브리핑 RSS 피드</description>
+    <description>비트코인·크립토 시장 브리핑 RSS 피드</description>
     ${rssItems}
   </channel>
 </rss>
 `;
   const llms = `# SOVEREIGN BRIEF
 
-이 서비스는 미국 기술주와 비트코인 시장 흐름을 한국어 브리핑으로 제공합니다.
+이 서비스는 비트코인, ETF, 달러·금리, 크립토 시장 흐름을 한국어 브리핑으로 제공합니다.
 
 ## 주요 경로
 - /

@@ -10,7 +10,7 @@ const HANGUL_RE = /[가-힣]/;
 const AS_OF_LINE_RE = /^\(?as of\s+/i;
 const BODY_REPLACEMENTS: Array<[RegExp, string]> = [
   [/BTC\s*&\s*크립토/gi, "비트코인과 크립토"],
-  [/Big Tech/gi, "빅테크"],
+  [/Big\s+Tech/gi, "크립토 기반"],
 ];
 
 function sanitizePublicBody(body: string): string {
@@ -65,9 +65,9 @@ export function BriefBody({
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="space-y-2">
             <p className="section-title">브리핑 본문</p>
-            <span className="eyebrow">Full Briefing</span>
+            <span className="eyebrow">전체 브리핑</span>
             <p className="max-w-2xl text-sm leading-7 text-white/56">
-              요약을 넘어, 판단의 근거와 전체 맥락을 정리한 장문 레이어입니다.
+              요약 뒤에 숨은 근거와 흐름을 이어서 볼 수 있어요.
             </p>
           </div>
           <MarkdownDownloadButton body={body} date={date} />

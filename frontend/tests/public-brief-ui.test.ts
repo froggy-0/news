@@ -6,6 +6,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { JudgmentBlock } from "../components/brief/JudgmentBlock";
+import { RiskOverlayPanel } from "../components/brief/RiskOverlayPanel";
 import { TopicGrid } from "../components/brief/TopicGrid";
 import { HomeHero } from "../components/hero/HomeHero";
 import { NewsFeed } from "../components/news/NewsFeed";
@@ -40,6 +41,17 @@ test("judgment block renders headline in static markup", async () => {
 
   assert.match(markup, /핵심 인사이트/);
   assert.doesNotMatch(markup, /신뢰 상태|발행 기준일|생성 시각/);
+});
+
+test("risk overlay panel renders market state cards", async () => {
+  const brief = await loadBrief("2026-03-21.json");
+  const markup = renderToStaticMarkup(createElement(RiskOverlayPanel, { overlay: brief.riskOverlay }));
+
+  assert.match(markup, /시장 상태/);
+  assert.match(markup, /방향 불명/);
+  assert.match(markup, /변동성/);
+  assert.match(markup, /오늘의 신호/);
+  assert.match(markup, /검증 기준 통과/);
 });
 
 test("topic grid renders empty state when topic summaries are absent", () => {

@@ -21,6 +21,7 @@ test("dated brief fixture matches contract", async () => {
   const brief = parseBriefData(await loadJson("2026-03-20.json"));
   assert.equal(brief.meta.dataQuality, "degraded");
   assert.ok(brief.marketSnapshot.items.length > 0);
+  assert.equal(brief.riskOverlay?.regimeState, "Transitional");
   assert.ok(brief.featuredNews.length > 0);
   assert.ok(brief.allNews.length > 0);
 });

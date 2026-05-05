@@ -48,7 +48,7 @@ SAMPLE_SNAPSHOT_BADGES = [
         "status_text": "",
     },
     {
-        "label": "나스닥 선물",
+        "label": "성장주 참고 지표",
         "value": "20,150",
         "change": "-0.4%",
         "direction": "down",
@@ -102,7 +102,7 @@ SAMPLE_SECTOR_MAPPING = {
     "positive": [{"ticker": "NVDA", "name": "NVDA", "reason": "AI 수요 확대"}],
     "negative": [{"ticker": "XLE", "name": "XLE", "reason": "유가 하락 압력"}],
     "neutral": [{"ticker": "GLD", "name": "GLD", "reason": "금리 동결 시 중립"}],
-    "commentary": "전반적으로 기술주 중심 수혜 예상",
+    "commentary": "전반적으로 크립토 연관 자산 중심 수혜 예상",
 }
 
 SAMPLE_EVENTS = [
@@ -127,7 +127,7 @@ SAMPLE_EVENTS = [
 SAMPLE_STOCK_INDICES = [
     {
         "ticker": "SPY",
-        "name": "S&P 500",
+        "name": "BTC 참고 지표",
         "price": "510.25",
         "change_pct": "+0.5%",
         "direction": "up",
@@ -181,7 +181,7 @@ def test_header_partial_renders_independently() -> None:
         header_signal_tone="flat",
     )
     assert "SOVEREIGN BRIEF" in html
-    assert "미국 기술주·비트코인" in html
+    assert "비트코인·거시 시장" in html
     assert "시장 브리핑" in html
     assert "뉴욕 마감 기준" in html
     assert "2026년 3월 18일 화요일" in html
@@ -189,7 +189,7 @@ def test_header_partial_renders_independently() -> None:
     assert 'data-mail-rhythm="hero"' in html
     assert "미국 10년물" in html
     assert "원/달러" in html
-    assert "나스닥 선물" in html
+    assert "성장주 참고 지표" in html
     assert "BTC 현물" in html
     assert "VIX" in html
     assert 'role="presentation"' in html
@@ -209,12 +209,12 @@ def test_hero_partial_renders_independently() -> None:
         hero_alerts=["추가 메모"],
         hero_verdict="오늘은 관망 국면입니다.",
         hero_reason="변동성은 남아 있지만 추세가 엇갈립니다.",
-        hero_kospi_impact="미국 기술주 흐름이 코스피 대형주에 선별적으로 반영될 수 있습니다.",
+        hero_kospi_impact="전통시장 흐름이 BTC 투자 심리에 선별적으로 반영될 수 있습니다.",
         hero_tone="flat",
     )
     assert "오늘은 관망 국면입니다." in html
     assert "변동성은 남아 있지만 추세가 엇갈립니다." in html
-    assert "미국 기술주 흐름이 코스피 대형주에 선별적으로 반영될 수 있습니다." in html
+    assert "전통시장 흐름이 BTC 투자 심리에 선별적으로 반영될 수 있습니다." in html
     assert 'data-mail-rhythm="hero"' in html
     assert 'role="presentation"' in html
 
@@ -269,9 +269,9 @@ def test_market_partial_renders_independently() -> None:
         macro_indicators=SAMPLE_MACRO_INDICATORS,
         market_status_text="",
     )
-    assert "미국 증시 흐름" in html
+    assert "크립토 외부환경" in html
     assert "SPY" in html
-    assert "S&P 500" in html or "S&amp;P 500" in html
+    assert "BTC 참고 지표" in html
     assert "510.25" in html
     assert "NVDA" in html
     assert "10년물" in html
@@ -295,7 +295,7 @@ def test_sector_partial_renders_independently() -> None:
     assert "유가 하락 압력" in html
     assert "GLD" in html
     assert "금리 동결 시 중립" in html
-    assert "전반적으로 기술주 중심 수혜 예상" in html
+    assert "전반적으로 크립토 연관 자산 중심 수혜 예상" in html
     assert 'data-mail-rhythm="data"' in html
     assert 'role="presentation"' in html
 
@@ -338,8 +338,8 @@ def test_footer_partial_renders_independently() -> None:
             }
         ],
         market_source_lines=[
-            "거시 지표: FRED, yfinance",
-            "미국 지수/기술주: KIS",
+            "크립토 돈 흐름: FRED, yfinance",
+            "전통시장 참고 지표: KIS",
         ],
         data_quality_status="ok",
         footer_notes=[],
@@ -388,8 +388,8 @@ def _build_full_context() -> dict:
             }
         ],
         "market_source_lines": [
-            "거시 지표: FRED, yfinance",
-            "미국 지수/기술주: KIS",
+            "크립토 돈 흐름: FRED, yfinance",
+            "전통시장 참고 지표: KIS",
             "비트코인: CoinGecko",
             "X 시그널: Grok",
         ],
@@ -501,8 +501,8 @@ _V2_PARTIALS = [
                 }
             ],
             "market_source_lines": [
-                "거시 지표: FRED, yfinance",
-                "미국 지수/기술주: KIS",
+                "크립토 돈 흐름: FRED, yfinance",
+                "전통시장 참고 지표: KIS",
             ],
             "data_quality_status": "ok",
             "footer_notes": [],
@@ -534,7 +534,7 @@ _EXPECTED_KOREAN_LABELS: dict[str, list[str]] = {
     "email_btc.html.j2": ["비트코인과 ETF", "공포탐욕지수", "주요 현물 ETF"],
     "email_sector.html.j2": ["오늘 주목 흐름", "상단 수혜", "하단 압력", "중립 관망"],
     "email_calendar.html.j2": ["이번 주 일정", "예상치"],
-    "email_market.html.j2": ["미국 증시 흐름", "주요 기술주", "거시 환경"],
+    "email_market.html.j2": ["크립토 외부환경", "크립토 관련 종목", "크립토 돈 흐름"],
     "email_footer.html.j2": ["출처와 데이터", "뉴스 출처", "시장 데이터", "구독 해지"],
 }
 

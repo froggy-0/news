@@ -40,46 +40,6 @@ SOVEREIGN BRIEF
 {{ news_status_text or "이번 집계에서는 주요 뉴스를 확인하지 못했어요." }}
 
 {% endif -%}
-미국 증시 흐름
-{% if not stock_indices and not stock_tech and not macro_indicators -%}
-{{ market_status_text or "이번 집계에서는 시장 지표를 확인하지 못했어요." }}
-{% endif -%}
-{% if stock_indices -%}
-주요 지수
-{% for s in stock_indices -%}
-· {{ s.ticker }} {{ s.name }}  {{ s.price }}  {{ s.change_pct }}
-{% endfor %}
-{% endif -%}
-{% if stock_tech -%}
-주요 기술주
-{% for s in stock_tech -%}
-· {{ s.ticker }}  {{ s.change_pct }}
-{% endfor %}
-{% endif -%}
-{% if macro_indicators -%}
-거시 환경
-{% for m in macro_indicators -%}
-· {{ m.label }}  {% if m.is_anomaly %}{{ m.status_text or "이번 집계에서는 확인되지 않았어요." }}{% else %}{{ m.value }}{% if m.change %}  {{ m.change }}{% endif %}{% endif %}{% if m.is_previous %}  (전일){% endif %}
-{% endfor %}
-{% endif %}
-
-{% if signal_block and signal_block.has_signal_block -%}
-BTC 신호 신뢰도
-· 시장 상태: {{ signal_block.regime_emoji }} {{ signal_block.regime_label }} — {{ signal_block.regime_description }}
-· 변동성: {{ signal_block.vol_text }}
-{% if signal_block.has_confidence -%}
-· 오늘의 신호: ⚡ {{ signal_block.confidence_label }}
-{% for reason in signal_block.reason_labels -%}
-  - {{ reason }}
-{% endfor -%}
-{% if signal_block.track_record_days and signal_block.track_record_hit_rate is not none -%}
-· 최근 {{ signal_block.track_record_days }}일 적중률: {{ (signal_block.track_record_hit_rate * 100) | round(0) | int }}% ({{ signal_block.track_record_signal_count }}회)
-{% endif -%}
-{% else -%}
-· 오늘은 신호 없음 ({{ signal_block.regime_label }} 구간, 관망 권고)
-{% endif %}
-{% endif -%}
-
 비트코인과 ETF
 {% if btc_data.status_text -%}
 {{ btc_data.status_text }}
@@ -103,6 +63,46 @@ BTC 신호 신뢰도
 {% endif -%}
 {% for snap in btc_data.official_snapshots -%}
 · {{ snap.issuer }} {{ snap.ticker }} {{ snap.btc_held }} BTC · AUM {{ snap.aum }}
+{% endfor %}
+{% endif %}
+
+{% if signal_block and signal_block.has_signal_block -%}
+BTC 신호 신뢰도
+· 시장 상태: {{ signal_block.regime_emoji }} {{ signal_block.regime_label }} — {{ signal_block.regime_description }}
+· 변동성: {{ signal_block.vol_text }}
+{% if signal_block.has_confidence -%}
+· 오늘의 신호: ⚡ {{ signal_block.confidence_label }}
+{% for reason in signal_block.reason_labels -%}
+  - {{ reason }}
+{% endfor -%}
+{% if signal_block.track_record_days and signal_block.track_record_hit_rate is not none -%}
+· 최근 {{ signal_block.track_record_days }}일 적중률: {{ (signal_block.track_record_hit_rate * 100) | round(0) | int }}% ({{ signal_block.track_record_signal_count }}회)
+{% endif -%}
+{% else -%}
+· 오늘은 신호 없음 ({{ signal_block.regime_label }} 구간, 관망 권고)
+{% endif %}
+{% endif -%}
+
+크립토 외부환경
+{% if not stock_indices and not stock_tech and not macro_indicators -%}
+{{ market_status_text or "이번 집계에서는 시장 지표를 확인하지 못했어요." }}
+{% endif -%}
+{% if macro_indicators -%}
+크립토 돈 흐름
+{% for m in macro_indicators -%}
+· {{ m.label }}  {% if m.is_anomaly %}{{ m.status_text or "이번 집계에서는 확인되지 않았어요." }}{% else %}{{ m.value }}{% if m.change %}  {{ m.change }}{% endif %}{% endif %}{% if m.is_previous %}  (전일){% endif %}
+{% endfor %}
+{% endif -%}
+{% if stock_indices -%}
+주요 지수
+{% for s in stock_indices -%}
+· {{ s.ticker }} {{ s.name }}  {{ s.price }}  {{ s.change_pct }}
+{% endfor %}
+{% endif -%}
+{% if stock_tech -%}
+크립토 관련 종목
+{% for s in stock_tech -%}
+· {{ s.ticker }}  {{ s.change_pct }}
 {% endfor %}
 {% endif %}
 
