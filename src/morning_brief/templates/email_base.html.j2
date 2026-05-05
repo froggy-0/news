@@ -77,9 +77,10 @@ a{color:{{ mail_theme.colors.textStrong }}!important}
 <table role="presentation" width="{{ mail_theme.layout.containerWidth }}" cellpadding="0" cellspacing="0" border="0" class="container" style="width:{{ mail_theme.layout.containerWidth }}px;max-width:{{ mail_theme.layout.containerWidth }}px;background:{{ mail_theme.colors.shellBg }};border:1px solid {{ mail_theme.colors.border }};color:{{ mail_theme.colors.textStrong }};" data-mail-shell="quiet-signal">
 {% include "email_header.html.j2" %}
 {% include "email_hero.html.j2" %}
-{% include "email_news.html.j2" %}
 {% include "email_btc.html.j2" %}
 {% include "email_signal.html.j2" %}
+{% include "email_sovereign.html.j2" %}
+{% include "email_news.html.j2" %}
 {% include "email_market.html.j2" %}
 {% if sector_mapping %}{% include "email_sector.html.j2" %}{% endif %}
 {% if event_calendar %}{% include "email_calendar.html.j2" %}{% endif %}

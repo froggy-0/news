@@ -20,6 +20,13 @@ SOVEREIGN BRIEF
 {% endif %}
 
 {% endif -%}
+{% if sovereign_block and sovereign_block.has_sovereign -%}
+─────────────────────────────────────────
+SOVEREIGN INDEX  {{ sovereign_block.score_int }}/100  {{ sovereign_block.label_ko }}
+[{{ '█' * (sovereign_block.score_int // 10) }}{{ '░' * (10 - sovereign_block.score_int // 10) }}] {{ sovereign_block.zone | upper }}
+─────────────────────────────────────────
+
+{% endif -%}
 {% if snapshot_badges -%}
 핵심 수치
 {% for b in snapshot_badges -%}
@@ -143,8 +150,9 @@ BTC 신호 신뢰도
 · {{ line }}
 {% endfor %}
 
+{% if data_quality_status != "ok" -%}
 {{ data_quality_line }}
-
+{% endif %}
 {% if footer_notes -%}
 데이터 처리 메모
 {% for note in footer_notes -%}

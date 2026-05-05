@@ -1,0 +1,108 @@
+{% from "email_macros.html.j2" import section_label with context %}
+{% if sovereign_block and sovereign_block.has_sovereign %}
+<tr data-mail-rhythm="sovereign"><td style="padding:0;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+<td class="section-pad" style="padding:{{ mail_theme.spacing.sectionGap }} {{ mail_theme.spacing.shellX }};border-bottom:1px solid {{ mail_theme.colors.border }};">
+
+{# ─── 헤더 라벨 ─── #}
+{{ section_label("Sovereign Index", "cyan") }}
+
+{# ─── 점수 + 레이블 행 ─── #}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px;">
+<tr>
+{# 좌측: 큰 숫자 점수 #}
+<td valign="middle" style="width:50%;">
+  <div style="font-family:{{ mail_theme.typography.labelMono }};font-size:56px;font-weight:700;line-height:1;letter-spacing:-0.03em;color:{{ sovereign_block.label_color }};font-variant-numeric:tabular-nums;">
+    {{ sovereign_block.score_int }}
+  </div>
+  <div style="padding-top:6px;font-family:{{ mail_theme.typography.labelMono }};font-size:10px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;color:{{ mail_theme.colors.textMuted }};">
+    / 100 &nbsp;·&nbsp; {{ sovereign_block.label_ko }}
+  </div>
+</td>
+{# 우측: 구간 설명 (현재 구간 강조) #}
+<td valign="middle" style="width:50%;padding-left:24px;border-left:1px solid {{ mail_theme.colors.border }};">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+  <tr>
+    <td style="padding-bottom:6px;">
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#10b981;vertical-align:middle;margin-right:6px;"></span>
+      {% if sovereign_block.zone == "bull" %}
+      <span style="font-family:{{ mail_theme.typography.bodySans }};font-size:12px;color:#10b981;font-weight:700;">70&#x2191; &nbsp;강세 구간</span>
+      {% else %}
+      <span style="font-family:{{ mail_theme.typography.bodySans }};font-size:12px;color:{{ mail_theme.colors.textMuted }};">70&#x2191; &nbsp;강세 구간</span>
+      {% endif %}
+    </td>
+  </tr>
+  <tr>
+    <td style="padding-bottom:6px;">
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#64748b;vertical-align:middle;margin-right:6px;"></span>
+      {% if sovereign_block.zone == "neutral" %}
+      <span style="font-family:{{ mail_theme.typography.bodySans }};font-size:12px;color:{{ mail_theme.colors.textStrong }};font-weight:700;">30–70 중립 구간</span>
+      {% else %}
+      <span style="font-family:{{ mail_theme.typography.bodySans }};font-size:12px;color:{{ mail_theme.colors.textMuted }};">30–70 중립 구간</span>
+      {% endif %}
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;vertical-align:middle;margin-right:6px;"></span>
+      {% if sovereign_block.zone == "bear" %}
+      <span style="font-family:{{ mail_theme.typography.bodySans }};font-size:12px;color:#ef4444;font-weight:700;">&#x2193;30 &nbsp;약세 구간</span>
+      {% else %}
+      <span style="font-family:{{ mail_theme.typography.bodySans }};font-size:12px;color:{{ mail_theme.colors.textMuted }};">&#x2193;30 &nbsp;약세 구간</span>
+      {% endif %}
+    </td>
+  </tr>
+  </table>
+</td>
+</tr>
+</table>
+
+{# ─── 게이지 바 (2-셀 방식, 오버레이 없음) ─── #}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:20px;">
+<tr>
+<td style="padding:0;">
+  {# 눈금 라벨 #}
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:6px;">
+  <tr>
+    <td style="font-family:{{ mail_theme.typography.labelMono }};font-size:9px;color:{{ mail_theme.colors.textMuted }};text-align:left;">0</td>
+    <td style="font-family:{{ mail_theme.typography.labelMono }};font-size:9px;color:{{ mail_theme.colors.textMuted }};text-align:center;">50</td>
+    <td style="font-family:{{ mail_theme.typography.labelMono }};font-size:9px;color:{{ mail_theme.colors.textMuted }};text-align:right;">100</td>
+  </tr>
+  </table>
+  {# 게이지 트랙: 채워진 부분 + 빈 부분 (2셀, 오버레이 없음) #}
+  {% set remaining_pct = 100 - sovereign_block.bar_pct %}
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-radius:4px;overflow:hidden;">
+  <tr>
+    {% if sovereign_block.bar_pct > 0 %}
+    <td style="width:{{ sovereign_block.bar_pct }}%;height:10px;background:{{ sovereign_block.bar_color }};font-size:1px;">&nbsp;</td>
+    {% endif %}
+    {% if remaining_pct > 0 %}
+    <td style="width:{{ remaining_pct }}%;height:10px;background:{{ mail_theme.colors.panelBgStrong }};font-size:1px;">&nbsp;</td>
+    {% endif %}
+  </tr>
+  </table>
+  {# 구간 구분 마커 (30, 70 위치) #}
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:3px;">
+  <tr>
+    <td style="width:30%;border-right:1px solid {{ mail_theme.colors.border }};font-size:9px;font-family:{{ mail_theme.typography.labelMono }};color:{{ mail_theme.colors.textMuted }};text-align:right;padding-right:4px;">30</td>
+    <td style="width:40%;border-right:1px solid {{ mail_theme.colors.border }};font-size:1px;">&nbsp;</td>
+    <td style="width:30%;font-size:9px;font-family:{{ mail_theme.typography.labelMono }};color:{{ mail_theme.colors.textMuted }};padding-left:4px;">70</td>
+  </tr>
+  </table>
+</td>
+</tr>
+</table>
+
+{# ─── 품질 경고 (degraded 시만) ─── #}
+{% if not sovereign_block.quality_ok %}
+<div style="margin-top:12px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textMuted }};font-size:11px;line-height:1.6;">
+  &#9888; 일부 데이터 누락으로 지수 신뢰도가 낮을 수 있어요
+</div>
+{% endif %}
+
+</td>
+</tr>
+</table>
+</td></tr>
+{% endif %}

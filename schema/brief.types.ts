@@ -19,10 +19,27 @@ export interface BriefIndexEntry {
   runs: BriefIndexRun[];
 }
 
+export interface EtfHistoryPoint {
+  date: string;
+  totalBtc: number;
+  totalAumUsd: number;
+  deltaBtc: number | null;
+}
+
+export interface SovereignIndex {
+  score: number;
+  signalLabel: string;
+  labelKo: string;
+  zone: "bull" | "neutral" | "bear";
+  qualityStatus: string;
+}
+
 export interface BriefData {
   meta: BriefMeta;
   marketSnapshot: MarketSnapshot;
   riskOverlay: RiskOverlay | null;
+  sovereignIndex: SovereignIndex | null;
+  etfHistory: EtfHistoryPoint[] | null;
   aiJudgment: AIJudgment;
   topicSummaries: TopicSummary[];
   techStocks: TechStock[];

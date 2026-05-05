@@ -158,6 +158,7 @@ EXPECTED_KEYS = {
     "data_quality_line",
     "footer_notes",
     "signal_block",
+    "sovereign_block",
     "unsubscribe_url",
     "github_url",
 }

@@ -1,9 +1,15 @@
 import React from "react";
+import dynamic from "next/dynamic";
 
-import type { BitcoinSection, FearGreedIndex } from "@schema/brief.types";
+import type { BitcoinSection, EtfHistoryPoint, FearGreedIndex } from "@schema/brief.types";
 
 import { DataState } from "@/components/ui/DataState";
 import { RevealSection } from "@/components/ui/RevealSection";
+
+const EtfInflowChart = dynamic(
+  () => import("./EtfInflowChart").then((m) => ({ default: m.EtfInflowChart })),
+  { ssr: false, loading: () => <div className="mt-6 h-[200px] rounded-xl bg-white/[0.03] animate-pulse" /> },
+);
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -231,14 +237,20 @@ function EtfIssuerRow({
   );
 }
 
-function EtfSnapshotCard({ etf }: { etf: BitcoinSection["etf"] }) {
+function EtfSnapshotCard({
+  etf,
+  etfHistory,
+}: {
+  etf: BitcoinSection["etf"];
+  etfHistory: EtfHistoryPoint[] | null;
+}) {
   return (
     <div className="section-shell card-family-data rounded-[var(--card-radius-data)] p-6">
       {/* 헤더 */}
       <div className="border-b border-white/8 pb-5">
         <p className="section-title">공식 ETF 스냅샷</p>
         <p className="mt-2 text-[13px] leading-6 text-white/46">
-          공식 페이지에서 바로 확인되는 총 보유량과 AUM만 표시합니다.
+          공식 페이지에서 바로 확인되는 총 보유량과 AUM, 14일 순유입 흐름을 함께 봅니다.
         </p>
 
         {/* stat-callout 2개 */}
@@ -250,10 +262,15 @@ function EtfSnapshotCard({ etf }: { etf: BitcoinSection["etf"] }) {
         )}
       </div>
 
+      {/* 유입 히스토리 차트 */}
+      {etfHistory && etfHistory.length > 1 && (
+        <EtfInflowChart history={etfHistory} />
+      )}
+
       {/* 발행사 테이블 */}
       {etf ? (
         etf.issuers.length > 0 ? (
-          <div className="mt-5 overflow-hidden rounded-xl border border-white/8 bg-black/20">
+          <div className={`overflow-hidden rounded-xl border border-white/8 bg-black/20 ${etfHistory && etfHistory.length > 1 ? "mt-5" : "mt-5"}`}>
             {/* 테이블 헤더 */}
             <div
               className="grid border-b border-white/8 px-4 py-2.5"
@@ -290,7 +307,13 @@ function EtfSnapshotCard({ etf }: { etf: BitcoinSection["etf"] }) {
 
 // ─── 메인 ─────────────────────────────────────────────────────────────────────
 
-export function BitcoinPanel({ bitcoin }: { bitcoin: BitcoinSection }) {
+export function BitcoinPanel({
+  bitcoin,
+  etfHistory,
+}: {
+  bitcoin: BitcoinSection;
+  etfHistory: EtfHistoryPoint[] | null;
+}) {
   return (
     <RevealSection className="border-b border-white/10 px-6 py-16" revealAt={0.84} delayMs={80}>
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
@@ -319,7 +342,7 @@ export function BitcoinPanel({ bitcoin }: { bitcoin: BitcoinSection }) {
         </div>
 
         {/* 하단: ETF 스냅샷 (full width) */}
-        <EtfSnapshotCard etf={bitcoin.etf} />
+        <EtfSnapshotCard etf={bitcoin.etf} etfHistory={etfHistory} />
 
       </div>
     </RevealSection>

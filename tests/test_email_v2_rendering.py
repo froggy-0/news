@@ -187,6 +187,18 @@ SAMPLE_CONTEXT = {
     "footer_notes": [],
     "unsubscribe_url": "mailto:test@example.com",
     "github_url": "https://github.com/test/repo",
+    "signal_block": {"has_signal_block": False},
+    "sovereign_block": {
+        "has_sovereign": True,
+        "score": 62.5,
+        "score_int": 63,
+        "bar_pct": 62.5,
+        "zone": "neutral",
+        "label_ko": "중립",
+        "bar_color": "#64748b",
+        "label_color": "#475569",
+        "quality_ok": True,
+    },
 }
 
 # 이모지 패턴: V2 템플릿에서 사용하면 안 되는 이모지 문자들

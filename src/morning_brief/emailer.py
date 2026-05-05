@@ -1569,6 +1569,44 @@ _CONFIDENCE_STYLE: dict[str, dict[str, str]] = {
 }
 
 
+def _build_sovereign_block(packet: dict) -> dict[str, object]:
+    """packet['sovereign_index']에서 이메일용 Sovereign Index 블록을 생성."""
+    si = packet.get("sovereign_index") or {}
+    if not si or si.get("score") is None:
+        return {"has_sovereign": False}
+
+    score = float(si["score"])
+    zone = str(si.get("zone", "neutral"))
+    label_ko = str(si.get("labelKo", "중립"))
+    quality_status = str(si.get("qualityStatus", "degraded"))
+
+    # 막대 그래프용 퍼센트 (0~100 → CSS width)
+    bar_pct = max(0, min(100, score))
+
+    # 색상: bull=녹색, bear=적색, neutral=회색
+    if zone == "bull":
+        bar_color = "#10b981"
+        label_color = "#059669"
+    elif zone == "bear":
+        bar_color = "#ef4444"
+        label_color = "#dc2626"
+    else:
+        bar_color = "#64748b"
+        label_color = "#475569"
+
+    return {
+        "has_sovereign": True,
+        "score": score,
+        "score_int": int(round(score)),
+        "bar_pct": round(bar_pct, 1),
+        "zone": zone,
+        "label_ko": label_ko,
+        "bar_color": bar_color,
+        "label_color": label_color,
+        "quality_ok": quality_status == "ok",
+    }
+
+
 def _build_signal_block(packet: dict) -> dict[str, object]:
     """packet['risk_overlay']에서 이메일용 신호 블록을 생성."""
     ro = packet.get("risk_overlay") or {}
@@ -1711,6 +1749,7 @@ def _build_email_context_v2(
         "unsubscribe_url": unsubscribe_url or "",
         "github_url": PROJECT_GITHUB_URL,
         "signal_block": _build_signal_block(packet),
+        "sovereign_block": _build_sovereign_block(packet),
     }
 
 

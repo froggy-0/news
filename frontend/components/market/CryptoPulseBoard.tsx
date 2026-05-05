@@ -1,8 +1,10 @@
 import type { CSSProperties } from "react";
+import dynamic from "next/dynamic";
 
 import type {
   BitcoinSection,
   CryptoIndicator,
+  EtfHistoryPoint,
   FearGreedIndex,
   MarketSnapshot,
   TickerItem,
@@ -10,6 +12,11 @@ import type {
 
 import { DataState } from "@/components/ui/DataState";
 import { RevealSection } from "@/components/ui/RevealSection";
+
+const EtfInflowChart = dynamic(
+  () => import("../bitcoin/EtfInflowChart").then((m) => ({ default: m.EtfInflowChart })),
+  { ssr: false, loading: () => <div className="mt-6 h-[200px] rounded-xl bg-white/[0.03] animate-pulse" /> },
+);
 
 /* ── colour / style helpers ─────────────────────────────────────────────── */
 
@@ -375,8 +382,14 @@ function EtfIssuerRow({
   );
 }
 
-function EtfDetail({ etf }: { etf: BitcoinSection["etf"] }) {
-  if (!etf) return null;
+function EtfDetail({
+  etf,
+  etfHistory,
+}: {
+  etf: BitcoinSection["etf"];
+  etfHistory: EtfHistoryPoint[] | null;
+}) {
+  if (!etf && (!etfHistory || etfHistory.length === 0)) return null;
 
   return (
     <div className="rounded-xl border border-white/8 bg-black/20 p-5 md:p-6">
@@ -384,16 +397,23 @@ function EtfDetail({ etf }: { etf: BitcoinSection["etf"] }) {
         <div className="space-y-1">
           <p className="label-meta text-white/42">공식 ETF 스냅샷</p>
           <p className="text-[13px] leading-6 text-white/46">
-            공식 페이지에서 확인되는 총 보유량과 AUM
+            총 보유량·AUM과 14일 순유입 흐름
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-2.5 md:min-w-[280px]">
-          <EtfStatCallout label="총 보유량" value={etf.totalHolding} />
-          <EtfStatCallout label="총 AUM" value={etf.totalAum} />
-        </div>
+        {etf && (
+          <div className="grid grid-cols-2 gap-2.5 md:min-w-[280px]">
+            <EtfStatCallout label="총 보유량" value={etf.totalHolding} />
+            <EtfStatCallout label="총 AUM" value={etf.totalAum} />
+          </div>
+        )}
       </div>
 
-      {etf.issuers.length > 0 && (
+      {/* 유입 히스토리 차트 */}
+      {etfHistory && etfHistory.length > 1 && (
+        <EtfInflowChart history={etfHistory} />
+      )}
+
+      {etf && etf.issuers.length > 0 && (
         <div className="mt-5 overflow-hidden rounded-xl border border-white/8 bg-black/20">
           <div
             className="grid border-b border-white/8 px-4 py-2"
@@ -437,10 +457,12 @@ export function CryptoPulseBoard({
   snapshot,
   indicators,
   bitcoin,
+  etfHistory,
 }: {
   snapshot: MarketSnapshot;
   indicators: CryptoIndicator[];
   bitcoin: BitcoinSection;
+  etfHistory: EtfHistoryPoint[] | null;
 }) {
   return (
     <RevealSection className="border-b border-white/10 px-6 py-20" revealAt={0.88} delayMs={60}>
@@ -547,7 +569,7 @@ export function CryptoPulseBoard({
         )}
 
         {/* ── 4. ETF Detail ──────────────────────────────────────────── */}
-        <EtfDetail etf={bitcoin.etf} />
+        <EtfDetail etf={bitcoin.etf} etfHistory={etfHistory} />
       </div>
     </RevealSection>
   );
