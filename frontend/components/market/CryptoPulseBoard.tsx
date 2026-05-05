@@ -1,5 +1,4 @@
 import type { CSSProperties } from "react";
-import dynamic from "next/dynamic";
 
 import type {
   BitcoinSection,
@@ -10,13 +9,9 @@ import type {
   TickerItem,
 } from "@schema/brief.types";
 
+import { EtfInflowChart } from "@/components/bitcoin/EtfInflowChart";
 import { DataState } from "@/components/ui/DataState";
 import { RevealSection } from "@/components/ui/RevealSection";
-
-const EtfInflowChart = dynamic(
-  () => import("../bitcoin/EtfInflowChart").then((m) => ({ default: m.EtfInflowChart })),
-  { ssr: false, loading: () => <div className="mt-6 h-[200px] rounded-xl bg-white/[0.03] animate-pulse" /> },
-);
 
 /* ── colour / style helpers ─────────────────────────────────────────────── */
 

@@ -1,15 +1,10 @@
 import React from "react";
-import dynamic from "next/dynamic";
 
 import type { BitcoinSection, EtfHistoryPoint, FearGreedIndex } from "@schema/brief.types";
 
+import { EtfInflowChart } from "./EtfInflowChart";
 import { DataState } from "@/components/ui/DataState";
 import { RevealSection } from "@/components/ui/RevealSection";
-
-const EtfInflowChart = dynamic(
-  () => import("./EtfInflowChart").then((m) => ({ default: m.EtfInflowChart })),
-  { ssr: false, loading: () => <div className="mt-6 h-[200px] rounded-xl bg-white/[0.03] animate-pulse" /> },
-);
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
