@@ -305,6 +305,8 @@ def build_public_brief(
             "items": market_snapshot_items,
         },
         "riskOverlay": _risk_overlay_public(packet),
+        "sovereignIndex": packet.get("sovereign_index") or None,
+        "etfHistory": packet.get("etf_history") or None,
         "aiJudgment": {
             "headline": headline,
             "body": brief_body,
@@ -312,7 +314,6 @@ def build_public_brief(
             "summarySupport": summary_support,
         },
         "topicSummaries": topic_summaries,
-        "techStocks": [],
         "cryptoIndicators": _crypto_indicators(
             bitcoin=bitcoin_payload,
             market_snapshot_items=market_snapshot_items,

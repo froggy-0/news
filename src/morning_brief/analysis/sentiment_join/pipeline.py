@@ -986,6 +986,13 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
                 else {}
             )
             label, zscore = hybrid_signal_label(master_df[f"{spec.name}_hybrid_index"])
+            score_col = f"{spec.name}_hybrid_index_score"
+            score_series = master_df[score_col] if score_col in master_df.columns else None
+            today_score: float | None = None
+            if score_series is not None:
+                valid = score_series.dropna()
+                if len(valid) > 0:
+                    today_score = round(float(valid.iloc[-1]), 1)
             hybrid_indices_meta[spec.name] = {
                 "vif_diagnostics": diag.get("vif_diagnostics", [])
                 if isinstance(diag, dict)
@@ -1003,6 +1010,7 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
                 else [],
                 "signal_label": label,
                 "signal_zscore": zscore,
+                "today_score": today_score,
             }
 
         stats_adf = (

@@ -404,6 +404,18 @@ def _build_full_context() -> dict:
         "footer_notes": [],
         "unsubscribe_url": "https://example.com/unsub",
         "github_url": "https://github.com/example",
+        "signal_block": {"has_signal_block": False},
+        "sovereign_block": {
+            "has_sovereign": True,
+            "score": 62.5,
+            "score_int": 63,
+            "bar_pct": 62.5,
+            "zone": "neutral",
+            "label_ko": "중립",
+            "bar_color": "#64748b",
+            "label_color": "#475569",
+            "quality_ok": True,
+        },
     }
 
 

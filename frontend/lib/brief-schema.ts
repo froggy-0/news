@@ -7,12 +7,14 @@ import type {
   BriefIndexRun,
   BriefMeta,
   CryptoIndicator,
+  EtfHistoryPoint,
   FearGreedIndex,
   MarketSnapshot,
   NewsItem,
   PublicNewsAnalysisAudit,
   RiskOverlay,
   SentimentAggregate,
+  SovereignIndex,
   SourceCounts,
   TechStock,
   TickerItem,
@@ -401,6 +403,32 @@ function parseNewsItem(value: unknown): NewsItem {
   };
 }
 
+function parseEtfHistoryPoint(value: unknown): EtfHistoryPoint | null {
+  if (!isRecord(value)) return null;
+  const date = typeof value.date === "string" && value.date.length > 0 ? value.date : null;
+  const totalBtc = typeof value.totalBtc === "number" ? value.totalBtc : null;
+  const totalAumUsd = typeof value.totalAumUsd === "number" ? value.totalAumUsd : null;
+  if (!date || totalBtc === null || totalAumUsd === null) return null;
+  return {
+    date,
+    totalBtc,
+    totalAumUsd,
+    deltaBtc: typeof value.deltaBtc === "number" ? value.deltaBtc : null,
+  };
+}
+
+function parseSovereignIndex(value: Record<string, unknown>): SovereignIndex {
+  const score = typeof value.score === "number" ? value.score : 50;
+  const zone = value.zone === "bull" || value.zone === "bear" ? value.zone : "neutral";
+  return {
+    score,
+    signalLabel: typeof value.signalLabel === "string" ? value.signalLabel : "Neutral",
+    labelKo: typeof value.labelKo === "string" ? value.labelKo : "중립",
+    zone,
+    qualityStatus: typeof value.qualityStatus === "string" ? value.qualityStatus : "degraded",
+  };
+}
+
 export function parseBriefIndex(value: unknown): BriefIndex {
   if (!isRecord(value)) {
     throw new Error("index payload must be an object");
@@ -475,21 +503,25 @@ export function parseBriefData(value: unknown): BriefData {
   const featuredNewsValue = Array.isArray(value.featuredNews) ? value.featuredNews : value.news;
   const allNewsValue = Array.isArray(value.allNews) ? value.allNews : value.news;
   const cryptoIndicatorsValue = Array.isArray(value.cryptoIndicators) ? value.cryptoIndicators : [];
+  const techStocksValue = Array.isArray(value.techStocks) ? value.techStocks : [];
   if (
     !Array.isArray(value.topicSummaries) ||
-    !Array.isArray(value.techStocks) ||
     !Array.isArray(featuredNewsValue) ||
     !Array.isArray(allNewsValue)
   ) {
-    throw new Error("topicSummaries, techStocks, featuredNews, and allNews must be arrays");
+    throw new Error("topicSummaries, featuredNews, and allNews must be arrays");
   }
   return {
     meta: parseMeta(value.meta),
     marketSnapshot: parseMarketSnapshot(value.marketSnapshot),
     riskOverlay: parseRiskOverlay(value.riskOverlay),
+    sovereignIndex: isRecord(value.sovereignIndex) ? parseSovereignIndex(value.sovereignIndex) : null,
+    etfHistory: Array.isArray(value.etfHistory)
+      ? (value.etfHistory.map(parseEtfHistoryPoint).filter(Boolean) as EtfHistoryPoint[])
+      : null,
     aiJudgment: parseAIJudgment(value.aiJudgment),
     topicSummaries: value.topicSummaries.map(parseTopicSummary),
-    techStocks: value.techStocks.map(parseTechStock),
+    techStocks: techStocksValue.map(parseTechStock),
     cryptoIndicators: cryptoIndicatorsValue.map(parseCryptoIndicator),
     bitcoin: parseBitcoin(value.bitcoin),
     featuredXSignals:

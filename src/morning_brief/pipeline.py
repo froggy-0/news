@@ -137,6 +137,91 @@ def _load_risk_overlay() -> RiskOverlay | None:
         return None
 
 
+def _load_etf_history(
+    supabase_url: str,
+    service_role_key: str,
+    *,
+    days: int = 14,
+) -> list[dict] | None:
+    """btc_etf_gold 테이블에서 최근 N일치 일별 합산 히스토리를 반환."""
+    from datetime import date, timedelta
+
+    from supabase import create_client
+
+    try:
+        client = create_client(supabase_url, service_role_key)
+        cutoff = (date.today() - timedelta(days=days)).isoformat()
+        rows = (
+            client.table("btc_etf_gold")
+            .select("as_of_date,total_btc,aum_usd")
+            .gte("as_of_date", cutoff)
+            .order("as_of_date", desc=False)
+            .execute()
+        ).data or []
+
+        # 날짜별 집계 (여러 발행사 합산)
+        by_date: dict[str, dict] = {}
+        for row in rows:
+            d = str(row.get("as_of_date", ""))[:10]
+            if not d:
+                continue
+            total_btc = row.get("total_btc")
+            aum_usd = row.get("aum_usd")
+            if d not in by_date:
+                by_date[d] = {"date": d, "totalBtc": 0.0, "totalAumUsd": 0.0}
+            if isinstance(total_btc, (int, float)):
+                by_date[d]["totalBtc"] += float(total_btc)
+            if isinstance(aum_usd, (int, float)):
+                by_date[d]["totalAumUsd"] += float(aum_usd)
+
+        sorted_dates = sorted(by_date.keys())
+        result: list[dict] = []
+        for i, d in enumerate(sorted_dates):
+            point = dict(by_date[d])
+            if i > 0:
+                prev_btc = by_date[sorted_dates[i - 1]]["totalBtc"]
+                point["deltaBtc"] = round(point["totalBtc"] - prev_btc, 2)
+            else:
+                point["deltaBtc"] = None
+            result.append(point)
+
+        return result if result else None
+    except Exception as exc:
+        log_structured(
+            logger,
+            event="etf_history.failed",
+            level=logging.WARNING,
+            message="ETF 히스토리 조회 실패 — 파이프라인에는 영향 없음",
+            reason=str(exc),
+        )
+        return None
+
+
+def _load_sovereign_index() -> dict | None:
+    """latest.json의 sovereignIndex 블록을 읽어 반환."""
+    import json
+
+    output_dir = Path(os.getenv("SENTIMENT_JOIN_OUTPUT_DIR", "data/sentiment_join")).resolve()
+    artifact_path = output_dir / "latest.json"
+    if not artifact_path.exists():
+        return None
+    try:
+        with artifact_path.open() as fp:
+            artifact = json.load(fp)
+        si = artifact.get("sovereignIndex")
+        if si and isinstance(si, dict):
+            return si
+    except Exception as exc:
+        log_structured(
+            logger,
+            event="sovereign_index.json_read_failed",
+            level=logging.WARNING,
+            message="latest.json sovereignIndex 읽기 실패",
+            reason=str(exc),
+        )
+    return None
+
+
 def _needs_public_news_backfill(public_context: dict) -> bool:
     counts = public_context.get("source_counts", {})
     if not isinstance(counts, dict):
@@ -311,6 +396,20 @@ def run_pipeline(settings: Settings) -> str:
         risk_overlay = _load_risk_overlay()
         if risk_overlay is not None:
             packet["risk_overlay"] = risk_overlay.to_dict()
+
+        sovereign_index = _load_sovereign_index()
+        if sovereign_index is not None:
+            packet["sovereign_index"] = sovereign_index
+
+        # ETF 히스토리 조회 (Supabase 미설정 환경에서는 건너뜀)
+        if settings.supabase_url and settings.supabase_service_role_key:
+            etf_history = _load_etf_history(
+                settings.supabase_url,
+                settings.supabase_service_role_key,
+                days=14,
+            )
+            if etf_history:
+                packet["etf_history"] = etf_history
 
         # 트랙레코드 조회 (Supabase 미설정 환경에서는 빈값으로 graceful 처리)
         if settings.supabase_url and settings.supabase_service_role_key:

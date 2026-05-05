@@ -29,7 +29,7 @@
 <tr>
 <td class="signal-rail panel" style="padding:16px 18px;background:{{ mail_theme.colors.panelBg }};border:1px solid {{ mail_theme.colors.border }};border-top:none;">
   <div style="font-family:{{ mail_theme.typography.labelMono }};font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:{{ mail_theme.colors.textMuted }};">오늘의 신호</div>
-  <div style="padding-top:8px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.accentGreen }};font-size:16px;font-weight:900;">⚡ {{ signal_block.confidence_label }}</div>
+  <div style="padding-top:8px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.accentGreen }};font-size:16px;font-weight:900;">&#x26A1; {{ signal_block.confidence_label }}</div>
   {% if signal_block.reason_labels %}
   <div style="padding-top:10px;">
     {% for reason in signal_block.reason_labels %}

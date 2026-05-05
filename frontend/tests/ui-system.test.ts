@@ -144,6 +144,7 @@ test("reading, data, and utility card families are rendered by home components",
         fearGreedIndex: { value: 58, label: "탐욕" },
         etf: null,
       } as any,
+      etfHistory: null,
     }),
   );
   const utilityMarkup = renderToStaticMarkup(

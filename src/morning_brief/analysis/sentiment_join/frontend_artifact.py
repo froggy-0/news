@@ -204,6 +204,10 @@ def _build_pca_index(raw_index: dict[str, Any]) -> dict[str, Any]:
     quality_status = str(raw_index.get("quality_status", "degraded"))
     quality_reasons: list[str] = list(raw_index.get("quality_reasons") or [])
 
+    today_score = raw_index.get("today_score")
+    today_score_float: float | None = float(today_score) if today_score is not None else None
+    signal_label = str(raw_index.get("signal_label", "")) or None
+
     return {
         "status": status,
         "selectedFeatures": selected_features,
@@ -214,6 +218,46 @@ def _build_pca_index(raw_index: dict[str, Any]) -> dict[str, Any]:
         "coverageRatio": coverage_ratio,
         "qualityStatus": quality_status,
         "qualityReasons": quality_reasons,
+        "todayScore": today_score_float,
+        "signalLabel": signal_label,
+    }
+
+
+_SOVEREIGN_LABEL_MAP: dict[str, str] = {
+    "Strong Bullish": "강세",
+    "Bullish": "상승",
+    "Neutral": "중립",
+    "Bearish": "하락",
+    "Strong Bearish": "강하락",
+}
+
+
+def _build_sovereign_index(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """full_hybrid_index_score 기반 Sovereign Index 최상위 블록."""
+    hybrid_indices = _as_record(payload.get("hybrid_indices"))
+    full_raw = _as_record(hybrid_indices.get("full"))
+    today_score = full_raw.get("today_score")
+    if today_score is None:
+        return None
+
+    score = round(float(today_score), 1)
+    signal_label = str(full_raw.get("signal_label", "Neutral"))
+    label_ko = _SOVEREIGN_LABEL_MAP.get(signal_label, "중립")
+    quality_status = str(full_raw.get("quality_status", "degraded"))
+
+    if score >= 70:
+        zone = "bull"
+    elif score <= 30:
+        zone = "bear"
+    else:
+        zone = "neutral"
+
+    return {
+        "score": score,
+        "signalLabel": signal_label,
+        "labelKo": label_ko,
+        "zone": zone,
+        "qualityStatus": quality_status,
     }
 
 
@@ -424,6 +468,7 @@ def build_frontend_artifact(
             "skips": granger_skips,
             "skipSummary": granger_skip_summary,
         },
+        "sovereignIndex": _json_safe(_build_sovereign_index(payload)),
         "pca": {
             "full": _build_pca_index(full_raw),
             "core": _build_pca_index(core_raw),

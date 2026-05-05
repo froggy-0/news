@@ -37,7 +37,9 @@ export function MetadataSection({
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatusCard label="발행 기준일" value={formatPublicationDate(meta.date)} />
           <StatusCard label="생성 시각" value={`${formatIssueTime(meta.generatedAt)} KST`} />
-          <StatusCard label="데이터 품질" value={qualityLabel(meta.dataQuality)} tone={meta.dataQuality === "ok" ? "positive" : "warning"} />
+          {meta.dataQuality !== "ok" && (
+            <StatusCard label="데이터 품질" value={qualityLabel(meta.dataQuality)} tone="warning" />
+          )}
           <StatusCard
             label="번역 상태"
             value={translationLabel(meta.translationStatus)}
