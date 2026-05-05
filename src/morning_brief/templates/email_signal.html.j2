@@ -1,0 +1,66 @@
+{% from "email_macros.html.j2" import section_label with context %}
+{% if signal_block and signal_block.has_signal_block %}
+<tr data-mail-rhythm="signal"><td style="padding:0;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+<td class="section-pad" style="padding:{{ mail_theme.spacing.sectionGap }} {{ mail_theme.spacing.shellX }};border-bottom:1px solid {{ mail_theme.colors.border }};">
+{{ section_label("BTC 신호 신뢰도", "cyan") }}
+
+{# Regime + Vol 행 #}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:20px;">
+<tr>
+<td class="stack-col stack-col-left panel panel-strong" valign="top" style="width:58%;padding:16px 18px;background:{{ mail_theme.colors.panelBgStrong }};border:1px solid {{ mail_theme.colors.border }};">
+  <div style="font-family:{{ mail_theme.typography.labelMono }};font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:{{ mail_theme.colors.textMuted }};">시장 상태</div>
+  <div style="padding-top:10px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textStrong }};font-size:20px;font-weight:900;line-height:1.1;">
+    {{ signal_block.regime_emoji }} {{ signal_block.regime_label }}
+  </div>
+  <div style="padding-top:6px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textMuted }};font-size:13px;line-height:1.6;">{{ signal_block.regime_description }}</div>
+</td>
+<td class="stack-col stack-col-right panel" valign="top" style="width:42%;padding:16px 18px;background:{{ mail_theme.colors.panelBg }};border:1px solid {{ mail_theme.colors.border }};border-left:none;">
+  <div style="font-family:{{ mail_theme.typography.labelMono }};font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:{{ mail_theme.colors.textMuted }};">변동성</div>
+  <div style="padding-top:10px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textStrong }};font-size:18px;font-weight:800;line-height:1.2;">{{ signal_block.vol_text }}</div>
+</td>
+</tr>
+</table>
+
+{# 신호 신뢰도 (조건부) #}
+{% if signal_block.has_confidence %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">
+<tr>
+<td class="signal-rail panel" style="padding:16px 18px;background:{{ mail_theme.colors.panelBg }};border:1px solid {{ mail_theme.colors.border }};border-top:none;">
+  <div style="font-family:{{ mail_theme.typography.labelMono }};font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:{{ mail_theme.colors.textMuted }};">오늘의 신호</div>
+  <div style="padding-top:8px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.accentGreen }};font-size:16px;font-weight:900;">⚡ {{ signal_block.confidence_label }}</div>
+  {% if signal_block.reason_labels %}
+  <div style="padding-top:10px;">
+    {% for reason in signal_block.reason_labels %}
+    <div style="font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textBody }};font-size:13px;line-height:1.8;">· {{ reason }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if signal_block.track_record_days and signal_block.track_record_days > 0 and signal_block.track_record_hit_rate is not none %}
+  <div style="padding-top:12px;font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textMuted }};font-size:12px;line-height:1.6;border-top:1px solid {{ mail_theme.colors.border }};margin-top:12px;">
+    최근 {{ signal_block.track_record_days }}일 신호 적중률:
+    <strong style="color:{{ mail_theme.colors.textStrong }};">{{ (signal_block.track_record_hit_rate * 100) | round(0) | int }}%</strong>
+    ({{ signal_block.track_record_signal_count }}회 신호)
+  </div>
+  {% endif %}
+</td>
+</tr>
+</table>
+{% else %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">
+<tr>
+<td class="panel" style="padding:14px 18px;background:{{ mail_theme.colors.panelBg }};border:1px solid {{ mail_theme.colors.border }};border-top:none;">
+  <div style="font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textMuted }};font-size:13px;line-height:1.7;">
+    오늘은 신호 없음 — {{ signal_block.regime_label }} 구간으로 포지션 신중 권고
+  </div>
+</td>
+</tr>
+</table>
+{% endif %}
+
+</td>
+</tr>
+</table>
+</td></tr>
+{% endif %}

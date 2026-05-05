@@ -1536,6 +1536,69 @@ def _to_email_news_item(item: dict[str, object]) -> _EmailNewsItem:
     )
 
 
+_REGIME_BADGE_STYLE: dict[str, dict[str, str]] = {
+    "BullQuiet": {"emoji": "🟢", "label": "안정 상승", "tone": "positive"},
+    "BullHeated": {"emoji": "🟡", "label": "과열 상승", "tone": "warning"},
+    "BearPanic": {"emoji": "🔴", "label": "공포 하락", "tone": "negative"},
+    "Choppy": {"emoji": "⚪", "label": "방향 불명", "tone": "neutral"},
+    "Transitional": {"emoji": "🔵", "label": "전환 구간", "tone": "neutral"},
+}
+
+_VOL_LEVEL_KO: dict[str, str] = {
+    "High": "변동성 높음",
+    "Mid": "변동성 보통",
+    "Low": "변동성 낮음",
+}
+
+_VOL_TREND_KO: dict[str, str] = {
+    "rising": "↑",
+    "falling": "↓",
+    "stable": "→",
+}
+
+_CONFIDENCE_STYLE: dict[str, dict[str, str]] = {
+    "HIGH": {"label": "신호 신뢰도 높음", "tone": "positive"},
+    "MEDIUM": {"label": "신호 신뢰도 보통", "tone": "warning"},
+}
+
+
+def _build_signal_block(packet: dict) -> dict[str, object]:
+    """packet['risk_overlay']에서 이메일용 신호 블록을 생성."""
+    ro = packet.get("risk_overlay") or {}
+    if not ro:
+        return {"has_signal_block": False}
+
+    regime_label = str(ro.get("regimeState", "Choppy"))
+    regime_style = _REGIME_BADGE_STYLE.get(regime_label, _REGIME_BADGE_STYLE["Choppy"])
+
+    vol_level = str(ro.get("volLevel", "Mid"))
+    vol_trend = str(ro.get("volTrend", "stable"))
+    vol_text = f"{_VOL_LEVEL_KO.get(vol_level, vol_level)} {_VOL_TREND_KO.get(vol_trend, '')}"
+
+    confidence = ro.get("signalConfidence")
+    confidence_style = _CONFIDENCE_STYLE.get(str(confidence), None) if confidence else None
+    reason_labels: list[str] = ro.get("signalReasonLabels") or []
+
+    # 트랙레코드는 packet에 별도 주입된 경우 표시
+    track_record = packet.get("signal_track_record") or {}
+
+    return {
+        "has_signal_block": True,
+        "regime_emoji": regime_style["emoji"],
+        "regime_label": regime_style["label"],
+        "regime_description": str(ro.get("regimeDescription", "")),
+        "regime_tone": regime_style["tone"],
+        "vol_text": vol_text,
+        "has_confidence": confidence_style is not None,
+        "confidence_label": confidence_style["label"] if confidence_style else "",
+        "confidence_tone": confidence_style["tone"] if confidence_style else "neutral",
+        "reason_labels": reason_labels[:3],  # 최대 3개
+        "track_record_hit_rate": track_record.get("hit_rate"),
+        "track_record_days": track_record.get("days_evaluated", 0),
+        "track_record_signal_count": track_record.get("signal_count", 0),
+    }
+
+
 def _build_email_context_v2(
     subject: str,
     body: str,
@@ -1640,6 +1703,7 @@ def _build_email_context_v2(
         "footer_notes": footer_notes if data_quality_status != "ok" else [],
         "unsubscribe_url": unsubscribe_url or "",
         "github_url": PROJECT_GITHUB_URL,
+        "signal_block": _build_signal_block(packet),
     }
 
 

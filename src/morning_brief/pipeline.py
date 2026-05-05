@@ -8,6 +8,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from morning_brief.analysis.sentiment_join.intelligence import load_sentiment_intelligence
+from morning_brief.analysis.sentiment_join.risk_overlay import RiskOverlay, compute_risk_overlay
 from morning_brief.briefing import generate_briefing
 from morning_brief.config import Settings
 from morning_brief.data.data_quality import (
@@ -48,6 +49,92 @@ _assess_data_quality = assess_data_quality
 def _load_sentiment_intelligence_packet() -> dict | None:
     output_dir = Path(os.getenv("SENTIMENT_JOIN_OUTPUT_DIR", "data/sentiment_join")).resolve()
     return load_sentiment_intelligence(output_dir)
+
+
+def _load_risk_overlay() -> RiskOverlay | None:
+    """Risk Overlay 산출. 두 가지 경로를 순서대로 시도한다.
+
+    경로 1 (선호): latest.json의 riskOverlay 필드 직접 읽기.
+                   sentiment-join이 먼저 실행된 환경(CI 정상 순서)에서 동작.
+    경로 2 (로컬 fallback): parquet을 직접 읽어 산출.
+                            로컬 개발 환경에서 동작.
+    """
+    import json
+
+    output_dir = Path(os.getenv("SENTIMENT_JOIN_OUTPUT_DIR", "data/sentiment_join")).resolve()
+    artifact_path = output_dir / "latest.json"
+
+    # 경로 1: latest.json → riskOverlay 필드
+    if artifact_path.exists():
+        try:
+            with artifact_path.open() as fp:
+                artifact = json.load(fp)
+
+            ro_dict = artifact.get("riskOverlay")
+            if ro_dict and isinstance(ro_dict, dict):
+                from morning_brief.analysis.sentiment_join.risk_overlay import (
+                    RegimeState,
+                    SignalConfidence,
+                    VolEnvironment,
+                )
+
+                return RiskOverlay(
+                    regime=RegimeState(
+                        label=ro_dict.get("regimeState", "Choppy"),
+                        description=ro_dict.get("regimeDescription", ""),
+                        raw=ro_dict.get("regimeRaw") or {},
+                    ),
+                    vol=VolEnvironment(
+                        level=ro_dict.get("volLevel", "Mid"),
+                        trend=ro_dict.get("volTrend", "stable"),
+                        description=ro_dict.get("volDescription", ""),
+                    ),
+                    confidence=SignalConfidence(
+                        level=ro_dict.get("signalConfidence"),
+                        reasons=ro_dict.get("signalReasons") or [],
+                        reason_labels=ro_dict.get("signalReasonLabels") or [],
+                    ),
+                    overlay_gate_decision=ro_dict.get("overlayGateDecision", "research_only"),
+                )
+        except Exception as exc:
+            log_structured(
+                logger,
+                event="risk_overlay.json_read_failed",
+                level=logging.WARNING,
+                message="latest.json riskOverlay 읽기 실패 — parquet fallback 시도",
+                reason=str(exc),
+            )
+
+    # 경로 2: parquet 직접 산출 (로컬 fallback)
+    try:
+        import pandas as pd
+
+        parquets = sorted(output_dir.glob("sentiment_join_master_*.parquet"))
+        if not parquets:
+            return None
+        df = pd.read_parquet(parquets[-1])
+
+        overlay_decision = "research_only"
+        if artifact_path.exists():
+            with artifact_path.open() as fp:
+                artifact = json.load(fp)
+            overlay_decision = (
+                artifact.get("alpha", {})
+                .get("promotionGate", {})
+                .get("volRegimeV2Overlay", {})
+                .get("decision", "research_only")
+            )
+
+        return compute_risk_overlay(df, overlay_decision)
+    except Exception as exc:
+        log_structured(
+            logger,
+            event="risk_overlay.failed",
+            level=logging.WARNING,
+            message="risk overlay 산출에 실패했지만 파이프라인을 계속합니다.",
+            reason=str(exc),
+        )
+        return None
 
 
 def _needs_public_news_backfill(public_context: dict) -> bool:
@@ -220,6 +307,30 @@ def run_pipeline(settings: Settings) -> str:
             )
         if sentiment_intelligence is not None:
             packet["sentiment_intelligence"] = sentiment_intelligence
+
+        risk_overlay = _load_risk_overlay()
+        if risk_overlay is not None:
+            packet["risk_overlay"] = risk_overlay.to_dict()
+
+        # 트랙레코드 조회 (Supabase 미설정 환경에서는 빈값으로 graceful 처리)
+        if settings.supabase_url and settings.supabase_service_role_key:
+            try:
+                from morning_brief.signal_logger import fetch_track_record
+
+                packet["signal_track_record"] = fetch_track_record(
+                    supabase_url=settings.supabase_url,
+                    service_role_key=settings.supabase_service_role_key,
+                    days=90,
+                )
+            except Exception as _tr_exc:
+                log_structured(
+                    logger,
+                    event="track_record.failed",
+                    level=logging.WARNING,
+                    message="트랙레코드 조회 실패 — 파이프라인에는 영향 없음",
+                    reason=str(_tr_exc),
+                )
+
         # 신규 데이터 소스를 packet에 추가 (브리핑 프롬프트에서 활용)
         if topic_summaries:
             from morning_brief.data.sources.perplexity_sonar import topic_summaries_to_dict
@@ -441,6 +552,41 @@ def run_pipeline(settings: Settings) -> str:
                     reason=failure_message,
                     error_type=type(exc).__name__,
                 )
+
+            # 이메일 발송 시도 후 신호를 기록 (발송 성공/실패 무관하게 기록)
+            if (
+                risk_overlay is not None
+                and settings.supabase_url
+                and settings.supabase_service_role_key
+            ):
+                try:
+                    from morning_brief.signal_logger import log_signal
+
+                    btc_spot_raw = render_packet.get("bitcoin", {}).get("spot", {}) or {}
+                    btc_price_open = btc_spot_raw.get("resolved_value") or btc_spot_raw.get("price")
+                    log_signal(
+                        supabase_url=settings.supabase_url,
+                        service_role_key=settings.supabase_service_role_key,
+                        signal_date=now.date(),
+                        regime_state=risk_overlay.regime.label,
+                        vol_level=risk_overlay.vol.level,
+                        vol_trend=risk_overlay.vol.trend,
+                        overlay_decision=risk_overlay.overlay_gate_decision,
+                        confidence=risk_overlay.confidence.level,
+                        reasons=risk_overlay.confidence.reasons,
+                        btc_price_open=float(btc_price_open)
+                        if btc_price_open is not None
+                        else None,
+                    )
+                except Exception as log_exc:
+                    log_structured(
+                        logger,
+                        event="signal_log.failed",
+                        level=logging.WARNING,
+                        message="signal_log 기록 실패 — 파이프라인에는 영향 없음",
+                        reason=str(log_exc),
+                    )
+
     except BriefGenerationError as exc:
         status = "openai_failed"
         failure_message = str(exc)
