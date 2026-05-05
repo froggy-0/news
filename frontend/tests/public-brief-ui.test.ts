@@ -5,6 +5,8 @@ import path from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { EtfInflowChart } from "../components/bitcoin/EtfInflowChart";
+import { BriefBody } from "../components/brief/BriefBody";
 import { JudgmentBlock } from "../components/brief/JudgmentBlock";
 import { RiskOverlayPanel } from "../components/brief/RiskOverlayPanel";
 import { TopicGrid } from "../components/brief/TopicGrid";
@@ -52,6 +54,42 @@ test("risk overlay panel renders market state cards", async () => {
   assert.match(markup, /변동성/);
   assert.match(markup, /오늘의 신호/);
   assert.match(markup, /검증 기준 통과/);
+});
+
+test("etf inflow chart renders range controls and summary cards", () => {
+  const history = Array.from({ length: 16 }, (_, index) => {
+    const day = String(index + 1).padStart(2, "0");
+    return {
+      date: `2026-03-${day}`,
+      totalBtc: 980_000 + index * 720,
+      totalAumUsd: 98_000_000_000 + index * 125_000_000,
+      deltaBtc: index === 0 ? null : index % 3 === 0 ? -420 : 760,
+    };
+  });
+  const markup = renderToStaticMarkup(createElement(EtfInflowChart, { history }));
+
+  assert.match(markup, /7D/);
+  assert.match(markup, /14D/);
+  assert.match(markup, /30D/);
+  assert.match(markup, /ALL/);
+  assert.match(markup, /오늘 순유입/);
+  assert.match(markup, /선택 기간 순유입/);
+  assert.match(markup, /총 보유 BTC/);
+  assert.match(markup, /총 AUM/);
+});
+
+test("brief body hides wrapper copy, download button, and data quality line", () => {
+  const markup = renderToStaticMarkup(
+    createElement(BriefBody, {
+      body: "## 오늘의 판단\n\nBTC ETF 유입이 이어졌습니다.\n\n데이터 품질 상태: ok",
+      date: "2026-03-21",
+    }),
+  );
+
+  assert.match(markup, /BTC ETF 유입이 이어졌습니다/);
+  assert.doesNotMatch(markup, /전체 브리핑/);
+  assert.doesNotMatch(markup, /Download MD/);
+  assert.doesNotMatch(markup, /데이터 품질 상태:/);
 });
 
 test("topic grid renders empty state when topic summaries are absent", () => {
