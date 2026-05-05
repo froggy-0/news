@@ -13,6 +13,8 @@ concurrency:
 jobs:
   run-brief:
     name: Generate and Publish Sovereign Briefing
+    needs: run-sentiment-join
+    if: ${{ needs.run-sentiment-join.result == 'success' || needs.run-sentiment-join.result == 'skipped' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -111,6 +113,40 @@ jobs:
             echo "pip_status=miss" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Download sentiment analysis artifact (latest.json)
+        shell: bash
+        env:
+          R2_S3_ENDPOINT: ${{ vars.R2_S3_ENDPOINT || '' }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID || '' }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY || '' }}
+          R2_PUBLIC_BUCKET: ${{ vars.R2_PUBLIC_BUCKET || '' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${R2_PUBLIC_BUCKET}" ] || [ -z "${R2_S3_ENDPOINT}" ]; then
+            echo "[workflow] R2 설정 없음 — latest.json 다운로드 건너뜀"
+            exit 0
+          fi
+          mkdir -p data/sentiment_join
+          python3 - <<'EOF'
+          import os, sys, boto3, json
+          from pathlib import Path
+
+          client = boto3.client(
+              "s3",
+              endpoint_url=os.environ["R2_S3_ENDPOINT"],
+              aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
+              aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+          )
+          bucket = os.environ["R2_PUBLIC_BUCKET"]
+          dest = Path("data/sentiment_join/latest.json")
+          try:
+              obj = client.get_object(Bucket=bucket, Key="analytics/sentiment/latest.json")
+              dest.write_bytes(obj["Body"].read())
+              print(f"[workflow] latest.json 다운로드 완료 ({dest.stat().st_size} bytes)")
+          except Exception as e:
+              print(f"[workflow] latest.json 다운로드 실패 (무시): {e}", file=sys.stderr)
+          EOF
+
       - name: Run brief generation pipeline
         shell: bash
         run: |
@@ -190,6 +226,15 @@ jobs:
           CACHE_PIP_HIT: ${{ steps.cache-pip.outputs.cache-hit || 'false' }}
           CACHE_PIP_STATUS: ${{ steps.cache-status.outputs.pip_status }}
 
+      - name: Fill signal outcomes (7일 전 신호 결과 채우기)
+        if: success()
+        continue-on-error: true
+        shell: bash
+        run: python scripts/fill_signal_outcomes.py
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || '' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || '' }}
+
       - name: Publish brief summary
         if: always()
         shell: bash
@@ -259,8 +304,6 @@ jobs:
 
   run-sentiment-join:
     name: Build Sentiment Time Join Parquet
-    needs: run-brief
-    if: ${{ needs.run-brief.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -365,7 +408,7 @@ jobs:
     needs:
       - run-brief
       - run-sentiment-join
-    if: ${{ needs.run-brief.result == 'success' && needs.run-sentiment-join.result == 'success' }}
+    if: ${{ needs.run-brief.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

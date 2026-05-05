@@ -153,8 +153,31 @@ def load_sentiment_intelligence(output_dir: Path) -> dict[str, Any] | None:
     else:
         etf_flow_direction = "flat"
 
+    # Risk Overlay — latest.json의 overlay decision과 함께 산출
+    risk_overlay_dict: dict[str, Any] | None = None
+    try:
+        from .risk_overlay import compute_risk_overlay
+
+        latest_json = Path(output_dir) / "latest.json"
+        overlay_decision = "research_only"
+        if latest_json.exists():
+            import json as _json
+
+            with latest_json.open() as _fp:
+                _artifact = _json.load(_fp)
+            overlay_decision = (
+                _artifact.get("alpha", {})
+                .get("promotionGate", {})
+                .get("volRegimeV2Overlay", {})
+                .get("decision", "research_only")
+            )
+        risk_overlay_dict = compute_risk_overlay(df, overlay_decision).to_dict()
+    except Exception:
+        pass
+
     return {
         "as_of_date": str(latest["date"]),
+        "risk_overlay": risk_overlay_dict,
         "hybrid_indices": hybrid_blocks,
         "hybrid_primary": "core",
         "hybrid_index": primary["raw"],

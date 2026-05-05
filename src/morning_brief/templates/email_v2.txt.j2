@@ -63,6 +63,23 @@ SOVEREIGN BRIEF
 {% endfor %}
 {% endif %}
 
+{% if signal_block and signal_block.has_signal_block -%}
+BTC 신호 신뢰도
+· 시장 상태: {{ signal_block.regime_emoji }} {{ signal_block.regime_label }} — {{ signal_block.regime_description }}
+· 변동성: {{ signal_block.vol_text }}
+{% if signal_block.has_confidence -%}
+· 오늘의 신호: ⚡ {{ signal_block.confidence_label }}
+{% for reason in signal_block.reason_labels -%}
+  - {{ reason }}
+{% endfor -%}
+{% if signal_block.track_record_days and signal_block.track_record_hit_rate is not none -%}
+· 최근 {{ signal_block.track_record_days }}일 적중률: {{ (signal_block.track_record_hit_rate * 100) | round(0) | int }}% ({{ signal_block.track_record_signal_count }}회)
+{% endif -%}
+{% else -%}
+· 오늘은 신호 없음 ({{ signal_block.regime_label }} 구간, 관망 권고)
+{% endif %}
+{% endif -%}
+
 비트코인과 ETF
 {% if btc_data.status_text -%}
 {{ btc_data.status_text }}

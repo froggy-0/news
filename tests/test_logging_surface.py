@@ -6,7 +6,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 EXPECTED_LOGGER_CALL_FILES: set[str] = {
+    "src/morning_brief/analysis/sentiment_join/pipeline.py",
     "src/morning_brief/data/finbert_sentiment.py",
+    "src/morning_brief/signal_logger.py",
 }
 EXPECTED_GET_LOGGER_FILES = {
     "src/morning_brief/analysis/sentiment_join/experiments.py",
@@ -61,6 +63,7 @@ EXPECTED_GET_LOGGER_FILES = {
     "src/morning_brief/raw_capture.py",
     "src/morning_brief/research_backfill.py",
     "src/morning_brief/scheduler.py",
+    "src/morning_brief/signal_logger.py",
     "src/morning_brief/unified_output.py",
 }
 EXPECTED_OBSERVER_CALL_FILES = {

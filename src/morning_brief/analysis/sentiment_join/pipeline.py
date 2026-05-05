@@ -1210,6 +1210,21 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             overlay_gate = _evaluate_and_log_overlay_gate(settings.output_dir)
             _apply_vol_regime_v2_overlay_promotion(fe_artifact, overlay_gate)
 
+            # Risk Overlay Score 주입
+            try:
+                from .risk_overlay import compute_risk_overlay
+
+                overlay_decision = (
+                    fe_artifact.get("alpha", {})
+                    .get("promotionGate", {})
+                    .get("volRegimeV2Overlay", {})
+                    .get("decision", "research_only")
+                )
+                risk_ov = compute_risk_overlay(master_df, overlay_decision)
+                fe_artifact["riskOverlay"] = risk_ov.to_dict()
+            except Exception as _ro_exc:
+                logger.warning("riskOverlay 산출 실패 (artifact 제외): %s", _ro_exc)
+
             if not should_skip_artifact(fe_artifact):
                 latest_path, dated_path = write_frontend_artifact(
                     settings.output_dir, fe_artifact, run_date
