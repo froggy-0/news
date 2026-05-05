@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { BriefBody } from "@/components/brief/BriefBody";
+import { BriefBody, sanitizePublicBody } from "@/components/brief/BriefBody";
 import { JudgmentBlock } from "@/components/brief/JudgmentBlock";
 import { RiskOverlayPanel } from "@/components/brief/RiskOverlayPanel";
 import { SovereignIndexPanel } from "@/components/brief/SovereignIndexPanel";
@@ -38,6 +38,7 @@ export default async function ArchiveDetailPage({
 
   try {
     const brief = await fetchBriefByDate(date);
+    const publicBody = sanitizePublicBody(brief.aiJudgment.body);
 
     return (
       <main className="pb-6">
@@ -56,7 +57,7 @@ export default async function ArchiveDetailPage({
           bitcoin={brief.bitcoin}
           etfHistory={brief.etfHistory}
         />
-        <BriefBody body={brief.aiJudgment.body} date={brief.meta.date} />
+        <BriefBody body={publicBody} date={brief.meta.date} />
         <TopicGrid items={brief.topicSummaries} />
         <SourceFeed
           featuredNews={brief.featuredNews}
