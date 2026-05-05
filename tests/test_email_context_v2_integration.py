@@ -18,30 +18,26 @@ SOVEREIGN BRIEF (2026-03-18)
 0. 오늘의 핵심
 오늘 시장은 혼조세를 보였어요.
 
-1. 거시 지표 Dashboard
+1. 크립토 외부환경 Dashboard
 - 10년물: 4.20% (전일 대비 +8bp)
 - DXY: 103.5 (-0.3%)
 
-2. 미국 증시
-SPY 510.25 +0.5%
-QQQ 440.10 -0.3%
-
-빅테크 10종
-NVDA 890.50 +2.1%
-AAPL 172.30 -0.8%
+2. 전통시장 리스크 맥락
+SPY는 BTC 참고 지표로 +0.5% 움직였어요.
+QQQ는 성장주 참고 지표로 -0.3% 움직였어요.
 
 3. BTC & 크립토
 BTC 현물 $87,200 (+1.2%)
 
 4-1. 이슈 브리핑
-AI 투자 확대
-엔비디아가 새로운 AI 칩을 발표했어요. 데이터센터 수요가 계속 늘어나고 있거든요.
+ETF 자금 흐름
+비트코인 현물 ETF 자금 흐름이 오늘 투자 심리를 좌우했어요.
 
 4-2. 핵심 뉴스 5선
-① 엔비디아 AI 칩 발표 — Reuters
-AI 반도체 시장에서 큰 변화가 예상돼요.
+① 비트코인 ETF 자금 유입 — Reuters
+ETF 자금 유입이 BTC 투자 심리에 힘을 보탰어요.
 → 원문 보기 https://reuters.com/example1
-핵심 한줄: 엔비디아 AI 칩 신제품 발표
+핵심 한줄: 비트코인 ETF 자금 유입 확대
 
 ② 연준 금리 동결 시사 — Bloomberg
 파월 의장이 당분간 금리를 유지하겠다고 했어요.
@@ -87,7 +83,7 @@ def _make_packet(
             },
             {
                 "canonical_key": "nq_futures",
-                "label": "나스닥 선물",
+                "label": "성장주 참고 지표",
                 "price": 20150.0,
                 "change_pct": -0.4,
             },
@@ -220,7 +216,7 @@ def test_build_email_context_v2_parses_news_items() -> None:
     news = ctx["news_items"]
     assert isinstance(news, list)
     assert len(news) == 2
-    assert news[0]["headline"] == "엔비디아 AI 칩 발표"
+    assert news[0]["headline"] == "비트코인 ETF 자금 유입"
     assert news[0]["source_name"] == "Reuters"
     assert news[0]["source_url"] == "https://reuters.com/example1"
     assert news[0]["source_label"] == "원문 기사 · Reuters"
@@ -269,8 +265,8 @@ def test_build_email_context_v2_builds_hero_metadata_and_sources() -> None:
     assert news_sources[0].source_name == "Reuters"
     assert news_sources[0].source_kind == "원문 기사"
     assert ctx["market_source_lines"] == [
-        "거시 지표: FRED, yfinance",
-        "미국 지수/기술주: KIS",
+        "크립토 돈 흐름: FRED, yfinance",
+        "전통시장 참고 지표: KIS",
         "비트코인: CoinGecko",
         "X 시그널: Grok",
     ]
@@ -296,7 +292,7 @@ def test_build_email_context_v2_snapshot_badges() -> None:
     labels = [b["label"] for b in badges]
     assert "미국 10년물" in labels
     assert "원/달러" in labels
-    assert "나스닥 선물" in labels
+    assert "성장주 참고 지표" in labels
     assert "BTC 현물" in labels
     assert "VIX" in labels
 

@@ -33,8 +33,8 @@ _PUBLIC_SNAPSHOT_SPECS = (
 )
 
 _PUBLIC_TOPIC_SPECS = (
-    ("macro", "macro", "거시경제"),
-    ("us_equity", "us-stocks", "미국 주식"),
+    ("macro", "macro", "돈 흐름"),
+    ("us_equity", "us-stocks", "시장 참고 흐름"),
     ("bitcoin", "bitcoin", "비트코인"),
 )
 
@@ -304,6 +304,7 @@ def build_public_brief(
         "marketSnapshot": {
             "items": market_snapshot_items,
         },
+        "riskOverlay": _risk_overlay_public(packet),
         "aiJudgment": {
             "headline": headline,
             "body": brief_body,
@@ -594,6 +595,34 @@ def _compute_sentiment_by_category(news_items: list[dict[str, Any]]) -> dict[str
                 "count": len(cat_scores),
             }
     return result or None
+
+
+def _risk_overlay_public(packet: dict[str, Any]) -> dict[str, Any] | None:
+    raw = packet.get("risk_overlay")
+    if not isinstance(raw, dict):
+        return None
+
+    def _text(key: str, default: str = "") -> str:
+        value = raw.get(key)
+        return str(value).strip() if value is not None else default
+
+    def _texts(key: str) -> list[str]:
+        value = raw.get(key)
+        if not isinstance(value, list):
+            return []
+        return [str(item).strip() for item in value if str(item).strip()]
+
+    return {
+        "regimeState": _text("regimeState", "Choppy"),
+        "regimeDescription": _text("regimeDescription"),
+        "volLevel": _text("volLevel", "Mid"),
+        "volTrend": _text("volTrend", "stable"),
+        "volDescription": _text("volDescription"),
+        "signalConfidence": _text("signalConfidence") or None,
+        "signalReasons": _texts("signalReasons"),
+        "signalReasonLabels": _texts("signalReasonLabels"),
+        "overlayGateDecision": _text("overlayGateDecision", "research_only"),
+    }
 
 
 def _is_machine_payload(text: str) -> bool:
@@ -928,8 +957,8 @@ def _crypto_indicators(
             )
 
     for symbol, label, description in (
-        ("VIX", "변동성 환경", "위험자산 변동성 참고"),
-        ("DXY", "달러 유동성", "달러 강도와 유동성 참고"),
+        ("VIX", "변동성 환경", "변동성 참고"),
+        ("DXY", "달러 돈 흐름", "달러 강도와 돈 흐름 참고"),
     ):
         snapshot_item = _snapshot_item(market_snapshot_items, symbol)
         if snapshot_item is None:
@@ -1073,7 +1102,9 @@ def _tech_stocks(packet: dict[str, Any]) -> list[dict[str, Any]]:
                 or canonical_key.upper()
                 or str(stock.get("label", "")).strip()
                 or "TECH",
-                "name": str(stock.get("label", "")).strip() or canonical_key.upper() or "기술주",
+                "name": str(stock.get("label", "")).strip()
+                or canonical_key.upper()
+                or "크립토 연관주",
                 "price": f"${price:,.2f}" if price is not None else None,
                 "change": _format_change(canonical_key, stock),
                 "trend": _trend_from_point(stock, canonical_key),
@@ -1843,10 +1874,10 @@ def _normalize_news_topic(raw_topic: Any) -> str:
 
 def _topic_label(topic: str) -> str:
     return {
-        "macro": "거시경제",
-        "bigtech": "빅테크",
+        "macro": "돈 흐름",
+        "bigtech": "크립토 기반",
         "bitcoin": "비트코인",
-        "us-stocks": "미국증시",
+        "us-stocks": "시장 참고 흐름",
     }.get(topic, "시장")
 
 

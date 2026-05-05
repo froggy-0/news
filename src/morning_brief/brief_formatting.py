@@ -13,8 +13,8 @@ class SectionMap(TypedDict, total=False):
 
     title: str
     section_0: str  # 오늘의 핵심 (30초 요약)
-    section_1: str  # 거시 지표 Dashboard
-    section_2: str  # 미국 증시
+    section_1: str  # 크립토 외부환경 Dashboard
+    section_2: str  # 전통시장 리스크 맥락
     section_3: str  # BTC & 크립토
     section_4_1: str  # 이슈 브리핑
     section_4_2: str  # 핵심 뉴스 5선
@@ -323,8 +323,8 @@ SECTION_KEY_MAP: dict[str, str] = {
 
 SECTION_TITLES: dict[str, str] = {
     "section_0": "0. 오늘의 핵심",
-    "section_1": "1. 거시 지표 Dashboard",
-    "section_2": "2. 미국 증시",
+    "section_1": "1. 크립토 외부환경 Dashboard",
+    "section_2": "2. 전통시장 리스크 맥락",
     "section_3": "3. BTC & 크립토",
     "section_4_1": "4-1. 이슈 브리핑",
     "section_4_2": "4-2. 핵심 뉴스 5선",

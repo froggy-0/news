@@ -22,6 +22,7 @@ export interface BriefIndexEntry {
 export interface BriefData {
   meta: BriefMeta;
   marketSnapshot: MarketSnapshot;
+  riskOverlay: RiskOverlay | null;
   aiJudgment: AIJudgment;
   topicSummaries: TopicSummary[];
   techStocks: TechStock[];
@@ -93,6 +94,18 @@ export interface TickerItem {
 
 export interface CryptoIndicator extends TickerItem {
   description: string | null;
+}
+
+export interface RiskOverlay {
+  regimeState: string;
+  regimeDescription: string;
+  volLevel: string;
+  volTrend: string;
+  volDescription: string;
+  signalConfidence: string | null;
+  signalReasons: string[];
+  signalReasonLabels: string[];
+  overlayGateDecision: string;
 }
 
 export interface AIJudgment {

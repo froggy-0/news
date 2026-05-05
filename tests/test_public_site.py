@@ -173,6 +173,17 @@ def _packet() -> dict:
             "official_etf_total_btc": 983240.13,
             "official_etf_total_aum_usd": 98422000000.0,
         },
+        "risk_overlay": {
+            "regimeState": "Choppy",
+            "regimeDescription": "방향성이 뚜렷하지 않아 확인 후 대응이 필요한 구간입니다.",
+            "volLevel": "Mid",
+            "volTrend": "stable",
+            "volDescription": "변동성은 보통 수준에서 유지되고 있습니다.",
+            "signalConfidence": "MEDIUM",
+            "signalReasons": ["vol_regime_v2_promoted"],
+            "signalReasonLabels": ["변동성 조건 양호"],
+            "overlayGateDecision": "promoted",
+        },
         "topic_summaries": {
             "macro": {
                 "summary_text": "장기 금리 반등이 부담입니다.",
@@ -262,6 +273,8 @@ def test_build_public_brief_matches_frontend_contract_shape() -> None:
     assert {"BTC", "F&G", "ETF BTC", "ETF AUM", "VIX", "DXY"} <= crypto_symbols
     assert payload["bitcoin"]["fearGreedIndex"]["label"] == "탐욕"
     assert payload["bitcoin"]["etf"]["totalHolding"] == "983,240.13 BTC"
+    assert payload["riskOverlay"]["regimeState"] == "Choppy"
+    assert payload["riskOverlay"]["signalReasonLabels"] == ["변동성 조건 양호"]
     assert payload["featuredXSignals"][0]["sentiment"] == "bullish"
     assert payload["featuredXSignals"][0]["rawContent"] is None
     assert payload["allNews"][0]["sourceTier"] == "tier1"

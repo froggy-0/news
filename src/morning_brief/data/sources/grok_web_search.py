@@ -30,16 +30,16 @@ from morning_brief.observability import PipelineObserver
 logger = logging.getLogger(__name__)
 GROK_WEB_PROVIDER = providers.RUNTIME_GROK_WEB_SEARCH
 
-WEB_SEARCH_PROMPT = """Search the web for the most important financial news articles
+WEB_SEARCH_PROMPT = """Search the web for the most important Bitcoin and crypto market news articles
 from the last 24 hours covering:
-1. US macro economy (Fed, rates, inflation, employment)
-2. US equity markets (S&P 500, Nasdaq, sector moves)
-3. Bitcoin and crypto (ETF flows, regulation, price)
+1. Bitcoin and crypto (ETF flows, regulation, price, institutional demand)
+2. Macro liquidity or policy only when it explicitly affects BTC, crypto ETFs, stablecoins, or leverage
+3. Equity risk signals only when tied to BTC correlation, miners, Coinbase, MicroStrategy, ETFs, or crypto liquidity
 
 Return the top {max_items} most market-moving articles as JSON.
 For each: title, url, source, published_at (ISO8601), topic (macro/us_equity/bitcoin), summary (one sentence).
 Prefer Reuters, Bloomberg, WSJ, FT, CNBC.
-Exclude data pages, stock quote pages, and non-English articles.
+Exclude data pages, stock quote pages, non-English articles, and broad macro/equity recaps without a direct crypto connection.
 Output format: {{"articles": [...]}}"""
 
 EXCLUDED_DOMAINS = [

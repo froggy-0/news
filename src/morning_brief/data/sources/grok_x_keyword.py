@@ -35,22 +35,22 @@ GROK_KEYWORD_PROVIDER = providers.RUNTIME_GROK_KEYWORD
 MACRO_EQUITY_GROUP = "macro_and_equity"
 BITCOIN_CRYPTO_GROUP = "bitcoin_crypto"
 
-MACRO_EQUITY_PROMPT = """Search X for the most significant market-moving posts from the last {lookback_hours} hours.
+MACRO_EQUITY_PROMPT = """Search X for the most significant traditional-market posts from the last {lookback_hours} hours only when they directly affect Bitcoin or crypto markets.
 Focus on:
-1. Fed policy signals, interest rate expectations, Treasury yield moves
-2. S&P 500, Nasdaq market reaction and trader sentiment
-3. Breaking economic data (CPI, PCE, jobs, GDP)
-4. Notable analyst calls or market-moving commentary
+1. Fed policy, interest rate expectations, Treasury yields, DXY, or VIX when they affect BTC liquidity, crypto ETFs, stablecoins, or leverage
+2. S&P 500 or Nasdaq reaction only when it changes the BTC risk-on/risk-off read
+3. Breaking economic data (CPI, PCE, jobs, GDP) only when crypto market impact is stated
+4. Miners, Coinbase, MicroStrategy, spot bitcoin ETF issuers, or other listed crypto-linked equities
 
 For each post, extract as JSON array "signals":
 - headline: one-line summary
 - summary: core market insight in 1-2 sentences
-- why_it_matters: market implication for investors
+- why_it_matters: direct BTC/crypto market implication
 - sentiment: bullish / bearish / neutral
 - source_handle: @handle of the poster
 - posted_at: ISO8601 timestamp
 
-Return the top {max_items} most impactful posts. Skip routine marketing and non-market posts.
+Return the top {max_items} most impactful posts. Skip routine marketing, non-market posts, and broad stock/macro commentary without a direct crypto link.
 Output format: {{"signals": [...]}}"""
 
 BITCOIN_CRYPTO_PROMPT = """Search X for the most significant Bitcoin and crypto market posts from the last {lookback_hours} hours.

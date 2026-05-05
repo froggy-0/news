@@ -448,8 +448,8 @@ export function CryptoPulseBoard({
         {/* ── Section header ─────────────────────────────────────────── */}
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="space-y-1">
-            <h2 className="section-title">크립토 펄스</h2>
-            <p className="eyebrow">Crypto Pulse</p>
+            <h2 className="section-title">크립토 흐름</h2>
+            <p className="eyebrow">흐름 보기</p>
           </div>
           <div className="flex items-center gap-4 text-[10px] font-mono uppercase tracking-[0.18em] text-white/42">
             <span className="flex items-center gap-2">
@@ -480,7 +480,7 @@ export function CryptoPulseBoard({
           )}
         </div>
 
-        {/* ── 2. Market Snapshot (macro) ──────────────────────────────── */}
+        {/* ── 2. Market Reference Snapshot ────────────────────────────── */}
         {snapshot.items.length > 0 ? (
           <>
             {/* mobile: strip rows */}
@@ -505,8 +505,8 @@ export function CryptoPulseBoard({
           </>
         ) : (
           <DataState
-            title="시장 지표"
-            message="이번 집계에서는 시장 지표를 확인하지 못했어요."
+            title="시장 참고 지표"
+            message="이번 집계에서는 시장 참고 지표를 확인하지 못했어요."
             family="data"
             minHeight={120}
           />
@@ -518,7 +518,7 @@ export function CryptoPulseBoard({
             <div className="mb-4">
               <p className="section-title">핵심 지표</p>
               <p className="mt-1 text-[13px] leading-6 text-[var(--text-secondary)]">
-                투자 심리, ETF 수급, 매크로 리스크 지표를 함께 확인합니다.
+                투자 심리, ETF 자금 흐름, 달러와 금리 변화를 함께 확인합니다.
               </p>
             </div>
 

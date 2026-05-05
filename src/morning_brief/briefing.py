@@ -50,7 +50,7 @@ RETRY_MAX_OUTPUT_TOKENS = 50000
 HANGUL_RE = re.compile(r"[가-힣]")
 TOPIC_KOREAN_LABELS = {
     "macro": "거시경제",
-    "us_equity": "미국 증시",
+    "us_equity": "전통시장 리스크 맥락",
     "bitcoin": "비트코인",
 }
 
@@ -309,7 +309,7 @@ def _brief_replacement_plan(text: str) -> tuple[list[str], set[str]]:
 
     section_2 = str(section_map.get("section_2", ""))
     if section_2 and len(section_2.strip()) < 30:
-        issues.append("미국 증시 섹션 내용이 부족해요.")
+        issues.append("전통시장 리스크 맥락 섹션 내용이 부족해요.")
         replacement_keys.add("section_2")
 
     return issues, replacement_keys
@@ -419,7 +419,7 @@ def _news_reference(item: dict) -> str:
 
 _TOPIC_LABEL = {
     "macro": "거시경제",
-    "us_equity": "미국 증시",
+    "us_equity": "전통시장 리스크 맥락",
     "bitcoin": "비트코인",
 }
 
@@ -471,28 +471,28 @@ def _layer3_headline(tech: list[dict]) -> str:
     gainers = [p for p in tech if (_point_change_pct(p) or 0) > 0.1]
     losers = [p for p in tech if (_point_change_pct(p) or 0) < -0.1]
     if gainers and losers:
-        return f"오늘은 {gainers[0]['label']} 등이 강했고 {losers[0]['label']} 등은 약했습니다."
+        return f"오늘은 {gainers[0]['label']} 등이 강했고 {losers[0]['label']} 등은 약했어요."
     if gainers:
-        return f"기술주 전반이 상승했고, {gainers[0]['label']}의 상승폭이 가장 컸습니다."
+        return f"위험자산 연관주 전반이 올랐고, {gainers[0]['label']}의 상승폭이 가장 컸어요."
     if losers:
-        return f"기술주 전반이 약했고, {losers[0]['label']}의 하락폭이 가장 컸습니다."
-    return "주요 종목 등락률이 충분히 확인되지 않았습니다."
+        return f"위험자산 연관주 전반이 약했고, {losers[0]['label']}의 하락폭이 가장 컸어요."
+    return "주요 종목 등락률은 이번 집계에서 충분히 확인되지 않았어요."
 
 
 def _layer3_easy_summary(direction: str) -> str:
     if direction == "bullish":
         return (
-            "기술주와 비트코인이 함께 강해, 위험자산 전반에 자금이 들어오는 흐름으로 읽힙니다.\n\n"
-            "다만 종목별 상승폭 차이가 있으므로, 어떤 테마에 자금이 집중되는지 함께 보는 편이 적절합니다."
+            "비트코인과 위험자산 전반에 자금이 들어오는 흐름이에요.\n\n"
+            "기술주 방향도 같이 올라 동조화가 확인돼요. 어떤 섹터에 자금이 집중되는지 같이 보는 편이 적절해요."
         )
     if direction == "bearish":
         return (
-            "기술주와 비트코인이 함께 약해, 위험자산에서 자금이 빠지는 흐름으로 읽힙니다.\n\n"
-            "하락폭이 큰 종목과 상대적으로 버틴 종목의 차이를 비교해서 보는 편이 적절합니다."
+            "비트코인과 위험자산 전반에서 자금이 빠지는 흐름이에요.\n\n"
+            "기술주도 같이 약해 디커플링 없이 하락 동조가 나타나고 있어요."
         )
     return (
-        "종목별로 방향이 갈려, 시장 전체보다 개별 종목 흐름을 따로 보는 편이 적절합니다.\n\n"
-        "같은 섹터 안에서도 차이가 나타나고 있어, 숫자 자체보다 상대적 강약을 비교할 필요가 있습니다."
+        "비트코인과 기술주 사이 방향이 엇갈리고 있어요.\n\n"
+        "위험자산 전반의 방향보다 BTC와 기술주 간 디커플링이 있는지 확인하는 편이 적절해요."
     )
 
 
@@ -548,7 +548,7 @@ def _fallback_news_takeaway(item: dict) -> str:
     if topic == "bitcoin":
         return "국내 투자자에게는 비트코인과 관련주 반응을 함께 보는 편이 적절합니다."
     if topic == "us_equity":
-        return "국내 투자자에게는 반도체와 대형 기술주 흐름을 같이 보는 편이 적절합니다."
+        return "국내 투자자에게는 반도체·AI 섹터가 BTC와 같이 움직이는지 함께 보는 편이 적절해요."
     if topic == "macro":
         return "국내 투자자에게는 환율과 외국인 수급 변화까지 같이 확인할 필요가 있습니다."
     return "국내 투자자에게는 같은 주제를 국내 관련주가 어떻게 반영하는지 확인할 필요가 있습니다."
@@ -737,7 +737,7 @@ def _judgement_and_reason(
             )
         return (
             "리스크 주의",
-            f"S&P500이 전일 대비 {spy_change:+.2f}% 밀려 위험자산 심리가 약해졌습니다.",
+            f"S&P500이 전일 대비 {spy_change:+.2f}% 밀려 BTC와 위험자산 심리를 함께 확인해야 합니다.",
         )
 
     if (
@@ -747,7 +747,7 @@ def _judgement_and_reason(
     ):
         return (
             "매수 관심",
-            f"VIX가 {vix:.2f}로 안정적이고 나스닥 선물과 S&P500 흐름이 함께 강합니다.",
+            f"VIX가 {vix:.2f}로 안정적이고 나스닥 선물과 S&P500 흐름이 BTC 위험자산 맥락과 함께 강합니다.",
         )
 
     if us10y is not None and us10y_change_bps is not None:
@@ -772,16 +772,16 @@ def _kospi_impact_line(*, korea_watch: list[dict], indices: list[dict]) -> str:
     if (nq_change is not None and nq_change > 0.2) and (
         usdkrw_change is None or usdkrw_change <= 0.2
     ):
-        detail = "나스닥 선물이 강하고 원/달러 환율이 비교적 안정돼, 대형 기술주 심리를 받쳐줄"
+        detail = "나스닥 선물이 강하고 원/달러 환율이 비교적 안정돼, BTC와 성장주 심리를 받쳐줄"
     elif (nq_change is not None and nq_change < -0.2) or (
         usdkrw_change is not None and usdkrw_change > 0.3
     ):
         detail = "나스닥 선물이 약하거나 원/달러 환율이 올라, 외국인 수급과 성장주 심리에 부담을 줄"
     elif spy_change is not None and spy_change > 0.3:
-        detail = "미국 지수 전반이 견조해, 코스피도 낙폭을 제한하는 데 도움을 줄"
+        detail = "미국 지수 전반이 견조해, BTC 위험자산 심리도 함께 확인할"
     else:
-        detail = "미국 증시 신호가 엇갈려, 코스피는 업종별 차별화 장세로 이어질"
-    return f"오늘 미국 증시 흐름이 코스피에 미치는 영향: {detail} 수 있습니다."
+        detail = "전통시장 신호가 엇갈려, BTC와 성장주 간 동조 여부를 더 확인할"
+    return f"오늘 전통시장 흐름이 BTC 위험자산 심리에 미치는 영향: {detail} 수 있습니다."
 
 
 def _fallback_stock_cause(label: str, change_pct: float | None, news: list[dict]) -> str:
@@ -806,7 +806,7 @@ def _fallback_stock_cause(label: str, change_pct: float | None, news: list[dict]
         "AVGO",
     }:
         if "us_equity" in topics:
-            return "기술주 전반 흐름 속에"
+            return "위험자산 동조 흐름 속에"
     if "macro" in topics:
         return "금리와 달러 흐름 영향으로"
     if change_pct is not None and change_pct > 0:
@@ -919,7 +919,7 @@ def _fallback_brief_raw(packet: dict, timezone: str) -> str:
 {judgement_reason}
 {kospi_impact}
 
-1. 거시 지표 Dashboard
+1. 크립토 외부환경 Dashboard
 {
         _bullet_lines(
             investor_lines
@@ -931,8 +931,8 @@ def _fallback_brief_raw(packet: dict, timezone: str) -> str:
         )
     }
 
-2. 미국 증시
-{_bullet_lines(stock_lines or ["주요 종목 등락률은 이번 집계에서 충분히 확인되지 않았습니다."])}
+2. 전통시장 리스크 맥락
+{_bullet_lines(stock_lines or ["주요 종목 등락률은 이번 집계에서 충분히 확인되지 않았어요."])}
 
 3. BTC & 크립토
 {_bullet_lines([btc_spot_line, sentiment_text])}

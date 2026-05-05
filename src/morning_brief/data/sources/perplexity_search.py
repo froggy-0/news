@@ -68,8 +68,8 @@ SOURCE_LABELS = {
 }
 
 TOPIC_IMPACT_LINES = {
-    "macro": "금리와 달러, 변동성 흐름을 읽는 데 바로 이어지는 기사예요.",
-    "us_equity": "미국 증시 전반의 방향과 시장 폭을 읽는 데 도움이 되는 기사예요.",
+    "macro": "BTC 유동성, ETF 수급, 스테이블코인 흐름을 읽는 데 직접 이어지는 기사예요.",
+    "us_equity": "BTC와 전통시장 간 동조·디커플링을 판단하는 데 도움이 되는 기사예요.",
     "bitcoin": "비트코인 가격 심리와 ETF 흐름을 이해하는 데 도움이 되는 기사예요.",
 }
 
@@ -188,25 +188,31 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
     SearchTopic(
         name="macro",
         query=(
-            "Latest Federal Reserve policy or Treasury yields article published in English. "
+            "Latest macro liquidity or Federal Reserve policy article with explicit Bitcoin, crypto, "
+            "spot bitcoin ETF, stablecoin, or crypto risk appetite impact published in English. "
             "Prefer Reuters, Bloomberg, WSJ, FT, or CNBC reporting. "
             "Exclude non-English pages, data pages, and quote pages.",
-            "Latest US inflation, jobs report, dollar index, or VIX volatility article published in English. "
+            "Latest US inflation, jobs report, dollar index, or VIX volatility article that explicitly "
+            "explains impact on Bitcoin, crypto ETFs, stablecoin liquidity, or crypto leverage. "
             "Prefer reliable financial news analysis. "
             "Exclude non-English pages, market data tables, and summary pages.",
-            "Latest Treasury yields, rate cut expectations, or risk sentiment article published in English. "
+            "Latest Treasury yields, rate cut expectations, or risk sentiment article with a clear "
+            "Bitcoin or crypto market implication published in English. "
             "Prefer reliable English-language financial reporting. "
             "Exclude non-English pages, data pages, and archive pages.",
         ),
         retry_query=(
             "Federal Reserve policy, Treasury yields, or interest rate outlook article or analysis "
-            "published within the last week in English. Prefer reliable financial news reporting. "
+            "published within the last week in English with explicit Bitcoin, crypto ETF, or "
+            "stablecoin liquidity impact. Prefer reliable financial news reporting. "
             "Exclude non-English pages, data pages, quote pages, and summary pages.",
             "US inflation, employment data, dollar, or market volatility article or analysis "
-            "published within the last week in English. Prefer reliable financial reporting. "
+            "published within the last week in English that directly connects to BTC, crypto "
+            "risk appetite, stablecoins, or leverage. Prefer reliable financial reporting. "
             "Exclude non-English pages, data pages, and archive pages.",
             "Treasury yields, rate cut expectations, or risk sentiment weekly review "
-            "published within the last week in English. Prefer reliable financial reporting. "
+            "published within the last week in English with a clear crypto market impact. "
+            "Prefer reliable financial reporting. "
             "Exclude non-English pages, data pages, and summary pages.",
         ),
         retry_recency_filter="week",
@@ -214,25 +220,31 @@ TOPIC_SPECS: tuple[SearchTopic, ...] = (
     SearchTopic(
         name="us_equity",
         query=(
-            "Latest S&P 500, Nasdaq, or Wall Street market article published in English. "
+            "Latest equity risk signal article tied to Bitcoin or crypto correlation, miners, "
+            "Coinbase, MicroStrategy, spot bitcoin ETFs, or crypto liquidity published in English. "
             "Prefer Reuters, Bloomberg, WSJ, or CNBC reporting. "
             "Exclude non-English pages, stock quote pages, and data tables.",
-            "Latest semiconductor stocks, sector rotation, or tech earnings article published in English. "
+            "Latest semiconductor, AI compute, or sector rotation article only if it directly links "
+            "to crypto mining, crypto infrastructure, BTC correlation, or crypto risk appetite. "
             "Prefer reliable English-language financial news analysis. "
             "Exclude non-English pages, quote pages, and summary pages.",
-            "Latest Dow Jones, futures, or market breadth article published in English. "
+            "Latest futures or market breadth article only if it explicitly discusses Bitcoin, "
+            "crypto-linked equities, ETF flows, miners, Coinbase, or crypto risk sentiment. "
             "Prefer reliable English-language financial reporting. "
             "Exclude non-English pages, data pages, and archive pages.",
         ),
         retry_query=(
             "S&P 500, Nasdaq, or Wall Street market sentiment article or weekly review "
-            "published within the last week in English. Prefer reliable financial reporting. "
+            "published within the last week in English only if tied to Bitcoin, crypto correlation, "
+            "miners, Coinbase, ETFs, or liquidity. Prefer reliable financial reporting. "
             "Exclude non-English pages, stock quote pages, and data tables.",
             "Semiconductor stocks, sector rotation, or tech earnings article "
-            "published within the last week in English. Prefer reliable financial reporting. "
+            "published within the last week in English only when it has direct crypto mining, "
+            "crypto infrastructure, or BTC risk-appetite relevance. Prefer reliable financial reporting. "
             "Exclude non-English pages, quote pages, and summary pages.",
             "Dow Jones, futures, or risk sentiment article or weekly review "
-            "published within the last week in English. Prefer reliable financial reporting. "
+            "published within the last week in English only if it directly explains BTC or crypto "
+            "market impact. Prefer reliable financial reporting. "
             "Exclude non-English pages, data pages, and archive pages.",
         ),
         retry_recency_filter="week",

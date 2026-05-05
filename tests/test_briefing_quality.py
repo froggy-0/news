@@ -33,10 +33,10 @@ def _complete_layered_brief(
 0. 오늘의 핵심
 {layer_one_body}
 
-1. 거시 지표 Dashboard
+1. 크립토 외부환경 Dashboard
 - 미국 10년물 국채금리: 4.10% (+0.20%) (전일 값)
 
-2. 미국 증시
+2. 전통시장 리스크 맥락
 {stock_block}
 - AAPL | +1.10% | 주요 기대
 - AMZN | -0.10% | 주요 기대
@@ -172,8 +172,8 @@ def test_fallback_brief_mentions_official_btc_etf_holdings_when_available():
     briefing = _fallback_brief(packet=packet, timezone="Asia/Seoul")
 
     assert "0. 오늘의 핵심" in briefing
-    assert "1. 거시 지표 Dashboard" in briefing
-    assert "2. 미국 증시" in briefing
+    assert "1. 크립토 외부환경 Dashboard" in briefing
+    assert "2. 전통시장 리스크 맥락" in briefing
     assert "981,234.56 BTC" in briefing
     assert "공식 발행사 기준 총 981,234.56 BTC" in briefing
     assert "98,764,800달러" in briefing
@@ -358,7 +358,7 @@ def test_fallback_brief_includes_korean_investor_signals():
     assert "나스닥 선물은 전일 대비 +0.48%로 상승 방향입니다. [출처: yfinance]" in briefing
     assert "공포탐욕지수는 60로 탐욕 구간입니다." not in briefing
     assert "공포탐욕지수는 60으로 탐욕 구간입니다." in briefing
-    assert "오늘 미국 증시 흐름이 코스피에 미치는 영향:" in briefing
+    assert "오늘 전통시장 흐름이 BTC 위험자산 심리에 미치는 영향:" in briefing
     assert "AVGO은" not in briefing
     assert "AVGO는" in briefing
 
@@ -535,10 +535,10 @@ def test_generate_briefing_falls_back_when_draft_structure_is_incomplete(monkeyp
 0. 오늘의 핵심
 - 금리와 기술주 흐름이 함께 관찰됐습니다.
 
-1. 거시 지표 Dashboard
+1. 크립토 외부환경 Dashboard
 - 미국 10년물 금리는 4.10%였습니다. [출처: FRED]
 
-2. 미국 증시
+2. 전통시장 리스크 맥락
 - NVDA | +1.20% |"""
 
     responses = [
@@ -558,8 +558,8 @@ def test_generate_briefing_falls_back_when_draft_structure_is_incomplete(monkeyp
     briefing = generate_briefing(packet=packet, settings=settings)
 
     assert "0. 오늘의 핵심" in briefing
-    assert "1. 거시 지표 Dashboard" in briefing
-    assert "2. 미국 증시" in briefing
+    assert "1. 크립토 외부환경 Dashboard" in briefing
+    assert "2. 전통시장 리스크 맥락" in briefing
     assert "주요 종목 등락률은 이번 집계에서 충분히 확인되지 않았습니다." not in briefing
 
 
@@ -647,9 +647,9 @@ def test_generate_briefing_records_cached_input_tokens_in_observer(monkeypatch, 
             "SOVEREIGN BRIEF (2026-03-14)\n\n"
             "0. 오늘의 핵심\n"
             "미국 시장은 혼조 흐름을 보였어요. [출처: test]\n\n"
-            "1. 거시 지표 Dashboard\n"
+            "1. 크립토 외부환경 Dashboard\n"
             "- 달러\n\n"
-            "2. 미국 증시\n"
+            "2. 전통시장 리스크 맥락\n"
             "- 1 | +1.1%\n"
             "- 2 | -0.1%\n"
             "- 3 | +1.1%\n"
@@ -791,10 +791,10 @@ def test_brief_structure_issues_flags_partially_truncated_news_section():
 0. 오늘의 핵심
 핵심 요약입니다.
 
-1. 거시 지표 Dashboard
+1. 크립토 외부환경 Dashboard
 - 미국 10년물 국채금리: 4.10% (+0.20%)
 
-2. 미국 증시
+2. 전통시장 리스크 맥락
 - NVDA | +1.20% | 데이터센터 투자 기대
 
 3. BTC & 크립토
@@ -869,10 +869,10 @@ def test_fallback_if_incomplete_replaces_truncated_news_section():
 0. 오늘의 핵심
 핵심 요약입니다.
 
-1. 거시 지표 Dashboard
+1. 크립토 외부환경 Dashboard
 - 미국 10년물 국채금리: 4.10% (+0.20%)
 
-2. 미국 증시
+2. 전통시장 리스크 맥락
 - NVDA | +1.20% | 데이터센터 투자 기대
 
 3. BTC & 크립토
@@ -942,10 +942,10 @@ def test_generate_briefing_skips_review_when_generation_response_is_incomplete(
 0. 오늘의 핵심
 오늘은 관망 국면입니다.
 
-1. 거시 지표 Dashboard
+1. 크립토 외부환경 Dashboard
 - 미국 10년물 국채금리: 4.10% (+0.20%)
 
-2. 미국 증시
+2. 전통시장 리스크 맥락
 - NVDA | +1.20% | 데이터센터 투자 기대
 
 4-2. 핵심 뉴스 5선
@@ -994,7 +994,7 @@ def test_generate_briefing_skips_validator_when_disabled(monkeypatch):
     calls: list[dict] = []
     responses = [
         SimpleNamespace(
-            output_text="SOVEREIGN BRIEF (2026-03-13)\n\n1. 거시 환경\n해석\n조용했어요.\n\n2. 미국 증시 흐름\n해석\n조용했어요.\n\n3. AI / 빅테크 동향\n해석\n조용했어요.\n\n4. 비트코인 시장\n해석\n조용했어요.\n\n5. 중요한 뉴스\n핵심 내용\n- 없음\n\n6. 시장 해석\n해석\n조용했어요.",
+            output_text="SOVEREIGN BRIEF (2026-03-13)\n\n1. 크립토 외부환경 Dashboard\n해석\n조용했어요.\n\n2. 전통시장 리스크 맥락\n해석\n조용했어요.\n\n3. BTC & 크립토\n해석\n조용했어요.\n\n4-2. 핵심 뉴스 5선\n핵심 내용\n- 없음\n\n6. 이벤트 캘린더\n해석\n조용했어요.",
             usage=None,
         )
     ]

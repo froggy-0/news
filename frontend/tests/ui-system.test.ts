@@ -122,7 +122,7 @@ test("reading, data, and utility card families are rendered by home components",
         {
           id: "news-1",
           url: "https://example.com/article",
-          title: "금리와 달러 강세가 증시에 주는 압력",
+          title: "금리와 달러 강세가 BTC 투자 심리에 주는 부담",
           rawTitle: null,
           summaryKo: "핵심 뉴스입니다. 시장 해석입니다.",
           interpretation: "장기 금리와 달러 흐름을 함께 읽어야 합니다.",

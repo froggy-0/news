@@ -11,6 +11,7 @@ import type {
   MarketSnapshot,
   NewsItem,
   PublicNewsAnalysisAudit,
+  RiskOverlay,
   SentimentAggregate,
   SourceCounts,
   TechStock,
@@ -174,6 +175,44 @@ function parseMarketSnapshot(value: unknown): MarketSnapshot {
   }
   return {
     items: value.items.map(parseTickerItem),
+  };
+}
+
+function parseRiskOverlay(value: unknown): RiskOverlay | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (!isRecord(value)) {
+    throw new Error("riskOverlay must be null or an object");
+  }
+  return {
+    regimeState: asString(value.regimeState, "riskOverlay.regimeState"),
+    regimeDescription:
+      value.regimeDescription === undefined
+        ? ""
+        : asOptionalString(value.regimeDescription, "riskOverlay.regimeDescription") ?? "",
+    volLevel: asString(value.volLevel, "riskOverlay.volLevel"),
+    volTrend: asString(value.volTrend, "riskOverlay.volTrend"),
+    volDescription:
+      value.volDescription === undefined
+        ? ""
+        : asOptionalString(value.volDescription, "riskOverlay.volDescription") ?? "",
+    signalConfidence:
+      value.signalConfidence === undefined
+        ? null
+        : asOptionalString(value.signalConfidence, "riskOverlay.signalConfidence"),
+    signalReasons:
+      value.signalReasons === undefined
+        ? []
+        : asStringArray(value.signalReasons, "riskOverlay.signalReasons"),
+    signalReasonLabels:
+      value.signalReasonLabels === undefined
+        ? []
+        : asStringArray(value.signalReasonLabels, "riskOverlay.signalReasonLabels"),
+    overlayGateDecision:
+      value.overlayGateDecision === undefined
+        ? "research_only"
+        : asOptionalString(value.overlayGateDecision, "riskOverlay.overlayGateDecision") ?? "research_only",
   };
 }
 
@@ -447,6 +486,7 @@ export function parseBriefData(value: unknown): BriefData {
   return {
     meta: parseMeta(value.meta),
     marketSnapshot: parseMarketSnapshot(value.marketSnapshot),
+    riskOverlay: parseRiskOverlay(value.riskOverlay),
     aiJudgment: parseAIJudgment(value.aiJudgment),
     topicSummaries: value.topicSummaries.map(parseTopicSummary),
     techStocks: value.techStocks.map(parseTechStock),

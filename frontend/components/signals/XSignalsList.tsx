@@ -72,7 +72,7 @@ export function XSignalsList({
 
             <div className="mt-6 space-y-3 border-t border-white/10 pt-5">
               <div>
-                <span className="label-meta text-white/28">시장 함의</span>
+                <span className="label-meta text-white/28">왜 중요한가</span>
                 <p className="mt-2 text-[12px] leading-6 text-white/64">{signal.impact}</p>
               </div>
 

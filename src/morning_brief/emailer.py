@@ -56,7 +56,7 @@ PROJECT_GITHUB_URL = "https://github.com/froggy-0/news"
 DEFAULT_UNSUBSCRIBE_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30
 UNSUBSCRIBE_TOKEN_VERSION = 1
 NONE_LIKE_TEXTS = {"", "none", "null", "n/a", "na"}
-_HERO_KOSPI_HINTS = ("코스피", "코스닥", "한국장", "국내 증시")
+_HERO_KOSPI_HINTS = ("BTC 투자 심리", "크립토 돈 흐름", "시장 참고 흐름", "성장주 참고")
 _SOURCE_AGG_HINTS = ("집계", "큐레이션", "요약 출처", "aggregated", "summary")
 _REQUIRED_SES_REGION = DEFAULT_SES_REGION
 _REQUIRED_SES_SENDER = DEFAULT_SES_SENDER
@@ -77,7 +77,7 @@ _SNAPSHOT_LABELS = {
     "dxy": "DXY",
     "vix": "VIX",
     "usdkrw": "원/달러",
-    "nq_futures": "나스닥 선물",
+    "nq_futures": "성장주 참고 지표",
     "btc": "BTC 현물",
 }
 
@@ -770,7 +770,8 @@ def _build_macro_rows(sections: list[_EmailSection]) -> list[tuple[str, Markup]]
     else:
         macro_keywords = ("미국 10년물", "달러 인덱스", "VIX", "공포탐욕", "US10Y", "DXY")
         macro_section = next(
-            (section for section in sections if section.heading == "거시 환경"), None
+            (section for section in sections if section.heading == "크립토 외부환경 Dashboard"),
+            None,
         )
         if macro_section is not None:
             candidate_lines.extend(_first_metric_lines(macro_section.groups["metrics"][1], limit=4))
@@ -864,8 +865,8 @@ def _build_news_source_items(
 
 def _market_source_lines() -> list[str]:
     return [
-        "거시 지표: FRED, yfinance",
-        "미국 지수/기술주: KIS",
+        "크립토 돈 흐름: FRED, yfinance",
+        "전통시장 참고 지표: KIS",
         "비트코인: CoinGecko",
         "X 시그널: Grok",
     ]
@@ -1275,7 +1276,13 @@ def _extract_index_change(packet: dict, ticker: str) -> str:
     for idx in packet.get("us_indices", []):
         if idx.get("ticker") == ticker:
             change = idx.get("change_pct", 0)
-            label = "S&P" if ticker == "SPY" else "나스닥" if ticker == "QQQ" else ticker
+            label = (
+                "BTC 참고 지표"
+                if ticker == "SPY"
+                else "성장주 참고 지표"
+                if ticker == "QQQ"
+                else ticker
+            )
             return f"{label} {change:+.1f}%"
     return ""
 
@@ -1416,8 +1423,8 @@ def _split_hero(raw: str) -> tuple[str, list[str]]:
 
 
 def _stock_indices_from_packet(packet: dict) -> list[StockItem]:
-    """packet['us_indices']에서 주요 지수 StockItem 리스트 생성."""
-    _LABEL = {"SPY": "S&P 500", "QQQ": "나스닥"}
+    """packet['us_indices']에서 전통시장 참고 지표 StockItem 리스트 생성."""
+    _LABEL = {"SPY": "BTC 참고 지표", "QQQ": "성장주 참고 지표"}
     items: list[StockItem] = []
     for idx in packet.get("us_indices", []):
         ticker = idx.get("ticker", "")
@@ -1439,7 +1446,7 @@ def _stock_indices_from_packet(packet: dict) -> list[StockItem]:
 
 
 def _stock_tech_from_packet(packet: dict) -> list[StockItem]:
-    """packet['tech_stocks']에서 빅테크 StockItem 리스트 생성."""
+    """packet['tech_stocks']에서 크립토 연관주 StockItem 리스트 생성."""
     items: list[StockItem] = []
     for s in packet.get("tech_stocks", []):
         ticker = s.get("ticker", "")

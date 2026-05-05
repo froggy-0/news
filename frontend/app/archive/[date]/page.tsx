@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { BriefBody } from "@/components/brief/BriefBody";
 import { JudgmentBlock } from "@/components/brief/JudgmentBlock";
+import { RiskOverlayPanel } from "@/components/brief/RiskOverlayPanel";
 import { TopicGrid } from "@/components/brief/TopicGrid";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { CryptoPulseBoard } from "@/components/market/CryptoPulseBoard";
@@ -46,6 +47,7 @@ export default async function ArchiveDetailPage({
           summarySupport={brief.aiJudgment.summarySupport}
           issueDate={brief.meta.date}
         />
+        <RiskOverlayPanel overlay={brief.riskOverlay} />
         <CryptoPulseBoard snapshot={brief.marketSnapshot} indicators={brief.cryptoIndicators} bitcoin={brief.bitcoin} />
         <BriefBody body={brief.aiJudgment.body} date={brief.meta.date} />
         <TopicGrid items={brief.topicSummaries} />

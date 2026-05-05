@@ -51,7 +51,7 @@ function formatKeyMetric(value: string | null | undefined): string | null {
   return normalized;
 }
 
-function displayRelatedStocks(value: string[] | null | undefined): string[] {
+function displayRelatedAssets(value: string[] | null | undefined): string[] {
   if (!value?.length) {
     return [];
   }
@@ -97,7 +97,7 @@ export function TopicGrid({
       item,
       summary: displaySummary(item),
       keyMetric: formatKeyMetric(item.keyMetric),
-      relatedStocks: displayRelatedStocks(item.relatedStocks),
+      relatedAssets: displayRelatedAssets(item.relatedStocks),
     }))
     .filter((entry) => entry.summary);
 
@@ -122,14 +122,14 @@ export function TopicGrid({
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="flex flex-col gap-1">
             <h2 className="section-title">오늘의 주요 테마</h2>
-            <span className="eyebrow">Contextual Analysis</span>
+            <span className="eyebrow">흐름 연결</span>
           </div>
           <p className="max-w-md text-[15px] leading-7 text-white/66">
-            오늘 장을 해석하는 핵심 축을 먼저 제시하고, 그 뒤에 숫자와 기사로 내려갑니다.
+            오늘 비트코인 흐름을 움직인 이유를 먼저 보고, 필요한 숫자와 기사로 확인합니다.
           </p>
         </div>
         <div className="grid gap-6 md:grid-cols-2">
-          {visibleItems.map(({ item, summary, keyMetric, relatedStocks }, index) => (
+          {visibleItems.map(({ item, summary, keyMetric, relatedAssets }, index) => (
             <article
               key={item.topic}
               className="card-reading card-family-reading theme-card group relative overflow-hidden rounded-[var(--card-radius-reading)] transition-colors duration-300"
@@ -154,13 +154,13 @@ export function TopicGrid({
                 </div>
 
                 <div className="space-y-3">
-                  <span className="label-meta text-white/30">전략적 맥락</span>
+                  <span className="label-meta text-white/30">왜 중요한가</span>
                   <p className="card-reading-copy theme-card-copy text-white/90 transition-colors group-hover:text-white text-[15px] leading-8">
                     {summary}
                   </p>
                 </div>
 
-                {(keyMetric || relatedStocks.length > 0) && (
+                {(keyMetric || relatedAssets.length > 0) && (
                   <div className="flex flex-col gap-3 border-t border-white/8 pt-4">
                     {keyMetric ? (
                       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -169,10 +169,10 @@ export function TopicGrid({
                       </div>
                     ) : null}
 
-                    {relatedStocks.length > 0 ? (
+                    {relatedAssets.length > 0 ? (
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                        <span className="label-meta text-white/24">Related</span>
-                        {relatedStocks.map((stock) => (
+                        <span className="label-meta text-white/24">연관 자산</span>
+                        {relatedAssets.map((stock) => (
                           <span
                             key={stock}
                             className="card-reading-meta text-[10px] font-mono uppercase tracking-[0.16em] text-white/44"
