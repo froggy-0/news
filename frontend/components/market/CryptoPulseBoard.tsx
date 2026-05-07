@@ -387,8 +387,9 @@ function EtfDetail({
   if (!etf && (!etfHistory || etfHistory.length === 0)) return null;
 
   return (
-    <div className="rounded-xl border border-white/8 bg-black/20 p-5 md:p-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+    <div className="md:rounded-xl md:border md:border-white/8 md:bg-black/20 md:p-6">
+      {/* header — needs its own padding on mobile since parent card is removed */}
+      <div className="flex flex-col gap-4 px-4 pb-3 pt-5 md:flex-row md:items-start md:justify-between md:p-0">
         <div className="space-y-1">
           <p className="label-meta text-white/42">공식 ETF 스냅샷</p>
           <p className="text-[13px] leading-6 text-white/46">
@@ -403,13 +404,11 @@ function EtfDetail({
         )}
       </div>
 
-      {/* 유입 히스토리 차트 */}
-      {etfHistory && etfHistory.length > 1 && (
-        <EtfInflowChart history={etfHistory} />
-      )}
+      {/* 유입 히스토리 차트 — full-width on mobile */}
+      {etfHistory && etfHistory.length > 1 && <EtfInflowChart history={etfHistory} />}
 
       {etf && etf.issuers.length > 0 && (
-        <div className="mt-5 overflow-hidden rounded-xl border border-white/8 bg-black/20">
+        <div className="mx-4 mt-5 overflow-hidden rounded-xl border border-white/8 bg-black/20 md:mx-0">
           <div
             className="grid border-b border-white/8 px-4 py-2"
             style={{ gridTemplateColumns: "1fr 1fr 1fr" }}
@@ -563,8 +562,10 @@ export function CryptoPulseBoard({
           </div>
         )}
 
-        {/* ── 4. ETF Detail ──────────────────────────────────────────── */}
-        <EtfDetail etf={bitcoin.etf} etfHistory={etfHistory} />
+        {/* ── 4. ETF Detail — breakout on mobile for full-width chart ── */}
+        <div className="-mx-6 md:mx-0">
+          <EtfDetail etf={bitcoin.etf} etfHistory={etfHistory} />
+        </div>
       </div>
     </RevealSection>
   );
