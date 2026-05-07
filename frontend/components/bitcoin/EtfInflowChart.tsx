@@ -11,22 +11,14 @@ const GREEN = "#0ecb81";
 const RED = "#f6465d";
 const YELLOW = "#f0b90b";
 const MUTED = "rgba(255,255,255,0.36)";
-const CHART_HEIGHT_DESKTOP = 240;
-const CHART_HEIGHT_MOBILE = 290;
+const CHART_HEIGHT_DESKTOP = 320;
+const CHART_HEIGHT_MOBILE = 360;
 const RANGE_OPTIONS: Array<{ key: RangeKey; days: number | null }> = [
   { key: "7D", days: 7 },
   { key: "14D", days: 14 },
   { key: "30D", days: 30 },
   { key: "ALL", days: null },
 ];
-
-function initialRange(length: number): RangeKey {
-  return length >= 14 ? "14D" : "ALL";
-}
-
-function rangeEnabled(length: number, days: number | null): boolean {
-  return days === null || length >= days;
-}
 
 function selectedSlice(history: EtfHistoryPoint[], range: RangeKey): EtfHistoryPoint[] {
   const option = RANGE_OPTIONS.find((item) => item.key === range);
@@ -64,6 +56,34 @@ function flowTone(value: number | null | undefined): string {
   return value > 0 ? GREEN : RED;
 }
 
+/* TradingView-style overlay legend shown at top-left of chart on mobile */
+function OverlayLegend({ point }: { point: EtfHistoryPoint | null }) {
+  if (!point) return null;
+  const delta = point.deltaBtc;
+  return (
+    <div className="pointer-events-none absolute left-3 top-3 z-20 flex flex-col gap-0.5 rounded bg-[#181a20]/85 px-2.5 py-2 backdrop-blur-sm">
+      <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/42">
+        {formatDate(point.date)}
+      </span>
+      <div className="flex items-center gap-1.5">
+        <span
+          className="h-1.5 w-2.5 rounded-full"
+          style={{ background: delta ? (delta > 0 ? GREEN : RED) : MUTED }}
+        />
+        <span className="font-mono text-[10px] font-bold" style={{ color: flowTone(delta) }}>
+          {formatSignedBtc(delta)}
+        </span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <span className="h-1.5 w-2.5 rounded-full" style={{ background: YELLOW }} />
+        <span className="font-mono text-[10px] font-bold" style={{ color: YELLOW }}>
+          {formatBtcAmount(point.totalBtc)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function TooltipCard({
   point,
   visible,
@@ -97,7 +117,10 @@ function TooltipRow({ label, value, color }: { label: string; value: string; col
   return (
     <div className="flex items-center justify-between gap-4">
       <span className="text-[11px] leading-5 text-white/42">{label}</span>
-      <span className="font-mono text-[11px] font-bold leading-5 text-white/78" style={color ? { color } : undefined}>
+      <span
+        className="font-mono text-[11px] font-bold leading-5 text-white/78"
+        style={color ? { color } : undefined}
+      >
         {value}
       </span>
     </div>
@@ -108,7 +131,10 @@ function SummaryCard({ label, value, tone }: { label: string; value: string; ton
   return (
     <div className="rounded-md border border-[#2b3139] bg-[#181a20] px-3.5 py-3">
       <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#848e9c]">{label}</p>
-      <p className="mt-1.5 font-mono text-[13px] font-bold text-[#eaecef]" style={tone ? { color: tone } : undefined}>
+      <p
+        className="mt-1.5 font-mono text-[13px] font-bold text-[#eaecef]"
+        style={tone ? { color: tone } : undefined}
+      >
         {value}
       </p>
     </div>
@@ -121,10 +147,11 @@ export function EtfInflowChart({ history }: { history: EtfHistoryPoint[] }) {
   const chartRef = useRef<ReturnType<LCModule["createChart"]> | null>(null);
   const frameRef = useRef<number | null>(null);
 
-  const [range, setRange] = useState<RangeKey>(() => initialRange(history.length));
+  const [range, setRange] = useState<RangeKey>("14D");
   const [hasEntered, setHasEntered] = useState(false);
   const [chartReady, setChartReady] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [hoveredPoint, setHoveredPoint] = useState<EtfHistoryPoint | null>(null);
   const [tooltip, setTooltip] = useState<{
     visible: boolean;
     point: EtfHistoryPoint | null;
@@ -140,13 +167,6 @@ export function EtfInflowChart({ history }: { history: EtfHistoryPoint[] }) {
   }, []);
 
   const chartHeight = isMobile ? CHART_HEIGHT_MOBILE : CHART_HEIGHT_DESKTOP;
-
-  useEffect(() => {
-    const selectedOption = RANGE_OPTIONS.find((item) => item.key === range);
-    if (selectedOption && !rangeEnabled(history.length, selectedOption.days)) {
-      setRange(initialRange(history.length));
-    }
-  }, [history.length, range]);
 
   useEffect(() => {
     const node = rootRef.current;
@@ -190,7 +210,13 @@ export function EtfInflowChart({ history }: { history: EtfHistoryPoint[] }) {
   );
 
   useEffect(() => {
-    if (!hasEntered || !containerRef.current || histogramData.length === 0 || holdingData.length < 2) return;
+    if (
+      !hasEntered ||
+      !containerRef.current ||
+      histogramData.length === 0 ||
+      holdingData.length < 2
+    )
+      return;
 
     let cancelled = false;
     let resizeObserver: ResizeObserver | null = null;
@@ -212,18 +238,18 @@ export function EtfInflowChart({ history }: { history: EtfHistoryPoint[] }) {
           fontSize: 10,
         },
         grid: {
-          vertLines: { color: "rgba(132,142,156,0.08)" },
+          vertLines: { color: "transparent" },
           horzLines: { color: "rgba(132,142,156,0.08)" },
         },
         crosshair: {
           vertLine: {
-            color: "rgba(240,185,11,0.42)",
+            color: "rgba(240,185,11,0.52)",
             width: 1,
             style: 3,
             labelBackgroundColor: "#1e2329",
           },
           horzLine: {
-            color: mobile ? "transparent" : "rgba(132,142,156,0.22)",
+            color: "rgba(132,142,156,0.22)",
             width: 1,
             style: 3,
             labelBackgroundColor: "#1e2329",
@@ -294,11 +320,13 @@ export function EtfInflowChart({ history }: { history: EtfHistoryPoint[] }) {
 
       chart.subscribeCrosshairMove((param) => {
         if (!param.point || !param.time) {
+          setHoveredPoint(null);
           setTooltip((current) => ({ ...current, visible: false }));
           return;
         }
         const isoDate = typeof param.time === "string" ? param.time : String(param.time);
         const matched = visibleHistory.find((point) => point.date === isoDate) ?? null;
+        setHoveredPoint(matched);
         const rawX = param.point.x;
         const tipWidth = 184;
         const tipX =
@@ -327,6 +355,7 @@ export function EtfInflowChart({ history }: { history: EtfHistoryPoint[] }) {
       chartRef.current?.remove();
       chartRef.current = null;
       frameRef.current = null;
+      setHoveredPoint(null);
       setTooltip((current) => ({ ...current, visible: false }));
     };
   }, [hasEntered, histogramData, holdingData, visibleHistory, isMobile, chartHeight]);
@@ -337,11 +366,15 @@ export function EtfInflowChart({ history }: { history: EtfHistoryPoint[] }) {
   const latestDelta = latest?.deltaBtc ?? null;
   const periodFlow = visibleHistory.reduce((sum, point) => sum + (point.deltaBtc ?? 0), 0);
   const periodTone = flowTone(periodFlow);
+  const displayPoint = hoveredPoint ?? latest ?? null;
 
   return (
-    <div ref={rootRef} className="mt-6 rounded-lg border border-[#2b3139] bg-[#0b0e11] shadow-[0_22px_54px_rgba(0,0,0,0.38)]">
+    <div
+      ref={rootRef}
+      className="mt-0 md:mt-6 md:rounded-lg md:border md:border-[#2b3139] md:bg-[#0b0e11] md:shadow-[0_22px_54px_rgba(0,0,0,0.38)]"
+    >
       {/* 헤더 + 필터 */}
-      <div className="flex flex-col gap-3 p-4 md:flex-row md:items-end md:justify-between md:p-5">
+      <div className="flex flex-col gap-3 px-4 pb-3 pt-4 md:flex-row md:items-end md:justify-between md:px-5 md:pt-5">
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#848e9c]">
             ETF Flow Timeseries
@@ -352,22 +385,29 @@ export function EtfInflowChart({ history }: { history: EtfHistoryPoint[] }) {
         </div>
         <div className="flex flex-wrap gap-1.5">
           {RANGE_OPTIONS.map((option) => {
-            const disabled = !rangeEnabled(history.length, option.days);
             const active = range === option.key;
+            const hasPartialData = option.days !== null && history.length < option.days;
             return (
               <button
                 key={option.key}
                 type="button"
-                disabled={disabled}
                 aria-pressed={active}
                 onClick={() => setRange(option.key)}
-                className={`h-8 min-w-12 rounded-md border px-3 font-mono text-[11px] font-bold transition-colors duration-200 ${
+                style={{ touchAction: "manipulation" }}
+                className={`relative h-10 min-w-12 cursor-pointer rounded-md border px-3 font-mono text-[11px] font-bold transition-colors duration-200 ${
                   active
                     ? "border-[#f0b90b] bg-[#f0b90b] text-black"
                     : "border-[#2b3139] bg-[#181a20] text-[#848e9c] hover:border-[#f0b90b]/60 hover:text-[#eaecef]"
-                } disabled:cursor-not-allowed disabled:border-[#2b3139] disabled:bg-[#111418] disabled:text-[#474d57]`}
+                }`}
               >
                 {option.key}
+                {hasPartialData && (
+                  <span
+                    className={`ml-1 font-mono text-[8px] ${active ? "text-black/60" : "text-[#474d57]"}`}
+                  >
+                    {history.length}d
+                  </span>
+                )}
               </button>
             );
           })}
@@ -387,19 +427,32 @@ export function EtfInflowChart({ history }: { history: EtfHistoryPoint[] }) {
           <ChartSkeleton height={chartHeight} />
         )}
         {hasEntered && !chartReady ? <ChartSkeleton height={chartHeight} overlay /> : null}
-        <TooltipCard point={tooltip.point} visible={tooltip.visible} x={tooltip.x} />
+        {/* TradingView-style overlay legend on mobile (price scales hidden) */}
+        {isMobile && <OverlayLegend point={displayPoint} />}
+        {/* Floating tooltip on desktop */}
+        {!isMobile && (
+          <TooltipCard point={tooltip.point} visible={tooltip.visible} x={tooltip.x} />
+        )}
       </div>
 
       {/* 범례 + 서머리 — 차트 아래 */}
-      <div className="p-4 md:p-5">
+      <div className="px-4 pb-4 pt-3 md:px-5 md:pb-5">
         <div className="flex flex-wrap gap-x-5 gap-y-2">
           <LegendDot color={GREEN} label="일별 유입" />
           <LegendDot color={RED} label="일별 유출" />
           <LegendDot color={YELLOW} label="누적 보유량" />
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
-          <SummaryCard label="오늘 순유입" value={formatSignedBtc(latestDelta)} tone={flowTone(latestDelta)} />
-          <SummaryCard label="기간 순유입" value={formatSignedBtc(periodFlow)} tone={periodTone} />
+          <SummaryCard
+            label="오늘 순유입"
+            value={formatSignedBtc(latestDelta)}
+            tone={flowTone(latestDelta)}
+          />
+          <SummaryCard
+            label="기간 순유입"
+            value={formatSignedBtc(periodFlow)}
+            tone={periodTone}
+          />
           <SummaryCard label="총 보유 BTC" value={formatBtcAmount(latest?.totalBtc)} />
           <SummaryCard label="총 AUM" value={formatAum(latest?.totalAumUsd)} />
         </div>
@@ -408,7 +461,13 @@ export function EtfInflowChart({ history }: { history: EtfHistoryPoint[] }) {
   );
 }
 
-function ChartSkeleton({ overlay = false, height = CHART_HEIGHT_DESKTOP }: { overlay?: boolean; height?: number }) {
+function ChartSkeleton({
+  overlay = false,
+  height = CHART_HEIGHT_DESKTOP,
+}: {
+  overlay?: boolean;
+  height?: number;
+}) {
   return (
     <div
       className={`${overlay ? "absolute inset-0 z-10" : "relative"} flex items-center justify-center bg-[#0b0e11]`}
