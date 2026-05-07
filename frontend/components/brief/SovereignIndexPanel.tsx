@@ -198,9 +198,10 @@ export function SovereignIndexPanel({
     return null;
   }
 
-  const { score, labelKo, zone, qualityStatus } = sovereignIndex;
+  const { score, labelKo, zone, qualityStatus, pcInterpretation, todayScoreMethod, trackAWfAvgHitRate, trackAWfFolds } = sovereignIndex;
   const cfg = ZONE_CONFIG[zone];
   const isDegraded = qualityStatus !== "ok";
+  const isOos = todayScoreMethod === "oos_expanding";
 
   return (
     <section className="border-b border-white/10 px-6 py-10 md:px-20">
@@ -247,8 +248,31 @@ export function SovereignIndexPanel({
                   <span className="text-sm font-bold" style={{ color: cfg.color }}>
                     {labelKo}
                   </span>
+                  {isOos && (
+                    <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/30">
+                      OOS
+                    </span>
+                  )}
                 </div>
               </div>
+
+              {trackAWfAvgHitRate != null && (
+                <div className="mt-4 flex items-center gap-2">
+                  <span className="font-mono text-[10px] text-white/36">T+7 OOS Hit Rate</span>
+                  <span className="font-mono text-[11px] font-semibold text-white/70">
+                    {(trackAWfAvgHitRate * 100).toFixed(1)}%
+                  </span>
+                  {trackAWfFolds != null && (
+                    <span className="font-mono text-[9px] text-white/28">({trackAWfFolds} folds)</span>
+                  )}
+                </div>
+              )}
+
+              {pcInterpretation && (
+                <p className="mt-4 font-mono text-[10px] leading-relaxed text-white/40">
+                  {pcInterpretation}
+                </p>
+              )}
 
               {isDegraded && (
                 <p className="mt-4 text-[11px] leading-relaxed text-white/36">

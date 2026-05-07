@@ -230,6 +230,43 @@ _SOVEREIGN_LABEL_MAP: dict[str, str] = {
     "neutral": "중립",
 }
 
+_FEATURE_LABEL_KO: dict[str, str] = {
+    "fng_value_lag1": "fng",
+    "news_sentiment_mean_lag1": "뉴스감성",
+    "vix_lag1": "VIX",
+    "vix_regime_score_lag1": "VIX레짐",
+    "btc_long_short_ratio_lag1": "롱숏비",
+    "funding_rate_lag1": "펀딩비",
+    "etf_net_inflow_usd_lag1": "ETF유입",
+    "volume_change_pct_lag1": "거래량",
+    "btc_realized_vol_20d_lag1": "실현변동성",
+}
+
+
+def _interpret_pca_loadings(loadings: dict[str, float]) -> str:
+    """PC1 loading 상위 기여 피처를 바탕으로 1문장 경제적 해석을 반환한다.
+
+    loadings가 비어 있으면 빈 문자열 반환.
+    """
+    if not loadings:
+        return ""
+    sorted_l = sorted(loadings.items(), key=lambda x: abs(x[1]), reverse=True)
+    top = sorted_l[:4]
+    pos = [(f, v) for f, v in top if v > 0]
+    neg = [(f, v) for f, v in top if v < 0]
+
+    def fmt(items: list[tuple[str, float]]) -> str:
+        return "·".join(f"{_FEATURE_LABEL_KO.get(f, f)}({v:+.2f})" for f, v in items[:2])
+
+    parts: list[str] = []
+    if pos:
+        parts.append(f"{fmt(pos)} 강세")
+    if neg:
+        parts.append(f"{fmt(neg)} 완화")
+    if not parts:
+        return ""
+    return f"PC1: {', '.join(parts)} 주도의 위험선호 복합 지수"
+
 
 def _build_sovereign_index(payload: dict[str, Any]) -> dict[str, Any] | None:
     """full_hybrid_index_score 기반 Sovereign Index 최상위 블록."""
@@ -243,6 +280,7 @@ def _build_sovereign_index(payload: dict[str, Any]) -> dict[str, Any] | None:
     signal_label = str(full_raw.get("signal_label", "neutral"))
     label_ko = _SOVEREIGN_LABEL_MAP.get(signal_label, "중립")
     quality_status = str(full_raw.get("quality_status", "degraded"))
+    today_score_method = str(full_raw.get("today_score_method", "unknown"))
 
     if score >= 70:
         zone = "bull"
@@ -251,12 +289,36 @@ def _build_sovereign_index(payload: dict[str, Any]) -> dict[str, Any] | None:
     else:
         zone = "neutral"
 
+    # PC1 loading 경제적 해석 (full model 기준)
+    loadings_raw = _as_record(full_raw.get("pca_summary")).get("loadings") or {}
+    loadings: dict[str, float] = {
+        k: float(v) for k, v in loadings_raw.items() if isinstance(v, (int, float))
+    }
+    pc_interpretation = _interpret_pca_loadings(loadings)
+
+    # Track A walk-forward avg hit rate (T+7 primary horizon, out-of-sample)
+    wf_horizons = _as_record(payload.get("walk_forward_horizons"))
+    wf_full_7 = _as_record(_as_record(wf_horizons.get("full")).get("7"))
+    wf_avg_hit_rate: float | None = None
+    wf_folds: int | None = None
+    if wf_full_7:
+        raw_hr = wf_full_7.get("avg_hit_rate")
+        raw_folds_list = wf_full_7.get("folds")
+        if isinstance(raw_hr, (int, float)) and not (raw_hr != raw_hr):  # exclude NaN
+            wf_avg_hit_rate = round(float(raw_hr), 4)
+        if isinstance(raw_folds_list, list):
+            wf_folds = len(raw_folds_list)
+
     return {
         "score": score,
         "signalLabel": signal_label,
         "labelKo": label_ko,
         "zone": zone,
         "qualityStatus": quality_status,
+        "todayScoreMethod": today_score_method,
+        "pcInterpretation": pc_interpretation or None,
+        "trackAWfAvgHitRate": wf_avg_hit_rate,
+        "trackAWfFolds": wf_folds,
     }
 
 
