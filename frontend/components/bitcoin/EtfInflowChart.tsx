@@ -11,7 +11,8 @@ const GREEN = "#0ecb81";
 const RED = "#f6465d";
 const YELLOW = "#f0b90b";
 const MUTED = "rgba(255,255,255,0.36)";
-const CHART_HEIGHT = 240;
+const CHART_HEIGHT_DESKTOP = 240;
+const CHART_HEIGHT_MOBILE = 290;
 const RANGE_OPTIONS: Array<{ key: RangeKey; days: number | null }> = [
   { key: "7D", days: 7 },
   { key: "14D", days: 14 },
@@ -123,11 +124,22 @@ export function EtfInflowChart({ history }: { history: EtfHistoryPoint[] }) {
   const [range, setRange] = useState<RangeKey>(() => initialRange(history.length));
   const [hasEntered, setHasEntered] = useState(false);
   const [chartReady, setChartReady] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const [tooltip, setTooltip] = useState<{
     visible: boolean;
     point: EtfHistoryPoint | null;
     x: number;
   }>({ visible: false, point: null, x: 0 });
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    setIsMobile(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
+  const chartHeight = isMobile ? CHART_HEIGHT_MOBILE : CHART_HEIGHT_DESKTOP;
 
   useEffect(() => {
     const selectedOption = RANGE_OPTIONS.find((item) => item.key === range);
@@ -188,9 +200,10 @@ export function EtfInflowChart({ history }: { history: EtfHistoryPoint[] }) {
       if (cancelled || !containerRef.current) return;
 
       const container = containerRef.current;
+      const mobile = container.clientWidth < 640;
       const chart = lc.createChart(container, {
         width: container.clientWidth,
-        height: CHART_HEIGHT,
+        height: chartHeight,
         autoSize: false,
         layout: {
           background: { color: "#0b0e11" },
@@ -210,29 +223,35 @@ export function EtfInflowChart({ history }: { history: EtfHistoryPoint[] }) {
             labelBackgroundColor: "#1e2329",
           },
           horzLine: {
-            color: "rgba(132,142,156,0.22)",
+            color: mobile ? "transparent" : "rgba(132,142,156,0.22)",
             width: 1,
             style: 3,
             labelBackgroundColor: "#1e2329",
+            labelVisible: !mobile,
           },
         },
         leftPriceScale: {
-          visible: true,
+          visible: !mobile,
           borderColor: "rgba(132,142,156,0.14)",
           textColor: "rgba(132,142,156,0.72)",
           scaleMargins: { top: 0.18, bottom: 0.2 },
         },
         rightPriceScale: {
-          visible: true,
+          visible: !mobile,
           borderColor: "rgba(132,142,156,0.14)",
           textColor: "rgba(132,142,156,0.72)",
           scaleMargins: { top: 0.12, bottom: 0.28 },
         },
         timeScale: {
           borderColor: "rgba(132,142,156,0.14)",
-          timeVisible: false,
+          timeVisible: true,
           fixLeftEdge: true,
           fixRightEdge: true,
+          tickMarkFormatter: (time: unknown) => {
+            const iso = typeof time === "string" ? time : String(time);
+            const [, mm, dd] = iso.split("-");
+            return `${mm}/${dd}`;
+          },
         },
         handleScroll: false,
         handleScale: false,
@@ -281,14 +300,20 @@ export function EtfInflowChart({ history }: { history: EtfHistoryPoint[] }) {
         const isoDate = typeof param.time === "string" ? param.time : String(param.time);
         const matched = visibleHistory.find((point) => point.date === isoDate) ?? null;
         const rawX = param.point.x;
-        const tipX = rawX + 200 > container.clientWidth ? Math.max(12, rawX - 196) : rawX + 14;
+        const tipWidth = 184;
+        const tipX =
+          rawX + tipWidth + 14 > container.clientWidth
+            ? Math.max(8, rawX - tipWidth - 8)
+            : rawX + 14;
         setTooltip({ visible: true, point: matched, x: tipX });
       });
 
       chartRef.current = chart;
       resizeObserver = new ResizeObserver(() => {
         if (containerRef.current && chartRef.current) {
-          chartRef.current.applyOptions({ width: containerRef.current.clientWidth });
+          const w = containerRef.current.clientWidth;
+          const h = w < 640 ? CHART_HEIGHT_MOBILE : CHART_HEIGHT_DESKTOP;
+          chartRef.current.applyOptions({ width: w, height: h });
           chartRef.current.timeScale().fitContent();
         }
       });
@@ -304,7 +329,7 @@ export function EtfInflowChart({ history }: { history: EtfHistoryPoint[] }) {
       frameRef.current = null;
       setTooltip((current) => ({ ...current, visible: false }));
     };
-  }, [hasEntered, histogramData, holdingData, visibleHistory]);
+  }, [hasEntered, histogramData, holdingData, visibleHistory, isMobile, chartHeight]);
 
   if (history.length < 2 || histogramData.length === 0) return null;
 
@@ -314,14 +339,15 @@ export function EtfInflowChart({ history }: { history: EtfHistoryPoint[] }) {
   const periodTone = flowTone(periodFlow);
 
   return (
-    <div ref={rootRef} className="mt-6 rounded-lg border border-[#2b3139] bg-[#0b0e11] p-4 shadow-[0_22px_54px_rgba(0,0,0,0.38)] md:p-5">
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <div ref={rootRef} className="mt-6 rounded-lg border border-[#2b3139] bg-[#0b0e11] shadow-[0_22px_54px_rgba(0,0,0,0.38)]">
+      {/* 헤더 + 필터 */}
+      <div className="flex flex-col gap-3 p-4 md:flex-row md:items-end md:justify-between md:p-5">
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#848e9c]">
             ETF Flow Timeseries
           </p>
           <p className="mt-1 text-sm font-semibold leading-6 text-[#eaecef]">
-            일별 순유입과 누적 보유량을 함께 봅니다.
+            일별 순유입과 누적 보유량
           </p>
         </div>
         <div className="flex flex-wrap gap-1.5">
@@ -348,42 +374,45 @@ export function EtfInflowChart({ history }: { history: EtfHistoryPoint[] }) {
         </div>
       </div>
 
-      <div className="mt-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-        <SummaryCard label="오늘 순유입" value={formatSignedBtc(latestDelta)} tone={flowTone(latestDelta)} />
-        <SummaryCard label="선택 기간 순유입" value={formatSignedBtc(periodFlow)} tone={periodTone} />
-        <SummaryCard label="총 보유 BTC" value={formatBtcAmount(latest?.totalBtc)} />
-        <SummaryCard label="총 AUM" value={formatAum(latest?.totalAumUsd)} />
-      </div>
-
-      <div className="relative mt-4 overflow-hidden rounded-lg border border-[#2b3139] bg-[#0b0e11]">
+      {/* 차트 — 모바일에서 좌우 패딩 없이 full-width */}
+      <div className="relative overflow-hidden border-t border-[#2b3139] bg-[#0b0e11]">
         <div className="absolute inset-x-0 top-0 z-10 h-px bg-gradient-to-r from-transparent via-[#f0b90b]/70 to-transparent" />
         {hasEntered ? (
           <div
             ref={containerRef}
             className={`w-full transition-all duration-300 ${chartReady ? "translate-y-0 opacity-100" : "translate-y-2 opacity-40"}`}
-            style={{ height: CHART_HEIGHT }}
+            style={{ height: chartHeight }}
           />
         ) : (
-          <ChartSkeleton />
+          <ChartSkeleton height={chartHeight} />
         )}
-        {hasEntered && !chartReady ? <ChartSkeleton overlay /> : null}
+        {hasEntered && !chartReady ? <ChartSkeleton height={chartHeight} overlay /> : null}
         <TooltipCard point={tooltip.point} visible={tooltip.visible} x={tooltip.x} />
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
-        <LegendDot color={GREEN} label="일별 유입" />
-        <LegendDot color={RED} label="일별 유출" />
-        <LegendDot color={YELLOW} label="누적 보유량" />
+      {/* 범례 + 서머리 — 차트 아래 */}
+      <div className="p-4 md:p-5">
+        <div className="flex flex-wrap gap-x-5 gap-y-2">
+          <LegendDot color={GREEN} label="일별 유입" />
+          <LegendDot color={RED} label="일별 유출" />
+          <LegendDot color={YELLOW} label="누적 보유량" />
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <SummaryCard label="오늘 순유입" value={formatSignedBtc(latestDelta)} tone={flowTone(latestDelta)} />
+          <SummaryCard label="기간 순유입" value={formatSignedBtc(periodFlow)} tone={periodTone} />
+          <SummaryCard label="총 보유 BTC" value={formatBtcAmount(latest?.totalBtc)} />
+          <SummaryCard label="총 AUM" value={formatAum(latest?.totalAumUsd)} />
+        </div>
       </div>
     </div>
   );
 }
 
-function ChartSkeleton({ overlay = false }: { overlay?: boolean }) {
+function ChartSkeleton({ overlay = false, height = CHART_HEIGHT_DESKTOP }: { overlay?: boolean; height?: number }) {
   return (
     <div
       className={`${overlay ? "absolute inset-0 z-10" : "relative"} flex items-center justify-center bg-[#0b0e11]`}
-      style={{ height: CHART_HEIGHT }}
+      style={{ height }}
       aria-hidden="true"
     >
       <div className="h-full w-full animate-pulse bg-[linear-gradient(90deg,rgba(30,35,41,0.35)_0%,rgba(43,49,57,0.55)_50%,rgba(30,35,41,0.35)_100%)]" />
