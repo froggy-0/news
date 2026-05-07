@@ -50,7 +50,7 @@ export default async function ArchiveDetailPage({
           issueDate={brief.meta.date}
         />
         <RiskOverlayPanel overlay={brief.riskOverlay} />
-        <SovereignIndexPanel sovereignIndex={brief.sovereignIndex} />
+        <SovereignIndexPanel sovereignIndex={brief.sovereignIndex} riskOverlay={brief.riskOverlay} />
         <CryptoPulseBoard
           snapshot={brief.marketSnapshot}
           indicators={brief.cryptoIndicators}
