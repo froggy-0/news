@@ -1,7 +1,7 @@
 import React from "react";
-import { BarChart2 } from "lucide-react";
+import { BarChart2, TrendingUp } from "lucide-react";
 
-import type { SovereignIndex } from "@schema/brief.types";
+import type { RiskOverlay, SovereignIndex } from "@schema/brief.types";
 
 const ZONE_CONFIG = {
   bull: {
@@ -98,7 +98,102 @@ function ZoneLegend({ zone }: { zone: SovereignIndex["zone"] }) {
   );
 }
 
-export function SovereignIndexPanel({ sovereignIndex }: { sovereignIndex: SovereignIndex | null }) {
+const REGIME_STATE_LABELS: Record<string, string> = {
+  BullQuiet: "안정 상승",
+  BullHeated: "과열 상승",
+  BearPanic: "공포 하락",
+  Choppy: "방향 불명",
+  Transitional: "전환 구간",
+};
+
+const CONFIDENCE_CONFIG: Record<
+  string,
+  { label: string; color: string; bg: string; border: string }
+> = {
+  HIGH: {
+    label: "롱 활성",
+    color: "#10b981",
+    bg: "rgba(16,185,129,0.10)",
+    border: "rgba(16,185,129,0.30)",
+  },
+  MEDIUM: {
+    label: "신호 약",
+    color: "#f0b90b",
+    bg: "rgba(240,185,11,0.10)",
+    border: "rgba(240,185,11,0.28)",
+  },
+  LOW: {
+    label: "약세",
+    color: "#ef4444",
+    bg: "rgba(239,68,68,0.10)",
+    border: "rgba(239,68,68,0.28)",
+  },
+  NONE: {
+    label: "대기",
+    color: "rgba(255,255,255,0.38)",
+    bg: "rgba(255,255,255,0.05)",
+    border: "rgba(255,255,255,0.12)",
+  },
+};
+
+function RegimeSignalFooter({ overlay }: { overlay: RiskOverlay }) {
+  const confidence = CONFIDENCE_CONFIG[overlay.signalConfidence ?? "NONE"] ?? CONFIDENCE_CONFIG.NONE;
+  const regimeLabel = REGIME_STATE_LABELS[overlay.regimeState] ?? overlay.regimeState;
+  const isPromoted = overlay.overlayGateDecision === "promote";
+
+  return (
+    <div className="border-t border-white/[0.06] bg-[#0b0a08]/90 px-5 py-3.5 md:px-6">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {/* Left: label */}
+        <div className="flex items-center gap-1.5">
+          <TrendingUp className="h-3 w-3 text-white/32" aria-hidden="true" />
+          <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-white/32">
+            레짐 신호 · vol_regime_v2
+          </span>
+        </div>
+
+        {/* Right: pills */}
+        <div className="ml-auto flex items-center gap-1.5">
+          {/* Regime state */}
+          <span className="rounded border border-white/10 bg-white/[0.04] px-2 py-0.5 font-mono text-[10px] text-white/52">
+            {regimeLabel}
+          </span>
+
+          {/* Signal confidence */}
+          <span
+            className="rounded border px-2 py-0.5 font-mono text-[10px] font-semibold"
+            style={{
+              color: confidence.color,
+              background: confidence.bg,
+              borderColor: confidence.border,
+            }}
+          >
+            {confidence.label}
+          </span>
+
+          {/* Gate decision */}
+          {isPromoted ? (
+            <span className="rounded border border-[rgba(0,255,255,0.22)] bg-[rgba(0,255,255,0.06)] px-2 py-0.5 font-mono text-[10px] font-semibold text-[rgba(0,255,255,0.72)]">
+              검증됨 ✓
+            </span>
+          ) : (
+            <span className="rounded border border-white/8 bg-white/[0.03] px-2 py-0.5 font-mono text-[10px] text-white/28">
+              관찰중
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function SovereignIndexPanel({
+  sovereignIndex,
+  riskOverlay,
+}: {
+  sovereignIndex: SovereignIndex | null;
+  riskOverlay?: RiskOverlay | null;
+}) {
   if (!sovereignIndex) {
     return null;
   }
@@ -176,6 +271,9 @@ export function SovereignIndexPanel({ sovereignIndex }: { sovereignIndex: Sovere
               <ZoneLegend zone={zone} />
             </div>
           </div>
+
+          {/* Footer: Regime Signal (predictive track) */}
+          {riskOverlay && <RegimeSignalFooter overlay={riskOverlay} />}
         </div>
       </div>
     </section>
