@@ -223,12 +223,11 @@ def _build_pca_index(raw_index: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# hybrid_signal_label()이 반환하는 값: "risk_on" / "risk_off" / "neutral"
 _SOVEREIGN_LABEL_MAP: dict[str, str] = {
-    "Strong Bullish": "강세",
-    "Bullish": "상승",
-    "Neutral": "중립",
-    "Bearish": "하락",
-    "Strong Bearish": "강하락",
+    "risk_on": "상승",
+    "risk_off": "하락",
+    "neutral": "중립",
 }
 
 
@@ -241,7 +240,7 @@ def _build_sovereign_index(payload: dict[str, Any]) -> dict[str, Any] | None:
         return None
 
     score = round(float(today_score), 1)
-    signal_label = str(full_raw.get("signal_label", "Neutral"))
+    signal_label = str(full_raw.get("signal_label", "neutral"))
     label_ko = _SOVEREIGN_LABEL_MAP.get(signal_label, "중립")
     quality_status = str(full_raw.get("quality_status", "degraded"))
 
