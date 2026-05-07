@@ -207,11 +207,32 @@ def evaluate_baseline(
     }
 
 
+def sovereign_gauge_long(
+    df: pd.DataFrame,
+    *,
+    threshold: float = 60.0,
+    score_col: str = "full_hybrid_index_score_lag1",
+) -> pd.Series:
+    """Track A 단순 임계값 신호: Gauge score > threshold → Long.
+
+    always_up / btc_momo_20d 와의 비교로 Track A의 독립 부가가치를 측정한다.
+    score_col이 없으면 flat(0) 반환.
+    """
+    if score_col not in df.columns:
+        return pd.Series(0.0, index=df.index, name="sovereign_gauge_long")
+    score = pd.to_numeric(df[score_col], errors="coerce")
+    signal = pd.Series(0.0, index=df.index, name="sovereign_gauge_long")
+    signal.loc[score > threshold] = 1.0
+    signal.loc[score < (100.0 - threshold)] = -1.0
+    return signal
+
+
 __all__ = [
     "always_up",
     "btc_momo_20d",
     "evaluate_baseline",
     "fng_contrarian",
+    "sovereign_gauge_long",
     "vol_regime",
     "vol_regime_v2",
 ]

@@ -36,6 +36,8 @@
 | btc_long_short_ratio_lag1 | −0.402 |
 | volume_change_pct_lag1 | −0.009 (거의 무기여) |
 
+**PC1 경제적 해석**: fng·뉴스감성(+0.48)이 높고 롱숏비·VIX(-0.40, -0.31)가 낮을수록 커지는 **BTC 시장 위험선호 복합 지수** — 낙관적 감성과 낮은 공포가 동시에 확인될 때 상승. (파이프라인이 매일 자동 생성: `sovereignIndex.pcInterpretation`)
+
 **PCA Core Model** (4 features, explainedVariance=80.2%): fng, funding, news_sentiment, volume_change
 
 ### 생산 값 (2026-05-01 기준, R2 artifact에서 확인)

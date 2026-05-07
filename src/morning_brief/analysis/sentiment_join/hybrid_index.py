@@ -587,6 +587,61 @@ def compute_hybrid_indices(
     return result
 
 
+def compute_today_score_oos(
+    df: pd.DataFrame,
+    spec: IndexSpec,
+    *,
+    feature_exclusion_reasons: dict[str, Any] | None = None,
+) -> float | None:
+    """오늘(마지막 행)의 OOS 점수를 expanding window로 반환한다.
+
+    train = df[:-1] (전체 과거), test = df[-1:] (오늘).
+    1. train으로 scaler/PCA/pc1_min-max fit (normal mode)
+    2. train에서 추출한 fitted 객체로 test를 pre-fitted mode transform
+    3. 점수 반환 — 룩어헤드 없는 오늘의 시황 점수.
+
+    데이터 부족 또는 PCA 실패 시 None 반환 (파이프라인 중단 없음).
+    """
+    if len(df) < MIN_PCA_ROWS + 1:
+        return None
+
+    train = df.iloc[:-1].copy()
+    test = df.iloc[-1:].copy()
+
+    _, _, train_diag = _compute_single_index(
+        train,
+        spec,
+        len(train),
+        feature_exclusion_reasons=feature_exclusion_reasons,
+    )
+    pca_summary = train_diag.get("pca_summary") or {}
+    if pca_summary.get("status") not in {"ok", "ok_pre_fitted"}:
+        return None
+
+    scaler = train_diag.get("_fitted_scaler")
+    pca = train_diag.get("_fitted_pca")
+    pc1_min = pca_summary.get("pc1_min")
+    pc1_max = pca_summary.get("pc1_max")
+    features: list[str] | None = pca_summary.get("selected_features")
+
+    if None in (scaler, pca, pc1_min, pc1_max, features):
+        return None
+
+    _, score_series, _ = _compute_single_index(
+        test,
+        spec,
+        len(test),
+        feature_exclusion_reasons=feature_exclusion_reasons,
+        pre_fitted_scaler=scaler,
+        pre_fitted_pca=pca,
+        pre_fitted_pc1_min=float(pc1_min),
+        pre_fitted_pc1_max=float(pc1_max),
+        pre_fitted_features=features,
+    )
+    valid = score_series.dropna()
+    return round(float(valid.iloc[-1]), 1) if len(valid) > 0 else None
+
+
 __all__ = [
     "HYBRID_FEATURE_CANDIDATES_CORE",
     "HYBRID_FEATURE_CANDIDATES_FULL",
@@ -597,5 +652,6 @@ __all__ = [
     "ScalerKind",
     "_compute_single_index",
     "compute_hybrid_indices",
+    "compute_today_score_oos",
     "make_scaler",
 ]

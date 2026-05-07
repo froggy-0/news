@@ -1501,6 +1501,14 @@ _ALPHA_PREDICTOR_CONFIGS: list[dict[str, Any]] = [
     {"col": "vix_regime_score_lag1", "threshold": 0.0, "inverted": False},
     {"col": "full_hybrid_index_score_lag1", "threshold": 50, "inverted": False},
     {"col": "core_hybrid_index_score_lag1", "threshold": 50, "inverted": False},
+    # Track A baseline 비교: Gauge > 60 → Long / < 40 → Short (단순 임계값 신호)
+    # always_up, btc_momo_20d 대비 Track A 독립 부가가치 측정용
+    {
+        "col": "full_hybrid_index_score_lag1",
+        "threshold": 60,
+        "inverted": False,
+        "predictor_name": "sovereign_gauge_60_long",
+    },
     # etf_net_inflow_usd_log1p_lag1: 기관 포지셔닝 신호 (log1p 변환으로 fat-tail 안정화)
     {"col": "etf_net_inflow_usd_log1p_lag1", "threshold": 0, "inverted": False},
     # --- etf_net_inflow_usd_log1p_lag1 threshold 3-variant 재설계 ---

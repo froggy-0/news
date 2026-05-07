@@ -426,6 +426,10 @@ function parseSovereignIndex(value: Record<string, unknown>): SovereignIndex {
     labelKo: typeof value.labelKo === "string" ? value.labelKo : "중립",
     zone,
     qualityStatus: typeof value.qualityStatus === "string" ? value.qualityStatus : "degraded",
+    pcInterpretation: typeof value.pcInterpretation === "string" ? value.pcInterpretation : null,
+    todayScoreMethod: typeof value.todayScoreMethod === "string" ? value.todayScoreMethod : null,
+    trackAWfAvgHitRate: typeof value.trackAWfAvgHitRate === "number" ? value.trackAWfAvgHitRate : null,
+    trackAWfFolds: typeof value.trackAWfFolds === "number" ? value.trackAWfFolds : null,
   };
 }
 

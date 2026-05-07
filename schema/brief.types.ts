@@ -32,6 +32,10 @@ export interface SovereignIndex {
   labelKo: string;
   zone: "bull" | "neutral" | "bear";
   qualityStatus: string;
+  pcInterpretation?: string | null;
+  todayScoreMethod?: string | null;
+  trackAWfAvgHitRate?: number | null;
+  trackAWfFolds?: number | null;
 }
 
 export interface BriefData {

@@ -12,6 +12,7 @@ from morning_brief.analysis.sentiment_join.config import SentimentJoinSettings
 from morning_brief.analysis.sentiment_join.hybrid_index import (
     INDEX_SPECS,
     compute_hybrid_indices,
+    compute_today_score_oos,
 )
 from morning_brief.analysis.sentiment_join.join import (
     OI_PRICE_DIVERGENCE_COLUMNS,
@@ -986,13 +987,31 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
                 else {}
             )
             label, zscore = hybrid_signal_label(master_df[f"{spec.name}_hybrid_index"])
-            score_col = f"{spec.name}_hybrid_index_score"
-            score_series = master_df[score_col] if score_col in master_df.columns else None
-            today_score: float | None = None
-            if score_series is not None:
-                valid = score_series.dropna()
-                if len(valid) > 0:
-                    today_score = round(float(valid.iloc[-1]), 1)
+
+            # OOS today_score: expanding window (train=전체 과거, test=오늘).
+            # 룩어헤드 없는 점수. 실패 시 in-sample fallback.
+            oos_score: float | None = None
+            try:
+                oos_score = compute_today_score_oos(
+                    analysis_with_hybrid,
+                    spec,
+                    feature_exclusion_reasons=feature_exclusion_reasons,
+                )
+            except Exception:
+                pass
+            if oos_score is not None:
+                today_score: float | None = oos_score
+                today_score_method = "oos_expanding"
+            else:
+                score_col = f"{spec.name}_hybrid_index_score"
+                score_series = master_df[score_col] if score_col in master_df.columns else None
+                today_score = None
+                if score_series is not None:
+                    valid = score_series.dropna()
+                    if len(valid) > 0:
+                        today_score = round(float(valid.iloc[-1]), 1)
+                today_score_method = "in_sample_fallback"
+
             hybrid_indices_meta[spec.name] = {
                 "vif_diagnostics": diag.get("vif_diagnostics", [])
                 if isinstance(diag, dict)
@@ -1011,6 +1030,7 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
                 "signal_label": label,
                 "signal_zscore": zscore,
                 "today_score": today_score,
+                "today_score_method": today_score_method,
             }
 
         stats_adf = (
