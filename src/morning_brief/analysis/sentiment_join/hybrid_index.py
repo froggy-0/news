@@ -620,11 +620,13 @@ def compute_today_score_oos(
 
     scaler = train_diag.get("_fitted_scaler")
     pca = train_diag.get("_fitted_pca")
-    pc1_min = pca_summary.get("pc1_min")
-    pc1_max = pca_summary.get("pc1_max")
+    pc1_min_raw = pca_summary.get("pc1_min")
+    pc1_max_raw = pca_summary.get("pc1_max")
     features: list[str] | None = pca_summary.get("selected_features")
 
-    if None in (scaler, pca, pc1_min, pc1_max, features):
+    if scaler is None or pca is None or features is None:
+        return None
+    if not isinstance(pc1_min_raw, (int, float)) or not isinstance(pc1_max_raw, (int, float)):
         return None
 
     _, score_series, _ = _compute_single_index(
@@ -634,8 +636,8 @@ def compute_today_score_oos(
         feature_exclusion_reasons=feature_exclusion_reasons,
         pre_fitted_scaler=scaler,
         pre_fitted_pca=pca,
-        pre_fitted_pc1_min=float(pc1_min),
-        pre_fitted_pc1_max=float(pc1_max),
+        pre_fitted_pc1_min=float(pc1_min_raw),
+        pre_fitted_pc1_max=float(pc1_max_raw),
         pre_fitted_features=features,
     )
     valid = score_series.dropna()
