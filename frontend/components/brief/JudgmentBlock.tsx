@@ -29,43 +29,52 @@ export function JudgmentBlock({
       : null;
 
   return (
-    <section id="brief" className="relative z-10 border-b border-[rgba(169,146,125,0.10)] px-6 py-24 md:px-20">
-      <div className="mx-auto w-full space-y-12">
+    <section id="brief" className="relative z-10 border-b border-[#2b3139] px-6 py-16 md:px-20">
+      <div className="mx-auto w-full space-y-10">
         <div className="space-y-6">
           <div className="relative pl-6 md:pl-10 max-w-4xl">
-            <div className="absolute left-0 top-0 h-full w-px bg-gradient-to-b from-[var(--accent-primary)] via-[var(--accent-primary)]/40 to-transparent" />
-            <div className="absolute left-0 top-0 h-px w-4 bg-[var(--accent-primary)]" />
-            <div className="space-y-4">
-              <h2 className="text-[10px] uppercase tracking-[0.18em] text-[var(--accent-primary)]">
+            <div className="absolute left-0 top-0 h-full w-px bg-gradient-to-b from-[#f0b90b] via-[rgba(240,185,11,0.3)] to-transparent" />
+            <div className="absolute left-0 top-0 h-px w-4 bg-[#f0b90b]" />
+            <div className="space-y-3">
+              <h2
+                className="text-[9px] uppercase tracking-[0.16em] text-[#f0b90b]"
+                style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+              >
                 브리프 헤드라인
               </h2>
-              <p className="text-base leading-8 text-[var(--smoke)]/90 md:text-lg md:leading-9">{cleanHeadline}</p>
+              <p className="text-base leading-8 text-[#eaecef] md:text-lg md:leading-9">{cleanHeadline}</p>
             </div>
           </div>
         </div>
 
-        <div className="space-y-8 max-w-4xl">
+        <div className="space-y-7 max-w-4xl">
           {cleanLead ? (
             <div className="relative pl-6 md:pl-10">
-              <div className="absolute left-0 top-0 h-full w-px bg-gradient-to-b from-[var(--accent-primary)] via-[var(--accent-primary)]/40 to-transparent" />
-              <div className="absolute left-0 top-0 h-px w-4 bg-[var(--accent-primary)]" />
-              <div className="space-y-4">
-                <h3 className="text-[10px] uppercase tracking-[0.18em] text-[var(--accent-primary)]">
+              <div className="absolute left-0 top-0 h-full w-px bg-gradient-to-b from-[#f0b90b] via-[rgba(240,185,11,0.3)] to-transparent" />
+              <div className="absolute left-0 top-0 h-px w-4 bg-[#f0b90b]" />
+              <div className="space-y-3">
+                <h3
+                  className="text-[9px] uppercase tracking-[0.16em] text-[#f0b90b]"
+                  style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+                >
                   핵심 인사이트
                 </h3>
-                <p className="text-sm leading-8 text-[var(--smoke)]/90 md:text-base">{cleanLead}</p>
+                <p className="text-sm leading-8 text-[#eaecef] md:text-base">{cleanLead}</p>
               </div>
             </div>
           ) : null}
 
           {cleanSupport ? (
             <div className="relative pl-6 md:pl-10">
-              <div className="absolute left-0 top-0 h-full w-px bg-[rgba(169,146,125,0.18)]" />
-              <div className="space-y-4">
-                <h3 className="text-[10px] uppercase tracking-[0.18em] text-[var(--taupe)]/52">
+              <div className="absolute left-0 top-0 h-full w-px bg-[#2b3139]" />
+              <div className="space-y-3">
+                <h3
+                  className="text-[9px] uppercase tracking-[0.16em] text-[#474d57]"
+                  style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+                >
                   상세 맥락
                 </h3>
-                <p className="text-sm leading-8 text-[var(--taupe)]/72">{cleanSupport}</p>
+                <p className="text-sm leading-8 text-[#848e9c]">{cleanSupport}</p>
               </div>
             </div>
           ) : null}

@@ -33,44 +33,47 @@
 }
 
 :root {
-  --bg-primary: #0a0908;
-  --bg-surface: #100d0c;
-  --bg-panel: rgba(242, 244, 243, 0.03);
-  --bg-panel-strong: rgba(242, 244, 243, 0.06);
-  --border-primary: rgba(169, 146, 125, 0.14);
-  --border-strong: rgba(169, 146, 125, 0.28);
-  --text-primary: #f2f4f3;
-  --text-secondary: rgba(242, 244, 243, 0.72);
-  --text-muted: rgba(169, 146, 125, 0.58);
-  --accent-primary: #49111c;
-  --accent-primary-strong: #6a1a29;
+  /* ── Binance exact palette ─────────────────────────────────── */
+  --bg-primary: #0b0e11;
+  --bg-surface: #1e2329;
+  --bg-panel: rgba(30, 35, 41, 0.95);
+  --bg-panel-strong: rgba(43, 49, 57, 0.98);
+  --border-primary: #2b3139;
+  --border-strong: rgba(234, 236, 239, 0.18);
+  --text-primary: #eaecef;
+  --text-secondary: #848e9c;
+  --text-muted: #474d57;
+  --accent-primary: #f0b90b;
+  --accent-primary-strong: #d4a500;
   --accent-green: #0ecb81;
   --accent-warning: #f0b90b;
   --accent-down: #f6465d;
-  --taupe: #a9927d;
-  --smoke: #f2f4f3;
-  --bordeaux: #49111c;
-  --shadow-panel: 0 30px 80px rgba(0, 0, 0, 0.55);
+  /* legacy compat aliases */
+  --taupe: #848e9c;
+  --smoke: #eaecef;
+  --bordeaux: #f0b90b;
+  --shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.48);
 
   --surface-canvas: var(--bg-primary);
   --surface-panel: var(--bg-panel);
   --surface-panel-strong: var(--bg-panel-strong);
   --text-primary-strong: var(--text-primary);
-  --text-secondary-strong: rgba(242, 244, 243, 0.76);
-  --label-meta: rgba(169, 146, 125, 0.72);
-  --label-section: rgba(169, 146, 125, 0.88);
+  --text-secondary-strong: #eaecef;
+  --label-meta: #848e9c;
+  --label-section: #848e9c;
   --status-positive: var(--accent-green);
   --status-warning: var(--accent-warning);
   --status-negative: var(--accent-down);
-  --meta-type: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
-  --numeric-type: var(--font-inter), "Inter", var(--font-dm-sans), "Pretendard", sans-serif;
+  --meta-type: var(--font-ibm-plex-mono), "IBM Plex Mono", var(--font-jetbrains-mono), monospace;
+  --numeric-type: var(--font-ibm-plex-mono), "IBM Plex Mono", var(--font-jetbrains-mono), monospace;
 
-  --card-radius-reading: 8px;
-  --card-radius-data: 8px;
-  --card-radius-utility: 8px;
-  --card-padding-reading: 24px;
-  --card-padding-data: 16px;
-  --card-padding-utility: 16px;
+  /* ── Binance border radius (tight) ────────────────────────── */
+  --card-radius-reading: 6px;
+  --card-radius-data: 6px;
+  --card-radius-utility: 6px;
+  --card-padding-reading: 20px;
+  --card-padding-data: 12px;
+  --card-padding-utility: 12px;
 
   --type-body-mobile: 16px;
   --type-body-desktop: 18px;
@@ -117,13 +120,13 @@ select {
 }
 
 :where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
-  outline: 2px solid var(--accent-primary);
+  outline: 2px solid rgba(240, 185, 11, 0.6);
   outline-offset: 3px;
 }
 
 ::selection {
-  background: rgba(73, 17, 28, 0.72);
-  color: var(--smoke);
+  background: rgba(240, 185, 11, 0.22);
+  color: #eaecef;
 }
 
 .site-noise {
@@ -131,12 +134,12 @@ select {
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  opacity: 0.16;
+  opacity: 0.06;
   background-image:
-    linear-gradient(rgba(242, 244, 243, 0.018) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(242, 244, 243, 0.018) 1px, transparent 1px);
-  background-size: 3px 3px, 3px 3px;
-  mask-image: radial-gradient(circle at center, black 34%, transparent 100%);
+    linear-gradient(rgba(234, 236, 239, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(234, 236, 239, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px, 40px 40px;
+  mask-image: radial-gradient(ellipse 80% 50% at center, black, transparent);
 }
 
 .page-shell {
@@ -162,10 +165,10 @@ section[id] {
   left: 0;
   right: 0;
   z-index: 85;
-  height: 1px;
+  height: 2px;
   transform-origin: left center;
-  background: linear-gradient(90deg, rgba(73, 17, 28, 0.2), rgba(73, 17, 28, 0.95), rgba(169, 146, 125, 0.75));
-  box-shadow: 0 0 20px rgba(73, 17, 28, 0.48);
+  background: linear-gradient(90deg, #f0b90b, #ffd666, #f0b90b);
+  box-shadow: 0 0 12px rgba(240, 185, 11, 0.5);
   pointer-events: none;
 }
 
@@ -176,29 +179,26 @@ section[id] {
   align-items: center;
   justify-content: center;
   padding: 6.5rem 0 2.5rem;
-  border-bottom: 1px solid rgba(169, 146, 125, 0.12);
+  border-bottom: 1px solid #2b3139;
 }
 
 .section-shell {
-  border: 1px solid var(--border-primary);
-  background: var(--bg-panel);
-  box-shadow: var(--shadow-panel);
-  backdrop-filter: blur(18px);
+  border: 1px solid #2b3139;
+  background: rgba(30, 35, 41, 0.9);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(12px);
 }
 
 .analysis-depth-panel {
   position: relative;
   overflow: hidden;
-  border-radius: 8px;
-  border: 1px solid rgba(169, 146, 125, 0.14);
-  background:
-    linear-gradient(145deg, rgba(242, 244, 243, 0.045), rgba(242, 244, 243, 0.015)),
-    linear-gradient(90deg, rgba(73, 17, 28, 0.08), transparent 58%);
+  border-radius: 6px;
+  border: 1px solid #2b3139;
+  background: #1e2329;
   box-shadow:
-    0 28px 70px rgba(0, 0, 0, 0.48),
-    inset 0 1px 0 rgba(169, 146, 125, 0.10);
+    0 8px 32px rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgba(234, 236, 239, 0.06);
   transform-style: preserve-3d;
-  backdrop-filter: blur(18px);
 }
 
 .analysis-depth-panel::before {
@@ -206,12 +206,12 @@ section[id] {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.38;
+  opacity: 0.18;
   background:
-    linear-gradient(90deg, rgba(169, 146, 125, 0.04) 1px, transparent 1px),
-    linear-gradient(rgba(169, 146, 125, 0.03) 1px, transparent 1px);
-  background-size: 42px 42px;
-  mask-image: linear-gradient(180deg, black, transparent 82%);
+    linear-gradient(90deg, rgba(234, 236, 239, 0.04) 1px, transparent 1px),
+    linear-gradient(rgba(234, 236, 239, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: linear-gradient(180deg, black, transparent 72%);
 }
 
 .analysis-depth-panel > * {
@@ -330,10 +330,9 @@ section[id] {
 .card-family-reading,
 .card-family-data,
 .card-family-utility {
-  border: 1px solid rgba(169, 146, 125, 0.12);
-  background: linear-gradient(180deg, rgba(242, 244, 243, 0.032), rgba(242, 244, 243, 0.015));
-  box-shadow: var(--shadow-panel);
-  backdrop-filter: blur(18px);
+  border: 1px solid #2b3139;
+  background: #1e2329;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24);
 }
 
 .card-family-reading {

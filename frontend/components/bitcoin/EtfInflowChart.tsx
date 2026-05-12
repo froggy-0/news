@@ -62,7 +62,7 @@ function OverlayLegend({ point }: { point: EtfHistoryPoint | null }) {
   const delta = point.deltaBtc;
   return (
     <div className="pointer-events-none absolute left-3 top-3 z-20 flex flex-col gap-0.5 rounded bg-[#181a20]/85 px-2.5 py-2 backdrop-blur-sm">
-      <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/42">
+      <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#474d57]">
         {formatDate(point.date)}
       </span>
       <div className="flex items-center gap-1.5">
@@ -101,7 +101,7 @@ function TooltipCard({
       className="pointer-events-none absolute top-3 z-20 min-w-[184px] rounded-lg border border-[#2b3139] bg-[#181a20]/95 px-3.5 py-3 shadow-[0_18px_42px_rgba(0,0,0,0.42)] backdrop-blur-md"
       style={{ left: x }}
     >
-      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/42">
+      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#474d57]">
         {formatDate(point.date)}
       </p>
       <div className="mt-2 space-y-1.5">
@@ -116,9 +116,9 @@ function TooltipCard({
 function TooltipRow({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div className="flex items-center justify-between gap-4">
-      <span className="text-[11px] leading-5 text-white/42">{label}</span>
+      <span className="text-[11px] leading-5 text-[#474d57]">{label}</span>
       <span
-        className="font-mono text-[11px] font-bold leading-5 text-white/78"
+        className="font-mono text-[11px] font-bold leading-5 text-[#848e9c]"
         style={color ? { color } : undefined}
       >
         {value}
