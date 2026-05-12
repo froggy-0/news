@@ -406,7 +406,7 @@ def run_pipeline(settings: Settings) -> str:
             etf_history = _load_etf_history(
                 settings.supabase_url,
                 settings.supabase_service_role_key,
-                days=14,
+                days=90,
             )
             if etf_history:
                 packet["etf_history"] = etf_history

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { DM_Sans, Inter, JetBrains_Mono } from "next/font/google";
+import { DM_Sans, IBM_Plex_Mono, Inter, JetBrains_Mono } from "next/font/google";
 
 import { AtmosphericCanvas } from "@/components/layout/AtmosphericCanvas";
 import { ScrollProgressBar } from "@/components/layout/ScrollProgressBar";
@@ -28,6 +28,13 @@ const jetBrainsMono = JetBrains_Mono({
   weight: ["400", "500", "700"],
 });
 
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  variable: "--font-ibm-plex-mono",
+  display: "swap",
+  weight: ["400", "500", "600", "700"],
+});
+
 export const metadata: Metadata = {
   title: "SOVEREIGN BRIEF",
   description:
@@ -42,7 +49,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${dmSans.variable} ${inter.variable} ${jetBrainsMono.variable}`}
+      className={`${dmSans.variable} ${inter.variable} ${jetBrainsMono.variable} ${ibmPlexMono.variable}`}
     >
       <body>
         <AtmosphericCanvas />

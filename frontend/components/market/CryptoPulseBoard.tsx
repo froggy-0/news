@@ -18,7 +18,7 @@ import { RevealSection } from "@/components/ui/RevealSection";
 function toneClass(trend: "up" | "down" | "neutral" | null): string {
   if (trend === "up") return "text-[var(--accent-green)]";
   if (trend === "down") return "text-[var(--accent-down)]";
-  return "text-white/55";
+  return "text-[#474d57]";
 }
 
 function trendColor(trend: "up" | "down" | "neutral" | null): string {
@@ -118,34 +118,47 @@ const FNG_SEGMENTS = [
 /* ── 1. Hero Row — BTC 현물 가격 ────────────────────────────────────────── */
 
 function HeroPrice({ bitcoin }: { bitcoin: BitcoinSection }) {
-  const borderLeft = trendColor(bitcoin.trend);
-  const changeColor =
-    bitcoin.trend === "up"
-      ? "text-[var(--accent-green)]"
-      : bitcoin.trend === "down"
-        ? "text-[var(--accent-down)]"
-        : "text-white/46";
+  const isUp = bitcoin.trend === "up";
+  const isDown = bitcoin.trend === "down";
 
   return (
-    <div
-      className="rounded-xl border border-white/8 bg-black/20 p-5 md:p-6"
-      style={{ borderLeftColor: borderLeft, borderLeftWidth: "3px" }}
-    >
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="space-y-1">
-          <p className="label-meta text-white/42">BTC / USD</p>
+    <div className="rounded-md border border-[#2b3139] bg-[#1e2329] p-4 md:p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span
+              className="rounded-sm bg-[#f0b90b] px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-[#1e2329]"
+              style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+            >
+              BTC/USD
+            </span>
+            <span className="text-[10px] font-medium text-[#474d57]" style={{ fontFamily: "var(--font-ibm-plex-mono)" }}>
+              현물
+            </span>
+          </div>
           {bitcoin.price ? (
-            <p className="numeric-display text-white">{bitcoin.price}</p>
+            <p
+              className="text-[36px] font-bold leading-none tracking-tight text-[#eaecef]"
+              style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+            >
+              {bitcoin.price}
+            </p>
           ) : (
             <DataState message="이번 집계에서는 현물 가격을 확인하지 못했어요." family="data" minHeight={48} />
           )}
         </div>
         {bitcoin.change && (
           <span
-            className={`inline-flex w-fit items-center gap-1.5 rounded-full border px-3 py-1.5 font-mono text-[12px] font-semibold ${changeColor}`}
-            style={{ borderColor: `${borderLeft}40`, background: `${borderLeft}12` }}
+            className={`mt-1 inline-flex items-center gap-1 rounded px-2.5 py-1.5 text-[13px] font-bold ${
+              isUp
+                ? "bg-[rgba(14,203,129,0.12)] text-[#0ecb81]"
+                : isDown
+                  ? "bg-[rgba(246,70,93,0.12)] text-[#f6465d]"
+                  : "text-[#848e9c]"
+            }`}
+            style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
           >
-            {bitcoin.trend === "up" ? "▲" : bitcoin.trend === "down" ? "▼" : ""}
+            {isUp ? "▲" : isDown ? "▼" : ""}
             {bitcoin.change}
           </span>
         )}
@@ -161,27 +174,37 @@ function FearGreedCompact({ fng }: { fng: FearGreedIndex }) {
   const markerPct = Math.max(1, Math.min(99, fng.value));
 
   return (
-    <div className="rounded-xl border border-white/8 bg-black/20 p-5 md:p-6">
-      <p className="label-meta text-white/42">공포·탐욕</p>
-
-      <div className="mt-3 flex items-end gap-2.5">
-        <p className="text-[32px] font-bold leading-none tracking-tight text-white" style={{ fontFamily: "var(--numeric-type)" }}>
-          {fng.value}
-        </p>
-        <div className="mb-0.5 flex flex-col gap-0.5">
-          <span className="numeric-sm text-white/28">/100</span>
-          <span
-            className="rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold"
-            style={{ color: stage.color, background: stage.bgColor }}
-          >
-            {stage.label}
-          </span>
+    <div className="rounded-md border border-[#2b3139] bg-[#1e2329] p-4 md:p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span
+              className="rounded-sm border border-[#2b3139] px-1.5 py-0.5 text-[9px] font-medium tracking-wider text-[#848e9c]"
+              style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+            >
+              FNG INDEX
+            </span>
+          </div>
+          <div className="flex items-end gap-2">
+            <p
+              className="text-[36px] font-bold leading-none tracking-tight text-[#eaecef]"
+              style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+            >
+              {fng.value}
+            </p>
+            <span className="mb-1 text-[13px] text-[#474d57]" style={{ fontFamily: "var(--font-ibm-plex-mono)" }}>/100</span>
+          </div>
         </div>
+        <span
+          className="mt-1 rounded px-2.5 py-1.5 text-[12px] font-bold"
+          style={{ color: stage.color, background: stage.bgColor, fontFamily: "var(--font-ibm-plex-mono)" }}
+        >
+          {stage.label}
+        </span>
       </div>
 
-      {/* gauge bar */}
-      <div className="mt-4 space-y-1">
-        <div className="relative h-1.5 overflow-visible rounded-full bg-white/8">
+      <div className="mt-4 space-y-1.5">
+        <div className="relative h-1.5 overflow-visible rounded-full bg-[#2b3139]">
           <div className="absolute inset-0 flex overflow-hidden rounded-full">
             {FNG_SEGMENTS.map((seg, i) => (
               <div
@@ -190,23 +213,22 @@ function FearGreedCompact({ fng }: { fng: FearGreedIndex }) {
                 style={{
                   width: "20%",
                   background: seg.color,
-                  opacity: fng.value >= (i === 0 ? 0 : FNG_SEGMENTS[i - 1]!.max) ? 0.72 : 0.18,
+                  opacity: fng.value >= (i === 0 ? 0 : FNG_SEGMENTS[i - 1]!.max) ? 0.8 : 0.15,
                   borderRadius:
-                    i === 0
-                      ? "9999px 0 0 9999px"
-                      : i === FNG_SEGMENTS.length - 1
-                        ? "0 9999px 9999px 0"
-                        : "0",
+                    i === 0 ? "9999px 0 0 9999px" : i === FNG_SEGMENTS.length - 1 ? "0 9999px 9999px 0" : "0",
                 }}
               />
             ))}
           </div>
           <div
-            className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#181a20] shadow-[0_0_6px_rgba(255,255,255,0.35)]"
+            className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[#eaecef] bg-[#1e2329] shadow-[0_0_8px_rgba(240,185,11,0.4)]"
             style={{ left: `${markerPct}%` }}
           />
         </div>
-        <div className="flex justify-between font-mono text-[8px] uppercase tracking-[0.06em] text-white/20">
+        <div
+          className="flex justify-between text-[9px] uppercase tracking-[0.06em] text-[#474d57]"
+          style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+        >
           {FNG_SEGMENTS.map((seg) => (
             <span key={seg.label}>{seg.label}</span>
           ))}
@@ -221,22 +243,37 @@ function FearGreedCompact({ fng }: { fng: FearGreedIndex }) {
 function IndicatorCard({ item }: { item: CryptoIndicator }) {
   return (
     <div
-      className="card-family-data h-full"
+      className="h-full rounded-md border border-[#2b3139] bg-[#1e2329] p-3"
       style={compactHeatTone(item.trend, changeMagnitude(item.change), 4)}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 space-y-0.5">
-          <p className="label-meta text-white/42">{item.symbol}</p>
-          <p className="truncate text-[13px] leading-5 text-white/78">{item.label}</p>
+          <p
+            className="text-[9px] font-medium uppercase tracking-[0.1em] text-[#474d57]"
+            style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+          >
+            {item.symbol}
+          </p>
+          <p className="truncate text-[12px] leading-5 text-[#848e9c]">{item.label}</p>
         </div>
         <div className="shrink-0 text-right">
-          <p className="numeric-md font-semibold text-white">{item.value ?? "N/A"}</p>
-          <p className={`mt-0.5 text-[12px] ${toneClass(item.trend)}`}>{item.change ?? "-"}</p>
+          <p
+            className="text-[14px] font-semibold leading-tight text-[#eaecef]"
+            style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+          >
+            {item.value ?? "N/A"}
+          </p>
+          <p
+            className={`mt-0.5 text-[11px] font-medium ${toneClass(item.trend)}`}
+            style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+          >
+            {item.change ?? "-"}
+          </p>
         </div>
       </div>
       {item.history.length >= 2 && (
-        <div className="mt-2.5 flex justify-end">
-          <Sparkline history={item.history} trend={item.trend} width={72} height={26} />
+        <div className="mt-2 flex justify-end">
+          <Sparkline history={item.history} trend={item.trend} width={72} height={24} />
         </div>
       )}
     </div>
@@ -246,10 +283,25 @@ function IndicatorCard({ item }: { item: CryptoIndicator }) {
 /* mobile pill for indicators */
 function IndicatorPill({ item }: { item: CryptoIndicator }) {
   return (
-    <div className="flex min-w-[124px] shrink-0 flex-col gap-1 rounded-xl border border-white/8 bg-white/[0.025] px-3 py-2.5 text-center">
-      <p className="numeric-sm font-semibold text-white">{item.symbol}</p>
-      <p className="numeric-sm text-white/80">{item.value ?? "N/A"}</p>
-      <p className={`text-[11px] font-medium ${toneClass(item.trend)}`}>{item.change ?? "-"}</p>
+    <div className="flex min-w-[110px] shrink-0 flex-col gap-1 rounded-md border border-[#2b3139] bg-[#1e2329] px-3 py-2.5 text-center">
+      <p
+        className="text-[9px] font-semibold uppercase tracking-[0.08em] text-[#474d57]"
+        style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+      >
+        {item.symbol}
+      </p>
+      <p
+        className="text-[13px] font-semibold text-[#eaecef]"
+        style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+      >
+        {item.value ?? "N/A"}
+      </p>
+      <p
+        className={`text-[11px] font-medium ${toneClass(item.trend)}`}
+        style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+      >
+        {item.change ?? "-"}
+      </p>
     </div>
   );
 }
@@ -259,63 +311,95 @@ function IndicatorPill({ item }: { item: CryptoIndicator }) {
 function MetricCard({ item }: { item: TickerItem }) {
   return (
     <div
-      className="card-family-data h-full"
+      className="h-full rounded-md border border-[#2b3139] bg-[#1e2329] p-3"
       style={compactHeatTone(item.trend, changeMagnitude(item.change), 3.5)}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <span className="label-meta truncate text-white/46">{item.symbol}</span>
-          <p className="truncate text-[13px] leading-5 text-white/78">{item.label}</p>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 space-y-0.5">
+          <span
+            className="block text-[9px] font-medium uppercase tracking-[0.1em] text-[#474d57]"
+            style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+          >
+            {item.symbol}
+          </span>
+          <p className="truncate text-[12px] leading-5 text-[#848e9c]">{item.label}</p>
         </div>
         <div className="text-right">
-          <span className="numeric-md block leading-tight text-white">{item.value ?? "N/A"}</span>
-          <div className={`mt-1 text-[12px] ${toneClass(item.trend)}`}>
-            <span>{item.change ?? "-"}</span>
-          </div>
+          <span
+            className="block text-[14px] font-semibold leading-tight text-[#eaecef]"
+            style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+          >
+            {item.value ?? "N/A"}
+          </span>
+          <span
+            className={`mt-0.5 block text-[11px] font-medium ${toneClass(item.trend)}`}
+            style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+          >
+            {item.change ?? "-"}
+          </span>
         </div>
       </div>
       {item.history.length >= 2 && (
-        <div className="mt-3 flex justify-end">
-          <Sparkline history={item.history} trend={item.trend} width={72} height={28} />
+        <div className="mt-2 flex justify-end">
+          <Sparkline history={item.history} trend={item.trend} width={72} height={26} />
         </div>
       )}
-      {item.isCached ? <p className="label-meta mt-2 text-white/28">cached</p> : null}
+      {item.isCached ? (
+        <p
+          className="mt-1.5 text-[9px] text-[#474d57]"
+          style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+        >
+          cached
+        </p>
+      ) : null}
     </div>
   );
 }
 
 function MarketStripRow({ item, isLast }: { item: TickerItem; isLast: boolean }) {
-  const borderColor =
+  const accentColor =
     item.trend === "up"
-      ? "rgba(14,203,129,0.55)"
+      ? "#0ecb81"
       : item.trend === "down"
-        ? "rgba(246,70,93,0.55)"
-        : "rgba(255,255,255,0.12)";
+        ? "#f6465d"
+        : "#2b3139";
   return (
     <div
-      className={`grid items-center gap-3 px-4 py-3.5 ${!isLast ? "border-b border-white/6" : ""}`}
-      style={{ gridTemplateColumns: "1fr 72px auto" }}
+      className={`grid items-center gap-3 px-4 py-3 ${!isLast ? "border-b border-[#2b3139]" : ""}`}
+      style={{ gridTemplateColumns: "1fr 64px auto" }}
     >
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <span
-            className="h-full w-[3px] shrink-0 self-stretch rounded-full"
-            style={{ background: borderColor, minHeight: "32px" }}
+            className="h-8 w-[2px] shrink-0 rounded-full"
+            style={{ background: accentColor }}
           />
           <div className="min-w-0">
-            <p className="numeric-sm font-semibold leading-tight text-white">{item.symbol}</p>
-            <p className="mt-0.5 truncate text-[11px] text-white/40">{item.label}</p>
+            <p
+              className="text-[12px] font-semibold leading-tight text-[#eaecef]"
+              style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+            >
+              {item.symbol}
+            </p>
+            <p className="mt-0.5 truncate text-[11px] text-[#474d57]">{item.label}</p>
           </div>
         </div>
       </div>
       <div className="flex items-center justify-center">
-        <Sparkline history={item.history} trend={item.trend} width={64} height={26} />
+        <Sparkline history={item.history} trend={item.trend} width={56} height={24} />
       </div>
       <div className="text-right">
-        <p className="numeric-sm font-semibold leading-tight text-white">{item.value ?? "N/A"}</p>
-        <p className={`mt-0.5 text-[11px] font-medium ${toneClass(item.trend)}`}>
+        <p
+          className="text-[12px] font-semibold leading-tight text-[#eaecef]"
+          style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+        >
+          {item.value ?? "N/A"}
+        </p>
+        <p
+          className={`mt-0.5 text-[11px] font-medium ${toneClass(item.trend)}`}
+          style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+        >
           {item.change ?? "-"}
-          {item.isCached ? <span className="ml-1 text-white/24">·</span> : null}
         </p>
       </div>
     </div>
@@ -326,9 +410,19 @@ function MarketStripRow({ item, isLast }: { item: TickerItem; isLast: boolean })
 
 function EtfStatCallout({ label, value }: { label: string; value: string | null }) {
   return (
-    <div className="rounded-xl border border-white/8 bg-black/30 px-4 py-3">
-      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/34">{label}</p>
-      <p className="numeric-md mt-1.5 font-semibold text-white">{value ?? "N/A"}</p>
+    <div className="rounded-md border border-[#2b3139] bg-[#161a1e] px-4 py-3">
+      <p
+        className="text-[9px] font-medium uppercase tracking-[0.14em] text-[#474d57]"
+        style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+      >
+        {label}
+      </p>
+      <p
+        className="mt-1.5 text-[15px] font-semibold text-[#eaecef]"
+        style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+      >
+        {value ?? "N/A"}
+      </p>
     </div>
   );
 }
@@ -349,15 +443,28 @@ function EtfIssuerRow({
   const inner = (
     <>
       <div className="flex items-center gap-2">
-        <span className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-white/72">
+        <span
+          className="rounded-sm border border-[#2b3139] bg-[#1e2329] px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.1em] text-[#848e9c]"
+          style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+        >
           {name}
         </span>
       </div>
-      <p className="numeric-sm text-white/70">{holding ?? "N/A"}</p>
-      <p className="numeric-sm text-right text-white/70">{aum ?? "N/A"}</p>
+      <p
+        className="text-[12px] text-[#848e9c]"
+        style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+      >
+        {holding ?? "N/A"}
+      </p>
+      <p
+        className="text-right text-[12px] text-[#848e9c]"
+        style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+      >
+        {aum ?? "N/A"}
+      </p>
     </>
   );
-  const rowClass = `grid items-center gap-3 px-4 py-3 transition ${!isFirst ? "border-t border-white/6" : ""}`;
+  const rowClass = `grid items-center gap-3 px-4 py-3 transition ${!isFirst ? "border-t border-[#2b3139]" : ""}`;
   const gridStyle = { gridTemplateColumns: "1fr 1fr 1fr" };
 
   return sourceUrl ? (
@@ -365,7 +472,7 @@ function EtfIssuerRow({
       href={sourceUrl}
       target="_blank"
       rel="noreferrer"
-      className={`${rowClass} hover:bg-white/[0.04]`}
+      className={`${rowClass} hover:bg-[#2b3139]/40`}
       style={gridStyle}
     >
       {inner}
@@ -387,14 +494,16 @@ function EtfDetail({
   if (!etf && (!etfHistory || etfHistory.length === 0)) return null;
 
   return (
-    <div className="md:rounded-xl md:border md:border-white/8 md:bg-black/20 md:p-6">
-      {/* header — needs its own padding on mobile since parent card is removed */}
-      <div className="flex flex-col gap-4 px-4 pb-3 pt-5 md:flex-row md:items-start md:justify-between md:p-0">
-        <div className="space-y-1">
-          <p className="label-meta text-white/42">공식 ETF 스냅샷</p>
-          <p className="text-[13px] leading-6 text-white/46">
-            총 보유량·AUM과 14일 순유입 흐름
+    <div className="md:rounded-md md:border md:border-[#2b3139] md:bg-[#1e2329] md:p-5">
+      <div className="flex flex-col gap-4 px-4 pb-3 pt-5 md:flex-row md:items-start md:justify-between md:p-0 md:pb-4">
+        <div className="space-y-0.5">
+          <p
+            className="text-[10px] font-medium uppercase tracking-[0.12em] text-[#474d57]"
+            style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+          >
+            BTC ETF 스냅샷
           </p>
+          <p className="text-[13px] text-[#848e9c]">총 보유량·AUM과 순유입 흐름</p>
         </div>
         {etf && (
           <div className="grid grid-cols-2 gap-2.5 md:min-w-[280px]">
@@ -404,18 +513,30 @@ function EtfDetail({
         )}
       </div>
 
-      {/* 유입 히스토리 차트 — full-width on mobile */}
       {etfHistory && etfHistory.length > 1 && <EtfInflowChart history={etfHistory} />}
 
       {etf && etf.issuers.length > 0 && (
-        <div className="mx-4 mt-5 overflow-hidden rounded-xl border border-white/8 bg-black/20 md:mx-0">
+        <div className="mx-4 mt-4 overflow-hidden rounded-md border border-[#2b3139] bg-[#161a1e] md:mx-0">
           <div
-            className="grid border-b border-white/8 px-4 py-2"
+            className="grid border-b border-[#2b3139] px-4 py-2"
             style={{ gridTemplateColumns: "1fr 1fr 1fr" }}
           >
-            <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/28">운용사</p>
-            <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/28">보유량</p>
-            <p className="text-right font-mono text-[9px] uppercase tracking-[0.14em] text-white/28">
+            <p
+              className="text-[9px] uppercase tracking-[0.14em] text-[#474d57]"
+              style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+            >
+              운용사
+            </p>
+            <p
+              className="text-[9px] uppercase tracking-[0.14em] text-[#474d57]"
+              style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+            >
+              보유량
+            </p>
+            <p
+              className="text-right text-[9px] uppercase tracking-[0.14em] text-[#474d57]"
+              style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+            >
               AUM
             </p>
           </div>
@@ -459,33 +580,47 @@ export function CryptoPulseBoard({
   etfHistory: EtfHistoryPoint[] | null;
 }) {
   return (
-    <RevealSection className="border-b border-white/10 px-6 py-20" revealAt={0.88} delayMs={60}>
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-10">
+    <RevealSection className="border-b border-[#2b3139] px-4 py-10 md:px-6" revealAt={0.88} delayMs={60}>
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
         {/* ── Section header ─────────────────────────────────────────── */}
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div className="space-y-1">
-            <h2 className="section-title">크립토 흐름</h2>
-            <p className="eyebrow">흐름 보기</p>
+        <div className="flex items-center justify-between border-b border-[#2b3139] pb-4">
+          <div className="flex items-center gap-3">
+            <span
+              className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#eaecef]"
+              style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+            >
+              크립토 흐름
+            </span>
+            <span className="h-3.5 w-px bg-[#2b3139]" />
+            <span
+              className="text-[10px] uppercase tracking-[0.1em] text-[#474d57]"
+              style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+            >
+              Market Overview
+            </span>
           </div>
-          <div className="flex items-center gap-4 text-[10px] font-mono uppercase tracking-[0.18em] text-white/42">
-            <span className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[var(--accent-green)]" />
+          <div
+            className="flex items-center gap-3 text-[9px] uppercase tracking-[0.1em] text-[#474d57]"
+            style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+          >
+            <span className="flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#0ecb81]" />
               상승
             </span>
-            <span className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[var(--accent-down)]" />
+            <span className="flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#f6465d]" />
               하락
             </span>
           </div>
         </div>
 
         {/* ── 1. Hero Row: BTC price + F&G ───────────────────────────── */}
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2">
           <HeroPrice bitcoin={bitcoin} />
           {bitcoin.fearGreedIndex ? (
             <FearGreedCompact fng={bitcoin.fearGreedIndex} />
           ) : (
-            <div className="rounded-xl border border-white/8 bg-black/20 p-5">
+            <div className="rounded-md border border-[#2b3139] bg-[#1e2329] p-5">
               <DataState
                 title="공포·탐욕"
                 message="이번 집계에서는 공포탐욕지수를 확인하지 못했어요."
@@ -500,18 +635,16 @@ export function CryptoPulseBoard({
         {snapshot.items.length > 0 ? (
           <>
             {/* mobile: strip rows */}
-            <div className="overflow-hidden rounded-2xl border border-white/8 bg-black/24 md:hidden">
+            <div className="overflow-hidden rounded-md border border-[#2b3139] bg-[#1e2329] md:hidden">
               {snapshot.items.map((item, i) => (
                 <MarketStripRow key={item.symbol} item={item} isLast={i === snapshot.items.length - 1} />
               ))}
             </div>
             {/* desktop: grid */}
-            <div className="hidden gap-3 md:grid md:grid-cols-3 lg:grid-cols-5">
+            <div className="hidden gap-2.5 md:grid md:grid-cols-3 lg:grid-cols-5">
               {snapshot.items.map((item, i) => (
                 <div
                   key={item.symbol}
-                  className="card-data market-heat-card"
-                  data-trend={item.trend ?? "neutral"}
                   style={{ animationDelay: metricDelay(i) }}
                 >
                   <MetricCard item={item} />
@@ -531,15 +664,23 @@ export function CryptoPulseBoard({
         {/* ── 3. Crypto Indicators ───────────────────────────────────── */}
         {indicators.length > 0 && (
           <div>
-            <div className="mb-4">
-              <p className="section-title">핵심 지표</p>
-              <p className="mt-1 text-[13px] leading-6 text-[var(--text-secondary)]">
-                투자 심리, ETF 자금 흐름, 달러와 금리 변화를 함께 확인합니다.
-              </p>
+            <div className="mb-3 flex items-center gap-3 border-b border-[#2b3139] pb-3">
+              <span
+                className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#eaecef]"
+                style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+              >
+                핵심 지표
+              </span>
+              <span
+                className="text-[10px] text-[#474d57]"
+                style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+              >
+                심리 · ETF · 달러 · 금리
+              </span>
             </div>
 
             {/* mobile: horizontal scroll pills */}
-            <div className="flex gap-2.5 overflow-x-auto pb-1 md:hidden">
+            <div className="flex gap-2 overflow-x-auto pb-1 md:hidden">
               {indicators.map((ind, i) => (
                 <div key={ind.symbol} style={{ animationDelay: indicatorDelay(i) }}>
                   <IndicatorPill item={ind} />
@@ -547,12 +688,10 @@ export function CryptoPulseBoard({
               ))}
             </div>
             {/* desktop: grid */}
-            <div className="hidden gap-3 md:grid md:grid-cols-3 xl:grid-cols-5">
+            <div className="hidden gap-2.5 md:grid md:grid-cols-3 xl:grid-cols-5">
               {indicators.map((ind, i) => (
                 <div
                   key={ind.symbol}
-                  className="card-data market-heat-card"
-                  data-trend={ind.trend ?? "neutral"}
                   style={{ animationDelay: indicatorDelay(i) }}
                 >
                   <IndicatorCard item={ind} />
@@ -563,7 +702,7 @@ export function CryptoPulseBoard({
         )}
 
         {/* ── 4. ETF Detail — breakout on mobile for full-width chart ── */}
-        <div className="-mx-6 md:mx-0">
+        <div className="-mx-4 md:mx-0">
           <EtfDetail etf={bitcoin.etf} etfHistory={etfHistory} />
         </div>
       </div>
