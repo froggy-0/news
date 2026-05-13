@@ -60,8 +60,12 @@ export function SiteHeader({
           <span className="mx-2 h-4 w-px bg-[#2b3139]" />
           <a
             href="/#subscribe"
-            className="flex h-8 items-center gap-1.5 rounded bg-[#f0b90b] px-4 text-[13px] font-bold text-[#1e2329] transition-opacity hover:opacity-90"
-            style={{ fontFamily: "var(--font-dm-sans)" }}
+            className="flex h-8 items-center gap-1.5 rounded px-4 text-[13px] font-bold text-[#0a0c0e] transition-all hover:-translate-y-px hover:opacity-95"
+            style={{
+              fontFamily: "var(--font-dm-sans)",
+              background: "linear-gradient(135deg, #f5c430 0%, #e8a800 100%)",
+              boxShadow: "0 2px 12px rgba(240,185,11,0.22), inset 0 1px 0 rgba(255,255,255,0.14)",
+            }}
           >
             Subscribe
           </a>
@@ -71,7 +75,11 @@ export function SiteHeader({
         <div className="flex items-center gap-2 md:hidden">
           <a
             href="/#subscribe"
-            className="flex h-8 items-center rounded bg-[#f0b90b] px-3 text-[12px] font-bold text-[#1e2329]"
+            className="flex h-8 items-center rounded px-3 text-[12px] font-bold text-[#0a0c0e]"
+            style={{
+              background: "linear-gradient(135deg, #f5c430 0%, #e8a800 100%)",
+              boxShadow: "0 2px 10px rgba(240,185,11,0.20)",
+            }}
           >
             Subscribe
           </a>

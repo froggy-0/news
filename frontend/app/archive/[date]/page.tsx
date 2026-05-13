@@ -3,8 +3,7 @@ import { notFound } from "next/navigation";
 
 import { BriefBody, sanitizePublicBody } from "@/components/brief/BriefBody";
 import { JudgmentBlock } from "@/components/brief/JudgmentBlock";
-import { RiskOverlayPanel } from "@/components/brief/RiskOverlayPanel";
-import { SovereignIndexPanel } from "@/components/brief/SovereignIndexPanel";
+import { SovereignCommandPanel } from "@/components/brief/SovereignCommandPanel";
 import { TopicGrid } from "@/components/brief/TopicGrid";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { CryptoPulseBoard } from "@/components/market/CryptoPulseBoard";
@@ -43,14 +42,13 @@ export default async function ArchiveDetailPage({
     return (
       <main className="pb-6">
         <SiteHeader variant="archive-detail" />
+        <SovereignCommandPanel sovereignIndex={brief.sovereignIndex} riskOverlay={brief.riskOverlay} />
         <JudgmentBlock
           headline={brief.meta.displayHeadline || brief.aiJudgment.headline}
           summaryLead={brief.aiJudgment.summaryLead}
           summarySupport={brief.aiJudgment.summarySupport}
           issueDate={brief.meta.date}
         />
-        <RiskOverlayPanel overlay={brief.riskOverlay} />
-        <SovereignIndexPanel sovereignIndex={brief.sovereignIndex} riskOverlay={brief.riskOverlay} />
         <CryptoPulseBoard
           snapshot={brief.marketSnapshot}
           indicators={brief.cryptoIndicators}

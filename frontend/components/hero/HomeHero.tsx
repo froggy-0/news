@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, BarChart2, Activity } from "lucide-react";
 import React from "react";
-import type { BriefData } from "@schema/brief.types";
+import type { BriefData, RiskOverlay, SovereignIndex } from "@schema/brief.types";
 
 import { SubscriptionForm } from "@/components/layout/SubscriptionForm";
 import { displayHeadline, formatPublicationDate, hasUsableHeadline } from "@/lib/format";
@@ -53,29 +53,95 @@ export function HomeHero({
     <>
       <section className="hero-stage px-6 md:px-20" data-hero-seed={heroSeed}>
         <div className="relative z-10 flex w-full max-w-3xl flex-col items-center text-center">
-          <p className="text-[11px] font-medium uppercase tracking-[0.15em] text-[var(--accent-primary)] md:text-[13px]">
-            MARKET NARRATIVE INTELLIGENCE
-          </p>
 
-          <h1 className="mt-6 text-4xl font-bold leading-[1.15] text-[var(--smoke)] md:mt-8 md:text-7xl md:leading-[1.14]">
+          {/* Eyebrow — date + live pulse */}
+          <div className="flex items-center gap-2.5">
+            <span
+              className="h-1.5 w-1.5 rounded-full bg-[#00ffff]"
+              style={{ boxShadow: "0 0 5px rgba(0,255,255,0.7)" }}
+            />
+            <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--taupe)]/60">
+              BTC Market Intelligence · Daily
+            </span>
+          </div>
+
+          <h1 className="mt-8 text-4xl font-bold leading-[1.12] text-[var(--smoke)] md:mt-10 md:text-[76px] md:leading-[1.10]">
             SOVEREIGN BRIEF
           </h1>
-          <p className="mt-3 text-4xl font-bold leading-[1.15] text-[var(--taupe)] md:text-7xl md:leading-[1.14]">
+          <p className="mt-3 text-4xl font-bold leading-[1.12] text-[var(--taupe)]/70 md:text-[76px] md:leading-[1.10]">
             시장이 움직이기 전에.
           </p>
 
-          <p className="mt-7 max-w-xs break-keep text-[15px] leading-relaxed text-[var(--taupe)] md:mt-10 md:max-w-[560px] md:text-lg">
-            Bloomberg, Reuters 보도와 Binance, BlackRock 공식 데이터를 교차해 내러티브가 가격에 반영되기 전에 정리합니다.
+          <p className="mt-8 max-w-xs break-keep text-[15px] leading-relaxed text-[var(--taupe)]/72 md:mt-10 md:max-w-[520px] md:text-[17px]">
+            Bloomberg, Reuters 보도와 Binance, BlackRock 공식 데이터를 교차해<br className="hidden md:block" />
+            내러티브가 가격에 반영되기 전에 정리합니다.
           </p>
 
-          <div id="subscribe" className="mt-14 w-full max-w-md md:mt-16 md:max-w-[520px]">
+          {/* Inline live signal — fold 내 브랜딩 핵심 */}
+          {(brief.sovereignIndex || brief.riskOverlay) && (
+            <div className="mt-10 flex items-center gap-0 overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.03] backdrop-blur-sm">
+              {brief.sovereignIndex && (
+                <div className="flex items-center gap-3 px-5 py-3">
+                  <div
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ background: ZONE_COLOR[brief.sovereignIndex.zone], boxShadow: `0 0 6px ${ZONE_COLOR[brief.sovereignIndex.zone]}80` }}
+                  />
+                  <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-white/32">Index</span>
+                  <span
+                    className="font-mono text-[18px] font-bold tabular-nums leading-none"
+                    style={{ color: ZONE_COLOR[brief.sovereignIndex.zone] }}
+                  >
+                    {Math.round(brief.sovereignIndex.score)}
+                  </span>
+                  <span className="font-mono text-[10px] text-white/38">
+                    {ZONE_LABEL[brief.sovereignIndex.zone]}
+                  </span>
+                </div>
+              )}
+              {brief.sovereignIndex && brief.riskOverlay && (
+                <div className="h-8 w-px bg-white/[0.08]" />
+              )}
+              {brief.riskOverlay && (
+                <div className="flex items-center gap-3 px-5 py-3">
+                  <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-white/32">State</span>
+                  <span
+                    className="text-[14px] font-bold leading-none"
+                    style={{ color: REGIME_COLOR[brief.riskOverlay.regimeState] ?? "rgba(255,255,255,0.72)" }}
+                  >
+                    {REGIME_LABEL[brief.riskOverlay.regimeState] ?? brief.riskOverlay.regimeState}
+                  </span>
+                  {brief.riskOverlay.signalConfidence && brief.riskOverlay.signalConfidence !== "NONE" && (
+                    <>
+                      <div className="h-3 w-px bg-white/[0.08]" />
+                      <span
+                        className="font-mono text-[10px] font-semibold"
+                        style={{ color: CONF_COLOR[brief.riskOverlay.signalConfidence] ?? "rgba(255,255,255,0.46)" }}
+                      >
+                        {CONF_LABEL[brief.riskOverlay.signalConfidence]}
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div id="subscribe" className="mt-10 w-full max-w-md md:mt-12 md:max-w-[480px]">
             <SubscriptionForm />
           </div>
-          <p className="mt-4 text-xs text-[var(--taupe)]/45 md:text-[13px]">
-            매일 아침 · 공개 브리핑 · 무료 구독
+          <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--taupe)]/36">
+            매일 아침 · 공개 브리핑 · 무료
           </p>
         </div>
       </section>
+
+      {(brief.sovereignIndex ?? brief.riskOverlay) && (
+        <SovereignLiveStrip
+          sovereignIndex={brief.sovereignIndex}
+          riskOverlay={brief.riskOverlay}
+          latestDate={latestDate}
+        />
+      )}
 
       <Divider />
 
@@ -227,9 +293,11 @@ function ComparisonPanel({
       <div className="mt-5 flex flex-col gap-3">
         {rows.map((row) => (
           <div key={row} className="flex items-start gap-3">
-            <span className={`text-sm ${muted ? "text-[var(--taupe)]/40" : "text-[var(--accent-primary)]"}`}>
-              {muted ? "-" : "->"}
-            </span>
+            {muted ? (
+              <span className="mt-0.5 shrink-0 text-sm text-[var(--taupe)]/36">—</span>
+            ) : (
+              <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent-primary)]" aria-hidden />
+            )}
             <span className={`text-sm leading-snug md:text-[15px] ${muted ? "text-[var(--taupe)]/60" : "font-medium text-[var(--smoke)]"}`}>
               {row}
             </span>
@@ -245,5 +313,193 @@ function Divider() {
     <div className="relative z-10 px-6 py-2.5 md:px-20">
       <div className="h-px w-full bg-[rgba(169,146,125,0.12)]" />
     </div>
+  );
+}
+
+/* ── zone helpers ───────────────────────────────────────────────────────── */
+
+const ZONE_COLOR = { bull: "#10b981", neutral: "#64748b", bear: "#ef4444" } as const;
+const ZONE_LABEL = { bull: "강세 구간", neutral: "중립 구간", bear: "약세 구간" } as const;
+
+const REGIME_COLOR: Record<string, string> = {
+  BullQuiet: "#10b981", BullHeated: "#f0b90b",
+  BearPanic: "#ef4444", Choppy: "#f0b90b", Transitional: "rgba(255,255,255,0.72)",
+};
+const REGIME_LABEL: Record<string, string> = {
+  BullQuiet: "안정 상승", BullHeated: "과열 상승",
+  BearPanic: "공포 하락", Choppy: "방향 불명", Transitional: "전환 구간",
+};
+
+const CONF_COLOR: Record<string, string> = {
+  HIGH: "#10b981", MEDIUM: "#f0b90b", LOW: "rgba(255,255,255,0.48)", NONE: "rgba(255,255,255,0.32)",
+};
+const CONF_LABEL: Record<string, string> = {
+  HIGH: "신호 강함", MEDIUM: "신호 보통", LOW: "신호 약함", NONE: "대기",
+};
+const VOL_LABEL: Record<string, string> = { Low: "변동성 낮음", Mid: "변동성 보통", High: "변동성 높음" };
+
+/* ── SovereignLiveStrip ─────────────────────────────────────────────────── */
+
+function SovereignLiveStrip({
+  sovereignIndex,
+  riskOverlay,
+  latestDate,
+}: {
+  sovereignIndex: SovereignIndex | null;
+  riskOverlay: RiskOverlay | null;
+  latestDate: string;
+}) {
+  const si = sovereignIndex;
+  const ro = riskOverlay;
+
+  return (
+    <section className="relative z-10 px-6 py-8 md:px-20">
+      <div className="mx-auto w-full max-w-6xl">
+        {/* Label row */}
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span
+              className="h-1.5 w-1.5 rounded-full bg-[#00ffff]"
+              style={{ boxShadow: "0 0 5px rgba(0,255,255,0.6)" }}
+            />
+            <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--taupe)]/50">
+              Sovereign · 오늘의 주력 신호
+            </span>
+          </div>
+          <span className="rounded-full border border-[rgba(0,255,255,0.18)] bg-[rgba(0,255,255,0.05)] px-2 py-0.5 font-mono text-[8px] uppercase tracking-[0.14em] text-[rgba(0,255,255,0.55)]">
+            LIVE
+          </span>
+        </div>
+
+        {/* Card */}
+        <div
+          className="relative overflow-hidden rounded-xl"
+          style={{
+            border: "1px solid rgba(0,255,255,0.10)",
+            background: "linear-gradient(135deg, rgba(0,255,255,0.04), rgba(10,9,8,0.96) 50%, rgba(16,185,129,0.03))",
+          }}
+        >
+          {/* top accent */}
+          <div
+            className="absolute inset-x-0 top-0 h-px"
+            style={{ background: "linear-gradient(to right, transparent, rgba(0,255,255,0.30), rgba(16,185,129,0.14), transparent)" }}
+          />
+
+          <div className="grid gap-px bg-white/[0.04] md:grid-cols-2">
+
+            {/* LEFT: Sovereign Index */}
+            <div className="bg-[#0b0a08]/94 p-5 md:p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <BarChart2 className="h-3.5 w-3.5" style={{ color: "#00ffff", opacity: 0.7 }} aria-hidden />
+                <span className="font-mono text-[9px] uppercase tracking-[0.20em]" style={{ color: "#00ffff", opacity: 0.7 }}>
+                  Sovereign Index
+                </span>
+              </div>
+
+              {si ? (
+                <div className="flex items-end gap-4">
+                  {/* Score */}
+                  <div>
+                    <span
+                      className="font-mono text-[52px] font-bold leading-none tabular-nums"
+                      style={{ color: ZONE_COLOR[si.zone], letterSpacing: "-0.03em" }}
+                    >
+                      {Math.round(si.score)}
+                    </span>
+                    <span className="ml-1.5 font-mono text-sm text-white/30">/ 100</span>
+                  </div>
+
+                  {/* Zone + mini gauge */}
+                  <div className="mb-1 flex-1">
+                    <span className="text-sm font-bold" style={{ color: ZONE_COLOR[si.zone] }}>
+                      {si.labelKo}
+                    </span>
+                    <p className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-white/30">
+                      {ZONE_LABEL[si.zone]}
+                    </p>
+                    {/* Gauge bar */}
+                    <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${Math.min(100, Math.max(0, si.score))}%`,
+                          background: ZONE_COLOR[si.zone],
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="font-mono text-[11px] text-white/26">데이터 준비 중</p>
+              )}
+            </div>
+
+            {/* RIGHT: Sovereign State */}
+            <div className="bg-[#0b0a08]/94 p-5 md:p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Activity className="h-3.5 w-3.5 text-white/50" aria-hidden />
+                <span className="font-mono text-[9px] uppercase tracking-[0.20em] text-white/50">
+                  Sovereign State
+                </span>
+              </div>
+
+              {ro ? (
+                <div className="flex items-end justify-between gap-4">
+                  {/* Regime */}
+                  <div>
+                    <span
+                      className="text-[28px] font-black leading-none"
+                      style={{ color: REGIME_COLOR[ro.regimeState] ?? "rgba(255,255,255,0.76)" }}
+                    >
+                      {REGIME_LABEL[ro.regimeState] ?? ro.regimeState}
+                    </span>
+                    <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.16em] text-white/26">
+                      {ro.regimeState}
+                    </p>
+                  </div>
+
+                  {/* Vol + signal pills */}
+                  <div className="mb-1 flex flex-col items-end gap-1.5">
+                    {ro.volLevel && (
+                      <span className="rounded border border-white/8 bg-white/[0.04] px-2 py-0.5 font-mono text-[10px] text-white/46">
+                        {VOL_LABEL[ro.volLevel] ?? ro.volLevel}
+                      </span>
+                    )}
+                    {ro.signalConfidence && (
+                      <span
+                        className="rounded border px-2 py-0.5 font-mono text-[10px] font-semibold"
+                        style={{
+                          color: CONF_COLOR[ro.signalConfidence] ?? "rgba(255,255,255,0.46)",
+                          borderColor: `${CONF_COLOR[ro.signalConfidence] ?? "rgba(255,255,255,0.1)"}33`,
+                          background: `${CONF_COLOR[ro.signalConfidence] ?? "rgba(255,255,255,0.04)"}14`,
+                        }}
+                      >
+                        {CONF_LABEL[ro.signalConfidence] ?? ro.signalConfidence}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="font-mono text-[11px] text-white/26">데이터 준비 중</p>
+              )}
+            </div>
+          </div>
+
+          {/* Footer CTA */}
+          <div className="flex items-center justify-between border-t border-white/[0.05] bg-[#0b0a08]/94 px-5 py-3 md:px-6">
+            <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/24">
+              전체 분석 · Sovereign Analysis
+            </span>
+            <Link
+              href={`/archive/${latestDate}`}
+              className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-white/38 transition-colors hover:text-[rgba(0,255,255,0.65)]"
+            >
+              오늘 브리프 전체 읽기
+              <ArrowRight className="h-3 w-3" aria-hidden />
+            </Link>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }

@@ -123,21 +123,21 @@ const fragmentShaderSource = `
       sin(shift + 2.094) * 0.5 + 0.5,
       sin(shift + 4.189) * 0.5 + 0.5
     );
-    tint = mix(tint, vec3(0.20, 0.15, 0.70), 0.6);
+    tint = mix(tint, vec3(0.02, 0.16, 0.20), 0.65);
 
-    vec3 surface = vec3(0.005, 0.004, 0.010);
-    surface += tint * 0.30 * lightAtten;
-    surface += vec3(0.40, 0.45, 1.00) * spec * lightAtten * 0.70;
-    surface += vec3(0.90, 0.92, 1.00) * sharpSpec * lightAtten * 1.50;
-    surface += vec3(0.50, 0.25, 0.08) * warmSpec * warmAtten * 0.50;
-    surface += vec3(0.60, 0.35, 0.10) * warmAtten * 0.08;
-    surface += vec3(0.06, 0.06, 0.15) * pow(1.0 - max(dot(normal, view), 0.0), 4.0) * 0.15;
+    vec3 surface = vec3(0.002, 0.006, 0.008);
+    surface += tint * 0.28 * lightAtten;
+    surface += vec3(0.00, 0.75, 0.90) * spec * lightAtten * 0.55;
+    surface += vec3(0.80, 0.96, 1.00) * sharpSpec * lightAtten * 1.20;
+    surface += vec3(0.58, 0.30, 0.02) * warmSpec * warmAtten * 0.55;
+    surface += vec3(0.65, 0.40, 0.04) * warmAtten * 0.09;
+    surface += vec3(0.02, 0.08, 0.12) * pow(1.0 - max(dot(normal, view), 0.0), 4.0) * 0.14;
 
-    float rim = exp(-abs(d) * 80.0) * 0.20;
+    float rim = exp(-abs(d) * 80.0) * 0.18;
     float edgeAngle = atan(p.y, p.x);
     vec3 rimColor = mix(
-      vec3(0.15, 0.18, 0.50),
-      vec3(0.30, 0.15, 0.05),
+      vec3(0.00, 0.22, 0.28),
+      vec3(0.30, 0.16, 0.02),
       sin(edgeAngle * 2.0 + t * 0.3) * 0.5 + 0.5
     );
 
@@ -256,7 +256,7 @@ export function AtmosphericCanvas() {
   return (
     <canvas
       ref={canvasRef}
-      className="pointer-events-none fixed inset-0 z-0 opacity-40 will-change-transform"
+      className="pointer-events-none fixed inset-0 z-0 opacity-[0.28] will-change-transform"
       aria-hidden="true"
     />
   );

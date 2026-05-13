@@ -56,7 +56,7 @@ export function SubscriptionForm() {
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           placeholder="이메일을 입력하세요"
-          className="h-[52px] w-full rounded-md border border-[rgba(169,146,125,0.25)] bg-[rgba(242,244,243,0.06)] px-5 pr-11 text-[15px] text-[var(--smoke)] outline-none transition-colors placeholder:text-[var(--taupe)]/50 focus:border-[rgba(169,146,125,0.50)]"
+          className="h-[52px] w-full rounded-md border border-white/10 bg-white/[0.04] px-5 pr-11 text-[15px] text-[var(--smoke)] outline-none transition-all placeholder:text-white/28 focus:border-[rgba(240,185,11,0.36)] focus:bg-white/[0.06] focus:shadow-[0_0_0_3px_rgba(240,185,11,0.08)]"
           required
         />
         <Mail className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--taupe)]/40 transition group-focus-within:text-[var(--taupe)]" />
@@ -64,7 +64,13 @@ export function SubscriptionForm() {
       <button
         type="submit"
         disabled={submitting}
-        className="group flex h-[52px] w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-[var(--accent-primary)] px-8 text-[15px] font-semibold text-[var(--smoke)] transition-colors hover:bg-[var(--accent-primary-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+        className="group flex h-[52px] w-full cursor-pointer items-center justify-center gap-2 rounded-md px-8 text-[15px] font-semibold text-[#0a0c0e] transition-all hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
+        style={{
+          background: "linear-gradient(135deg, #f5c430 0%, #e8a800 100%)",
+          boxShadow: "0 4px 20px rgba(240,185,11,0.22), inset 0 1px 0 rgba(255,255,255,0.14)",
+        }}
+        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 6px 28px rgba(240,185,11,0.34), inset 0 1px 0 rgba(255,255,255,0.20)"; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 20px rgba(240,185,11,0.22), inset 0 1px 0 rgba(255,255,255,0.14)"; }}
       >
         {submitting ? (
           <>
@@ -78,8 +84,8 @@ export function SubscriptionForm() {
           </>
         )}
       </button>
-      <p className="text-[13px] leading-6 text-[var(--taupe)]/45">
-        이메일 확인 후 다음 브리프부터 받아볼 수 있습니다.
+      <p className="font-mono text-[11px] uppercase tracking-[0.10em] text-white/28">
+        이메일 확인 후 다음 브리프부터 수신
       </p>
       {message ? <SubscriptionState tone="success">{message}</SubscriptionState> : null}
       {error ? <SubscriptionState tone="danger">{error}</SubscriptionState> : null}

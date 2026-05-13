@@ -4,7 +4,6 @@ import type {
   BitcoinSection,
   CryptoIndicator,
   EtfHistoryPoint,
-  FearGreedIndex,
   MarketSnapshot,
   TickerItem,
 } from "@schema/brief.types";
@@ -96,25 +95,6 @@ function Sparkline({
   );
 }
 
-/* ── Fear & Greed helpers ───────────────────────────────────────────────── */
-
-function fngStage(value: number) {
-  if (value <= 20) return { label: "극도 공포", color: "#f6465d", bgColor: "rgba(246,70,93,0.12)" };
-  if (value <= 40) return { label: "공포", color: "#f0b90b", bgColor: "rgba(240,185,11,0.10)" };
-  if (value <= 60)
-    return { label: "중립", color: "rgba(255,255,255,0.55)", bgColor: "rgba(255,255,255,0.05)" };
-  if (value <= 80) return { label: "탐욕", color: "#0ecb81", bgColor: "rgba(14,203,129,0.10)" };
-  return { label: "극도 탐욕", color: "#0ecb81", bgColor: "rgba(14,203,129,0.16)" };
-}
-
-const FNG_SEGMENTS = [
-  { max: 20, color: "#f6465d", label: "극공포" },
-  { max: 40, color: "#f0b90b", label: "공포" },
-  { max: 60, color: "rgba(255,255,255,0.28)", label: "중립" },
-  { max: 80, color: "#0ecb81", label: "탐욕" },
-  { max: 100, color: "#0ecb81", label: "극탐욕" },
-];
-
 /* ── 1. Hero Row — BTC 현물 가격 ────────────────────────────────────────── */
 
 function HeroPrice({ bitcoin }: { bitcoin: BitcoinSection }) {
@@ -167,78 +147,7 @@ function HeroPrice({ bitcoin }: { bitcoin: BitcoinSection }) {
   );
 }
 
-/* ── 2. Fear & Greed Gauge (compact) ────────────────────────────────────── */
-
-function FearGreedCompact({ fng }: { fng: FearGreedIndex }) {
-  const stage = fngStage(fng.value);
-  const markerPct = Math.max(1, Math.min(99, fng.value));
-
-  return (
-    <div className="rounded-md border border-[#2b3139] bg-[#1e2329] p-4 md:p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <span
-              className="rounded-sm border border-[#2b3139] px-1.5 py-0.5 text-[9px] font-medium tracking-wider text-[#848e9c]"
-              style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
-            >
-              FNG INDEX
-            </span>
-          </div>
-          <div className="flex items-end gap-2">
-            <p
-              className="text-[36px] font-bold leading-none tracking-tight text-[#eaecef]"
-              style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
-            >
-              {fng.value}
-            </p>
-            <span className="mb-1 text-[13px] text-[#474d57]" style={{ fontFamily: "var(--font-ibm-plex-mono)" }}>/100</span>
-          </div>
-        </div>
-        <span
-          className="mt-1 rounded px-2.5 py-1.5 text-[12px] font-bold"
-          style={{ color: stage.color, background: stage.bgColor, fontFamily: "var(--font-ibm-plex-mono)" }}
-        >
-          {stage.label}
-        </span>
-      </div>
-
-      <div className="mt-4 space-y-1.5">
-        <div className="relative h-1.5 overflow-visible rounded-full bg-[#2b3139]">
-          <div className="absolute inset-0 flex overflow-hidden rounded-full">
-            {FNG_SEGMENTS.map((seg, i) => (
-              <div
-                key={seg.label}
-                className="h-full"
-                style={{
-                  width: "20%",
-                  background: seg.color,
-                  opacity: fng.value >= (i === 0 ? 0 : FNG_SEGMENTS[i - 1]!.max) ? 0.8 : 0.15,
-                  borderRadius:
-                    i === 0 ? "9999px 0 0 9999px" : i === FNG_SEGMENTS.length - 1 ? "0 9999px 9999px 0" : "0",
-                }}
-              />
-            ))}
-          </div>
-          <div
-            className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[#eaecef] bg-[#1e2329] shadow-[0_0_8px_rgba(240,185,11,0.4)]"
-            style={{ left: `${markerPct}%` }}
-          />
-        </div>
-        <div
-          className="flex justify-between text-[9px] uppercase tracking-[0.06em] text-[#474d57]"
-          style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
-        >
-          {FNG_SEGMENTS.map((seg) => (
-            <span key={seg.label}>{seg.label}</span>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── 3. Indicator Grid — 매크로 + 크립토 지표 카드 ──────────────────────── */
+/* ── 2. Indicator Grid — 매크로 + 크립토 지표 카드 ──────────────────────── */
 
 function IndicatorCard({ item }: { item: CryptoIndicator }) {
   return (
@@ -306,7 +215,7 @@ function IndicatorPill({ item }: { item: CryptoIndicator }) {
   );
 }
 
-/* ── 4. Market Snapshot — 매크로 지표 (BTC, Gold, US10Y, DXY, VIX) ──── */
+/* ── 3. Market Snapshot — 매크로 지표 (BTC, Gold, US10Y, DXY, VIX) ──── */
 
 function MetricCard({ item }: { item: TickerItem }) {
   return (
@@ -406,7 +315,7 @@ function MarketStripRow({ item, isLast }: { item: TickerItem; isLast: boolean })
   );
 }
 
-/* ── 5. ETF Detail ──────────────────────────────────────────────────────── */
+/* ── 4. ETF Detail ──────────────────────────────────────────────────────── */
 
 function EtfStatCallout({ label, value }: { label: string; value: string | null }) {
   return (
@@ -614,22 +523,8 @@ export function CryptoPulseBoard({
           </div>
         </div>
 
-        {/* ── 1. Hero Row: BTC price + F&G ───────────────────────────── */}
-        <div className="grid gap-3 md:grid-cols-2">
-          <HeroPrice bitcoin={bitcoin} />
-          {bitcoin.fearGreedIndex ? (
-            <FearGreedCompact fng={bitcoin.fearGreedIndex} />
-          ) : (
-            <div className="rounded-md border border-[#2b3139] bg-[#1e2329] p-5">
-              <DataState
-                title="공포·탐욕"
-                message="이번 집계에서는 공포탐욕지수를 확인하지 못했어요."
-                family="data"
-                minHeight={100}
-              />
-            </div>
-          )}
-        </div>
+        {/* ── 1. Hero Row: BTC price ──────────────────────────────────── */}
+        <HeroPrice bitcoin={bitcoin} />
 
         {/* ── 2. Market Reference Snapshot ────────────────────────────── */}
         {snapshot.items.length > 0 ? (
@@ -661,7 +556,7 @@ export function CryptoPulseBoard({
           />
         )}
 
-        {/* ── 3. Crypto Indicators ───────────────────────────────────── */}
+        {/* ── 2. Crypto Indicators ───────────────────────────────────── */}
         {indicators.length > 0 && (
           <div>
             <div className="mb-3 flex items-center gap-3 border-b border-[#2b3139] pb-3">
@@ -701,7 +596,7 @@ export function CryptoPulseBoard({
           </div>
         )}
 
-        {/* ── 4. ETF Detail — breakout on mobile for full-width chart ── */}
+        {/* ── 3. ETF Detail — breakout on mobile for full-width chart ── */}
         <div className="-mx-4 md:mx-0">
           <EtfDetail etf={bitcoin.etf} etfHistory={etfHistory} />
         </div>

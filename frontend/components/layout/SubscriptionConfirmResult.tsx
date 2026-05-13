@@ -136,7 +136,11 @@ export function SubscriptionConfirmResult() {
             </Link>
             <Link
               href="/archive"
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold tracking-tight text-black transition hover:bg-[var(--accent-primary)]"
+              className="inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold tracking-tight text-[#0a0c0e] transition hover:-translate-y-px"
+              style={{
+                background: "linear-gradient(135deg, #f5c430 0%, #e8a800 100%)",
+                boxShadow: "0 4px 20px rgba(240,185,11,0.22), inset 0 1px 0 rgba(255,255,255,0.14)",
+              }}
             >
               브리핑 아카이브 보기
               <ArrowRight className="h-4 w-4" />

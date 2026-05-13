@@ -178,8 +178,9 @@ section[id] {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 6.5rem 0 2.5rem;
-  border-bottom: 1px solid #2b3139;
+  padding: 6.5rem 0 3.5rem;
+  border-bottom: 1px solid rgba(0, 255, 255, 0.07);
+  background: radial-gradient(ellipse 70% 55% at 50% 46%, rgba(0, 255, 255, 0.025) 0%, transparent 72%);
 }
 
 .section-shell {
@@ -360,20 +361,21 @@ section[id] {
   font-weight: 700;
   line-height: 1.2;
   transition:
-    background-color 180ms ease,
+    box-shadow 180ms ease,
     border-color 180ms ease,
     color 180ms ease,
     transform 180ms ease;
 }
 
 .hero-cta-primary {
-  background: var(--accent-primary);
-  color: var(--smoke);
+  background: linear-gradient(135deg, #f5c430 0%, #e8a800 100%);
+  color: #0a0c0e;
   font-weight: 700;
+  box-shadow: 0 4px 20px rgba(240, 185, 11, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 
 .hero-cta-primary:hover {
-  background: var(--accent-primary-strong);
+  box-shadow: 0 6px 28px rgba(240, 185, 11, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.20);
   transform: translateY(-1px);
 }
 
