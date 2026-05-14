@@ -149,6 +149,12 @@ MASTER_SCHEMA = pa.DataFrameSchema(
         "us10y_change_7d_lag1": pa.Column(float, nullable=True, required=False),
         "nasdaq_return_7d": pa.Column(float, nullable=True, required=False),
         "nasdaq_return_7d_lag1": pa.Column(float, nullable=True, required=False),
+        # Regime quantile 사전 계산 컬럼 — risk_overlay.py가 일관된 분위수를 읽도록
+        # join.py _add_regime_quantile_features()가 생성, 구형 parquet에는 없을 수 있음
+        "vix_q40_90d": pa.Column(float, nullable=True, required=False),
+        "vix_q80_90d": pa.Column(float, nullable=True, required=False),
+        "rv_q45_45d": pa.Column(float, nullable=True, required=False),
+        "fng_q70_90d": pa.Column(float, nullable=True, required=False),
     },
     strict=True,
 )
