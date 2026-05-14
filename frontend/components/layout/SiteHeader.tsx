@@ -59,7 +59,7 @@ export function SiteHeader({
           ))}
           <span className="mx-2 h-4 w-px bg-[#2b3139]" />
           <a
-            href="/#subscribe"
+            href="/subscribe"
             className="flex h-8 items-center gap-1.5 rounded px-4 text-[13px] font-bold text-[#0a0c0e] transition-all hover:-translate-y-px hover:opacity-95"
             style={{
               fontFamily: "var(--font-dm-sans)",
@@ -74,7 +74,7 @@ export function SiteHeader({
         {/* mobile */}
         <div className="flex items-center gap-2 md:hidden">
           <a
-            href="/#subscribe"
+            href="/subscribe"
             className="flex h-8 items-center rounded px-3 text-[12px] font-bold text-[#0a0c0e]"
             style={{
               background: "linear-gradient(135deg, #f5c430 0%, #e8a800 100%)",

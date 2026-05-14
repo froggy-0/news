@@ -450,6 +450,81 @@ def _append_composite_score_v1_drift(
         )
 
 
+def _count_consecutive_regime(records: list[dict], current_regime: str) -> int:
+    """최신 레코드부터 역순으로 연속된 동일 regime_state 일수를 반환한다."""
+    count = 0
+    for rec in reversed(records):
+        if rec.get("regime_state") == current_regime:
+            count += 1
+        else:
+            break
+    return count
+
+
+def _enrich_sovereign_score_context(
+    fe_artifact: dict,
+    master_df: "pd.DataFrame",
+    output_dir: "Path",
+    run_date: str,
+) -> None:
+    """scoreDelta / score30dAvg / scorePercentile / regimeDurationDays 를 sovereignIndex에 주입한다.
+
+    master_df의 full_hybrid_index_score 컬럼과 sovereign_score_drift.jsonl 이력을 사용한다.
+    fe_artifact["riskOverlay"] 가 먼저 설정된 이후에 호출해야 한다.
+    실패 시 sovereignIndex를 건드리지 않고 warning만 기록한다.
+    """
+    try:
+        from morning_brief.analysis.sentiment_join.storage import (
+            append_drift_record,
+            read_drift_records,
+        )
+
+        si = fe_artifact.get("sovereignIndex")
+        if not isinstance(si, dict) or si.get("score") is None:
+            return
+
+        score_col = "full_hybrid_index_score"
+        if score_col not in master_df.columns:
+            return
+
+        scores = master_df[score_col].dropna()
+        if scores.empty:
+            return
+
+        today_score = float(scores.iloc[-1])
+        prev_score = float(scores.iloc[-2]) if len(scores) >= 2 else None
+        score_delta = round(today_score - prev_score, 1) if prev_score is not None else None
+
+        score_30d = scores.tail(30)
+        score_30d_avg = round(float(score_30d.mean()), 1)
+        score_percentile = round(float((score_30d < today_score).mean() * 100))
+
+        # regimeDurationDays: 이전 기록 읽기 → 연속 일수 계산 → 오늘 기록 추가
+        regime_state = (fe_artifact.get("riskOverlay") or {}).get("regimeState", "")
+        hist_records = read_drift_records(output_dir, filename="sovereign_score_drift.jsonl")
+        regime_duration_days = _count_consecutive_regime(hist_records, regime_state) + 1
+
+        si["scoreDelta"] = score_delta
+        si["score30dAvg"] = score_30d_avg
+        si["scorePercentile"] = score_percentile
+        si["regimeDurationDays"] = regime_duration_days
+
+        append_drift_record(
+            output_dir,
+            run_date,
+            {"sovereign_score": round(today_score, 1), "regime_state": regime_state},
+            filename="sovereign_score_drift.jsonl",
+        )
+    except Exception as exc:
+        log_structured(
+            logger,
+            event="sovereign_score.enrich_failed",
+            message="sovereignIndex 컨텍스트 보강 실패",
+            level=logging.WARNING,
+            reason=str(exc),
+        )
+
+
 def _evaluate_and_log_overlay_gate(output_dir: "Path") -> Any | None:
     """drift JSONL을 읽어 overlay gate를 평가하고 결과를 structured log로 출력한다."""
     try:
@@ -1253,6 +1328,9 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
             except Exception as _ro_exc:
                 logger.warning("riskOverlay 산출 실패 (artifact 제외): %s", _ro_exc)
 
+            # §5-b: Sovereign Index 컨텍스트 보강 (scoreDelta / percentile / regimeDurationDays)
+            _enrich_sovereign_score_context(fe_artifact, master_df, settings.output_dir, run_date)
+
             if not should_skip_artifact(fe_artifact):
                 latest_path, dated_path = write_frontend_artifact(
                     settings.output_dir, fe_artifact, run_date
@@ -1286,6 +1364,16 @@ def run_sentiment_join(settings: SentimentJoinSettings) -> int:
                     upload_to_r2(
                         composite_drift_path,
                         "analytics/sentiment/composite_score_v1_drift.jsonl",
+                        r2_s3_endpoint=settings.r2_s3_endpoint,
+                        r2_access_key_id=settings.r2_access_key_id,
+                        r2_secret_access_key=settings.r2_secret_access_key,
+                        r2_public_bucket=settings.r2_public_bucket,
+                    )
+                sovereign_score_drift_path = settings.output_dir / "sovereign_score_drift.jsonl"
+                if sovereign_score_drift_path.exists():
+                    upload_to_r2(
+                        sovereign_score_drift_path,
+                        "analytics/sentiment/sovereign_score_drift.jsonl",
                         r2_s3_endpoint=settings.r2_s3_endpoint,
                         r2_access_key_id=settings.r2_access_key_id,
                         r2_secret_access_key=settings.r2_secret_access_key,

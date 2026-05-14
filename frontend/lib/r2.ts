@@ -31,6 +31,10 @@ export type ArchiveBriefSummary = {
   translationStatus?: "ok" | "partial" | "failed";
   newsAll?: number;
   xSignalAll?: number;
+  sovereignScore?: number;
+  sovereignZone?: "bull" | "neutral" | "bear";
+  sovereignRegime?: string;
+  sovereignLabelKo?: string;
 };
 
 async function readFixture<T>(name: string): Promise<T> {
@@ -122,6 +126,13 @@ function parseArchiveSummary(value: unknown, expectedDate?: string): ArchiveBrie
   const quality = meta.dataQuality;
   const translationStatus = meta.translationStatus;
 
+  const si = asOptionalRecord(root.sovereignIndex);
+  const siScore = si && typeof si.score === "number" ? si.score : undefined;
+  const siZoneRaw = si?.zone;
+  const siZone = siZoneRaw === "bull" || siZoneRaw === "neutral" || siZoneRaw === "bear" ? siZoneRaw : undefined;
+  const siRegime = asOptionalRecord(root.riskOverlay);
+  const regimeState = siRegime && typeof siRegime.regimeState === "string" ? siRegime.regimeState : undefined;
+
   return {
     date,
     generatedAt: asOptionalString(meta.generatedAt),
@@ -134,6 +145,10 @@ function parseArchiveSummary(value: unknown, expectedDate?: string): ArchiveBrie
         : undefined,
     newsAll: sourceCounts && typeof sourceCounts.newsAll === "number" ? sourceCounts.newsAll : undefined,
     xSignalAll: sourceCounts && typeof sourceCounts.xSignalAll === "number" ? sourceCounts.xSignalAll : undefined,
+    sovereignScore: siScore,
+    sovereignZone: siZone,
+    sovereignRegime: regimeState,
+    sovereignLabelKo: si && typeof si.labelKo === "string" ? si.labelKo : undefined,
   };
 }
 

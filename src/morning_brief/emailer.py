@@ -1304,15 +1304,49 @@ def _extract_key_event(section_map: SectionMap) -> str:
     return ""
 
 
+def _format_sovereign_tag(packet: dict) -> str:
+    """Sovereign Index + regimeState 를 'BullQuiet 58↑4' 형식으로 반환한다.
+
+    sovereignIndex 또는 riskOverlay 중 하나라도 없으면 빈 문자열 반환.
+    """
+    si = packet.get("sovereign_index") or {}
+    ro = packet.get("risk_overlay") or {}
+    score = si.get("score")
+    if score is None:
+        return ""
+
+    score_int = int(round(score))
+    delta = si.get("scoreDelta")
+    delta_str = ""
+    if delta is not None:
+        arrow = "↑" if delta >= 0 else "↓"
+        delta_str = f"{arrow}{abs(int(round(delta)))}"
+
+    regime = ro.get("regimeState", "")
+    regime_label = _REGIME_BADGE_STYLE.get(regime, {}).get("label", "")
+
+    if regime_label:
+        return f"{regime_label} {score_int}{delta_str}"
+    return f"지수 {score_int}{delta_str}"
+
+
 def _build_subject_line(section_map: SectionMap, packet: dict) -> str:
-    """[날짜 요일] 브리핑 — [지수 등락] · [BTC 가격] · [핵심 변수]"""
+    """[날짜 요일] · [국면 지수↑] — [BTC 가격] · [핵심 변수]"""
     date_str = _format_subject_date(packet)
-    sp500_change = _extract_index_change(packet, "SPY")
+    sovereign_tag = _format_sovereign_tag(packet)
     btc_price = _extract_btc_price(packet)
     key_event = _extract_key_event(section_map)
 
-    parts = [p for p in [sp500_change, btc_price, key_event] if p]
-    subject = f"{date_str} 브리핑 — {' · '.join(parts)}" if parts else f"{date_str} 브리핑"
+    tail_parts = [p for p in [btc_price, key_event] if p]
+    tail = " · ".join(tail_parts)
+
+    if sovereign_tag:
+        subject = f"{date_str} · {sovereign_tag}"
+        if tail:
+            subject += f" — {tail}"
+    else:
+        parts = [p for p in [btc_price, key_event] if p]
+        subject = f"{date_str} 브리핑 — {' · '.join(parts)}" if parts else f"{date_str} 브리핑"
 
     if packet.get("data_quality", {}).get("status") == "critical":
         subject = f"[데이터 참고] {subject}"

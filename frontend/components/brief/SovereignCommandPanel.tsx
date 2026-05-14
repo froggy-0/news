@@ -124,17 +124,32 @@ function IndexPanel({ si }: { si: SovereignIndex }) {
 
       {/* Score */}
       <div className="mt-5 flex items-baseline gap-3">
-        <span
-          className="font-mono text-[68px] font-bold leading-none tabular-nums"
-          style={{ color: cfg.color, letterSpacing: "-0.03em" }}
-        >
-          {Math.round(si.score)}
-        </span>
+        <div className="flex items-baseline gap-1.5">
+          <span
+            className="font-mono text-[68px] font-bold leading-none tabular-nums"
+            style={{ color: cfg.color, letterSpacing: "-0.03em" }}
+          >
+            {Math.round(si.score)}
+          </span>
+          {si.scoreDelta != null && (
+            <span
+              className="font-mono text-[18px] font-semibold tabular-nums leading-none"
+              style={{ color: si.scoreDelta >= 0 ? "#10b981" : "#f87171" }}
+            >
+              {si.scoreDelta >= 0 ? "↑" : "↓"}{Math.abs(Math.round(si.scoreDelta))}
+            </span>
+          )}
+        </div>
         <div className="flex flex-col gap-1">
           <span className="font-mono text-sm text-white/36">/ 100</span>
           <span className="text-sm font-bold" style={{ color: cfg.color }}>
             {si.labelKo}
           </span>
+          {si.scorePercentile != null && (
+            <span className="font-mono text-[9px] text-white/30">
+              30일 상위 {100 - si.scorePercentile}%
+            </span>
+          )}
           {isOos && (
             <span className="rounded border border-[rgba(0,255,255,0.18)] bg-[rgba(0,255,255,0.05)] px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-[0.14em] text-[rgba(0,255,255,0.48)]">
               실전 검증
@@ -169,8 +184,8 @@ function IndexPanel({ si }: { si: SovereignIndex }) {
       {/* 지수 구성 신호 (PC interpretation) */}
       {si.pcInterpretation && (
         <div className="mt-3 border-l-2 border-[rgba(0,255,255,0.18)] pl-3">
-          <p className="font-mono text-[8px] uppercase tracking-[0.14em] text-white/24">지수 구성 신호</p>
-          <p className="mt-1 font-mono text-[9px] leading-relaxed text-white/40">
+          <p className="font-mono text-[9px] leading-relaxed text-white/40">
+            <span className="mr-1.5 font-mono text-[8px] uppercase tracking-[0.14em] text-white/24">지수 구성 신호</span>
             {si.pcInterpretation}
           </p>
         </div>
@@ -187,7 +202,7 @@ function IndexPanel({ si }: { si: SovereignIndex }) {
 
 /* ── RIGHT: Sovereign State ──────────────────────────────────────────────── */
 
-function StatePanel({ overlay }: { overlay: RiskOverlay }) {
+function StatePanel({ overlay, regimeDurationDays }: { overlay: RiskOverlay; regimeDurationDays?: number | null }) {
   const regime = REGIME_CFG[overlay.regimeState] ?? { label: overlay.regimeState, color: "rgba(255,255,255,0.76)" };
   const confidence = CONFIDENCE_CFG[overlay.signalConfidence ?? "NONE"] ?? CONFIDENCE_CFG.NONE;
   const volLabel = VOL_LABELS[overlay.volLevel] ?? overlay.volLevel;
@@ -224,6 +239,9 @@ function StatePanel({ overlay }: { overlay: RiskOverlay }) {
         </p>
         <p className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-white/28">
           {overlay.regimeState}
+          {regimeDurationDays != null && regimeDurationDays > 1 && (
+            <span className="ml-2 text-white/36"> · {regimeDurationDays}일째</span>
+          )}
         </p>
         {overlay.regimeDescription && (
           <p className="mt-3 text-sm leading-6 text-white/52">{overlay.regimeDescription}</p>
@@ -344,7 +362,7 @@ export function SovereignCommandPanel({
 
           <div className={`grid gap-px bg-white/[0.05] ${both ? "md:grid-cols-2" : ""}`}>
             {sovereignIndex && <IndexPanel si={sovereignIndex} />}
-            {riskOverlay && <StatePanel overlay={riskOverlay} />}
+            {riskOverlay && <StatePanel overlay={riskOverlay} regimeDurationDays={sovereignIndex?.regimeDurationDays} />}
           </div>
         </div>
       </div>

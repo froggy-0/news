@@ -36,6 +36,14 @@ export interface SovereignIndex {
   todayScoreMethod?: string | null;
   trackAWfAvgHitRate?: number | null;
   trackAWfFolds?: number | null;
+  /** 전일 대비 점수 변화 (양수=상승, 음수=하락) */
+  scoreDelta?: number | null;
+  /** 최근 30일 평균 점수 */
+  score30dAvg?: number | null;
+  /** 최근 30일 내 백분위 순위 (0~100) */
+  scorePercentile?: number | null;
+  /** 현재 riskOverlay 국면이 연속 유지된 일수 */
+  regimeDurationDays?: number | null;
 }
 
 export interface BriefData {

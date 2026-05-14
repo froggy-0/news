@@ -430,6 +430,10 @@ function parseSovereignIndex(value: Record<string, unknown>): SovereignIndex {
     todayScoreMethod: typeof value.todayScoreMethod === "string" ? value.todayScoreMethod : null,
     trackAWfAvgHitRate: typeof value.trackAWfAvgHitRate === "number" ? value.trackAWfAvgHitRate : null,
     trackAWfFolds: typeof value.trackAWfFolds === "number" ? value.trackAWfFolds : null,
+    scoreDelta: typeof value.scoreDelta === "number" ? value.scoreDelta : null,
+    score30dAvg: typeof value.score30dAvg === "number" ? value.score30dAvg : null,
+    scorePercentile: typeof value.scorePercentile === "number" ? value.scorePercentile : null,
+    regimeDurationDays: typeof value.regimeDurationDays === "number" ? value.regimeDurationDays : null,
   };
 }
 

@@ -87,13 +87,23 @@ export function HomeHero({
                     style={{ background: ZONE_COLOR[brief.sovereignIndex.zone], boxShadow: `0 0 6px ${ZONE_COLOR[brief.sovereignIndex.zone]}80` }}
                   />
                   <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-white/32">Index</span>
-                  <span
-                    className="font-mono text-[18px] font-bold tabular-nums leading-none"
-                    style={{ color: ZONE_COLOR[brief.sovereignIndex.zone] }}
-                  >
-                    {Math.round(brief.sovereignIndex.score)}
+                  <span className="flex items-baseline gap-1">
+                    <span
+                      className="font-mono text-[18px] font-bold tabular-nums leading-none"
+                      style={{ color: ZONE_COLOR[brief.sovereignIndex.zone] }}
+                    >
+                      {Math.round(brief.sovereignIndex.score)}
+                    </span>
+                    {brief.sovereignIndex.scoreDelta != null && (
+                      <span
+                        className="font-mono text-[11px] font-semibold tabular-nums leading-none"
+                        style={{ color: brief.sovereignIndex.scoreDelta >= 0 ? "#10b981" : "#f87171" }}
+                      >
+                        {brief.sovereignIndex.scoreDelta >= 0 ? "↑" : "↓"}{Math.abs(Math.round(brief.sovereignIndex.scoreDelta))}
+                      </span>
+                    )}
                   </span>
-                  <span className="font-mono text-[10px] text-white/38">
+                  <span className="whitespace-nowrap font-mono text-[10px] text-white/38">
                     {ZONE_LABEL[brief.sovereignIndex.zone]}
                   </span>
                 </div>
@@ -105,7 +115,7 @@ export function HomeHero({
                 <div className="flex items-center gap-3 px-5 py-3">
                   <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-white/32">State</span>
                   <span
-                    className="text-[14px] font-bold leading-none"
+                    className="whitespace-nowrap text-[14px] font-bold leading-none"
                     style={{ color: REGIME_COLOR[brief.riskOverlay.regimeState] ?? "rgba(255,255,255,0.72)" }}
                   >
                     {REGIME_LABEL[brief.riskOverlay.regimeState] ?? brief.riskOverlay.regimeState}
@@ -114,7 +124,7 @@ export function HomeHero({
                     <>
                       <div className="h-3 w-px bg-white/[0.08]" />
                       <span
-                        className="font-mono text-[10px] font-semibold"
+                        className="whitespace-nowrap font-mono text-[10px] font-semibold"
                         style={{ color: CONF_COLOR[brief.riskOverlay.signalConfidence] ?? "rgba(255,255,255,0.46)" }}
                       >
                         {CONF_LABEL[brief.riskOverlay.signalConfidence]}
@@ -398,18 +408,28 @@ function SovereignLiveStrip({
 
               {si ? (
                 <div className="flex items-end gap-4">
-                  {/* Score */}
+                  {/* Score + delta */}
                   <div>
-                    <span
-                      className="font-mono text-[52px] font-bold leading-none tabular-nums"
-                      style={{ color: ZONE_COLOR[si.zone], letterSpacing: "-0.03em" }}
-                    >
-                      {Math.round(si.score)}
-                    </span>
-                    <span className="ml-1.5 font-mono text-sm text-white/30">/ 100</span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span
+                        className="font-mono text-[52px] font-bold leading-none tabular-nums"
+                        style={{ color: ZONE_COLOR[si.zone], letterSpacing: "-0.03em" }}
+                      >
+                        {Math.round(si.score)}
+                      </span>
+                      {si.scoreDelta != null && (
+                        <span
+                          className="font-mono text-[15px] font-semibold tabular-nums leading-none"
+                          style={{ color: si.scoreDelta >= 0 ? "#10b981" : "#f87171" }}
+                        >
+                          {si.scoreDelta >= 0 ? "↑" : "↓"}{Math.abs(Math.round(si.scoreDelta))}
+                        </span>
+                      )}
+                    </div>
+                    <span className="font-mono text-sm text-white/30">/ 100</span>
                   </div>
 
-                  {/* Zone + mini gauge */}
+                  {/* Zone + context + gauge */}
                   <div className="mb-1 flex-1">
                     <span className="text-sm font-bold" style={{ color: ZONE_COLOR[si.zone] }}>
                       {si.labelKo}
@@ -417,6 +437,11 @@ function SovereignLiveStrip({
                     <p className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-white/30">
                       {ZONE_LABEL[si.zone]}
                     </p>
+                    {si.scorePercentile != null && (
+                      <p className="mt-0.5 font-mono text-[9px] text-white/24">
+                        30일 중 상위 {100 - si.scorePercentile}%
+                      </p>
+                    )}
                     {/* Gauge bar */}
                     <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
                       <div
@@ -456,6 +481,11 @@ function SovereignLiveStrip({
                     <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.16em] text-white/26">
                       {ro.regimeState}
                     </p>
+                    {si?.regimeDurationDays != null && si.regimeDurationDays > 1 && (
+                      <p className="mt-0.5 font-mono text-[9px] text-white/24">
+                        {si.regimeDurationDays}일째 유지 중
+                      </p>
+                    )}
                   </div>
 
                   {/* Vol + signal pills */}
