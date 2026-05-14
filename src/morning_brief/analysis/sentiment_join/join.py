@@ -368,6 +368,43 @@ def _add_vix_regime_feature(result: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def _add_regime_quantile_features(result: pd.DataFrame) -> pd.DataFrame:
+    """Regime 분류용 롤링 분위수 컬럼 사전 계산.
+
+    risk_overlay.py 가 .tail() 슬라이스 없이 이 컬럼의 마지막 행만 읽도록 한다.
+    호출 시점 독립성을 보장하므로 어떤 df 슬라이스로 compute_regime_state()를 호출해도
+    동일한 결과가 나온다.
+
+    vix_q40_90d  : VIX 90일 롤링 q40  (BullQuiet / vol_regime_v2 기준)
+    vix_q80_90d  : VIX 90일 롤링 q80  (BearPanic 기준)
+    rv_q45_45d   : realized_vol_20d 45일 롤링 q45
+    fng_q70_90d  : FNG 90일 롤링 q70  (탐욕 상단 적응형 임계값)
+    """
+    if "vix" in result.columns:
+        vix = pd.to_numeric(result["vix"], errors="coerce")
+        result["vix_q40_90d"] = vix.rolling(90, min_periods=30).quantile(0.40)
+        result["vix_q80_90d"] = vix.rolling(90, min_periods=30).quantile(0.80)
+    else:
+        result["vix_q40_90d"] = float("nan")
+        result["vix_q80_90d"] = float("nan")
+
+    rv_col = "btc_realized_vol_20d_lag1"
+    if rv_col in result.columns:
+        rv = pd.to_numeric(result[rv_col], errors="coerce")
+        result["rv_q45_45d"] = rv.rolling(45, min_periods=20).quantile(0.45)
+    else:
+        result["rv_q45_45d"] = float("nan")
+
+    if "fng_value" in result.columns:
+        fng = pd.to_numeric(result["fng_value"], errors="coerce")
+        # FNG는 0-100 bounded + AR≈0.96이므로 rolling quantile이 절대값보다 적응적
+        result["fng_q70_90d"] = fng.rolling(90, min_periods=30).quantile(0.70)
+    else:
+        result["fng_q70_90d"] = float("nan")
+
+    return result
+
+
 def _add_macro_features(df: pd.DataFrame) -> pd.DataFrame:
     """Macro feature 파생: USD 광의지수·US10Y·Nasdaq 7일 변화 + zscore.
 
@@ -715,6 +752,7 @@ def merge_sources(
     merged = _add_macro_features(merged)
     merged = _add_breadth_features(merged)
     merged = _add_stablecoin_features(merged)
+    merged = _add_regime_quantile_features(merged)
     # raw close 컬럼은 파생 피처 계산 후 제거 (MASTER_SCHEMA strict=True)
     from morning_brief.analysis.sentiment_join.sources.binance_breadth import BREADTH_SYMBOLS
 

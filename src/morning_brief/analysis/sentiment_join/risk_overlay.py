@@ -63,9 +63,35 @@ def _last_valid(series: pd.Series) -> float | None:
     return float(s.iloc[-1]) if not s.empty else None
 
 
-def compute_regime_state(df: pd.DataFrame) -> RegimeState:
-    """최신 행의 피처를 기반으로 현재 시장 regime을 분류."""
+def _read_precomputed_or_fallback(
+    df: pd.DataFrame,
+    precomputed_col: str,
+    series: pd.Series,
+    window: int,
+    min_periods: int,
+    quantile: float,
+) -> float | None:
+    """join.py 사전 계산 컬럼이 있으면 마지막 행을 읽고, 없으면 .tail() fallback.
 
+    사전 계산 컬럼(join.py _add_regime_quantile_features)을 우선 사용하면
+    compute_regime_state()가 어떤 df 슬라이스로 호출되든 동일한 결과를 보장한다.
+    """
+    if precomputed_col in df.columns:
+        val = pd.to_numeric(df[precomputed_col], errors="coerce").iloc[-1]
+        return float(val) if pd.notna(val) else None
+    clean = series.dropna()
+    if len(clean) < min_periods:
+        return None
+    return float(clean.tail(window).quantile(quantile))
+
+
+def compute_regime_state(df: pd.DataFrame) -> RegimeState:
+    """최신 행의 피처를 기반으로 현재 시장 regime을 분류.
+
+    롤링 분위수는 join.py의 _add_regime_quantile_features()가 사전 계산한
+    vix_q40_90d / vix_q80_90d / rv_q45_45d / fng_q70_90d 컬럼을 우선 사용한다.
+    컬럼이 없는 환경(테스트, 단독 호출)에서는 .tail() 기반 fallback으로 계산한다.
+    """
     vix_col = "vix_lag1" if "vix_lag1" in df.columns else "vix"
     vix_series = pd.to_numeric(df.get(vix_col, pd.Series(dtype=float)), errors="coerce")
     vix_now = _last_valid(vix_series)
@@ -79,21 +105,27 @@ def compute_regime_state(df: pd.DataFrame) -> RegimeState:
     fng = _last_valid(df.get("fng_value", pd.Series(dtype=float)))
     oi_div = _last_valid(df.get("oi_price_divergence_flag_7d", pd.Series(dtype=float)))
 
-    # 롤링 분위수 계산
-    vix_q_high = (
-        float(vix_series.dropna().tail(_VIX_WINDOW).quantile(_VIX_QUANTILE_HIGH))
-        if vix_series.dropna().__len__() >= _VIX_MIN_PERIODS
-        else None
+    # 롤링 분위수: 사전 계산 컬럼 우선, 없으면 .tail() fallback
+    vix_q_high = _read_precomputed_or_fallback(
+        df, "vix_q80_90d", vix_series, _VIX_WINDOW, _VIX_MIN_PERIODS, _VIX_QUANTILE_HIGH
     )
-    vix_q_mid = (
-        float(vix_series.dropna().tail(_VIX_WINDOW).quantile(_VIX_QUANTILE_MID))
-        if vix_series.dropna().__len__() >= _VIX_MIN_PERIODS
-        else None
+    vix_q_mid = _read_precomputed_or_fallback(
+        df, "vix_q40_90d", vix_series, _VIX_WINDOW, _VIX_MIN_PERIODS, _VIX_QUANTILE_MID
     )
-    rv_q = (
-        float(rv_series.dropna().tail(_RV_WINDOW).quantile(_RV_QUANTILE))
-        if rv_series.dropna().__len__() >= _RV_MIN_PERIODS
-        else None
+    rv_q = _read_precomputed_or_fallback(
+        df, "rv_q45_45d", rv_series, _RV_WINDOW, _RV_MIN_PERIODS, _RV_QUANTILE
+    )
+
+    # FNG rolling q70: SignalConfidence 레이어에서 greed_block 판단에 사용
+    # BullQuiet 경계 조건에는 사용하지 않는다.
+    # 이유: rolling q70은 공포장 지속 시 16 수준까지 하락해 BullQuiet을 오차단함
+    fng_q70 = _read_precomputed_or_fallback(
+        df,
+        "fng_q70_90d",
+        pd.to_numeric(df.get("fng_value", pd.Series(dtype=float)), errors="coerce"),
+        90,
+        30,
+        0.70,
     )
 
     raw = {
@@ -104,6 +136,7 @@ def compute_regime_state(df: pd.DataFrame) -> RegimeState:
         "rv_q45": rv_q,
         "funding_zscore": funding_z,
         "fng": fng,
+        "fng_q70": fng_q70,
         "oi_divergence_flag": oi_div,
     }
 
@@ -123,6 +156,7 @@ def compute_regime_state(df: pd.DataFrame) -> RegimeState:
         return RegimeState("BullHeated", _REGIME_LABELS["BullHeated"], raw)
 
     # BullQuiet: vol_regime_v2 조건 (VIX < q40 AND rv < q45) + fng 중립
+    # FNG 경계는 기존 고정값(20~80) 유지 — rolling q70 적응형은 BullQuiet 오차단을 유발함
     vix_low = vix_now is not None and vix_q_mid is not None and vix_now < vix_q_mid
     rv_low = rv_now is not None and rv_q is not None and rv_now < rv_q
     fng_neutral = fng is not None and _FNG_EXTREME_FEAR < fng < _FNG_EXTREME_GREED
@@ -214,7 +248,8 @@ _CONFIDENCE_REASONS: dict[str, str] = {
     "vol_regime_v2_promoted": "vol_regime_v2 overlay gate 통과",
     "vol_quiet": "변동성 안정 구간",
     "funding_normal": "자금조달 비율 정상",
-    "fng_contrarian": "공포 구간 — 역발산 가능성",
+    "sentiment_vol_divergence": "변동성 낮은데 감정 공포 — 역발산 구간",
+    "fng_greed_block": "탐욕 상위 30% 구간 — 고점 신호",
     "research_rules_agree": "research rules 2/3 동의",
     "regime_unfavorable": "현재 regime에서 신호 신뢰도 낮음",
     "vol_elevated": "변동성 상승 중",
@@ -270,8 +305,18 @@ def compute_signal_confidence(
             negative_reasons.append("funding_overheated")
 
     fng = raw.get("fng")
-    if fng is not None and fng <= _FNG_FEAR:
-        reasons.append("fng_contrarian")
+
+    if fng is not None:
+        if fng >= _FNG_GREED:
+            # FNG >= 70 (탐욕 구간): vol_ok여도 BTC 90일 고점 근처일 확률 높음 → 차단
+            # 근거: vol_ok + FNG>=70 구간의 97.6%가 BTC 90일 최고점 5% 이내로 확인됨
+            # rolling q70을 사용하지 않는 이유: 공포장 지속 시 q70이 16 수준까지 하락해
+            # FNG=26(공포) 조차 "탐욕 상위 30%"로 오분류됨 — 절대 임계값이 더 robust
+            negative_reasons.append("fng_greed_block")
+        elif fng <= _FNG_FEAR and regime.label == "BullQuiet":
+            # 변동성 낮은데 감정만 공포인 "감정-변동성 괴리" 상태
+            # BullQuiet(vol_ok) 안에서만 의미 있음 — 단독 FNG fear는 대부분 하락장 중임
+            reasons.append("sentiment_vol_divergence")
 
     # 신뢰도 판정
     positive = len(reasons)
