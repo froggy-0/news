@@ -75,8 +75,12 @@ def _rolling_low_high_signal(
 
 
 def vol_regime_v2(df: pd.DataFrame) -> pd.Series:
-    """VIX 90D q40 방향을 BTC 45D realized-vol q45 regime이 확인할 때만 거래한다."""
+    """VIX 90D q40 + BTC 45D realized-vol q45 dual-filter.
 
+    FNG≥70 구간에서는 long 신호를 차단한다.
+    근거: vol_ok + FNG≥70 구간의 97.6%가 BTC 90일 최고점 5% 이내 — 기대수익 음수.
+    short 신호는 차단하지 않는다 (고변동성 + 탐욕 공존은 드물고 방향이 일치).
+    """
     vix_col = "vix_lag1" if "vix_lag1" in df.columns else "vix"
     base = _rolling_low_high_signal(df, vix_col, window=90, min_periods=30, quantile=0.40)
     realized = _rolling_low_high_signal(
@@ -85,6 +89,12 @@ def vol_regime_v2(df: pd.DataFrame) -> pd.Series:
     signal = pd.Series(0.0, index=df.index, name="vol_regime_v2")
     signal.loc[(base > 0) & (realized > 0)] = 1.0
     signal.loc[(base < 0) & (realized < 0)] = -1.0
+
+    fng_col = "fng_value_lag1" if "fng_value_lag1" in df.columns else "fng_value"
+    if fng_col in df.columns:
+        fng = pd.to_numeric(df[fng_col], errors="coerce")
+        signal.loc[(fng >= 70) & (signal > 0)] = 0.0
+
     return signal
 
 
