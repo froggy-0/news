@@ -87,6 +87,9 @@ BTC 신호 신뢰도
 {% endif -%}
 {% else -%}
 · 오늘은 신호 없음 ({{ signal_block.regime_label }} 구간, 관망 권고)
+{% endif -%}
+{% if signal_block.pca_top_loadings -%}
+· 지수 PC1 주요 피처:{% for item in signal_block.pca_top_loadings %} {{ item.feature }} {{ item.direction }}{{ item.loading | abs }}{% if not loop.last %},{% endif %}{% endfor %}
 {% endif %}
 {% endif -%}
 

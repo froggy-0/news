@@ -123,6 +123,11 @@ def _build_granger_results(raw_results: list[dict[str, Any]]) -> list[dict[str, 
                 else None,
                 "significant": bool(significant_raw) if significant_raw is not None else False,
                 "optimalLag": False,  # 2단계에서 설정
+                # 정상성 처리 절차 메타데이터
+                "predDifferenced": bool(row.get("pred_differenced", False)),
+                "tgtDifferenced": bool(row.get("tgt_differenced", False)),
+                "predStationarity": str(row.get("pred_stationarity", "")),
+                "tgtStationarity": str(row.get("tgt_stationarity", "")),
             }
         )
 
@@ -426,14 +431,81 @@ def _build_composite_scores(payload: dict[str, Any]) -> dict[str, list[dict[str,
     return rendered
 
 
+def _compute_fold_instability(walk_forward: dict[str, Any]) -> dict[str, Any]:
+    """walk_forward 페이로드에서 variant별 fold hit_rate 불안정성 통계를 계산한다.
+
+    high_instability 기준:
+      - cv (std/mean) > 0.25  → 평균 대비 변동이 25% 초과
+      - std > 0.15            → 절대 편차가 15%p 초과
+      - range (max-min) > 0.4 → 최고-최저 격차가 40%p 초과
+    셋 중 하나라도 해당하면 True.
+    """
+    import statistics as _stats
+
+    result: dict[str, Any] = {}
+    for variant in ("full", "core"):
+        wf = _as_record(walk_forward.get(variant))
+        folds = _as_list(wf.get("folds"))
+        hrs = [float(f["hit_rate"]) for f in folds if isinstance(f, dict) and "hit_rate" in f]
+        if len(hrs) < 2:
+            result[variant] = {"nFolds": len(hrs), "status": "insufficient_folds"}
+            continue
+
+        mean_hr = _stats.mean(hrs)
+        std_hr = _stats.stdev(hrs)
+        cv = std_hr / abs(mean_hr) if mean_hr != 0 else float("inf")
+        hr_range = max(hrs) - min(hrs)
+
+        worst = min(
+            folds, key=lambda f: float(f.get("hit_rate", 1.0)) if isinstance(f, dict) else 1.0
+        )
+        best = max(
+            folds, key=lambda f: float(f.get("hit_rate", 0.0)) if isinstance(f, dict) else 0.0
+        )
+
+        result[variant] = {
+            "nFolds": len(hrs),
+            "mean": round(mean_hr, 4),
+            "std": round(std_hr, 4),
+            "cv": round(cv, 4),
+            "min": round(min(hrs), 4),
+            "max": round(max(hrs), 4),
+            "range": round(hr_range, 4),
+            "highInstability": cv > 0.25 or std_hr > 0.15 or hr_range > 0.40,
+            "instabilityFlags": {
+                "cvExceeded": cv > 0.25,
+                "stdExceeded": std_hr > 0.15,
+                "rangeExceeded": hr_range > 0.40,
+            },
+            "worstFold": {
+                "fold": worst.get("fold") if isinstance(worst, dict) else None,
+                "hitRate": round(float(worst["hit_rate"]), 4)
+                if isinstance(worst, dict) and "hit_rate" in worst
+                else None,
+                "testStart": str(worst.get("test_start", "")) if isinstance(worst, dict) else None,
+                "testEnd": str(worst.get("test_end", "")) if isinstance(worst, dict) else None,
+            },
+            "bestFold": {
+                "fold": best.get("fold") if isinstance(best, dict) else None,
+                "hitRate": round(float(best["hit_rate"]), 4)
+                if isinstance(best, dict) and "hit_rate" in best
+                else None,
+                "testStart": str(best.get("test_start", "")) if isinstance(best, dict) else None,
+                "testEnd": str(best.get("test_end", "")) if isinstance(best, dict) else None,
+            },
+        }
+    return result
+
+
 def _build_alpha(payload: dict[str, Any]) -> dict[str, Any]:
     horizon_metrics = _as_record(payload.get("horizon_metrics"))
     gate_stats = _compute_gate_stats(horizon_metrics)
+    wf_raw = _as_record(payload.get("walk_forward"))
     return {
         "hitRates": _json_safe(_as_list(payload.get("hit_rates"))),
         "correlations": _json_safe(_as_list(payload.get("correlations"))),
         "backtest": _json_safe(_as_list(payload.get("backtest"))),
-        "walkForward": _json_safe(_as_record(payload.get("walk_forward"))),
+        "walkForward": _json_safe(wf_raw),
         "walkForwardLegacy1d": _json_safe(_as_record(payload.get("walk_forward_legacy_1d"))),
         "baselineMetrics": _json_safe(_as_record(payload.get("baseline_metrics"))),
         "horizonMetrics": _json_safe(horizon_metrics),
@@ -443,6 +515,24 @@ def _build_alpha(payload: dict[str, Any]) -> dict[str, Any]:
         "nextResearchCandidates": _json_safe(_as_record(payload.get("next_research_candidates"))),
         "compositeScores": _json_safe(_build_composite_scores(payload)),
         "gateStats": gate_stats,
+        "foldInstability": _json_safe(_compute_fold_instability(wf_raw)),
+        # IS vs OOS 분리 안내: 리뷰어가 어떤 숫자가 in-sample인지 OOS인지 판단할 수 있도록 명시
+        "evaluationNotes": {
+            "horizonMetrics": (
+                "Full-sample bootstrap (circular block, n=1000). "
+                "hit_rate는 전체 데이터 기준 점 추정치이며 in-sample fit을 포함할 수 있습니다. "
+                "hit_rate_ci_lower/upper는 블록 bootstrap 95% CI입니다."
+            ),
+            "walkForward": (
+                "Out-of-sample: time-series k-fold walk-forward, embargo_days=7. "
+                "avg_hit_rate가 OOS 성과 지표이며 horizonMetrics.hit_rate와 직접 비교하면 안 됩니다."
+            ),
+            "isVsOos": (
+                "OOS 추정치: walkForward.avg_hit_rate. "
+                "Full-sample 추정치: horizonMetrics[horizon].hit_rates[*].hit_rate. "
+                "두 수치의 괴리가 클수록 과적합 위험이 높습니다."
+            ),
+        },
     }
 
 

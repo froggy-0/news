@@ -1641,6 +1641,35 @@ def _build_sovereign_block(packet: dict) -> dict[str, object]:
     }
 
 
+def _build_pca_top_loadings(pca: dict) -> list[dict[str, object]]:
+    """pca 블록에서 PC1 loading 상위 3개를 [{feature, loading, direction}] 형태로 반환."""
+    # full이 없으면 core로 fallback
+    index = pca.get("full") or pca.get("core") or {}
+    loadings: dict[str, float] = index.get("loadings") or {}
+    if not loadings:
+        return []
+    _FEATURE_LABEL_KO: dict[str, str] = {
+        "fng_value_lag1": "F&G",
+        "news_sentiment_mean_lag1": "뉴스감성",
+        "vix_lag1": "VIX",
+        "vix_regime_score_lag1": "VIX레짐",
+        "btc_long_short_ratio_lag1": "롱숏비",
+        "funding_rate_lag1": "펀딩비",
+        "etf_net_inflow_usd_lag1": "ETF유입",
+        "volume_change_pct_lag1": "거래량",
+        "btc_realized_vol_20d_lag1": "실현변동성",
+    }
+    top = sorted(loadings.items(), key=lambda x: abs(x[1]), reverse=True)[:3]
+    return [
+        {
+            "feature": _FEATURE_LABEL_KO.get(k, k),
+            "loading": round(v, 3),
+            "direction": "+" if v >= 0 else "−",
+        }
+        for k, v in top
+    ]
+
+
 def _build_signal_block(packet: dict) -> dict[str, object]:
     """packet['risk_overlay']에서 이메일용 신호 블록을 생성."""
     ro = packet.get("risk_overlay") or {}
@@ -1661,6 +1690,9 @@ def _build_signal_block(packet: dict) -> dict[str, object]:
     # 트랙레코드는 packet에 별도 주입된 경우 표시
     track_record = packet.get("signal_track_record") or {}
 
+    # PCA PC1 상위 기여 피처 (artifact에 있는 경우만)
+    pca_top_loadings = _build_pca_top_loadings(packet.get("pca") or {})
+
     return {
         "has_signal_block": True,
         "regime_emoji": regime_style["emoji"],
@@ -1675,6 +1707,7 @@ def _build_signal_block(packet: dict) -> dict[str, object]:
         "track_record_hit_rate": track_record.get("hit_rate"),
         "track_record_days": track_record.get("days_evaluated", 0),
         "track_record_signal_count": track_record.get("signal_count", 0),
+        "pca_top_loadings": pca_top_loadings,
     }
 
 

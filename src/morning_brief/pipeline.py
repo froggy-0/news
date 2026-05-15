@@ -222,6 +222,31 @@ def _load_sovereign_index() -> dict | None:
     return None
 
 
+def _load_pca_from_artifact() -> dict | None:
+    """latest.json의 pca 블록(full/core loadings)을 읽어 반환."""
+    import json
+
+    output_dir = Path(os.getenv("SENTIMENT_JOIN_OUTPUT_DIR", "data/sentiment_join")).resolve()
+    artifact_path = output_dir / "latest.json"
+    if not artifact_path.exists():
+        return None
+    try:
+        with artifact_path.open() as fp:
+            artifact = json.load(fp)
+        pca = artifact.get("pca")
+        if pca and isinstance(pca, dict):
+            return pca
+    except Exception as exc:
+        log_structured(
+            logger,
+            event="pca.json_read_failed",
+            level=logging.WARNING,
+            message="latest.json pca 읽기 실패",
+            reason=str(exc),
+        )
+    return None
+
+
 def _needs_public_news_backfill(public_context: dict) -> bool:
     counts = public_context.get("source_counts", {})
     if not isinstance(counts, dict):
@@ -400,6 +425,10 @@ def run_pipeline(settings: Settings) -> str:
         sovereign_index = _load_sovereign_index()
         if sovereign_index is not None:
             packet["sovereign_index"] = sovereign_index
+
+        pca_data = _load_pca_from_artifact()
+        if pca_data is not None:
+            packet["pca"] = pca_data
 
         # ETF 히스토리 조회 (Supabase 미설정 환경에서는 건너뜀)
         if settings.supabase_url and settings.supabase_service_role_key:

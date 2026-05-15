@@ -59,6 +59,23 @@
 </table>
 {% endif %}
 
+{# PCA PC1 주요 기여 피처 (loadings 있을 때만) #}
+{% if signal_block.pca_top_loadings %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">
+<tr>
+<td class="panel" style="padding:14px 18px;background:{{ mail_theme.colors.panelBg }};border:1px solid {{ mail_theme.colors.border }};border-top:none;">
+  <div style="font-family:{{ mail_theme.typography.labelMono }};font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:{{ mail_theme.colors.textMuted }};margin-bottom:8px;">지수 구성 (PC1 주요 피처)</div>
+  {% for item in signal_block.pca_top_loadings %}
+  <div style="font-family:{{ mail_theme.typography.bodySans }};color:{{ mail_theme.colors.textBody }};font-size:13px;line-height:1.9;">
+    <span style="color:{{ mail_theme.colors.textMuted }};min-width:72px;display:inline-block;">{{ item.feature }}</span>
+    <strong style="color:{{ mail_theme.colors.textStrong }};">{{ item.direction }}{{ item.loading | abs }}</strong>
+  </div>
+  {% endfor %}
+</td>
+</tr>
+</table>
+{% endif %}
+
 </td>
 </tr>
 </table>

@@ -498,6 +498,11 @@ def _run_granger_all_lags(
             "optimal_lag": optimal_lag,
             "granger_primary": lag == optimal_lag,
             "inference": "ssr_ftest_ols",
+            # 정상성 처리 메타데이터: 차분 여부와 ADF+KPSS 결론 기록
+            "pred_differenced": pred_gate.differenced,
+            "tgt_differenced": tgt_gate.differenced,
+            "pred_stationarity": pred_gate.conclusion,
+            "tgt_stationarity": tgt_gate.conclusion,
         }
         if gap_days > 1:
             entry["warning"] = "non_contiguous_dates"
