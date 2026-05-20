@@ -25,6 +25,34 @@ function shortLabel(feature: string): string {
   return label.length > 14 ? label.slice(0, 13) + "…" : label;
 }
 
+// ─── InlineExplain ─────────────────────────────────────────────────────────────
+
+export function InlineExplain({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mb-4">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex cursor-pointer items-center gap-1.5 font-mono text-[0.60rem] text-white/30 transition-colors hover:text-white/52"
+      >
+        <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-white/18 text-[0.46rem] font-bold leading-none">
+          ?
+        </span>
+        이게 뭔가요?
+        <span className="text-[0.50rem] opacity-60">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="mt-2 rounded-xl border border-white/6 bg-white/[0.025] px-4 py-3">
+          <div className="space-y-1 font-mono text-[0.64rem] leading-5 text-white/52">
+            {children}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Baseline CI Chart ───────────────────────────────────────────────────────
 //
 // Dot-and-whisker chart: 5 baselines × T+7 hit rate with 95% bootstrap CI.
@@ -102,6 +130,12 @@ export function BaselineCIChart({ alpha }: { alpha?: AlphaSection }) {
           ? "점 = 부트스트랩 평균 · 수염 = 95% CI (B=1000, block=14) · 50% 기준선 대비"
           : "점 = 적중률 · CI 범위 없음"}
       </p>
+
+      <InlineExplain>
+        <p>5가지 기본 전략의 7일 후 적중률을 나란히 비교합니다.</p>
+        <p>점(●)이 오른쪽일수록 좋은 신호입니다. 50% 기준선이 랜덤(동전 던지기) 수준입니다.</p>
+        <p>수염(whisker)은 95% 신뢰구간 — 범위가 좁을수록 결과가 안정적입니다.</p>
+      </InlineExplain>
 
       {/* chart area */}
       <div className="relative select-none">
@@ -305,6 +339,12 @@ export function GrangerHeatmap({ granger }: { granger: GrangerSection }) {
         행 → 열 방향 · 최적 lag 기준 · {granger.correction.nTests}개 검정 · → 순방향 · ← 역방향
       </p>
 
+      <InlineExplain>
+        <p>감성 데이터가 BTC 가격을 며칠 전부터 예측하는지 검증한 결과입니다.</p>
+        <p>초록색 셀일수록 통계적으로 강한 예측력이 있다는 의미입니다. 빈 셀은 관계 없음.</p>
+        <p>L2는 lag=2, 즉 2일 전 감성 데이터가 오늘 가격과 연관됩니다.</p>
+      </InlineExplain>
+
       <div className="overflow-x-auto">
         <div className="min-w-max">
           {/* header row */}
@@ -504,6 +544,12 @@ export function WalkForwardTimeseries({
         OOS 폴드별 결과 (엠바고 7일) · Core vs Full PCA
       </p>
 
+      <InlineExplain>
+        <p>미래 데이터를 절대 쓰지 않고 시간 순서대로 전략을 검증하는 방법입니다.</p>
+        <p>각 점 = 하나의 테스트 구간(폴드). 50% 위에 고르게 분포할수록 과최적화가 없는 안정적인 전략입니다.</p>
+        <p>Core(초록)는 4개 지표, Full(보라)는 8개 지표로 만든 PCA 복합 지수입니다.</p>
+      </InlineExplain>
+
       <div className="overflow-x-auto">
         <svg
           viewBox={`0 0 ${W} ${H}`}
@@ -669,6 +715,12 @@ export function SignalImprovementMatrix() {
       <p className="mb-6 font-mono text-[0.68rem] leading-5 text-white/38">
         필터 추가 시 T+7 적중률 변화 · vol_regime_v2 기준 · 539일 분석
       </p>
+
+      <InlineExplain>
+        <p>현재 신호에 조건을 하나씩 추가했을 때 적중률이 어떻게 변하는지 보여줍니다.</p>
+        <p>위에서 아래로 갈수록 조건이 까다로워지고 적중률이 높아지지만, 신호 발화 빈도(coverage)가 줄어듭니다.</p>
+        <p>소표본(n＜30) 결과는 우연일 가능성이 높으니 참고용으로만 사용합니다.</p>
+      </InlineExplain>
 
       {/* Distinction note: this "Base" ≠ BaselineCIChart vol_regime_v2 */}
       <div className="mb-4 rounded-xl border border-[var(--accent-primary)]/12 bg-[var(--accent-primary)]/[0.04] px-4 py-2.5">
@@ -840,6 +892,12 @@ export function PcaInterpretationCard() {
           ))}
         </div>
       </div>
+
+      <InlineExplain>
+        <p>PCA는 여러 지표를 하나의 복합 숫자(PC1)로 압축하는 방법입니다.</p>
+        <p>막대가 길수록 해당 지표가 지수에 더 큰 영향을 미칩니다.</p>
+        <p>초록(양+) = 지수 상승과 같은 방향, 빨강(음-) = 반대 방향으로 움직입니다.</p>
+      </InlineExplain>
 
       {/* economic summary */}
       <div className="mb-5 rounded-xl border border-white/8 bg-white/[0.03] px-4 py-3">
