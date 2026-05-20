@@ -8,6 +8,8 @@ const MACHINE_PAYLOAD_RE = /^\s*[\[{].*[:].*[\]}]\s*$/;
 const HANGUL_RE = /[가-힣]/;
 const AS_OF_LINE_RE = /^\(?as of\s+/i;
 const DATA_QUALITY_STATUS_RE = /^데이터 품질 상태:\s*(?:ok|degraded|critical)/i;
+const DATA_QUALITY_NOTICE_RE = /^\[데이터 품질 알림\]/;
+const DATA_QUALITY_ISSUE_RE = /^데이터 품질 이슈:/;
 const BODY_REPLACEMENTS: Array<[RegExp, string]> = [
   [/BTC\s*&\s*크립토/gi, "비트코인과 크립토"],
   [/Big\s+Tech/gi, "크립토 기반"],
@@ -34,7 +36,7 @@ export function sanitizePublicBody(body: string): string {
     if (stripped && AS_OF_LINE_RE.test(stripped)) {
       continue;
     }
-    if (stripped && DATA_QUALITY_STATUS_RE.test(stripped)) {
+    if (stripped && (DATA_QUALITY_STATUS_RE.test(stripped) || DATA_QUALITY_NOTICE_RE.test(stripped) || DATA_QUALITY_ISSUE_RE.test(stripped))) {
       continue;
     }
     if (stripped && (MACHINE_PAYLOAD_RE.test(stripped) || stripped.startsWith("{'") || stripped.startsWith('{"'))) {

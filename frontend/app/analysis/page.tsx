@@ -2,18 +2,9 @@ import type { Metadata } from "next";
 
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { AnalysisMasthead } from "@/components/analysis/AnalysisMasthead";
-import { GrangerSymmetric } from "@/components/analysis/GrangerSymmetric";
-import { PcaTabs } from "@/components/analysis/PcaTabs";
 import { AnalysisUnavailable } from "@/components/analysis/AnalysisUnavailable";
 import { AnalysisSignalField } from "@/components/analysis/AnalysisSignalField";
-import {
-  AlphaValidationBoard,
-  AnalysisOverviewDeck,
-  DataQualityMatrix,
-  RawMetadataExplorer,
-  StationarityPanel,
-  TargetDiagnosticsPanel,
-} from "@/components/analysis/AnalysisDashboardPanels";
+import { InsightHub } from "@/components/analysis/InsightHub";
 import { fetchSentimentInsight, isStaleReferenceDate } from "@/lib/analysis";
 import { deriveAnalysisSummary, isFullDiagnosticArtifact } from "@/lib/analysis-derive";
 
@@ -50,129 +41,7 @@ export default async function AnalysisPage() {
           schemaVersion={artifact.schemaVersion}
           diagnosticsReady={diagnosticsReady}
         />
-
-        <div className="mx-auto w-full space-y-14 px-6 py-14 md:px-20">
-          {/* § PIPELINE HEALTH */}
-          <section>
-            <SectionHeader
-              index="01"
-              title="Pipeline Health"
-              badge="run · coverage · source · raw metadata"
-              description="Data integrity check before reading any signal. Quality precedes interpretation."
-            />
-            <div className="mt-8">
-              <AnalysisOverviewDeck artifact={artifact} />
-            </div>
-          </section>
-
-          {/* § DATA QUALITY */}
-          <section>
-            <SectionHeader
-              index="02"
-              title="Data Quality"
-              badge="source lineage · ffill · exclusion"
-              description="Where BTC, ETF, futures, and VIX inputs originated and how much interpolation was applied. High ffill counts indicate stale propagation, not real signal."
-            />
-            <div className="analysis-depth-panel mt-8 p-5 md:p-8">
-              <DataQualityMatrix
-                dataQuality={artifact.dataQuality}
-                diagnosticsReady={diagnosticsReady}
-              />
-            </div>
-          </section>
-
-          {/* § GRANGER CAUSALITY */}
-          <section>
-            <SectionHeader
-              index="03"
-              title="Granger Causality"
-              badge={`${artifact.granger.correction.nTests} relationships · lag 1–3d`}
-              description="Tests whether past values of one series statistically precede changes in another. Highlighted results survive multiple-comparison correction."
-            />
-            <div className="analysis-depth-panel mt-8 p-5 md:p-8">
-              <GrangerSymmetric granger={artifact.granger} />
-            </div>
-          </section>
-
-          {/* § ALPHA VALIDATION */}
-          <section>
-            <SectionHeader
-              index="04"
-              title="Alpha Validation"
-              badge="7d horizon · baseline uplift"
-              description="Candidate signals must outperform naive baselines on lag-only forward returns. Walk-forward stability separates persistent edge from in-sample curve-fitting."
-            />
-            <div className="analysis-depth-panel mt-8 p-5 md:p-8">
-              <AlphaValidationBoard
-                alpha={artifact.alpha}
-                summary={artifact.summary}
-                diagnosticsReady={diagnosticsReady}
-                meta={artifact.meta}
-              />
-            </div>
-          </section>
-
-          {/* § TARGET DIAGNOSTICS */}
-          <section>
-            <SectionHeader
-              index="05"
-              title="Target Diagnostics"
-              badge="forward returns · fixed label · volatility adjusted label"
-              description="Event rates for large-move labels. Labels that are too frequent or too rare distort the prediction task — compare fixed vs. vol-adjusted thresholds across regimes."
-            />
-            <div className="analysis-depth-panel mt-8 p-5 md:p-8">
-              <TargetDiagnosticsPanel
-                targets={artifact.targets}
-                diagnosticsReady={diagnosticsReady}
-              />
-            </div>
-          </section>
-
-          {/* § PCA FACTOR ANALYSIS */}
-          <section>
-            <SectionHeader
-              index="06"
-              title="PCA Factor Analysis"
-              badge="extended features · core features · loadings"
-              description="Compression of market indicators into a single hybrid index. Loadings reveal which features drive the composite signal direction and magnitude."
-            />
-            <div className="analysis-depth-panel mt-8 p-5 md:p-8">
-              <PcaTabs pca={artifact.pca} />
-            </div>
-          </section>
-
-          {/* § STATIONARITY GATE */}
-          <section>
-            <SectionHeader
-              index="07"
-              title="Stationarity Gate"
-              badge="ADF · stationarity · diagnostics"
-              description="Granger tests assume stationary inputs. Weak ADF results cause skips or reduce confidence in causality estimates — this panel traces the root cause."
-            />
-            <div className="analysis-depth-panel mt-8 p-5 md:p-8">
-              <StationarityPanel
-                adf={artifact.stationarity?.adf}
-                diagnosticsReady={diagnosticsReady}
-              />
-            </div>
-          </section>
-
-          {/* § RAW PARQUET METADATA */}
-          <section>
-            <SectionHeader
-              index="08"
-              title="Raw Parquet Metadata"
-              badge="sentiment_join_stats · no-loss view"
-              description="Full parquet metadata exposed as JSON. Dashboard cards are curated views — this section is the ground truth for debugging and contract verification."
-            />
-            <div className="mt-8">
-              <RawMetadataExplorer
-                rawStats={artifact.rawStats}
-                diagnosticsReady={diagnosticsReady}
-              />
-            </div>
-          </section>
-        </div>
+        <InsightHub artifact={artifact} diagnosticsReady={diagnosticsReady} />
       </>
     );
   } catch (error) {
@@ -188,29 +57,3 @@ export default async function AnalysisPage() {
   );
 }
 
-function SectionHeader({
-  index,
-  title,
-  badge,
-  description,
-}: {
-  index: string;
-  title: string;
-  badge: string;
-  description: string;
-}) {
-  return (
-    <div className="border-b border-[rgba(169,146,125,0.10)] pb-5">
-      <div className="flex flex-wrap items-baseline gap-3">
-        <span className="text-[0.62rem] tabular-nums tracking-[0.12em] text-[var(--taupe)]/35">
-          §{index}
-        </span>
-        <h2 className="text-[1rem] font-semibold text-[var(--smoke)]/90">{title}</h2>
-        <span className="text-[0.65rem] tracking-[0.06em] text-[var(--accent-primary)]/70">
-          {badge}
-        </span>
-      </div>
-      <p className="mt-2 max-w-3xl text-[0.74rem] leading-6 text-[var(--taupe)]/60">{description}</p>
-    </div>
-  );
-}

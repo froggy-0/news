@@ -96,6 +96,7 @@ export interface AlphaSection {
   correlations: JsonValue[];
   backtest: JsonValue[];
   walkForward: JsonObject;
+  walkForwardLegacy1d?: JsonObject;
   baselineMetrics: JsonObject;
   horizonMetrics: JsonObject;
   walkForwardHorizons: JsonObject;

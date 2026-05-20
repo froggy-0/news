@@ -234,11 +234,13 @@ function parseAlphaSection(value: unknown): AlphaSection {
   const bootstrapRaw = raw.bootstrapConfig ?? raw.bootstrap_config;
   const gateStatsRaw = raw.gateStats ?? raw.gate_stats;
   const promotionGateRaw = raw.promotionGate ?? raw.promotion_gate;
+  const walkForwardLegacy1dRaw = raw.walkForwardLegacy1d ?? raw.walk_forward_legacy_1d;
   return {
     hitRates: toJsonArray(raw.hitRates),
     correlations: toJsonArray(raw.correlations),
     backtest: toJsonArray(raw.backtest),
     walkForward: toJsonObject(raw.walkForward),
+    walkForwardLegacy1d: walkForwardLegacy1dRaw === undefined ? undefined : toJsonObject(walkForwardLegacy1dRaw),
     baselineMetrics: toJsonObject(raw.baselineMetrics),
     horizonMetrics: toJsonObject(raw.horizonMetrics),
     walkForwardHorizons: toJsonObject(raw.walkForwardHorizons),
