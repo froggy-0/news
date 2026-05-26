@@ -458,10 +458,41 @@ function CausalityDirectionCard({ kpi, granger }: { kpi: Kpi; granger: GrangerSe
         )}
       </div>
 
-      <div className="mt-4 rounded-xl border border-white/6 bg-white/[0.02] px-4 py-3">
-        <p className="font-mono text-[0.63rem] leading-5 text-white/56">
-          <span className="font-semibold text-white/80">결론:</span> 양방향 관계 모두 확인. 역방향(가격→감성)이
-          더 강하나, 순방향 신호도 유의미 — vol_regime 필터와 조합 시 활용 가능.
+      {/* F-ratio asymmetry highlight — key research finding */}
+      <div className="mt-4 rounded-xl border border-[var(--accent-warning)]/18 bg-[var(--accent-warning)]/[0.04] px-4 py-3">
+        <p className="mb-2 font-mono text-[0.56rem] uppercase tracking-[0.12em] text-[var(--accent-warning)]/60">
+          핵심 발견 — F통계량 비대칭
+        </p>
+        <div className="flex items-center gap-4">
+          <div className="flex flex-1 flex-col gap-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono text-[0.60rem] text-white/44">순방향 (감성 → BTC)</span>
+              <span className="font-mono text-[0.66rem] font-semibold tabular-nums text-[var(--accent-green)]/80">F ≈ 8.3</span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/6">
+              <div className="h-full rounded-full bg-[var(--accent-green)]/40" style={{ width: "7.5%" }} />
+            </div>
+          </div>
+          <div className="shrink-0 font-mono text-[0.68rem] font-bold text-[var(--accent-warning)]">
+            ×12
+          </div>
+          <div className="flex flex-1 flex-col gap-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono text-[0.60rem] text-white/44">역방향 (BTC → 감성)</span>
+              <span className="font-mono text-[0.66rem] font-semibold tabular-nums text-[var(--accent-warning)]/80">F ≈ 103</span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/6">
+              <div className="h-full rounded-full bg-[var(--accent-warning)]/50" style={{ width: "100%" }} />
+            </div>
+          </div>
+        </div>
+        <p className="mt-2.5 font-mono text-[0.60rem] leading-5 text-white/44">
+          <span className="text-white/68">해석:</span> BTC 가격이 뉴스 감성을 만드는 방향이 Granger F 기준으로 12배 강함.
+          감성 지표는 미래 예측이 아닌 <span className="text-white/68">현재 시장 국면의 반영값</span>이다.
+          &thinsp;순방향도 유의(p_adj=0.004)하므로 vol_regime 필터와 조합 시 활용 가능.
+        </p>
+        <p className="mt-1 font-mono text-[0.52rem] text-white/20">
+          ※ F통계량은 VAR Granger 검정(n=539, BH-FDR 보정 전 원시값 기준)
         </p>
       </div>
     </div>
@@ -836,6 +867,111 @@ function GuideTab() {
         <p className="mt-1 font-mono text-[0.68rem] leading-5 text-white/38">
           Summary → Signal → Causality → Factor 순서로 읽으시면 결과를 자연스럽게 이해할 수 있습니다.
         </p>
+      </div>
+
+      {/* Walk-Forward Validation Diagram */}
+      <div>
+        <p className="mb-1 font-mono text-[0.68rem] uppercase tracking-[0.18em] text-[var(--accent-primary)]/80">
+          Walk-Forward 검증 — 시계열의 정공법
+        </p>
+        <p className="mb-5 font-mono text-[0.68rem] text-white/38">
+          왜 K-Fold가 시계열에 쓰면 안 되는지, Walk-Forward가 어떻게 작동하는지 시각으로 확인하세요.
+        </p>
+
+        {/* K-Fold (wrong) */}
+        <div className="mb-4 rounded-2xl border border-[var(--accent-down)]/15 bg-[var(--accent-down)]/[0.03] p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="rounded-full border border-[var(--accent-down)]/30 px-2.5 py-0.5 font-mono text-[0.54rem] text-[var(--accent-down)]/70">
+              ✗ K-Fold — 시계열에 사용 금지
+            </span>
+          </div>
+          <p className="mb-4 font-mono text-[0.62rem] text-white/40">
+            3월 데이터로 학습하고 1월을 예측하는 구조 — <span className="text-[var(--accent-down)]/80">미래 정보로 과거를 맞히는 Lookahead Bias</span>
+          </p>
+          <svg viewBox="0 0 560 72" className="w-full max-w-[560px]" aria-label="K-Fold diagram">
+            {/* time axis */}
+            <text x="4" y="14" style={{ fontSize: 8.5, fill: "rgba(255,255,255,0.28)", fontFamily: "monospace" }}>시간 →</text>
+            {/* months */}
+            {["Jan","Feb","Mar","Apr","May","Jun"].map((m, i) => (
+              <text key={m} x={64 + i * 82 + 30} y="14" textAnchor="middle"
+                style={{ fontSize: 8, fill: "rgba(255,255,255,0.22)", fontFamily: "monospace" }}>{m}</text>
+            ))}
+            {/* K-Fold blocks */}
+            {[
+              { x: 64,  label: "TEST",  fill: "rgba(246,70,93,0.28)",  stroke: "rgba(246,70,93,0.50)" },
+              { x: 146, label: "TRAIN", fill: "rgba(255,255,255,0.05)", stroke: "rgba(255,255,255,0.12)" },
+              { x: 228, label: "TRAIN", fill: "rgba(255,255,255,0.05)", stroke: "rgba(255,255,255,0.12)" },
+              { x: 310, label: "TRAIN", fill: "rgba(255,255,255,0.05)", stroke: "rgba(255,255,255,0.12)" },
+              { x: 392, label: "TRAIN", fill: "rgba(255,255,255,0.05)", stroke: "rgba(255,255,255,0.12)" },
+              { x: 474, label: "TRAIN", fill: "rgba(255,255,255,0.05)", stroke: "rgba(255,255,255,0.12)" },
+            ].map((b, i) => (
+              <g key={i}>
+                <rect x={b.x} y="22" width="76" height="28" rx="4" fill={b.fill} stroke={b.stroke} strokeWidth="1" />
+                <text x={b.x + 38} y="40" textAnchor="middle"
+                  style={{ fontSize: 9, fill: i === 0 ? "rgba(246,70,93,0.9)" : "rgba(255,255,255,0.34)", fontFamily: "monospace", fontWeight: i === 0 ? 700 : 400 }}>
+                  {b.label}
+                </text>
+              </g>
+            ))}
+            {/* arrow: TRAIN → TEST (wrong direction) */}
+            <path d="M 228 36 C 180 36 160 50 106 50" fill="none" stroke="rgba(246,70,93,0.40)" strokeWidth="1.2" strokeDasharray="4,3" />
+            <polygon points="100,50 110,46 110,54" fill="rgba(246,70,93,0.40)" />
+            <text x="168" y="66" textAnchor="middle" style={{ fontSize: 7.5, fill: "rgba(246,70,93,0.60)", fontFamily: "monospace" }}>3월로 학습 → 1월 예측 (미래→과거)</text>
+          </svg>
+        </div>
+
+        {/* Walk-Forward (correct) */}
+        <div className="rounded-2xl border border-[var(--accent-green)]/15 bg-[var(--accent-green)]/[0.03] p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="rounded-full border border-[var(--accent-green)]/30 px-2.5 py-0.5 font-mono text-[0.54rem] text-[var(--accent-green)]/70">
+              ✅ Walk-Forward — 본 연구 채택
+            </span>
+          </div>
+          <p className="mb-4 font-mono text-[0.62rem] text-white/40">
+            과거→현재 방향만 허용 · Embargo로 label leakage 차단 · <span className="text-[var(--accent-green)]/80">본 연구: 240일 train / 7일 embargo / 45일 test / 30일 step → 9 fold</span>
+          </p>
+          <svg viewBox="0 0 560 130" className="w-full max-w-[560px]" aria-label="Walk-Forward diagram">
+            {/* Fold 1 */}
+            <text x="4" y="18" style={{ fontSize: 7.5, fill: "rgba(255,255,255,0.24)", fontFamily: "monospace" }}>fold 1</text>
+            <rect x="44" y="6" width="200" height="22" rx="3" fill="rgba(14,203,129,0.12)" stroke="rgba(14,203,129,0.28)" strokeWidth="1" />
+            <text x="144" y="21" textAnchor="middle" style={{ fontSize: 8.5, fill: "rgba(14,203,129,0.80)", fontFamily: "monospace" }}>TRAIN (240일)</text>
+            <rect x="248" y="6" width="30" height="22" rx="3" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
+            <text x="263" y="21" textAnchor="middle" style={{ fontSize: 7, fill: "rgba(255,255,255,0.28)", fontFamily: "monospace" }}>7d</text>
+            <rect x="282" y="6" width="100" height="22" rx="3" fill="rgba(14,203,129,0.22)" stroke="rgba(14,203,129,0.50)" strokeWidth="1" />
+            <text x="332" y="21" textAnchor="middle" style={{ fontSize: 8.5, fill: "rgba(14,203,129,1.0)", fontFamily: "monospace", fontWeight: 700 }}>TEST (45일)</text>
+            <text x="392" y="21" style={{ fontSize: 7.5, fill: "rgba(255,255,255,0.22)", fontFamily: "monospace" }}>← OOS</text>
+
+            {/* Arrow down */}
+            <line x1="170" y1="30" x2="200" y2="42" stroke="rgba(255,255,255,0.10)" strokeWidth="1" strokeDasharray="3,2" />
+            <text x="455" y="50" style={{ fontSize: 7, fill: "rgba(255,255,255,0.18)", fontFamily: "monospace" }}>30일 이동</text>
+            <path d="M 440 42 L 455 42" stroke="rgba(255,255,255,0.14)" strokeWidth="1" />
+            <polygon points="455,42 451,39 451,45" fill="rgba(255,255,255,0.14)" />
+
+            {/* Fold 2 */}
+            <text x="4" y="68" style={{ fontSize: 7.5, fill: "rgba(255,255,255,0.24)", fontFamily: "monospace" }}>fold 2</text>
+            <rect x="74" y="56" width="200" height="22" rx="3" fill="rgba(14,203,129,0.12)" stroke="rgba(14,203,129,0.28)" strokeWidth="1" />
+            <text x="174" y="71" textAnchor="middle" style={{ fontSize: 8.5, fill: "rgba(14,203,129,0.80)", fontFamily: "monospace" }}>TRAIN (240일)</text>
+            <rect x="278" y="56" width="30" height="22" rx="3" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
+            <text x="293" y="71" textAnchor="middle" style={{ fontSize: 7, fill: "rgba(255,255,255,0.28)", fontFamily: "monospace" }}>7d</text>
+            <rect x="312" y="56" width="100" height="22" rx="3" fill="rgba(14,203,129,0.22)" stroke="rgba(14,203,129,0.50)" strokeWidth="1" />
+            <text x="362" y="71" textAnchor="middle" style={{ fontSize: 8.5, fill: "rgba(14,203,129,1.0)", fontFamily: "monospace", fontWeight: 700 }}>TEST (45일)</text>
+
+            {/* Dots for more folds */}
+            <text x="120" y="104" style={{ fontSize: 9, fill: "rgba(255,255,255,0.18)", fontFamily: "monospace" }}>⋯  9개 fold 반복  ⋯</text>
+
+            {/* Key labels */}
+            <rect x="44" y="116" width="10" height="6" rx="1" fill="rgba(14,203,129,0.18)" stroke="rgba(14,203,129,0.36)" strokeWidth="0.8" />
+            <text x="58" y="122" style={{ fontSize: 7.5, fill: "rgba(255,255,255,0.36)", fontFamily: "monospace" }}>Train (학습 전용)</text>
+            <rect x="180" y="116" width="10" height="6" rx="1" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.14)" strokeWidth="0.8" />
+            <text x="194" y="122" style={{ fontSize: 7.5, fill: "rgba(255,255,255,0.36)", fontFamily: "monospace" }}>Embargo (7일 격리)</text>
+            <rect x="340" y="116" width="10" height="6" rx="1" fill="rgba(14,203,129,0.30)" stroke="rgba(14,203,129,0.60)" strokeWidth="0.8" />
+            <text x="354" y="122" style={{ fontSize: 7.5, fill: "rgba(255,255,255,0.36)", fontFamily: "monospace" }}>Test (OOS 평가)</text>
+          </svg>
+          <p className="mt-3 font-mono text-[0.58rem] leading-5 text-white/34">
+            <span className="text-white/60">Embargo가 필요한 이유:</span> T+7 예측에서 train 마지막 날의 정답(label)이 test 첫 7일의 입력과 겹칩니다.
+            이 7일을 비워야 label leakage가 차단됩니다. Embargo 길이 = 예측 horizon (T+7 → 7일).
+          </p>
+        </div>
       </div>
 
       {/* Tab reading guides */}
