@@ -1,6 +1,9 @@
 # Walk-Forward Validation — 발표 슬라이드 스크립트
 ### 시계열 검증의 정공법 | 1~2분 발표용
-> 데이터 기준: R2 latest.json (2026-05-25, n=539)
+> 데이터 기준: R2 latest.json (2026-05-25, n=539)  
+> 전체 연구 서사 (질문→피처→PCA→검정→WFV 흐름): [research-narrative.md](research-narrative.md)  
+> 상세 이론: [wfv-deep-dive.md](wfv-deep-dive.md)  
+> 고민·실패·결정 기록 (왜 다른 신호들은 실패했나): [signal-design-log.md](signal-design-log.md)
 
 ---
 
@@ -46,19 +49,21 @@ K-Fold:  [TEST] [TRAIN][TRAIN][TRAIN][TRAIN][TRAIN]
 Walk-Forward는 이 원칙을 기계적으로 강제합니다.
 
 ```
-시간 →
+시간 →                            ← vol_regime_v2 등 규칙 기반 신호 검증
 ┌────────────────────┐  [7일 Embargo]  ┌──────────┐
-│  TRAIN  (240일)    │  ─────────────► │ TEST 45일│  ← fold 1
+│  TRAIN  (120일)    │  ─────────────► │ TEST 30일│  ← fold 1
 └────────────────────┘                 └──────────┘
        ↓ 30일 앞으로 이동
   ┌────────────────────┐  [7일 Embargo]  ┌──────────┐
-  │  TRAIN  (240일)    │  ─────────────► │ TEST 45일│  ← fold 2
+  │  TRAIN  (120일)    │  ─────────────► │ TEST 30일│  ← fold 2
   └────────────────────┘                 └──────────┘
-           ↓ 반복 (총 9회)
+           ↓ 반복 (총 ~13회)
 ```
 
 Test 구간은 **학습에 사용된 적 없는 데이터**에서만 성능을 측정합니다.
 중간 Embargo(격리)가 왜 필요한지는 다음 슬라이드에서 설명합니다.
+
+> (참고: ML 복합 점수 검증 경로는 TRAIN 240일 / TEST 45일 / 9 fold로 파라미터가 다릅니다.)
 
 ---
 
@@ -87,11 +92,13 @@ Test 첫 날의 입력에 Train 마지막 날 시장 정보 포함
 
 > **말할 내용 (약 15초)**
 
-이 프로젝트는 매일 자동으로 Walk-Forward 방식을 씁니다.
+이 프로젝트는 매일 자동으로 **Expanding Window OOS** 방식을 씁니다.
 
 ```
 어제까지 전체 데이터 → 모델 학습 → 오늘 하루만 예측 (학습에 안 씀)
 ```
+
+> Walk-Forward(다중 fold 검증)와 다른 점: 매일 운영은 fold 구분 없이 전체 과거를 train으로, 오늘 하루만 test로 쓰는 Expanding Window 방식입니다.
 
 이 방식으로 나온 성능입니다 (R2 기준, 2026-05-25, n=539).
 
@@ -109,12 +116,13 @@ Lookahead 없이 나온 61.8%이기 때문에 의미가 있습니다.
 
 > **말할 내용 (약 15초)**
 
-| 방법 | Lookahead 차단 | 시계열 적합 | 다중 평가 |
-|---|---|---|---|
-| K-Fold | ✗ | ✗ | ✅ |
-| Train/Test 단순 분할 | ✅ | △ | ✗ 1회뿐 |
-| **Walk-Forward** | ✅ | ✅ | ✅ |
-| Purged K-Fold *(López de Prado, 2018)* | ✅ + Purge | ✅ | ✅ |
+| 방법 | Lookahead 차단 | 시계열 적합 | 다중 평가 | 이 프로젝트 |
+|---|---|---|---|---|
+| K-Fold | ✗ | ✗ | ✅ | ❌ |
+| Train/Test 단순 분할 | ✅ | △ | ✗ 1회뿐 | 초기 확인용 |
+| **Walk-Forward (경로 A)** | ✅ | ✅ | ✅ ~13 fold | 기본 신호 |
+| **Walk-Forward (경로 B)** | ✅ | ✅ | ✅ 9 fold | ML 복합 점수 |
+| Purged K-Fold *(López de Prado, 2018)* | ✅ + Purge | ✅ | ✅ | 복수 horizon 시 |
 
 - **Purged K-Fold**는 Walk-Forward의 고급 변종 — 복수 horizon이 레이블과 겹칠 때 train에서 해당 행까지 제거(purge)합니다. 본 프로젝트는 단일 T+7이므로 Embargo만으로 충분합니다.
 
