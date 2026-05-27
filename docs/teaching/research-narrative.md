@@ -2,7 +2,8 @@
 ### BTC 뉴스 감성 분석 프로젝트 전체 흐름
 > 데이터 기준: R2 latest.json (2026-05-25, n=539)  
 > 검증 방법론: [wfv-deep-dive.md](wfv-deep-dive.md)  
-> 고민·실패·결정 기록: [signal-design-log.md](signal-design-log.md)
+> 고민·실패·결정 기록: [signal-design-log.md](signal-design-log.md)  
+> 15분 발표 스크립트: [presentation-script-15min.md](presentation-script-15min.md)
 
 ---
 
