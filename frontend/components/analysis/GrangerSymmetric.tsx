@@ -114,7 +114,7 @@ export function GrangerSymmetric({ granger }: { granger: GrangerSection }) {
         </div>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid items-start gap-5 lg:grid-cols-2">
         <SignalColumn
           title="감성이 먼저"
           subtitle="news leads price"
@@ -224,7 +224,7 @@ function SignalCard({
       `}</style>
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
-          <p className="truncate text-[0.9rem] font-semibold text-white/86">{group.label}</p>
+          <p className="break-words text-[0.9rem] font-semibold leading-5 text-white/86">{group.label}</p>
           <p className="mt-1 font-mono text-[0.63rem] text-white/30">
             best lag: {group.optimal.lag}일 전 · {formatAdjustedPValue(group.optimal.pvalueAdjusted)}
           </p>
@@ -253,7 +253,7 @@ function SignalCard({
             <button
               key={id}
               type="button"
-              className={`relative rounded-lg border px-2 py-3 text-left transition ${
+              className={`relative min-h-[76px] cursor-pointer rounded-lg border px-2 py-3 text-left transition ${
                 active
                   ? "border-white/28 bg-white/[0.08]"
                   : "border-white/8 bg-black/20 hover:border-white/18 hover:bg-white/[0.05]"

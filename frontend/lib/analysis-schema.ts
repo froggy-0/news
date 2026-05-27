@@ -127,6 +127,7 @@ function parseGrangerResult(value: unknown, index: number): GrangerResult {
     lag: raw.lag,
     pvalue: asNumber(raw.pvalue),
     pvalueAdjusted: asNumber(raw.pvalueAdjusted),
+    fStatistic: asNumber(raw.fStatistic) ?? asNumber(raw.f_statistic),
     significant: asBoolean(raw.significant),
     optimalLag: asBoolean(raw.optimalLag),
   };

@@ -11,6 +11,7 @@ export interface GrangerResult {
   lag: number;
   pvalue: number | null;
   pvalueAdjusted: number | null;
+  fStatistic?: number | null;
   significant: boolean;
   optimalLag: boolean;
 }

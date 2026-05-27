@@ -30,6 +30,28 @@ export type AnalysisSummary = {
   coverageRatio: number;
 };
 
+export type GrangerRawStatistic = {
+  predictor: string;
+  target: string;
+  direction: GrangerDirection;
+  lag: number;
+  fStatistic: number | null;
+  pvalue: number | null;
+  pvalueAdjusted: number | null;
+  significant: boolean;
+  primary: boolean;
+  optimalLag: number | null;
+};
+
+export type NewsBtcGrangerAsymmetry = {
+  lag: number;
+  forward: GrangerRawStatistic | null;
+  reverse: GrangerRawStatistic | null;
+  primaryForward: GrangerRawStatistic | null;
+  primaryReverse: GrangerRawStatistic | null;
+  ratio: number | null;
+};
+
 function cleanFeatureName(value: string): string {
   return value.replace(/_lag\d+$/, "").replace(/_mean$/, "").replace(/_/g, " ");
 }
@@ -62,6 +84,84 @@ export function formatFeatureLabel(value: string): string {
 
 export function formatSignalLabel(result: Pick<GrangerResult, "predictor" | "target">): string {
   return `${formatFeatureLabel(result.predictor)} -> ${formatFeatureLabel(result.target)}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function textValue(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+export function deriveRawGrangerStatistics(
+  artifact: Pick<SentimentInsightArtifact, "rawStats">,
+): GrangerRawStatistic[] {
+  const rows = artifact.rawStats?.granger_results;
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((item): GrangerRawStatistic[] => {
+    if (!isRecord(item)) return [];
+    const predictor = textValue(item.predictor);
+    const target = textValue(item.target);
+    const lag = finiteNumber(item.lag);
+    if (!predictor || !target || lag === null) return [];
+
+    const rawDirection = textValue(item.direction);
+    const direction: GrangerDirection = rawDirection === "reverse" ? "reverse" : "forward";
+
+    return [
+      {
+        predictor,
+        target,
+        direction,
+        lag,
+        fStatistic: finiteNumber(item.f_statistic) ?? finiteNumber(item.fStatistic),
+        pvalue: finiteNumber(item.pvalue) ?? finiteNumber(item.pvalue_raw),
+        pvalueAdjusted: finiteNumber(item.pvalue_adjusted) ?? finiteNumber(item.pvalueAdjusted),
+        significant: item.significant === true,
+        primary: item.granger_primary === true || item.primary === true,
+        optimalLag: finiteNumber(item.optimal_lag) ?? finiteNumber(item.optimalLag),
+      },
+    ];
+  });
+}
+
+function findRawGrangerStatistic(
+  rows: GrangerRawStatistic[],
+  predictor: string,
+  target: string,
+  lag?: number,
+): GrangerRawStatistic | null {
+  const candidates = rows.filter((row) => row.predictor === predictor && row.target === target);
+  if (lag !== undefined) return candidates.find((row) => row.lag === lag) ?? null;
+
+  return (
+    candidates.find((row) => row.primary) ??
+    [...candidates].sort((a, b) => (a.pvalueAdjusted ?? 1) - (b.pvalueAdjusted ?? 1))[0] ??
+    null
+  );
+}
+
+export function deriveNewsBtcGrangerAsymmetry(
+  artifact: Pick<SentimentInsightArtifact, "rawStats">,
+  lag = 1,
+): NewsBtcGrangerAsymmetry {
+  const rows = deriveRawGrangerStatistics(artifact);
+  const forward = findRawGrangerStatistic(rows, "news_sentiment_mean", "btc_log_return", lag);
+  const reverse = findRawGrangerStatistic(rows, "btc_log_return", "news_sentiment_mean", lag);
+  const primaryForward = findRawGrangerStatistic(rows, "news_sentiment_mean", "btc_log_return");
+  const primaryReverse = findRawGrangerStatistic(rows, "btc_log_return", "news_sentiment_mean");
+  const ratio =
+    forward?.fStatistic && reverse?.fStatistic && forward.fStatistic > 0
+      ? reverse.fStatistic / forward.fStatistic
+      : null;
+
+  return { lag, forward, reverse, primaryForward, primaryReverse, ratio };
 }
 
 export function negLog10(value: number | null): number {

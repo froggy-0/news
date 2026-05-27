@@ -15,7 +15,7 @@ import {
   ZAxis,
 } from "recharts";
 import type { AlphaSection, GrangerSection, JsonObject, SentimentInsightArtifact } from "@schema/analysis.types";
-import { formatFeatureLabel } from "@/lib/analysis-derive";
+import { deriveNewsBtcGrangerAsymmetry, formatFeatureLabel } from "@/lib/analysis-derive";
 import { GrangerSymmetric } from "./GrangerSymmetric";
 import { PcaTabs } from "./PcaTabs";
 import {
@@ -43,7 +43,7 @@ const TABS: { id: TabId; label: string; hint: string }[] = [
   { id: "story",     label: "Story",      hint: "연구 서사" },
   { id: "summary",   label: "Summary",    hint: "핵심 KPI" },
   { id: "signal",    label: "Signal",     hint: "성과 검증" },
-  { id: "causality", label: "Causality",  hint: "인과 분석" },
+  { id: "causality", label: "Causality",  hint: "선행성 분석" },
   { id: "factor",    label: "Factor",     hint: "PCA 팩터" },
   { id: "pipeline",  label: "Pipeline",   hint: "전처리·품질" },
   { id: "guide",     label: "Guide",      hint: "읽는 법·용어" },
@@ -62,6 +62,11 @@ function fmtPct(v: number | null, d = 1): string {
 function fmtP(v: number | null): string {
   if (v === null) return "—";
   return v < 0.001 ? "<0.001" : v.toFixed(3);
+}
+
+function fmtF(v: number | null): string {
+  if (v === null) return "F —";
+  return `F=${v >= 10 ? v.toFixed(1) : v.toFixed(2)}`;
 }
 
 function str(v: unknown): string {
@@ -243,11 +248,11 @@ function SignalSpaceChart({ data }: { data: ScatterPoint[] }) {
         신호 성과 공간
       </p>
       <p className="mb-5 font-mono text-[0.68rem] text-white/38">
-        버블 크기 = coverage · 우상단 = 고품질
+        버블 크기 = coverage · 우상단 = 검증상 우세한 구간
       </p>
       <InlineExplain>
         <p>5가지 전략을 적중률(X축)과 Sharpe 비율(Y축) 기준으로 배치합니다.</p>
-        <p>버블이 크고 우상단에 있을수록 좋은 전략입니다. 초록 버블이 현재 메인 신호(vol_regime_v2)입니다.</p>
+        <p>버블이 크고 우상단에 있을수록 이번 검증에서 상대적으로 우세했습니다. 초록 버블이 저위험 국면 필터(vol_regime_v2)입니다.</p>
         <p>50% 점선 왼쪽에 있으면 랜덤 수준 이하입니다.</p>
       </InlineExplain>
       <ResponsiveContainer width="100%" height={240}>
@@ -324,8 +329,17 @@ function SignalSpaceChart({ data }: { data: ScatterPoint[] }) {
 
 // ─── Causality direction card ──────────────────────────────────────────────────
 
-function CausalityDirectionCard({ kpi, granger }: { kpi: Kpi; granger: GrangerSection }) {
+function CausalityDirectionCard({
+  kpi,
+  granger,
+  artifact,
+}: {
+  kpi: Kpi;
+  granger: GrangerSection;
+  artifact: SentimentInsightArtifact;
+}) {
   const [showOther, setShowOther] = useState(false);
+  const asymmetry = useMemo(() => deriveNewsBtcGrangerAsymmetry(artifact, 1), [artifact]);
 
   const sigOpt = useMemo(
     () => granger.results.filter((r) => r.significant && r.optimalLag),
@@ -361,11 +375,11 @@ function CausalityDirectionCard({ kpi, granger }: { kpi: Kpi; granger: GrangerSe
   }, [sigOpt, catSentToPrice, catPriceToSent]);
 
   function PairRow({ r }: { r: (typeof sigOpt)[0] }) {
-    const pred = r.predictor.replace(/_lag\d+$/, "").replace(/_zscore_\d+d$/, "");
-    const tgt  = r.target.replace(/_lag\d+$/, "").replace(/_zscore_\d+d$/, "");
+    const pred = formatFeatureLabel(r.predictor.replace(/_lag\d+$/, "").replace(/_zscore_\d+d$/, ""));
+    const tgt  = formatFeatureLabel(r.target.replace(/_lag\d+$/, "").replace(/_zscore_\d+d$/, ""));
     return (
-      <div className="flex items-center gap-2 py-1">
-        <span className="flex-1 truncate font-mono text-[0.60rem] text-white/52">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 py-1">
+        <span className="min-w-0 break-words font-mono text-[0.60rem] leading-4 text-white/52">
           {pred} → {tgt}
         </span>
         <span className="shrink-0 font-mono text-[0.58rem] text-white/28">lag={r.lag}</span>
@@ -379,15 +393,15 @@ function CausalityDirectionCard({ kpi, granger }: { kpi: Kpi; granger: GrangerSe
   return (
     <div className="rounded-2xl border border-white/10 bg-black/24 p-6">
       <p className="mb-1 font-mono text-[0.68rem] uppercase tracking-[0.18em] text-[var(--accent-primary)]/80">
-        인과 방향 요약
+        선행성 방향 요약
       </p>
       <p className="mb-5 font-mono text-[0.68rem] text-white/38">
         {sigOpt.length}개 유의 쌍 · FDR-BH 보정 · {granger.correction.nTests}개 검정
       </p>
       <InlineExplain>
-        <p>감성 데이터와 BTC 가격 사이에 어떤 방향의 인과관계가 있는지 정리한 카드입니다.</p>
-        <p>'감성→가격' 쌍이 있다는 것은 오늘의 감성 데이터가 며칠 후 가격 변동을 예측하는 데 도움이 된다는 의미입니다.</p>
-        <p>'가격→감성' 역방향도 자연스러운 현상입니다 — 가격이 오르면 사람들 감성도 좋아지기 때문입니다.</p>
+        <p>감성 데이터와 BTC 가격 사이에서 어느 쪽의 과거값이 이후 변화를 더 잘 설명했는지 정리한 카드입니다.</p>
+        <p>'감성→가격' 쌍은 오늘의 감성 데이터가 며칠 후 가격 변동 예측에 보조 정보를 제공했다는 의미입니다.</p>
+        <p>'가격→감성' 역방향은 가격 변화 이후 감성 지표가 따라 움직였을 가능성을 보여줍니다.</p>
       </InlineExplain>
 
       <div className="space-y-3">
@@ -459,41 +473,95 @@ function CausalityDirectionCard({ kpi, granger }: { kpi: Kpi; granger: GrangerSe
         )}
       </div>
 
-      {/* F-ratio asymmetry highlight — key research finding */}
+      {/* F-statistic asymmetry highlight — key research finding */}
       <div className="mt-4 rounded-xl border border-[var(--accent-warning)]/18 bg-[var(--accent-warning)]/[0.04] px-4 py-3">
-        <p className="mb-2 font-mono text-[0.56rem] uppercase tracking-[0.12em] text-[var(--accent-warning)]/60">
-          핵심 발견 — F통계량 비대칭
-        </p>
-        <div className="flex items-center gap-4">
-          <div className="flex flex-1 flex-col gap-1">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <p className="font-mono text-[0.56rem] uppercase tracking-[0.12em] text-[var(--accent-warning)]/60">
+              핵심 발견 — F통계량 비대칭
+            </p>
+            <p className="mt-1 font-mono text-[0.54rem] text-white/28">
+              latest artifact · lag {asymmetry.lag} 기준 · rawStats.granger_results
+            </p>
+          </div>
+          <span className="rounded-full border border-[var(--accent-warning)]/20 bg-black/20 px-2.5 py-1 font-mono text-[0.54rem] text-[var(--accent-warning)]/64">
+            크기 비교는 방향성·유의성 해석의 보조 정보
+          </span>
+        </div>
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center">
+          <div className="flex min-w-0 flex-col gap-1">
             <div className="flex items-center justify-between gap-2">
               <span className="font-mono text-[0.60rem] text-white/44">순방향 (감성 → BTC)</span>
-              <span className="font-mono text-[0.66rem] font-semibold tabular-nums text-[var(--accent-green)]/80">F ≈ 8.3</span>
+              <span className="font-mono text-[0.66rem] font-semibold tabular-nums text-[var(--accent-green)]/80">
+                {fmtF(asymmetry.forward?.fStatistic ?? null)}
+              </span>
             </div>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/6">
-              <div className="h-full rounded-full bg-[var(--accent-green)]/40" style={{ width: "7.5%" }} />
+              <div
+                className="h-full rounded-full bg-[var(--accent-green)]/40"
+                style={{
+                  width: `${Math.max(
+                    4,
+                    ((asymmetry.forward?.fStatistic ?? 0) /
+                      Math.max(
+                        asymmetry.forward?.fStatistic ?? 0,
+                        asymmetry.reverse?.fStatistic ?? 0,
+                        1,
+                      )) *
+                      100,
+                  )}%`,
+                }}
+              />
             </div>
+            <p className="font-mono text-[0.52rem] text-white/26">
+              p_adj={fmtP(asymmetry.forward?.pvalueAdjusted ?? null)}
+            </p>
           </div>
-          <div className="shrink-0 font-mono text-[0.68rem] font-bold text-[var(--accent-warning)]">
-            ×12
+          <div className="hidden shrink-0 rounded-full border border-white/10 bg-black/24 px-3 py-1.5 text-center font-mono text-[0.56rem] uppercase tracking-[0.10em] text-white/34 md:block">
+            lag {asymmetry.lag}
           </div>
-          <div className="flex flex-1 flex-col gap-1">
+          <div className="flex min-w-0 flex-col gap-1">
             <div className="flex items-center justify-between gap-2">
               <span className="font-mono text-[0.60rem] text-white/44">역방향 (BTC → 감성)</span>
-              <span className="font-mono text-[0.66rem] font-semibold tabular-nums text-[var(--accent-warning)]/80">F ≈ 103</span>
+              <span className="font-mono text-[0.66rem] font-semibold tabular-nums text-[var(--accent-warning)]/80">
+                {fmtF(asymmetry.reverse?.fStatistic ?? null)}
+              </span>
             </div>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/6">
-              <div className="h-full rounded-full bg-[var(--accent-warning)]/50" style={{ width: "100%" }} />
+              <div
+                className="h-full rounded-full bg-[var(--accent-warning)]/50"
+                style={{
+                  width: `${Math.max(
+                    4,
+                    ((asymmetry.reverse?.fStatistic ?? 0) /
+                      Math.max(
+                        asymmetry.forward?.fStatistic ?? 0,
+                        asymmetry.reverse?.fStatistic ?? 0,
+                        1,
+                      )) *
+                      100,
+                  )}%`,
+                }}
+              />
             </div>
+            <p className="font-mono text-[0.52rem] text-white/26">
+              p_adj={fmtP(asymmetry.reverse?.pvalueAdjusted ?? null)}
+            </p>
           </div>
         </div>
         <p className="mt-2.5 font-mono text-[0.60rem] leading-5 text-white/44">
-          <span className="text-white/68">해석:</span> BTC 가격이 뉴스 감성을 만드는 방향이 Granger F 기준으로 12배 강함.
-          감성 지표는 미래 예측이 아닌 <span className="text-white/68">현재 시장 국면의 반영값</span>이다.
-          &thinsp;순방향도 유의(p_adj=0.004)하므로 vol_regime 필터와 조합 시 활용 가능.
+          <span className="text-white/68">해석:</span> 이 표본에서는 BTC 수익률의 과거값이 뉴스 감성의 이후 변화를 설명하는 데 더 많은 정보를 제공했습니다.
+          감성 지표는 직접 예측 신호보다 <span className="text-white/68">현재 시장 국면의 반영값</span>에 가까웠습니다.
+          &thinsp;순방향도 유의하지만, 실제 인과관계가 증명됐다는 뜻은 아닙니다.
         </p>
+        {asymmetry.primaryForward && asymmetry.primaryReverse && (
+          <p className="mt-1 font-mono text-[0.52rem] leading-4 text-white/24">
+            primary lag 기준: 감성→BTC lag {asymmetry.primaryForward.lag} {fmtF(asymmetry.primaryForward.fStatistic)} ·
+            BTC→감성 lag {asymmetry.primaryReverse.lag} {fmtF(asymmetry.primaryReverse.fStatistic)}
+          </p>
+        )}
         <p className="mt-1 font-mono text-[0.52rem] text-white/20">
-          ※ F통계량은 VAR Granger 검정(n=539, BH-FDR 보정 전 원시값 기준)
+          ※ F통계량은 VAR Granger 검정(n={artifact.summary?.grangerEligibleRows ?? artifact.granger.eligibleRows ?? "—"}, BH-FDR 보정 전 원시값 기준)
         </p>
       </div>
     </div>
@@ -741,21 +809,21 @@ type GlossaryEntry = {
 };
 
 const GLOSSARY: GlossaryEntry[] = [
-  { term: "적중률", en: "Hit Rate", cat: "성과", definition: "신호가 발화한 날로부터 7일 후 BTC 가격이 상승한 비율. 50%가 랜덤(동전 던지기) 기준선이며, 높을수록 예측력이 좋습니다." },
-  { term: "Sharpe Ratio", cat: "성과", definition: "수익률을 변동성(위험)으로 나눈 지표. 1.0 이상이면 우수, 0 이하면 불안정. 거래비용까지 반영한 현실적 지표입니다." },
-  { term: "커버리지", en: "Coverage", cat: "성과", definition: "전체 기간 중 신호가 발화한 날의 비율. 높으면 더 자주 사용 가능하지만 조건이 느슨하다는 의미이기도 합니다." },
+  { term: "적중률", en: "Hit Rate", cat: "성과", definition: "필터가 ON이 된 날로부터 7일 후 BTC 가격이 상승한 비율. 50%가 랜덤 기준선이며, 높을수록 해당 구간의 방향성이 우세했을 가능성을 시사합니다." },
+  { term: "Sharpe Ratio", cat: "성과", definition: "수익률을 변동성(위험)으로 나눈 지표. 다만 슬리피지, 스프레드, 포지션 크기 등 운영 조건까지 포함한 실전 수익성 검증은 별도 과제입니다." },
+  { term: "커버리지", en: "Coverage", cat: "성과", definition: "전체 기간 중 필터가 ON이 된 날의 비율. 높으면 더 자주 사용 가능하지만 조건이 느슨하다는 의미이기도 합니다." },
   { term: "최대낙폭", en: "MDD", cat: "성과", definition: "전략이 최고점에서 최저점까지 하락한 최대 폭. -20%면 고점 대비 20% 손실을 경험했다는 뜻입니다." },
   { term: "누적수익", en: "Cumulative Return", cat: "성과", definition: "전략 기간 전체의 총 수익률. Buy & Hold(그냥 보유)와 비교해 전략의 실질 가치를 평가합니다." },
-  { term: "p-value", cat: "통계", definition: "우연히 이런 결과가 나올 확률. 0.05(5%) 이하면 통계적으로 유의하다고 봅니다. 숫자가 낮을수록 결과가 우연이 아닌 실제 패턴일 가능성이 높습니다." },
+  { term: "p-value", cat: "통계", definition: "귀무가설이 맞다는 전제에서 이 정도 결과가 관측될 가능성. 0.05(5%) 이하면 통계적으로 유의하다고 보지만, 실전 성과를 단독으로 보장하지는 않습니다." },
   { term: "신뢰구간", en: "Confidence Interval", cat: "통계", definition: "'95% CI [40%, 70%]'는 진짜 값이 40~70% 사이에 있을 확률이 95%라는 의미입니다. 범위가 좁을수록 추정이 정밀합니다." },
   { term: "Bootstrap CI", cat: "통계", definition: "실제 데이터를 수천 번 반복 샘플링해 신뢰구간을 추정하는 방법. 데이터가 적을 때 특히 유용합니다." },
   { term: "FDR-BH 보정", cat: "통계", definition: "검정을 여러 번 반복하면 우연히 유의한 결과가 나올 확률이 높아집니다. FDR-BH는 이 다중 검정 함정을 보정하는 통계 기법입니다." },
-  { term: "Granger 인과검정", en: "Granger Causality", cat: "방법론", definition: "A의 과거 값이 B를 예측하는 데 통계적으로 도움이 되는지 검증합니다. 일반적인 원인과 달리 예측 선행성(temporal precedence)을 측정합니다." },
+  { term: "Granger 선행성 검정", en: "Granger Causality", cat: "방법론", definition: "A의 과거 값이 B를 예측하는 데 통계적으로 도움이 되는지 검증합니다. 일반적인 원인과 달리 예측 선행성(temporal precedence)을 측정합니다." },
   { term: "PCA", en: "주성분분석", cat: "방법론", definition: "여러 개의 지표를 하나의 복합 지수(PC1)로 압축하는 방법. 중복 정보를 제거하고 핵심 변동 패턴만 추출합니다." },
   { term: "Walk-Forward 검증", cat: "방법론", definition: "전략을 시간 순서대로 나눠 미래 데이터를 절대 사용하지 않고 검증하는 방법. 과거 데이터에 과적합된 전략을 걸러냅니다." },
-  { term: "OOS", en: "Out-of-Sample", cat: "방법론", definition: "전략 개발에 사용하지 않은 기간의 데이터로 검증한 결과. OOS 성과가 좋아야 실전에서도 통할 가능성이 높습니다." },
-  { term: "vol_regime_v2", cat: "신호", definition: "이 시스템의 메인 매매 신호. VIX(시장 공포 지수)와 BTC 실현변동성이 모두 낮은 조용한 구간을 포착합니다. 저변동성 구간에서 반등 가능성이 높다는 전제에 기반합니다." },
-  { term: "Overlay Gate", cat: "신호", definition: "신호를 실제 운용에 투입하기 전 실시간 품질 모니터링 시스템. 누적 결과가 적중률·p-value 기준을 통과해야 'promote' 판정을 받습니다." },
+  { term: "OOS", en: "Out-of-Sample", cat: "방법론", definition: "전략 개발에 사용하지 않은 기간의 데이터로 검증한 결과. OOS 결과가 좋아야 과거 데이터 과적합 가능성을 낮게 볼 수 있습니다." },
+  { term: "vol_regime_v2", cat: "신호", definition: "저위험 시장 국면을 판별하는 ON/OFF 필터. VIX와 BTC 실현변동성이 낮고 F&G가 극단이 아닌 조용한 구간을 구분합니다." },
+  { term: "Overlay Gate", cat: "신호", definition: "운영 적용 전 품질을 모니터링하는 보조 게이트. 누적 결과가 적중률·p-value 기준을 통과하는지 확인하지만, 최종 적용에는 비용·유동성 검증이 필요합니다." },
   { term: "F&G Index", cat: "신호", definition: "암호화폐 시장의 탐욕·공포를 0~100으로 표현한 지수. 0=극단적 공포, 100=극단적 탐욕. 역발상 신호로 활용됩니다." },
   { term: "Taker Imbalance", cat: "신호", definition: "시장가 매수·매도 체결의 불균형. 음수이거나 중립이면 스마트머니가 조용히 축적 중인 신호로 해석합니다." },
 ];
@@ -781,14 +849,14 @@ const TAB_GUIDES: TabGuide[] = [
     title: "Summary — 핵심 KPI",
     summary: "전략 성과의 핵심 숫자 5개와 전략 간 비교 차트. 처음 이 페이지를 열면 여기부터 보세요.",
     steps: [
-      "KPI 5개 카드 — 적중률·Sharpe·인과 p값·Overlay Gate 확인",
-      "신호 성과 공간 — 버블이 우상단일수록 좋은 전략",
-      "인과 방향 요약 — '감성→가격' 쌍이 있으면 신호에 통계적 근거 존재",
+      "KPI 5개 카드 — 적중률·Sharpe·선행성 p값·Overlay Gate 확인",
+      "신호 성과 공간 — 버블이 우상단일수록 검증상 우세한 구간",
+      "선행성 방향 요약 — '감성→가격' 쌍이 있으면 예측 선행성 근거를 보조적으로 확인",
       "결론 배너 — 모든 결과의 한 줄 요약",
     ],
     qa: [
-      { q: "Hit Rate 60.7%가 좋은 건가요?", a: "50%가 랜덤(동전 던지기) 기준입니다. 60.7%는 약 10.7%p의 예측 엣지(edge)가 있다는 의미로, 통계적으로 유의미하게 좋은 수치입니다." },
-      { q: "Overlay Gate 'promote'는 무슨 뜻인가요?", a: "22일 누적 데이터에서 적중률과 p-value가 운용 투입 기준을 통과했다는 뜻입니다. 아직 실제 투자에 적용되지는 않았고, 60일 이상 누적 후 최종 판단합니다." },
+      { q: "Hit Rate가 50%보다 높으면 좋은 건가요?", a: "50%가 랜덤 기준입니다. 현재 수치는 해당 검증에서 우세할 가능성이 관측됐다는 뜻이며, 실전 수익 모델이 확정됐다는 의미는 아닙니다." },
+      { q: "Overlay Gate 'promote'는 무슨 뜻인가요?", a: "누적 데이터에서 적중률과 p-value 기준을 통과했다는 뜻입니다. 실제 적용 전에는 기간 확대와 비용·유동성 검증이 필요합니다." },
     ],
   },
   {
@@ -807,16 +875,16 @@ const TAB_GUIDES: TabGuide[] = [
   },
   {
     id: "causality",
-    title: "Causality — 인과 분석",
-    summary: "뉴스 감성이 정말 BTC 가격을 예측하는지 통계적으로 검증합니다. Granger 인과검정으로 시간적 선행성을 측정합니다.",
+    title: "Causality — 선행성 분석",
+    summary: "뉴스 감성이 BTC 가격보다 먼저 움직였는지 통계적으로 확인합니다. Granger 검정으로 예측 선행성을 측정합니다.",
     steps: [
-      "인과관계 매트릭스 — 초록 셀일수록 강한 예측력 (행 → 열 방향)",
-      "인과 방향 요약 — 감성→가격(순방향)과 가격→감성(역방향) 쌍 분류",
+      "선행성 매트릭스 — 초록 셀일수록 과거값의 예측 기여가 큼 (행 → 열 방향)",
+      "방향 요약 — 감성→가격(순방향)과 가격→감성(역방향) 쌍 분류",
       "하단 상세 테이블 — 각 쌍의 lag, p-value 원본 수치 확인",
     ],
     qa: [
-      { q: "Granger 검정이 통과했다고 실제 인과관계가 있나요?", a: "Granger는 예측 선행성을 검증합니다. 실제 인과관계의 근거이지만, 제3의 변수가 둘 다 움직일 수도 있으니 여러 근거 중 하나로 활용합니다." },
-      { q: "역방향(가격→감성)이 더 강한 게 문제인가요?", a: "가격이 감성에 영향을 주는 건 자연스러운 현상입니다. 순방향(감성→가격)도 통계적으로 유의하다는 점이 중요합니다 — 두 방향 모두 확인된 게 신호 근거를 지지합니다." },
+      { q: "Granger 검정이 통과했다고 실제 인과관계가 있나요?", a: "아닙니다. Granger는 과거값이 미래 예측에 도움이 되는지 보는 선행성 검정이며, 실제 원인까지 증명하지는 않습니다." },
+      { q: "역방향(가격→감성)이 더 강한 게 문제인가요?", a: "가격 변화 뒤에 뉴스 감성이 따라 움직였을 가능성이 크다는 뜻입니다. 그래서 감성 단독 가격 예측보다 시장 국면 필터 관점으로 전환했습니다." },
     ],
   },
   {
@@ -1144,18 +1212,18 @@ function SummaryTab({ artifact, kpi }: { artifact: SentimentInsightArtifact; kpi
       {/* Charts */}
       <div className="grid gap-6 xl:grid-cols-2">
         <SignalSpaceChart data={scatterData} />
-        <CausalityDirectionCard kpi={kpi} granger={artifact.granger} />
+        <CausalityDirectionCard kpi={kpi} granger={artifact.granger} artifact={artifact} />
       </div>
 
       {/* Conclusion banner */}
       <div className="rounded-2xl border border-[var(--accent-primary)]/15 bg-[var(--accent-primary)]/[0.04] px-6 py-4">
         <p className="font-mono text-[0.72rem] leading-6 text-white/68">
           <span className="font-semibold text-[var(--accent-primary)]">결론</span>{" "}
-          vol_regime_v2는 T+7 hit rate {hitStr} (Sharpe {sharpeStr})로 Always Long 대비 {upliftStr} 개선.
-          Granger 인과검정에서 감성→가격 순방향 신호 확인 (p={gStr}, lag{" "}
+          vol_regime_v2는 T+7 hit rate {hitStr} (Sharpe {sharpeStr})로 Always Long 대비 {upliftStr} 개선 가능성을 보였습니다.
+          Granger 선행성 검정에서 감성→가격 방향의 보조 근거 확인 (p={gStr}, lag{" "}
           {kpi.bestForwardLag ?? "?"}).{" "}
           Overlay Gate: {overlayLabel} ({kpi.overlayRecords ?? "—"}일 누적, p={fmtP(kpi.overlayPMedian)}).
-          taker 필터 추가 시 hit rate 79.2% 도달 가능 (n=48, 통계적으로 안정).
+          taker 필터 조합은 표본이 작아 추가 검증 대상으로 남겼습니다.
         </p>
       </div>
     </div>
@@ -1172,18 +1240,17 @@ function SignalTab({ artifact }: { artifact: SentimentInsightArtifact }) {
           walkForward1d={artifact.alpha?.walkForwardLegacy1d}
         />
       </div>
-      <SignalImprovementMatrix />
+      <SignalImprovementMatrix alpha={artifact.alpha} />
     </div>
   );
 }
 
-function CausalityTab({ artifact }: { artifact: SentimentInsightArtifact }) {
+function CausalityTab({ artifact, kpi }: { artifact: SentimentInsightArtifact; kpi: Kpi }) {
   return (
     <div className="space-y-8">
+      <CausalityDirectionCard kpi={kpi} granger={artifact.granger} artifact={artifact} />
       <GrangerHeatmap granger={artifact.granger} />
-      <div className="analysis-depth-panel p-5 md:p-8">
-        <GrangerSymmetric granger={artifact.granger} />
-      </div>
+      <GrangerSymmetric granger={artifact.granger} />
     </div>
   );
 }
@@ -1272,6 +1339,29 @@ function StoryTab({ artifact, kpi }: { artifact: SentimentInsightArtifact; kpi: 
     const v = artifact.pca?.core?.explainedVariance;
     return typeof v === "number" ? `${(v * 100).toFixed(1)}%` : "85.4%";
   }, [artifact]);
+  const volRegimeV2 = useMemo(() => {
+    const bm7 = artifact.alpha?.baselineMetrics?.["7"];
+    if (typeof bm7 !== "object" || bm7 === null || Array.isArray(bm7)) return null;
+    const raw = (bm7 as JsonObject)["vol_regime_v2"];
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
+    return raw as JsonObject;
+  }, [artifact.alpha]);
+  const filterCoverageStr = fmtPct(num(volRegimeV2?.coverage));
+  const hitCiLowerStr = fmtPct(num(volRegimeV2?.hit_rate_ci_lower));
+  const hitCiUpperStr = fmtPct(num(volRegimeV2?.hit_rate_ci_upper));
+  const hitRateByPredictor = useMemo(() => {
+    const rows = artifact.alpha?.hitRates ?? [];
+    const map = new Map<string, number>();
+    for (const row of rows) {
+      const obj = asObj(row);
+      const predictor = str(obj?.["predictor"]);
+      const hitRate = num(obj?.["hit_rate"]);
+      if (predictor && hitRate !== null) map.set(predictor, hitRate);
+    }
+    return map;
+  }, [artifact.alpha?.hitRates]);
+  const pcaFullHitStr = fmtPct(hitRateByPredictor.get("full_hybrid_index_score_lag1") ?? null);
+  const newsHitStr = fmtPct(hitRateByPredictor.get("news_sentiment_mean_lag1") ?? null);
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -1307,7 +1397,7 @@ function StoryTab({ artifact, kpi }: { artifact: SentimentInsightArtifact; kpi: 
           <p className="mb-4 font-mono text-[0.73rem] leading-6 text-white/68">
             데이터는 두 종류를 결합했습니다.
           </p>
-          <div className="mb-4 grid grid-cols-2 gap-3">
+          <div className="mb-4 grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl border border-white/8 bg-white/[0.025] p-4">
               <p className="mb-1.5 font-mono text-[0.54rem] uppercase tracking-[0.10em] text-[var(--accent-primary)]/60">비정형 데이터</p>
               <p className="font-mono text-[0.65rem] leading-5 text-white/62">뉴스 텍스트 → FinBERT로 감성 점수화</p>
@@ -1333,7 +1423,7 @@ function StoryTab({ artifact, kpi }: { artifact: SentimentInsightArtifact; kpi: 
             감성 점수와 정형 피처들을 합쳐 PCA를 수행했습니다.
             여러 시장 지표를 하나의 <span className="text-white/86">시장 위험선호 지수</span>로 압축하는 것이 목적입니다.
           </p>
-          <div className="mt-4 flex items-center gap-3">
+          <div className="mt-4 flex flex-wrap items-center gap-3">
             <div className="rounded-lg border border-white/8 bg-white/[0.03] px-4 py-2 font-mono text-[0.65rem] text-white/54">
               8개 피처
             </div>
@@ -1361,8 +1451,8 @@ function StoryTab({ artifact, kpi }: { artifact: SentimentInsightArtifact; kpi: 
           </p>
           <div className="mt-4 space-y-2">
             {[
-              { method: "PCA 복합지수 (50 기준 ON/OFF)", result: "47.6%", note: "동전 던지기 이하" },
-              { method: "뉴스 감성 직접 사용", result: "48.9%", note: "랜덤 수준" },
+              { method: "PCA 복합지수 (50 기준 ON/OFF)", result: pcaFullHitStr, note: "동전 던지기 이하" },
+              { method: "뉴스 감성 직접 사용", result: newsHitStr, note: "랜덤 수준" },
             ].map(({ method, result, note }) => (
               <div key={method} className="flex items-center gap-3 rounded-lg border border-white/6 bg-white/[0.025] px-4 py-2.5">
                 <span className="flex-1 font-mono text-[0.62rem] text-white/48">{method}</span>
@@ -1377,11 +1467,11 @@ function StoryTab({ artifact, kpi }: { artifact: SentimentInsightArtifact; kpi: 
           </StoryFinding>
         </div>
 
-        {/* 5. Granger 인과성 검정 */}
+        {/* 5. Granger 선행성 검정 */}
         <div className="rounded-2xl border border-[var(--accent-warning)]/18 bg-[var(--accent-warning)]/[0.03] p-6">
-          <StorySectionHeader num={5} title="Granger 인과성 검정 — 예상을 뒤엎는 결과" />
+          <StorySectionHeader num={5} title="Granger 선행성 검정 — 예상을 조정한 결과" />
           <p className="font-mono text-[0.73rem] leading-6 text-white/68">
-            뉴스 감성이 정말 시장을 선행하는가? Granger 검정으로 인과 방향을 통계적으로 검증했습니다.
+            뉴스 감성이 정말 시장을 선행하는가? Granger 검정으로 예측 선행성을 통계적으로 확인했습니다.
             결과는 예상과 달랐습니다.
           </p>
 
@@ -1400,20 +1490,20 @@ function StoryTab({ artifact, kpi }: { artifact: SentimentInsightArtifact; kpi: 
               <p className="mb-2 font-mono text-[0.56rem] uppercase tracking-[0.10em] text-[var(--accent-green)]/70">
                 역방향 발견 (가격 → 감성)
               </p>
-              <p className="font-mono text-[0.70rem] leading-5 text-white/60">가격이 감성을 유발</p>
+              <p className="font-mono text-[0.70rem] leading-5 text-white/60">가격 이후 감성 변화</p>
               <p className="mt-2 font-mono text-[1.2rem] font-bold text-[var(--accent-green)]/90">
                 {revCount}개 유의
               </p>
-              <p className="font-mono text-[0.56rem] text-white/30">역방향이 훨씬 강함</p>
+              <p className="font-mono text-[0.56rem] text-white/30">역방향 정보가 더 크게 관측</p>
             </div>
           </div>
 
           <StoryFinding>
-            가격과 시장 상황이 먼저 움직이고, 뉴스 감성이 뒤따라 반응했습니다.
+            이 표본에서는 가격과 시장 상황이 먼저 움직이고, 뉴스 감성이 뒤따라 반응하는 패턴이 더 크게 관측됐습니다.
             뉴스 감성은 선행 지표가 아니라 <span className="text-[var(--accent-warning)]/90">후행 반응</span>에 가까웠습니다.
           </StoryFinding>
           <p className="font-mono text-[0.60rem] text-white/30">
-            → <span className="text-white/48">Causality 탭</span>에서 전체 인과 방향 히트맵 확인
+            → <span className="text-white/48">Causality 탭</span>에서 전체 선행성 방향 히트맵 확인
           </p>
         </div>
 
@@ -1452,7 +1542,7 @@ function StoryTab({ artifact, kpi }: { artifact: SentimentInsightArtifact; kpi: 
           </p>
           <div className="mt-5 rounded-xl border border-white/10 bg-black/20 p-5">
             <p className="mb-3 font-mono text-[0.58rem] uppercase tracking-[0.12em] text-white/32">
-              3가지 조건 동시 충족 시 신호 ON
+              3가지 조건 동시 충족 시 필터 ON
             </p>
             <div className="space-y-2">
               {[
@@ -1470,12 +1560,12 @@ function StoryTab({ artifact, kpi }: { artifact: SentimentInsightArtifact; kpi: 
               ))}
             </div>
             <p className="mt-3 font-mono text-[0.58rem] text-white/30">
-              신호 발동 빈도: 전체의 약 56.2% · 조용한 시장에서만 신호 ON
+              필터 ON 빈도: 전체의 약 {filterCoverageStr} · 조용한 시장 구간만 허용
             </p>
           </div>
           <StoryFinding>
             극단적으로 흥분하거나 공포에 빠진 시장 구간을 걸러내고,
-            신호가 살아날 수 있는 상태에서만 포지션을 취합니다.
+            상대적으로 저위험인 구간만 거래 허용 상태로 분류합니다.
           </StoryFinding>
           <p className="font-mono text-[0.60rem] text-white/30">
             → <span className="text-white/48">Signal 탭</span>에서 신호별 성과 비교 확인
@@ -1499,7 +1589,7 @@ function StoryTab({ artifact, kpi }: { artifact: SentimentInsightArtifact; kpi: 
               {hitStr}
             </p>
             <p className="mt-1 font-mono text-[0.62rem] text-[var(--accent-green)]/60">
-              95% CI [52.0%, 71.6%] · 하한도 50% 초과
+              95% CI [{hitCiLowerStr}, {hitCiUpperStr}] · 하한도 50% 초과
             </p>
           </div>
 
@@ -1517,8 +1607,8 @@ function StoryTab({ artifact, kpi }: { artifact: SentimentInsightArtifact; kpi: 
           </div>
 
           <StoryFinding>
-            단순 랜덤(50%)보다 우위가 있는 저위험 필터 가능성을 확인했습니다.
-            Lookahead 없이 나온 수치이기 때문에 의미가 있습니다.
+            단순 랜덤(50%)보다 우세할 가능성이 있는 저위험 필터 결과가 관측됐습니다.
+            다만 운영 적용에는 더 긴 기간과 비용 검증이 필요합니다.
           </StoryFinding>
           <p className="font-mono text-[0.60rem] text-white/30">
             → <span className="text-white/48">Summary 탭</span>에서 전체 KPI · <span className="text-white/48">Guide 탭</span>에서 Walk-Forward 원리 설명
@@ -1595,7 +1685,7 @@ export function InsightHub({
         {tab === "story"     && <StoryTab     artifact={artifact} kpi={kpi} />}
         {tab === "summary"   && <SummaryTab   artifact={artifact} kpi={kpi} />}
         {tab === "signal"    && <SignalTab     artifact={artifact} />}
-        {tab === "causality" && <CausalityTab  artifact={artifact} />}
+        {tab === "causality" && <CausalityTab  artifact={artifact} kpi={kpi} />}
         {tab === "factor"    && <FactorTab     artifact={artifact} />}
         {tab === "pipeline"  && <PipelineTab   artifact={artifact} diagnosticsReady={diagnosticsReady} />}
         {tab === "guide"     && <GuideTab />}

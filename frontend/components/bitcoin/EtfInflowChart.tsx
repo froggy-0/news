@@ -449,7 +449,7 @@ export function EtfInflowChart({ history }: { history: EtfHistoryPoint[] }) {
             tone={flowTone(latestDelta)}
           />
           <SummaryCard
-            label="기간 순유입"
+            label="선택 기간 순유입"
             value={formatSignedBtc(periodFlow)}
             tone={periodTone}
           />

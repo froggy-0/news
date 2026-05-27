@@ -32,7 +32,8 @@ export async function fetchSentimentInsight(): Promise<SentimentInsightArtifact>
   }
 
   const url = `${requireAbsoluteHttpUrl(baseUrl, PUBLIC_R2_BASE_URL_ENV)}/${ANALYSIS_R2_PATH}`;
-  const response = await fetch(url, { cache: "force-cache" });
+  const cacheMode: RequestCache = process.env.NODE_ENV === "development" ? "no-store" : "force-cache";
+  const response = await fetch(url, { cache: cacheMode });
   if (!response.ok) {
     throw new Error(`Failed to fetch sentiment insight: ${response.status} ${url}`);
   }

@@ -19,12 +19,6 @@ function pctLabel(v: number | null, digits = 1): string {
   return `${(v * 100).toFixed(digits)}%`;
 }
 
-// Short feature label for cramped spaces
-function shortLabel(feature: string): string {
-  const label = formatFeatureLabel(feature);
-  return label.length > 14 ? label.slice(0, 13) + "…" : label;
-}
-
 // ─── InlineExplain ─────────────────────────────────────────────────────────────
 
 export function InlineExplain({ children }: { children: React.ReactNode }) {
@@ -328,11 +322,13 @@ export function GrangerHeatmap({ granger }: { granger: GrangerSection }) {
     return <EmptyChart label="No Granger results" />;
   }
 
+  const gridTemplateColumns = `minmax(150px, 1.2fr) repeat(${targets.length}, minmax(88px, 1fr))`;
+
   return (
     <div className="rounded-2xl border border-white/10 bg-black/24 p-6">
       <div className="mb-1">
         <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-[var(--accent-primary)]/80">
-          인과관계 매트릭스 — FDR-BH 검정
+          선행성 매트릭스 — FDR-BH 검정
         </p>
       </div>
       <p className="mb-6 font-mono text-[0.68rem] leading-5 text-white/38">
@@ -341,64 +337,75 @@ export function GrangerHeatmap({ granger }: { granger: GrangerSection }) {
 
       <InlineExplain>
         <p>감성 데이터가 BTC 가격을 며칠 전부터 예측하는지 검증한 결과입니다.</p>
-        <p>초록색 셀일수록 통계적으로 강한 예측력이 있다는 의미입니다. 빈 셀은 관계 없음.</p>
+        <p>초록색 셀일수록 보정 p-value가 낮아 예측 선행성 근거가 더 뚜렷하다는 의미입니다. 빈 셀은 관계 없음.</p>
         <p>L2는 lag=2, 즉 2일 전 감성 데이터가 오늘 가격과 연관됩니다.</p>
       </InlineExplain>
 
-      <div className="overflow-x-auto">
-        <div className="min-w-max">
-          {/* header row */}
-          <div className="mb-1 flex gap-1 pl-[136px]">
-            {targets.map((t) => (
-              <div
-                key={t}
-                className="flex h-9 w-[88px] items-center justify-center text-center font-mono text-[0.52rem] uppercase leading-3 tracking-[0.07em] text-white/30"
-              >
-                {shortLabel(t)}
-              </div>
-            ))}
-          </div>
-
-          {/* data rows */}
-          {predictors.map((pred) => (
-            <div key={pred} className="mb-1 flex items-center gap-1">
-              <div className="w-[132px] pr-3 text-right font-mono text-[0.60rem] leading-4 text-white/48">
-                {shortLabel(pred)}
-              </div>
-              {targets.map((tgt) => {
-                const cell = matrix[pred]?.[tgt] ?? {
-                  pAdj: null, significant: false, lag: null, direction: "forward" as const,
-                };
-                const isEmpty = cell.pAdj === null;
-                return (
-                  <div
-                    key={tgt}
-                    className={`flex h-10 w-[88px] flex-col items-center justify-center gap-px rounded-lg border transition-all duration-150 hover:brightness-125 ${
-                      isEmpty ? "border-white/5 bg-transparent" : cellBg(cell)
-                    }`}
-                    title={
-                      isEmpty
-                        ? `${pred} → ${tgt}: no result`
-                        : `${pred} → ${tgt} | lag=${cell.lag} | p_adj=${cell.pAdj?.toFixed(4)}`
-                    }
-                  >
-                    {isEmpty ? (
-                      <span className="font-mono text-[0.52rem] text-white/12">—</span>
-                    ) : (
-                      <>
-                        <span className={`font-mono text-[0.60rem] font-semibold tabular-nums ${cellText(cell)}`}>
-                          {cell.pAdj !== null ? (cell.pAdj < 0.001 ? "<.001" : cell.pAdj.toFixed(3)) : "—"}
-                        </span>
-                        <span className="font-mono text-[0.50rem] text-white/26">
-                          {cell.direction === "forward" ? "→" : "←"} L{cell.lag}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                );
-              })}
+      <div className="-mx-1 overflow-x-auto pb-2">
+        <div className="min-w-[760px] rounded-xl border border-white/6 bg-black/14 p-2">
+          <div className="grid gap-1" style={{ gridTemplateColumns }}>
+            <div className="flex min-h-[44px] items-center justify-end pr-3 font-mono text-[0.54rem] uppercase tracking-[0.10em] text-white/22">
+              row → column
             </div>
-          ))}
+            {targets.map((target) => {
+              const label = formatFeatureLabel(target);
+              return (
+                <div
+                  key={target}
+                  className="flex min-h-[44px] items-center justify-center rounded-lg bg-white/[0.02] px-1.5 text-center font-mono text-[0.52rem] uppercase leading-3 tracking-[0.06em] text-white/34"
+                  title={label}
+                >
+                  {label}
+                </div>
+              );
+            })}
+
+            {predictors.map((pred) => {
+              const predLabel = formatFeatureLabel(pred);
+              return (
+                <React.Fragment key={pred}>
+                  <div
+                    className="flex min-h-[52px] items-center justify-end rounded-lg bg-white/[0.018] px-3 text-right font-mono text-[0.60rem] leading-4 text-white/52"
+                    title={predLabel}
+                  >
+                    {predLabel}
+                  </div>
+                  {targets.map((tgt) => {
+                    const cell = matrix[pred]?.[tgt] ?? {
+                      pAdj: null, significant: false, lag: null, direction: "forward" as const,
+                    };
+                    const isEmpty = cell.pAdj === null;
+                    return (
+                      <div
+                        key={tgt}
+                        className={`flex min-h-[52px] flex-col items-center justify-center gap-px rounded-lg border px-1 transition-all duration-150 hover:brightness-125 ${
+                          isEmpty ? "border-white/5 bg-transparent" : cellBg(cell)
+                        }`}
+                        title={
+                          isEmpty
+                            ? `${predLabel} → ${formatFeatureLabel(tgt)}: no result`
+                            : `${predLabel} → ${formatFeatureLabel(tgt)} | lag=${cell.lag} | p_adj=${cell.pAdj?.toFixed(4)}`
+                        }
+                      >
+                        {isEmpty ? (
+                          <span className="font-mono text-[0.52rem] text-white/12">—</span>
+                        ) : (
+                          <>
+                            <span className={`font-mono text-[0.62rem] font-semibold tabular-nums ${cellText(cell)}`}>
+                              {cell.pAdj !== null ? (cell.pAdj < 0.001 ? "<.001" : cell.pAdj.toFixed(3)) : "—"}
+                            </span>
+                            <span className="font-mono text-[0.50rem] text-white/28">
+                              {cell.direction === "forward" ? "→" : "←"} L{cell.lag}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </React.Fragment>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -700,25 +707,36 @@ const IMPROVEMENT_SCENARIOS: ScenarioRow[] = [
   },
 ];
 
-export function SignalImprovementMatrix() {
+export function SignalImprovementMatrix({ alpha }: { alpha?: AlphaSection }) {
   const [active, setActive] = useState<number | null>(null);
   const maxHit = Math.max(...IMPROVEMENT_SCENARIOS.map((s) => s.hitRate));
   const base   = IMPROVEMENT_SCENARIOS[0].hitRate;
+  const liveVolRegime = useMemo(() => {
+    const raw = alpha?.baselineMetrics?.["7"];
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+    const vr2 = (raw as JsonObject).vol_regime_v2;
+    if (!vr2 || typeof vr2 !== "object" || Array.isArray(vr2)) return null;
+    const row = vr2 as JsonObject;
+    return {
+      hitRate: num(row.hit_rate),
+      coverage: num(row.coverage),
+    };
+  }, [alpha]);
 
   return (
     <div className="rounded-2xl border border-white/10 bg-black/24 p-6">
       <div className="mb-1">
         <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-[var(--accent-primary)]/80">
-          신호 개선 분석 — 필터 추가 효과
+          필터 개선 분석 — 조건 추가 효과
         </p>
       </div>
       <p className="mb-6 font-mono text-[0.68rem] leading-5 text-white/38">
-        필터 추가 시 T+7 적중률 변화 · vol_regime_v2 기준 · 539일 분석
+        필터 추가 시 T+7 적중률 변화 · 2026-05-14 별도 audit
       </p>
 
       <InlineExplain>
-        <p>현재 신호에 조건을 하나씩 추가했을 때 적중률이 어떻게 변하는지 보여줍니다.</p>
-        <p>위에서 아래로 갈수록 조건이 까다로워지고 적중률이 높아지지만, 신호 발화 빈도(coverage)가 줄어듭니다.</p>
+        <p>현재 필터에 조건을 하나씩 추가했을 때 적중률이 어떻게 변하는지 보여줍니다.</p>
+        <p>위에서 아래로 갈수록 조건이 까다로워지고 적중률이 높아지지만, 필터 ON 빈도(coverage)가 줄어듭니다.</p>
         <p>소표본(n＜30) 결과는 우연일 가능성이 높으니 참고용으로만 사용합니다.</p>
       </InlineExplain>
 
@@ -726,7 +744,8 @@ export function SignalImprovementMatrix() {
       <div className="mb-4 rounded-xl border border-[var(--accent-primary)]/12 bg-[var(--accent-primary)]/[0.04] px-4 py-2.5">
         <p className="font-mono text-[0.62rem] leading-5 text-white/52">
           <span className="text-[var(--accent-primary)]/80 font-semibold">주의</span>: 이 표의 &ldquo;Base&rdquo;(hit 71.1%, n=76)는 FNG&lt;70 필터를 추가로 적용한 결과입니다.
-          Baseline CI 차트의 vol_regime_v2(hit 60.7%, coverage 56.3%)와 <em>다른 신호</em>입니다.
+          최신 Baseline CI의 vol_regime_v2
+          (hit {pctLabel(liveVolRegime?.hitRate ?? null)}, coverage {pctLabel(liveVolRegime?.coverage ?? null)})와 <em>다른 필터 조합</em>입니다.
         </p>
       </div>
 

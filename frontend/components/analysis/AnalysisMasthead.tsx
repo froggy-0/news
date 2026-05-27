@@ -65,7 +65,7 @@ export function AnalysisMasthead({
               Signal Intelligence Lab
             </h1>
             <p className="mt-3 max-w-2xl text-[0.78rem] leading-6 text-[var(--taupe)]/62">
-              Granger causality · PCA hybrid index · lag-only alpha validation · target diagnostics
+              Granger temporal precedence · PCA hybrid index · lag-only alpha validation · target diagnostics
               - all resolved against the same parquet reference date.
             </p>
 
