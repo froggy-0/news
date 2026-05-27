@@ -37,9 +37,10 @@ import {
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
-type TabId = "summary" | "signal" | "causality" | "factor" | "pipeline" | "guide";
+type TabId = "story" | "summary" | "signal" | "causality" | "factor" | "pipeline" | "guide";
 
 const TABS: { id: TabId; label: string; hint: string }[] = [
+  { id: "story",     label: "Story",      hint: "연구 서사" },
   { id: "summary",   label: "Summary",    hint: "핵심 KPI" },
   { id: "signal",    label: "Signal",     hint: "성과 검증" },
   { id: "causality", label: "Causality",  hint: "인과 분석" },
@@ -928,17 +929,17 @@ function GuideTab() {
             </span>
           </div>
           <p className="mb-4 font-mono text-[0.62rem] text-white/40">
-            과거→현재 방향만 허용 · Embargo로 label leakage 차단 · <span className="text-[var(--accent-green)]/80">본 연구: 240일 train / 7일 embargo / 45일 test / 30일 step → 9 fold</span>
+            과거→현재 방향만 허용 · Embargo로 label leakage 차단 · <span className="text-[var(--accent-green)]/80">Path A (규칙 기반): 120일 train / 7일 embargo / 30일 test → ~13 fold</span>
           </p>
           <svg viewBox="0 0 560 130" className="w-full max-w-[560px]" aria-label="Walk-Forward diagram">
             {/* Fold 1 */}
             <text x="4" y="18" style={{ fontSize: 7.5, fill: "rgba(255,255,255,0.24)", fontFamily: "monospace" }}>fold 1</text>
             <rect x="44" y="6" width="200" height="22" rx="3" fill="rgba(14,203,129,0.12)" stroke="rgba(14,203,129,0.28)" strokeWidth="1" />
-            <text x="144" y="21" textAnchor="middle" style={{ fontSize: 8.5, fill: "rgba(14,203,129,0.80)", fontFamily: "monospace" }}>TRAIN (240일)</text>
+            <text x="144" y="21" textAnchor="middle" style={{ fontSize: 8.5, fill: "rgba(14,203,129,0.80)", fontFamily: "monospace" }}>TRAIN (120일)</text>
             <rect x="248" y="6" width="30" height="22" rx="3" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
             <text x="263" y="21" textAnchor="middle" style={{ fontSize: 7, fill: "rgba(255,255,255,0.28)", fontFamily: "monospace" }}>7d</text>
             <rect x="282" y="6" width="100" height="22" rx="3" fill="rgba(14,203,129,0.22)" stroke="rgba(14,203,129,0.50)" strokeWidth="1" />
-            <text x="332" y="21" textAnchor="middle" style={{ fontSize: 8.5, fill: "rgba(14,203,129,1.0)", fontFamily: "monospace", fontWeight: 700 }}>TEST (45일)</text>
+            <text x="332" y="21" textAnchor="middle" style={{ fontSize: 8.5, fill: "rgba(14,203,129,1.0)", fontFamily: "monospace", fontWeight: 700 }}>TEST (30일)</text>
             <text x="392" y="21" style={{ fontSize: 7.5, fill: "rgba(255,255,255,0.22)", fontFamily: "monospace" }}>← OOS</text>
 
             {/* Arrow down */}
@@ -950,14 +951,14 @@ function GuideTab() {
             {/* Fold 2 */}
             <text x="4" y="68" style={{ fontSize: 7.5, fill: "rgba(255,255,255,0.24)", fontFamily: "monospace" }}>fold 2</text>
             <rect x="74" y="56" width="200" height="22" rx="3" fill="rgba(14,203,129,0.12)" stroke="rgba(14,203,129,0.28)" strokeWidth="1" />
-            <text x="174" y="71" textAnchor="middle" style={{ fontSize: 8.5, fill: "rgba(14,203,129,0.80)", fontFamily: "monospace" }}>TRAIN (240일)</text>
+            <text x="174" y="71" textAnchor="middle" style={{ fontSize: 8.5, fill: "rgba(14,203,129,0.80)", fontFamily: "monospace" }}>TRAIN (120일)</text>
             <rect x="278" y="56" width="30" height="22" rx="3" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
             <text x="293" y="71" textAnchor="middle" style={{ fontSize: 7, fill: "rgba(255,255,255,0.28)", fontFamily: "monospace" }}>7d</text>
             <rect x="312" y="56" width="100" height="22" rx="3" fill="rgba(14,203,129,0.22)" stroke="rgba(14,203,129,0.50)" strokeWidth="1" />
-            <text x="362" y="71" textAnchor="middle" style={{ fontSize: 8.5, fill: "rgba(14,203,129,1.0)", fontFamily: "monospace", fontWeight: 700 }}>TEST (45일)</text>
+            <text x="362" y="71" textAnchor="middle" style={{ fontSize: 8.5, fill: "rgba(14,203,129,1.0)", fontFamily: "monospace", fontWeight: 700 }}>TEST (30일)</text>
 
             {/* Dots for more folds */}
-            <text x="120" y="104" style={{ fontSize: 9, fill: "rgba(255,255,255,0.18)", fontFamily: "monospace" }}>⋯  9개 fold 반복  ⋯</text>
+            <text x="120" y="104" style={{ fontSize: 9, fill: "rgba(255,255,255,0.18)", fontFamily: "monospace" }}>⋯  ~13개 fold 반복  ⋯</text>
 
             {/* Key labels */}
             <rect x="44" y="116" width="10" height="6" rx="1" fill="rgba(14,203,129,0.18)" stroke="rgba(14,203,129,0.36)" strokeWidth="0.8" />
@@ -1234,6 +1235,317 @@ function PipelineTab({
   );
 }
 
+// ─── Story tab ────────────────────────────────────────────────────────────────
+
+function StorySectionHeader({ num, title }: { num: number; title: string }) {
+  return (
+    <div className="flex items-center gap-3 mb-3">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/16 bg-white/[0.05] font-mono text-[0.68rem] font-bold text-white/54">
+        {num}
+      </div>
+      <p className="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-white/36">{title}</p>
+    </div>
+  );
+}
+
+function StoryFinding({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="my-3 rounded-xl border border-[var(--accent-primary)]/18 bg-[var(--accent-primary)]/[0.05] px-4 py-3">
+      <p className="font-mono text-[0.70rem] leading-6 text-white/74">{children}</p>
+    </div>
+  );
+}
+
+function StoryTab({ artifact, kpi }: { artifact: SentimentInsightArtifact; kpi: Kpi }) {
+  const hitStr      = fmtPct(kpi.hitRate);
+  const fwdCount    = kpi.forwardCount;
+  const revCount    = kpi.reverseCount;
+  const overlayLabel = kpi.overlayDecision ?? "—";
+  const overlayDays  = kpi.overlayRecords ?? "—";
+
+  const totalRows = useMemo(() => {
+    const meta = artifact.meta as Record<string, unknown> | null;
+    return typeof meta?.["nRows"] === "number" ? meta["nRows"] : null;
+  }, [artifact]);
+
+  const pcaVar = useMemo(() => {
+    const v = artifact.pca?.core?.explainedVariance;
+    return typeof v === "number" ? `${(v * 100).toFixed(1)}%` : "85.4%";
+  }, [artifact]);
+
+  return (
+    <div className="mx-auto max-w-2xl">
+      {/* Hero banner */}
+      <div className="mb-10 rounded-2xl border border-[var(--accent-primary)]/18 bg-gradient-to-br from-[var(--accent-primary)]/[0.06] to-transparent px-7 py-6">
+        <p className="mb-1 font-mono text-[0.54rem] uppercase tracking-[0.16em] text-[var(--accent-primary)]/56">
+          연구 서사 · Story
+        </p>
+        <p className="mb-1 font-mono text-[1.05rem] font-bold leading-7 text-white/86">
+          뉴스 감성으로 BTC 가격을 예측할 수 있을까?
+        </p>
+        <p className="font-mono text-[0.65rem] text-white/36">
+          {totalRows !== null ? `${totalRows}일` : "539일"} 데이터 · 8단계 발견 · 약 3분 읽기
+        </p>
+      </div>
+
+      <div className="space-y-8">
+        {/* 1. 최초 연구 질문 */}
+        <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-6">
+          <StorySectionHeader num={1} title="최초 연구 질문" />
+          <p className="font-mono text-[0.73rem] leading-6 text-white/68">
+            뉴스 분위기가 먼저 좋아지거나 나빠진 뒤에 BTC 가격이 움직이는가?
+            즉, 뉴스 감성 점수가 BTC 수익률을 <span className="text-white/86">선행</span>하는지 확인하려 했습니다.
+          </p>
+          <StoryFinding>
+            가설: 오늘의 뉴스 감성 점수 → 7일 후 BTC 가격 방향 예측 가능
+          </StoryFinding>
+        </div>
+
+        {/* 2. 데이터 구성 */}
+        <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-6">
+          <StorySectionHeader num={2} title="데이터 구성" />
+          <p className="mb-4 font-mono text-[0.73rem] leading-6 text-white/68">
+            데이터는 두 종류를 결합했습니다.
+          </p>
+          <div className="mb-4 grid grid-cols-2 gap-3">
+            <div className="rounded-xl border border-white/8 bg-white/[0.025] p-4">
+              <p className="mb-1.5 font-mono text-[0.54rem] uppercase tracking-[0.10em] text-[var(--accent-primary)]/60">비정형 데이터</p>
+              <p className="font-mono text-[0.65rem] leading-5 text-white/62">뉴스 텍스트 → FinBERT로 감성 점수화</p>
+              <p className="mt-1 font-mono text-[0.56rem] text-white/30">긍정/중립/부정 확률 → 일별 감성 점수</p>
+            </div>
+            <div className="rounded-xl border border-white/8 bg-white/[0.025] p-4">
+              <p className="mb-1.5 font-mono text-[0.54rem] uppercase tracking-[0.10em] text-[var(--accent-primary)]/60">정형 데이터</p>
+              <p className="font-mono text-[0.65rem] leading-5 text-white/62">BTC 수익률, VIX, F&G, 변동성, 펀딩비 등</p>
+              <p className="mt-1 font-mono text-[0.56rem] text-white/30">단위 이질적 → 전처리 필요</p>
+            </div>
+          </div>
+          <p className="font-mono text-[0.62rem] leading-5 text-white/38">
+            정형 데이터는 이상치가 많기 때문에 전처리를 했습니다.
+            단, 루나 사태 같은 실제 시장 충격은 제거하지 않았습니다 —
+            오류성 값은 제거하고 의미 있는 극단값은 보존·완화 처리했습니다.
+          </p>
+        </div>
+
+        {/* 3. PCA 통합 지수 생성 */}
+        <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-6">
+          <StorySectionHeader num={3} title="PCA로 통합 지수 생성" />
+          <p className="font-mono text-[0.73rem] leading-6 text-white/68">
+            감성 점수와 정형 피처들을 합쳐 PCA를 수행했습니다.
+            여러 시장 지표를 하나의 <span className="text-white/86">시장 위험선호 지수</span>로 압축하는 것이 목적입니다.
+          </p>
+          <div className="mt-4 flex items-center gap-3">
+            <div className="rounded-lg border border-white/8 bg-white/[0.03] px-4 py-2 font-mono text-[0.65rem] text-white/54">
+              8개 피처
+            </div>
+            <span className="font-mono text-[0.60rem] text-white/28">→ PCA →</span>
+            <div className="rounded-lg border border-[var(--accent-primary)]/20 bg-[var(--accent-primary)]/[0.06] px-4 py-2 font-mono text-[0.65rem] text-[var(--accent-primary)]/80">
+              PC1 ({pcaVar} 설명)
+            </div>
+            <span className="font-mono text-[0.60rem] text-white/28">→</span>
+            <div className="rounded-lg border border-white/8 bg-white/[0.03] px-4 py-2 font-mono text-[0.65rem] text-white/54">
+              0~100 지수
+            </div>
+          </div>
+          <StoryFinding>
+            높음 = 낙관 / risk-on &nbsp;·&nbsp; 낮음 = 공포 / risk-off
+            <br />
+            → <span className="text-white/54">Factor 탭</span>에서 PC1 팩터 로딩 확인
+          </StoryFinding>
+        </div>
+
+        {/* 4. PCA 예측 실패 */}
+        <div className="rounded-2xl border border-[var(--accent-down)]/14 bg-[var(--accent-down)]/[0.03] p-6">
+          <StorySectionHeader num={4} title="PCA 지수로 예측해봤지만 실패" />
+          <p className="font-mono text-[0.73rem] leading-6 text-white/68">
+            PCA 지수를 50 기준으로 ON/OFF 신호로 만들어 T+7 BTC 방향을 예측해봤습니다.
+          </p>
+          <div className="mt-4 space-y-2">
+            {[
+              { method: "PCA 복합지수 (50 기준 ON/OFF)", result: "47.6%", note: "동전 던지기 이하" },
+              { method: "뉴스 감성 직접 사용", result: "48.9%", note: "랜덤 수준" },
+            ].map(({ method, result, note }) => (
+              <div key={method} className="flex items-center gap-3 rounded-lg border border-white/6 bg-white/[0.025] px-4 py-2.5">
+                <span className="flex-1 font-mono text-[0.62rem] text-white/48">{method}</span>
+                <span className="font-mono text-[0.70rem] font-bold tabular-nums text-[var(--accent-down)]/70">{result}</span>
+                <span className="font-mono text-[0.54rem] text-white/28">{note}</span>
+              </div>
+            ))}
+          </div>
+          <StoryFinding>
+            PCA 지수는 현재 시장 상태 설명에는 의미가 있지만,
+            미래 가격 방향 예측에는 약함을 확인했습니다. 이유가 뭘까요?
+          </StoryFinding>
+        </div>
+
+        {/* 5. Granger 인과성 검정 */}
+        <div className="rounded-2xl border border-[var(--accent-warning)]/18 bg-[var(--accent-warning)]/[0.03] p-6">
+          <StorySectionHeader num={5} title="Granger 인과성 검정 — 예상을 뒤엎는 결과" />
+          <p className="font-mono text-[0.73rem] leading-6 text-white/68">
+            뉴스 감성이 정말 시장을 선행하는가? Granger 검정으로 인과 방향을 통계적으로 검증했습니다.
+            결과는 예상과 달랐습니다.
+          </p>
+
+          <div className="mt-5 grid grid-cols-2 gap-4">
+            <div className="rounded-xl border border-[var(--accent-down)]/20 bg-[var(--accent-down)]/[0.06] p-4">
+              <p className="mb-2 font-mono text-[0.56rem] uppercase tracking-[0.10em] text-[var(--accent-down)]/70">
+                가설 (감성 → 가격)
+              </p>
+              <p className="font-mono text-[0.70rem] leading-5 text-white/60">감성이 가격을 선행</p>
+              <p className="mt-2 font-mono text-[1.2rem] font-bold text-[var(--accent-down)]/80">
+                {fwdCount}개 유의
+              </p>
+              <p className="font-mono text-[0.56rem] text-white/30">BH-FDR 보정 기준</p>
+            </div>
+            <div className="rounded-xl border border-[var(--accent-green)]/20 bg-[var(--accent-green)]/[0.06] p-4">
+              <p className="mb-2 font-mono text-[0.56rem] uppercase tracking-[0.10em] text-[var(--accent-green)]/70">
+                역방향 발견 (가격 → 감성)
+              </p>
+              <p className="font-mono text-[0.70rem] leading-5 text-white/60">가격이 감성을 유발</p>
+              <p className="mt-2 font-mono text-[1.2rem] font-bold text-[var(--accent-green)]/90">
+                {revCount}개 유의
+              </p>
+              <p className="font-mono text-[0.56rem] text-white/30">역방향이 훨씬 강함</p>
+            </div>
+          </div>
+
+          <StoryFinding>
+            가격과 시장 상황이 먼저 움직이고, 뉴스 감성이 뒤따라 반응했습니다.
+            뉴스 감성은 선행 지표가 아니라 <span className="text-[var(--accent-warning)]/90">후행 반응</span>에 가까웠습니다.
+          </StoryFinding>
+          <p className="font-mono text-[0.60rem] text-white/30">
+            → <span className="text-white/48">Causality 탭</span>에서 전체 인과 방향 히트맵 확인
+          </p>
+        </div>
+
+        {/* 6. 연구 질문 전환 */}
+        <div className="rounded-2xl border border-[var(--accent-primary)]/14 bg-[var(--accent-primary)]/[0.03] p-6">
+          <StorySectionHeader num={6} title="연구 질문 전환 — 방향 예측 → 국면 필터" />
+          <p className="font-mono text-[0.73rem] leading-6 text-white/68">
+            PCA 예측 실패와 Granger 역방향 발견으로 초기 가설을 수정했습니다.
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="rounded-xl border border-[var(--accent-down)]/16 bg-[var(--accent-down)]/[0.04] p-4">
+              <p className="mb-1.5 font-mono text-[0.54rem] text-white/30">기존 질문</p>
+              <p className="font-mono text-[0.66rem] leading-5 text-white/54">
+                뉴스 감성으로 BTC 상승/하락을 맞출 수 있는가?
+              </p>
+            </div>
+            <div className="rounded-xl border border-[var(--accent-green)]/16 bg-[var(--accent-green)]/[0.04] p-4">
+              <p className="mb-1.5 font-mono text-[0.54rem] text-white/30">수정된 질문</p>
+              <p className="font-mono text-[0.66rem] leading-5 text-white/72">
+                위험한 시장 구간을 피하면 성과가 좋아지는가?
+              </p>
+            </div>
+          </div>
+          <StoryFinding>
+            방향 예측 모델에서 <span className="text-[var(--accent-primary)]/90">시장 국면 필터</span>로 전환했습니다.
+            감성이 직접 예측하는 게 아니라, 예측이 가능한 시장 환경을 판별하는 역할입니다.
+          </StoryFinding>
+        </div>
+
+        {/* 7. vol_regime_v2 설계 */}
+        <div className="rounded-2xl border border-[var(--accent-green)]/14 bg-[var(--accent-green)]/[0.03] p-6">
+          <StorySectionHeader num={7} title="vol_regime_v2 설계 — ON/OFF 필터" />
+          <p className="font-mono text-[0.73rem] leading-6 text-white/68">
+            가격을 직접 맞히는 모델이 아닙니다. 지금 시장이 거래하기
+            상대적으로 안전한 구간인지 판단하는 ON/OFF 필터입니다.
+          </p>
+          <div className="mt-5 rounded-xl border border-white/10 bg-black/20 p-5">
+            <p className="mb-3 font-mono text-[0.58rem] uppercase tracking-[0.12em] text-white/32">
+              3가지 조건 동시 충족 시 신호 ON
+            </p>
+            <div className="space-y-2">
+              {[
+                { icon: "①", label: "VIX 낮음", desc: "VIX < 90일 롤링 40분위수" },
+                { icon: "②", label: "BTC 실현변동성 낮음", desc: "RV < 45일 롤링 45분위수" },
+                { icon: "③", label: "F&G 극단 아님", desc: "20 < 공포탐욕지수 < 80" },
+              ].map(({ icon, label, desc }) => (
+                <div key={icon} className="flex items-start gap-3">
+                  <span className="mt-0.5 shrink-0 font-mono text-[0.58rem] text-[var(--accent-green)]/60">{icon}</span>
+                  <div>
+                    <span className="font-mono text-[0.65rem] font-semibold text-white/64">{label}</span>
+                    <span className="ml-2 font-mono text-[0.56rem] text-white/30">{desc}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 font-mono text-[0.58rem] text-white/30">
+              신호 발동 빈도: 전체의 약 56.2% · 조용한 시장에서만 신호 ON
+            </p>
+          </div>
+          <StoryFinding>
+            극단적으로 흥분하거나 공포에 빠진 시장 구간을 걸러내고,
+            신호가 살아날 수 있는 상태에서만 포지션을 취합니다.
+          </StoryFinding>
+          <p className="font-mono text-[0.60rem] text-white/30">
+            → <span className="text-white/48">Signal 탭</span>에서 신호별 성과 비교 확인
+          </p>
+        </div>
+
+        {/* 8. WFV 검증 결과 */}
+        <div className="rounded-2xl border border-[var(--accent-green)]/22 bg-[var(--accent-green)]/[0.04] p-6">
+          <StorySectionHeader num={8} title="Walk-Forward Validation — 검증 결과" />
+          <p className="font-mono text-[0.73rem] leading-6 text-white/68">
+            과거 데이터로 기준 설정 → 미래 구간 테스트 → 시간 앞으로 이동 → 반복.
+            K-Fold와 달리 미래 정보가 학습에 절대 섞이지 않습니다.
+            약 13개 독립 구간에서 테스트했습니다.
+          </p>
+
+          <div className="mt-5 rounded-xl border border-[var(--accent-green)]/20 bg-[var(--accent-green)]/[0.05] p-5 text-center">
+            <p className="font-mono text-[0.56rem] uppercase tracking-[0.14em] text-[var(--accent-green)]/60">
+              vol_regime_v2 · T+7 적중률 (Lookahead 없음)
+            </p>
+            <p className="mt-2 font-mono text-[2.4rem] font-bold tabular-nums leading-none text-[var(--accent-green)]">
+              {hitStr}
+            </p>
+            <p className="mt-1 font-mono text-[0.62rem] text-[var(--accent-green)]/60">
+              95% CI [52.0%, 71.6%] · 하한도 50% 초과
+            </p>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="rounded-xl border border-white/8 bg-white/[0.025] p-3 text-center">
+              <p className="font-mono text-[0.54rem] text-white/30">Overlay Gate</p>
+              <p className="mt-1 font-mono text-[0.80rem] font-bold capitalize text-white/66">{overlayLabel}</p>
+              <p className="font-mono text-[0.52rem] text-white/24">{overlayDays}일 누적 검증</p>
+            </div>
+            <div className="rounded-xl border border-white/8 bg-white/[0.025] p-3 text-center">
+              <p className="font-mono text-[0.54rem] text-white/30">운영 적용</p>
+              <p className="mt-1 font-mono text-[0.80rem] font-bold text-[var(--accent-warning)]/72">대기 중</p>
+              <p className="font-mono text-[0.52rem] text-white/24">60일 누적 후 판단</p>
+            </div>
+          </div>
+
+          <StoryFinding>
+            단순 랜덤(50%)보다 우위가 있는 저위험 필터 가능성을 확인했습니다.
+            Lookahead 없이 나온 수치이기 때문에 의미가 있습니다.
+          </StoryFinding>
+          <p className="font-mono text-[0.60rem] text-white/30">
+            → <span className="text-white/48">Summary 탭</span>에서 전체 KPI · <span className="text-white/48">Guide 탭</span>에서 Walk-Forward 원리 설명
+          </p>
+        </div>
+
+        {/* Footer */}
+        <div className="rounded-xl border border-white/6 bg-white/[0.01] px-5 py-4">
+          <p className="mb-1 font-mono text-[0.56rem] uppercase tracking-[0.10em] text-white/22">한 문장 요약</p>
+          <p className="font-mono text-[0.66rem] leading-6 text-white/50">
+            뉴스 감성이 BTC를 선행하는지 보려 했지만, PCA 예측 실패와 Granger 역방향 발견으로
+            뉴스 감성은 선행 신호가 아닌 후행 반응임을 확인하고,
+            가격 예측이 아닌 <span className="text-white/70">위험 국면 회피 필터</span>로 연구 방향을 전환해 vol_regime_v2를 설계·검증했습니다.
+          </p>
+          <p className="mt-3 font-mono text-[0.60rem] text-white/28">
+            더 깊이: <span className="text-white/46">Factor</span> → PCA ·{" "}
+            <span className="text-white/46">Causality</span> → Granger ·{" "}
+            <span className="text-white/46">Signal</span> → 신호 비교 ·{" "}
+            <span className="text-white/46">Summary</span> → KPI ·{" "}
+            <span className="text-white/46">Guide</span> → 용어 설명
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── main export ──────────────────────────────────────────────────────────────
 
 export function InsightHub({
@@ -1280,6 +1592,7 @@ export function InsightHub({
 
       {/* Content */}
       <div className="px-6 py-12 md:px-20">
+        {tab === "story"     && <StoryTab     artifact={artifact} kpi={kpi} />}
         {tab === "summary"   && <SummaryTab   artifact={artifact} kpi={kpi} />}
         {tab === "signal"    && <SignalTab     artifact={artifact} />}
         {tab === "causality" && <CausalityTab  artifact={artifact} />}
