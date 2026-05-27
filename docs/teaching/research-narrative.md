@@ -321,7 +321,7 @@ AND
 
 세 조건 모두 만족하면 진입 (coverage ≈ 56.2%).
 
-**파라미터 근거**: VIX window/quantile, RV window/quantile은 2D grid search로 최적화됐다. F&G 20-80은 고정값 — rolling quantile을 시도했지만 시장 급변 때 역방향으로 움직여 절대값이 더 안정적이었다.
+**파라미터 근거**: VIX window/quantile, RV window/quantile은 과거 오프라인 분석(코드 미보존)으로 탐색한 뒤 결과값만 `baselines.py`에 하드코딩됐다(`window=90, q=0.40` / `window=45, q=0.45`). F&G 20-80은 고정값 — rolling quantile을 시도했지만 시장 급변 때 역방향으로 움직여 절대값이 더 안정적이었다.
 
 ### 9.2 Walk-Forward Validation
 
@@ -329,9 +329,11 @@ AND
 
 이 프로젝트에는 두 가지 WFV 경로가 있다:
 - **경로 A**: 규칙 기반 신호(vol_regime_v2 등) 검증 — `train=120d / test=30d / ~13 fold`
-- **경로 B**: ML 복합 점수(L1Logistic, ElasticNet, LightGBM 앙상블) 검증 — `train=240d / test=45d / 9 fold`
+- **경로 B**: ML 복합 점수 검증 — `train=240d / test=45d / 9 fold` (단일 LogisticRegression, research-only)
 
-아래는 vol_regime_v2를 검증하는 경로 A 기준이다. 경로 B가 더 긴 train 기간을 쓰는 이유는 ML 모델이 피처 가중치를 안정적으로 추정하려면 더 많은 표본이 필요하기 때문이다. 두 경로의 상세 파라미터 비교는 [wfv-deep-dive.md §8](wfv-deep-dive.md#8-이-프로젝트의-실제-적용)을 참조.
+아래는 vol_regime_v2를 검증하는 경로 A 기준이다. 경로 B가 더 긴 train 기간을 쓰는 이유는 ML 모델이 피처 가중치를 안정적으로 추정하려면 더 많은 표본이 필요하기 때문이다.
+
+> **코드 현실**: 경로 B는 단일 LogisticRegression(C=0.3)으로 구현된다. L1Logistic·ElasticNet·LightGBM 앙상블은 표본 부족(539행)으로 보류 중이며 `models.py`에 클래스만 존재한다. 두 경로의 상세 파라미터 비교는 [wfv-deep-dive.md §8](wfv-deep-dive.md#8-이-프로젝트의-실제-적용)을 참조.
 
 경로 A (`walk_forward_validate`):
 

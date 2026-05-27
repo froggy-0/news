@@ -32,3 +32,5 @@ supabase/migrations/
 log.txt
 CLAUDE.md
 AGENTS.md
+scripts/generate_presentation.py
+scripts/generate_presentation_v2.py
