@@ -39,7 +39,7 @@ def _fetch_pending_rows(client) -> list[dict]:
     cutoff = (date.today() - timedelta(days=_OUTCOME_LAG_DAYS)).isoformat()
     resp = (
         client.table("signal_log")
-        .select("id, signal_date, confidence, btc_price_open")
+        .select("id, signal_date, confidence, btc_price_open, direction, regime_state")
         .is_("btc_price_7d", "null")
         .lte("signal_date", cutoff)
         .execute()
@@ -77,20 +77,36 @@ def _fetch_btc_price_on(target_date: date) -> float | None:
         return None
 
 
+def _resolve_direction(direction: str | None, regime_state: str | None) -> str | None:
+    """direction 컬럼이 있으면 그대로, 없으면(구 레코드) regime_state로 추론."""
+    if direction is not None:
+        return direction
+    # 컬럼 추가 전 구 레코드: regime_state로 fallback
+    from morning_brief.analysis.sentiment_join.risk_overlay import regime_to_direction
+
+    return regime_to_direction(regime_state or "")
+
+
 def _compute_hit(
     confidence: str | None,
     btc_price_open: float | None,
     btc_price_7d: float | None,
+    direction: str | None = None,
 ) -> bool | None:
     """신호 방향과 실제 7일 수익이 일치하면 True.
 
-    confidence가 None(신호 없음)이면 hit 평가 대상 아님 → None.
-    신호는 항상 long 방향 (현재 파이프라인이 long-only).
+    direction=None이면 관망 구간 — hit 평가 대상 아님 → None.
     """
-    if confidence is None or btc_price_open is None or btc_price_7d is None:
+    if confidence is None or direction is None or direction == "flat":
+        return None
+    if btc_price_open is None or btc_price_7d is None:
         return None
     ret = (btc_price_7d / btc_price_open) - 1
-    return bool(ret > 0)
+    if direction == "long":
+        return bool(ret > 0)
+    if direction == "short":
+        return bool(ret < 0)
+    return None
 
 
 def main() -> None:
@@ -117,7 +133,8 @@ def main() -> None:
 
         price_open = row.get("btc_price_open")
         ret_7d = ((price_7d / price_open) - 1) if price_open else None
-        hit = _compute_hit(row.get("confidence"), price_open, price_7d)
+        direction = _resolve_direction(row.get("direction"), row.get("regime_state"))
+        hit = _compute_hit(row.get("confidence"), price_open, price_7d, direction)
 
         try:
             client.table("signal_log").update(

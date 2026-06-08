@@ -340,12 +340,28 @@ def compute_signal_confidence(
 # ---------------------------------------------------------------------------
 # 통합 진입점
 # ---------------------------------------------------------------------------
+def regime_to_direction(regime_label: str) -> str | None:
+    """Regime → 신호 방향.
+
+    BullQuiet  → "long"  (안정 상승 — 롱)
+    BearPanic  → "long"  (극단 공포 역발산 — contrarian long)
+    나머지      → None   (방향 없음 — hit/miss 평가 제외)
+    """
+    if regime_label in ("BullQuiet", "BearPanic"):
+        return "long"
+    return None
+
+
 @dataclass
 class RiskOverlay:
     regime: RegimeState
     vol: VolEnvironment
     confidence: SignalConfidence
     overlay_gate_decision: str = "research_only"
+
+    @property
+    def direction(self) -> str | None:
+        return regime_to_direction(self.regime.label)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -359,6 +375,7 @@ class RiskOverlay:
             "signalReasons": self.confidence.reasons,
             "signalReasonLabels": self.confidence.reason_labels,
             "overlayGateDecision": self.overlay_gate_decision,
+            "direction": self.direction,
         }
 
 

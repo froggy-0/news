@@ -550,7 +550,15 @@ def run_pipeline(settings: Settings) -> str:
                 reason="; ".join(quality["warnings"]),
             )
 
-        briefing = generate_briefing(packet=packet, settings=settings, observer=observer)
+        if settings.openai_api_key:
+            briefing = generate_briefing(packet=packet, settings=settings, observer=observer)
+        else:
+            log_structured(
+                logger,
+                event="briefing.skipped",
+                message="OPENAI_API_KEY 미설정 — 브리핑 생성을 건너뜁니다.",
+            )
+            briefing = ""
 
         # unified-pipeline: 공통 레이어 생성 (Phase 1 — 채널 분기 전 SSOT 확립)
         # 기존 packet / briefing 변수는 그대로 유지 (하위 호환 참조)
@@ -657,63 +665,65 @@ def run_pipeline(settings: Settings) -> str:
             str(event.get("event", "")).strip() == "brief_review_failed"
             for event in observer.events
         )
-        if quality["status"] == "critical" and brief_review_failed:
-            status = "skipped"
-            observer.log_event(
-                "email_skipped",
-                level=logging.WARNING,
-                message="데이터 품질 critical + 검수 미통과 조합으로 이메일 발송을 건너뛸게요.",
-                reason="데이터 품질 critical + 검수 미통과 조합으로 발송을 건너뛸게요.",
-            )
-        else:
-            try:
-                with observer.phase("email"):
-                    SesSender(settings).send(subject=subject, body=briefing, packet=render_packet)
-            except Exception as exc:
-                if status == "ok":
-                    status = "degraded"
-                failure_message = str(exc)
+        if settings.send_email and briefing:
+            if quality["status"] == "critical" and brief_review_failed:
+                status = "skipped"
                 observer.log_event(
-                    "email_send_failed",
+                    "email_skipped",
                     level=logging.WARNING,
-                    message="이메일 발송은 실패했지만 공개 산출물은 유지하고 다음 단계를 계속할게요.",
-                    reason=failure_message,
-                    error_type=type(exc).__name__,
+                    message="데이터 품질 critical + 검수 미통과 조합으로 이메일 발송을 건너뛸게요.",
+                    reason="데이터 품질 critical + 검수 미통과 조합으로 발송을 건너뛸게요.",
                 )
-
-            # 이메일 발송 시도 후 신호를 기록 (발송 성공/실패 무관하게 기록)
-            if (
-                risk_overlay is not None
-                and settings.supabase_url
-                and settings.supabase_service_role_key
-            ):
+            else:
                 try:
-                    from morning_brief.signal_logger import log_signal
-
-                    btc_spot_raw = render_packet.get("bitcoin", {}).get("spot", {}) or {}
-                    btc_price_open = btc_spot_raw.get("resolved_value") or btc_spot_raw.get("price")
-                    log_signal(
-                        supabase_url=settings.supabase_url,
-                        service_role_key=settings.supabase_service_role_key,
-                        signal_date=now.date(),
-                        regime_state=risk_overlay.regime.label,
-                        vol_level=risk_overlay.vol.level,
-                        vol_trend=risk_overlay.vol.trend,
-                        overlay_decision=risk_overlay.overlay_gate_decision,
-                        confidence=risk_overlay.confidence.level,
-                        reasons=risk_overlay.confidence.reasons,
-                        btc_price_open=float(btc_price_open)
-                        if btc_price_open is not None
-                        else None,
-                    )
-                except Exception as log_exc:
-                    log_structured(
-                        logger,
-                        event="signal_log.failed",
+                    with observer.phase("email"):
+                        SesSender(settings).send(
+                            subject=subject, body=briefing, packet=render_packet
+                        )
+                except Exception as exc:
+                    if status == "ok":
+                        status = "degraded"
+                    failure_message = str(exc)
+                    observer.log_event(
+                        "email_send_failed",
                         level=logging.WARNING,
-                        message="signal_log 기록 실패 — 파이프라인에는 영향 없음",
-                        reason=str(log_exc),
+                        message="이메일 발송은 실패했지만 공개 산출물은 유지하고 다음 단계를 계속할게요.",
+                        reason=failure_message,
+                        error_type=type(exc).__name__,
                     )
+
+        # 이메일/브리핑 여부와 무관하게 신호를 항상 기록
+        if (
+            risk_overlay is not None
+            and settings.supabase_url
+            and settings.supabase_service_role_key
+        ):
+            try:
+                from morning_brief.signal_logger import log_signal
+
+                btc_spot_raw = render_packet.get("bitcoin", {}).get("spot", {}) or {}
+                btc_price_open = btc_spot_raw.get("resolved_value") or btc_spot_raw.get("price")
+                log_signal(
+                    supabase_url=settings.supabase_url,
+                    service_role_key=settings.supabase_service_role_key,
+                    signal_date=now.date(),
+                    regime_state=risk_overlay.regime.label,
+                    vol_level=risk_overlay.vol.level,
+                    vol_trend=risk_overlay.vol.trend,
+                    overlay_decision=risk_overlay.overlay_gate_decision,
+                    confidence=risk_overlay.confidence.level,
+                    reasons=risk_overlay.confidence.reasons,
+                    btc_price_open=float(btc_price_open) if btc_price_open is not None else None,
+                    direction=risk_overlay.direction,
+                )
+            except Exception as log_exc:
+                log_structured(
+                    logger,
+                    event="signal_log.failed",
+                    level=logging.WARNING,
+                    message="signal_log 기록 실패 — 파이프라인에는 영향 없음",
+                    reason=str(log_exc),
+                )
 
     except BriefGenerationError as exc:
         status = "openai_failed"

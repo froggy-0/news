@@ -31,6 +31,7 @@ def log_signal(
     confidence: str | None,
     reasons: list[str],
     btc_price_open: float | None,
+    direction: str | None = None,
 ) -> bool:
     """signal_log 테이블에 오늘 신호를 upsert.
 
@@ -49,6 +50,7 @@ def log_signal(
         "confidence": confidence,
         "reasons": reasons,
         "btc_price_open": btc_price_open,
+        "direction": direction,
     }
 
     try:
