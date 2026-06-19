@@ -1,0 +1,182 @@
+"""Arena strategy and feature metadata for reproducible research marts."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from . import parameters
+
+
+def strategy_version_row(params_snapshot: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "strategy_version": parameters.STRATEGY_VERSION,
+        "params_version": parameters.PARAMS_VERSION,
+        "feature_set_version": parameters.FEATURE_SET_VERSION,
+        "risk_model_version": parameters.RISK_MODEL_VERSION,
+        "runtime": parameters.RUNTIME,
+        "status": "active",
+        "description": "EC2 BTCUSDT 4H paper-trading arena with five rule-based strategies.",
+        "params_snapshot": params_snapshot,
+        "code_ref": {
+            "module": "src/arena",
+            "algorithms_module": "src/arena/algorithms.py",
+            "parameters_module": "src/arena/parameters.py",
+        },
+        "methodology": {
+            "decision_frequency": parameters.BINANCE_KLINE_INTERVAL,
+            "symbol": parameters.BINANCE_SYMBOL,
+            "feature_timing": "closed_candle_only",
+            "label_horizons_bars": [1, 3, 6],
+            "cost_basis": "gross_forward_returns; paper_positions stores realized fee-adjusted returns",
+            "risk_controls": {
+                "stop_loss": parameters.RISK_MODEL_VERSION,
+                "min_hold_hours": parameters.MIN_HOLD_HOURS,
+            },
+        },
+    }
+
+
+def feature_registry_rows() -> list[dict[str, Any]]:
+    rows = [
+        {
+            "feature_name": "rsi",
+            "source_table": "arena_indicator_snapshots",
+            "source_column": "rsi",
+            "layer": "derived_indicator",
+            "dtype": "double",
+            "unit": "index",
+            "lookback_bars": parameters.RSI_PERIOD,
+            "lag_bars": 0,
+            "is_model_input": True,
+            "risk_impact": "medium",
+            "description": "Relative Strength Index computed from closed 4H closes.",
+        },
+        {
+            "feature_name": "macd_hist",
+            "source_table": "arena_indicator_snapshots",
+            "source_column": "macd_hist",
+            "layer": "derived_indicator",
+            "dtype": "double",
+            "unit": "price",
+            "lookback_bars": parameters.MACD_SLOW_PERIOD + parameters.MACD_SIGNAL_PERIOD,
+            "lag_bars": 0,
+            "is_model_input": True,
+            "risk_impact": "high",
+            "description": "MACD histogram from closed 4H closes; thresholded by ATR in strategy.",
+        },
+        {
+            "feature_name": "macd_hist_prev",
+            "source_table": "arena_indicator_snapshots",
+            "source_column": "macd_hist_prev",
+            "layer": "derived_indicator",
+            "dtype": "double",
+            "unit": "price",
+            "lookback_bars": parameters.MACD_SLOW_PERIOD + parameters.MACD_SIGNAL_PERIOD,
+            "lag_bars": 1,
+            "is_model_input": True,
+            "risk_impact": "high",
+            "description": "Previous bar MACD histogram — used to compute momentum direction (delta).",
+        },
+        {
+            "feature_name": "bb_pos",
+            "source_table": "arena_indicator_snapshots",
+            "source_column": "bb_pos",
+            "layer": "derived_indicator",
+            "dtype": "double",
+            "unit": "ratio_0_1",
+            "lookback_bars": parameters.BOLLINGER_PERIOD,
+            "lag_bars": 0,
+            "is_model_input": True,
+            "risk_impact": "medium",
+            "description": "Close position within Bollinger band, clipped by DB check to 0..1.",
+        },
+        {
+            "feature_name": "bb_width",
+            "source_table": "arena_indicator_snapshots",
+            "source_column": "bb_width",
+            "layer": "derived_indicator",
+            "dtype": "double",
+            "unit": "pct",
+            "lookback_bars": parameters.BOLLINGER_PERIOD,
+            "lag_bars": 0,
+            "is_model_input": True,
+            "risk_impact": "medium",
+            "description": "Bollinger Band width as % of SMA. Low = squeeze/choppy, high = trending.",
+        },
+        {
+            "feature_name": "atr",
+            "source_table": "arena_indicator_snapshots",
+            "source_column": "atr",
+            "layer": "derived_indicator",
+            "dtype": "double",
+            "unit": "price",
+            "lookback_bars": parameters.ATR_PERIOD,
+            "lag_bars": 0,
+            "is_model_input": True,
+            "risk_impact": "high",
+            "description": "Average True Range from closed 4H OHLC, used for dynamic stop distance.",
+        },
+        {
+            "feature_name": "regime_state",
+            "source_table": "arena_macro_snapshots",
+            "source_column": "risk_overlay.regimeState",
+            "layer": "macro",
+            "dtype": "text",
+            "unit": "category",
+            "lookback_bars": None,
+            "lag_bars": 0,
+            "is_model_input": True,
+            "risk_impact": "high",
+            "description": "Risk overlay regime state from R2 latest macro payload.",
+        },
+        {
+            "feature_name": "fng",
+            "source_table": "arena_macro_snapshots",
+            "source_column": "risk_overlay.regimeRaw.fng",
+            "layer": "macro",
+            "dtype": "double",
+            "unit": "index_0_100",
+            "lookback_bars": None,
+            "lag_bars": 0,
+            "is_model_input": True,
+            "risk_impact": "high",
+            "description": "Fear and Greed index used by contrarian strategy.",
+        },
+        {
+            "feature_name": "vix_now",
+            "source_table": "arena_macro_snapshots",
+            "source_column": "risk_overlay.regimeRaw.vix_now",
+            "layer": "macro",
+            "dtype": "double",
+            "unit": "index",
+            "lookback_bars": None,
+            "lag_bars": 0,
+            "is_model_input": True,
+            "risk_impact": "medium",
+            "description": "Current VIX level from macro risk overlay.",
+        },
+        {
+            "feature_name": "vix_q40",
+            "source_table": "arena_macro_snapshots",
+            "source_column": "risk_overlay.regimeRaw.vix_q40",
+            "layer": "macro",
+            "dtype": "double",
+            "unit": "index",
+            "lookback_bars": None,
+            "lag_bars": 0,
+            "is_model_input": True,
+            "risk_impact": "medium",
+            "description": "VIX 40th percentile threshold from macro risk overlay.",
+        },
+    ]
+    return [
+        {
+            "feature_set_version": parameters.FEATURE_SET_VERSION,
+            "frequency": parameters.BINANCE_KLINE_INTERVAL,
+            "leakage_safe": True,
+            "null_policy": "nullable_until_source_available",
+            "active": True,
+            **row,
+        }
+        for row in rows
+    ]

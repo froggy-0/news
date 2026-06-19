@@ -4,6 +4,7 @@ __pycache__/
 .DS_Store
 .env
 .env.example
+lambda/arena/.env.arena
 credentials.json
 token.json
 outputs/

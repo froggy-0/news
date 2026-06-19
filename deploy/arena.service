@@ -1,0 +1,19 @@
+[Unit]
+Description=BTC Paper Trading Arena
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/news
+EnvironmentFile=/home/ubuntu/news/.env
+Environment=PYTHONPATH=/home/ubuntu/news/src
+ExecStart=/home/ubuntu/news/.venv/bin/python -m arena.server
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

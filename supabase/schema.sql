@@ -259,6 +259,440 @@ CREATE INDEX idx_btc_etf_reference_ticker_as_of_date
 
 
 -- =============================================================================
+-- 7. 페이퍼트레이딩 포지션 원장
+-- 작성: src/arena/positions.py (EC2 상시 프로세스)
+-- 정산: 신호 반전 / flat 전환 / WebSocket 스톱로스 발생 시 즉시 청산
+-- RLS: OFF (service_role만 write)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS paper_positions (
+    id               BIGSERIAL        PRIMARY KEY,
+    algo_id          TEXT             NOT NULL,          -- 'regime_v2' | 'fng_contrarian' | ...
+    direction        TEXT             NOT NULL,          -- 'long' | 'short'
+    status           TEXT             NOT NULL DEFAULT 'open',
+    open_time        TIMESTAMPTZ      NOT NULL,          -- 4H 사이클 실행 시각 (UTC)
+    data_timestamp   TIMESTAMPTZ      NOT NULL,          -- 판단에 사용한 마지막 closed candle 시각
+    open_price       DOUBLE PRECISION NOT NULL,          -- 진입가
+    stop_loss_price  DOUBLE PRECISION NOT NULL,          -- ATR 기반 절대 손절가
+    close_time       TIMESTAMPTZ,
+    close_price      DOUBLE PRECISION,
+    ret_pct          DOUBLE PRECISION,                   -- sign*(close/open-1) - 2*fee
+    hit              BOOLEAN,                            -- ret_pct > 0
+    hold_hours       DOUBLE PRECISION,
+    is_stop_loss     BOOLEAN          NOT NULL DEFAULT FALSE,
+    fee_bps          DOUBLE PRECISION NOT NULL DEFAULT 5.0,
+    strategy_version TEXT             NOT NULL DEFAULT 'legacy',
+    params_version   TEXT             NOT NULL DEFAULT 'legacy',
+    params_snapshot  JSONB            NOT NULL DEFAULT '{}'::jsonb,
+    indicator_snapshot JSONB          NOT NULL DEFAULT '{}'::jsonb,
+    macro_snapshot   JSONB            NOT NULL DEFAULT '{}'::jsonb,
+    market_snapshot  JSONB            NOT NULL DEFAULT '{}'::jsonb,
+    signal_reason    JSONB            NOT NULL DEFAULT '{}'::jsonb,
+    risk_snapshot    JSONB            NOT NULL DEFAULT '{}'::jsonb,
+    runtime          TEXT             NOT NULL DEFAULT 'ec2',
+    created_at       TIMESTAMPTZ      NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_paper_positions_open
+    ON paper_positions (algo_id)
+    WHERE status = 'open';
+
+CREATE INDEX IF NOT EXISTS idx_paper_positions_algo_closed
+    ON paper_positions (algo_id, close_time DESC)
+    WHERE status = 'closed';
+
+CREATE INDEX IF NOT EXISTS idx_paper_positions_strategy_version
+    ON paper_positions (strategy_version, open_time DESC);
+
+CREATE INDEX IF NOT EXISTS idx_paper_positions_data_timestamp
+    ON paper_positions (data_timestamp DESC);
+
+
+-- =============================================================================
+-- 8. 아레나 분석용 데이터 레이크
+-- 작성: src/arena/data_lake.py (EC2 상시 프로세스)
+-- grain: 4H arena run / Binance OHLCV bar / algo decision
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS arena_runs (
+    run_id           UUID        PRIMARY KEY,
+    started_at       TIMESTAMPTZ NOT NULL,
+    completed_at     TIMESTAMPTZ,
+    status           TEXT        NOT NULL DEFAULT 'started',
+    runtime          TEXT        NOT NULL DEFAULT 'ec2',
+    symbol           TEXT        NOT NULL,
+    interval         TEXT        NOT NULL,
+    data_timestamp   TIMESTAMPTZ,
+    strategy_version TEXT        NOT NULL,
+    params_version   TEXT        NOT NULL,
+    feature_set_version TEXT     NOT NULL DEFAULT 'arena-features-v1',
+    risk_model_version TEXT      NOT NULL DEFAULT 'atr-stop-v1',
+    params_snapshot  JSONB       NOT NULL DEFAULT '{}'::jsonb,
+    error_message    TEXT,
+    capture_status   TEXT        NOT NULL DEFAULT 'pending',
+    capture_error_count INTEGER  NOT NULL DEFAULT 0,
+    capture_warnings JSONB       NOT NULL DEFAULT '[]'::jsonb,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT arena_runs_status_check
+        CHECK (status IN ('started', 'completed', 'data_failed', 'partial_failed')),
+    CONSTRAINT arena_runs_runtime_check
+        CHECK (runtime IN ('ec2', 'lambda', 'manual')),
+    CONSTRAINT arena_runs_capture_status_check
+        CHECK (capture_status IN ('pending', 'ok', 'degraded')),
+    CONSTRAINT arena_runs_capture_error_count_check
+        CHECK (capture_error_count >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_arena_runs_started_at
+    ON arena_runs (started_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_arena_runs_strategy_version
+    ON arena_runs (strategy_version, started_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_arena_runs_feature_set_version
+    ON arena_runs (feature_set_version, started_at DESC);
+
+CREATE TABLE IF NOT EXISTS arena_strategy_versions (
+    strategy_version  TEXT        PRIMARY KEY,
+    params_version    TEXT        NOT NULL,
+    feature_set_version TEXT      NOT NULL,
+    risk_model_version TEXT       NOT NULL,
+    runtime           TEXT        NOT NULL DEFAULT 'ec2',
+    status            TEXT        NOT NULL DEFAULT 'active',
+    description       TEXT        NOT NULL,
+    params_snapshot   JSONB       NOT NULL DEFAULT '{}'::jsonb,
+    code_ref          JSONB       NOT NULL DEFAULT '{}'::jsonb,
+    methodology       JSONB       NOT NULL DEFAULT '{}'::jsonb,
+    deployed_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT arena_strategy_versions_status_check
+        CHECK (status IN ('active', 'research', 'retired')),
+    CONSTRAINT arena_strategy_versions_runtime_check
+        CHECK (runtime IN ('ec2', 'lambda', 'manual'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_arena_strategy_versions_feature_set
+    ON arena_strategy_versions (feature_set_version);
+
+CREATE TABLE IF NOT EXISTS arena_ohlcv_bars (
+    exchange               TEXT        NOT NULL,
+    symbol                 TEXT        NOT NULL,
+    interval               TEXT        NOT NULL,
+    open_time              TIMESTAMPTZ NOT NULL,
+    close_time             TIMESTAMPTZ NOT NULL,
+    open                   DOUBLE PRECISION NOT NULL,
+    high                   DOUBLE PRECISION NOT NULL,
+    low                    DOUBLE PRECISION NOT NULL,
+    close                  DOUBLE PRECISION NOT NULL,
+    volume                 DOUBLE PRECISION NOT NULL,
+    quote_volume           DOUBLE PRECISION,
+    trade_count            BIGINT,
+    taker_buy_base_volume  DOUBLE PRECISION,
+    taker_buy_quote_volume DOUBLE PRECISION,
+    raw_payload            JSONB       NOT NULL,
+    run_id                 UUID        REFERENCES arena_runs (run_id),
+    fetched_at             TIMESTAMPTZ NOT NULL,
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (exchange, symbol, interval, open_time),
+    CONSTRAINT arena_ohlcv_bars_price_check
+        CHECK (open > 0 AND high > 0 AND low > 0 AND close > 0),
+    CONSTRAINT arena_ohlcv_bars_ohlc_shape_check
+        CHECK (high >= low AND high >= open AND high >= close AND low <= open AND low <= close),
+    CONSTRAINT arena_ohlcv_bars_time_order_check
+        CHECK (close_time >= open_time)
+);
+
+CREATE INDEX IF NOT EXISTS idx_arena_ohlcv_bars_symbol_interval_time
+    ON arena_ohlcv_bars (symbol, interval, open_time DESC);
+
+CREATE INDEX IF NOT EXISTS idx_arena_ohlcv_bars_run_id
+    ON arena_ohlcv_bars (run_id);
+
+CREATE TABLE IF NOT EXISTS arena_run_ohlcv_bars (
+    run_id         UUID        NOT NULL REFERENCES arena_runs (run_id) ON DELETE CASCADE,
+    exchange       TEXT        NOT NULL,
+    symbol         TEXT        NOT NULL,
+    interval       TEXT        NOT NULL,
+    open_time      TIMESTAMPTZ NOT NULL,
+    close_time     TIMESTAMPTZ NOT NULL,
+    input_position INTEGER     NOT NULL,
+    fetched_at     TIMESTAMPTZ NOT NULL,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (run_id, exchange, symbol, interval, open_time),
+    CONSTRAINT arena_run_ohlcv_bars_bar_fk
+        FOREIGN KEY (exchange, symbol, interval, open_time)
+        REFERENCES arena_ohlcv_bars (exchange, symbol, interval, open_time),
+    CONSTRAINT arena_run_ohlcv_bars_position_check
+        CHECK (input_position >= 0),
+    CONSTRAINT arena_run_ohlcv_bars_time_order_check
+        CHECK (close_time >= open_time)
+);
+
+CREATE INDEX IF NOT EXISTS idx_arena_run_ohlcv_bars_run_position
+    ON arena_run_ohlcv_bars (run_id, input_position);
+
+CREATE INDEX IF NOT EXISTS idx_arena_run_ohlcv_bars_symbol_time
+    ON arena_run_ohlcv_bars (symbol, interval, open_time DESC);
+
+CREATE TABLE IF NOT EXISTS arena_feature_registry (
+    feature_set_version TEXT        NOT NULL,
+    feature_name        TEXT        NOT NULL,
+    source_table        TEXT        NOT NULL,
+    source_column       TEXT        NOT NULL,
+    layer               TEXT        NOT NULL,
+    dtype               TEXT        NOT NULL,
+    unit                TEXT        NOT NULL,
+    frequency           TEXT        NOT NULL,
+    lookback_bars       INTEGER,
+    lag_bars            INTEGER     NOT NULL DEFAULT 0,
+    leakage_safe        BOOLEAN     NOT NULL DEFAULT TRUE,
+    is_model_input      BOOLEAN     NOT NULL DEFAULT TRUE,
+    null_policy         TEXT        NOT NULL DEFAULT 'nullable_until_source_available',
+    risk_impact         TEXT        NOT NULL,
+    active              BOOLEAN     NOT NULL DEFAULT TRUE,
+    description         TEXT        NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (feature_set_version, feature_name),
+    CONSTRAINT arena_feature_registry_layer_check
+        CHECK (layer IN ('raw_market', 'derived_indicator', 'macro', 'decision', 'label')),
+    CONSTRAINT arena_feature_registry_risk_impact_check
+        CHECK (risk_impact IN ('low', 'medium', 'high')),
+    CONSTRAINT arena_feature_registry_lag_check
+        CHECK (lag_bars >= 0),
+    CONSTRAINT arena_feature_registry_lookback_check
+        CHECK (lookback_bars IS NULL OR lookback_bars >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_arena_feature_registry_active
+    ON arena_feature_registry (feature_set_version, active, is_model_input);
+
+CREATE TABLE IF NOT EXISTS arena_macro_snapshots (
+    run_id         UUID        PRIMARY KEY REFERENCES arena_runs (run_id),
+    fetched_at     TIMESTAMPTZ NOT NULL,
+    source_url     TEXT        NOT NULL,
+    reference_date DATE,
+    stale_hours    DOUBLE PRECISION,
+    payload_hash   TEXT        NOT NULL,
+    payload        JSONB       NOT NULL,
+    risk_overlay   JSONB       NOT NULL DEFAULT '{}'::jsonb,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_arena_macro_snapshots_reference_date
+    ON arena_macro_snapshots (reference_date DESC);
+
+CREATE INDEX IF NOT EXISTS idx_arena_macro_snapshots_payload_hash
+    ON arena_macro_snapshots (payload_hash);
+
+CREATE TABLE IF NOT EXISTS arena_indicator_snapshots (
+    run_id           UUID        PRIMARY KEY REFERENCES arena_runs (run_id),
+    symbol           TEXT        NOT NULL,
+    interval         TEXT        NOT NULL,
+    data_timestamp   TIMESTAMPTZ NOT NULL,
+    params_version   TEXT        NOT NULL,
+    indicator_params JSONB       NOT NULL DEFAULT '{}'::jsonb,
+    rsi              DOUBLE PRECISION,
+    macd_hist        DOUBLE PRECISION,
+    bb_pos           DOUBLE PRECISION,
+    atr              DOUBLE PRECISION,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT arena_indicator_snapshots_bb_pos_check
+        CHECK (bb_pos IS NULL OR (bb_pos >= 0 AND bb_pos <= 1)),
+    CONSTRAINT arena_indicator_snapshots_atr_check
+        CHECK (atr IS NULL OR atr >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_arena_indicator_snapshots_symbol_time
+    ON arena_indicator_snapshots (symbol, interval, data_timestamp DESC);
+
+CREATE TABLE IF NOT EXISTS arena_decisions (
+    run_id                UUID        NOT NULL REFERENCES arena_runs (run_id),
+    algo_id               TEXT        NOT NULL,
+    signal                TEXT,
+    action                TEXT        NOT NULL,
+    reason                JSONB       NOT NULL DEFAULT '{}'::jsonb,
+    current_position_id   BIGINT      REFERENCES paper_positions (id),
+    resulting_position_id BIGINT      REFERENCES paper_positions (id),
+    skipped_reason        TEXT,
+    risk_decision         JSONB       NOT NULL DEFAULT '{}'::jsonb,
+    risk_snapshot         JSONB       NOT NULL DEFAULT '{}'::jsonb,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (run_id, algo_id),
+    CONSTRAINT arena_decisions_signal_check
+        CHECK (signal IS NULL OR signal IN ('long', 'short')),
+    CONSTRAINT arena_decisions_action_check
+        CHECK (
+            action IN (
+                'open',
+                'close_flat',
+                'reverse',
+                'hold',
+                'flat_skip',
+                'min_hold_skip',
+                'risk_blocked',
+                'error'
+            )
+        )
+);
+
+CREATE INDEX IF NOT EXISTS idx_arena_decisions_algo_created
+    ON arena_decisions (algo_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_arena_decisions_action_created
+    ON arena_decisions (action, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS arena_risk_events (
+    risk_event_id UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    run_id        UUID        REFERENCES arena_runs (run_id) ON DELETE CASCADE,
+    algo_id       TEXT        NOT NULL,
+    position_id   BIGINT      REFERENCES paper_positions (id),
+    event_type    TEXT        NOT NULL,
+    risk_decision JSONB       NOT NULL DEFAULT '{}'::jsonb,
+    risk_snapshot JSONB       NOT NULL DEFAULT '{}'::jsonb,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_arena_risk_events_run_algo
+    ON arena_risk_events (run_id, algo_id);
+
+CREATE INDEX IF NOT EXISTS idx_arena_risk_events_created
+    ON arena_risk_events (created_at DESC);
+
+CREATE TABLE IF NOT EXISTS arena_risk_state (
+    algo_id            TEXT        NOT NULL,
+    risk_model_version TEXT        NOT NULL,
+    status             TEXT        NOT NULL DEFAULT 'active',
+    reason             TEXT,
+    triggered_at       TIMESTAMPTZ,
+    cooldown_until     TIMESTAMPTZ,
+    state_snapshot     JSONB       NOT NULL DEFAULT '{}'::jsonb,
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (algo_id, risk_model_version),
+    CONSTRAINT arena_risk_state_status_check
+        CHECK (status IN ('active', 'killed', 'cooldown'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_arena_risk_state_status
+    ON arena_risk_state (status, updated_at DESC);
+
+CREATE OR REPLACE VIEW arena_decision_mart_v1 AS
+WITH bar_series AS (
+    SELECT
+        b.*,
+        ROW_NUMBER() OVER (
+            PARTITION BY b.exchange, b.symbol, b.interval
+            ORDER BY b.open_time
+        ) - 1 AS bar_index
+    FROM arena_ohlcv_bars b
+),
+run_bar AS (
+    SELECT
+        r.run_id,
+        bs.exchange,
+        bs.symbol,
+        bs.interval,
+        bs.open_time AS signal_bar_open_time,
+        bs.close_time AS signal_bar_close_time,
+        bs.open AS signal_open,
+        bs.high AS signal_high,
+        bs.low AS signal_low,
+        bs.close AS signal_close,
+        bs.volume AS signal_volume,
+        bs.bar_index
+    FROM arena_runs r
+    JOIN bar_series bs
+      ON bs.symbol = r.symbol
+     AND bs.interval = r.interval
+     AND bs.close_time = r.data_timestamp
+)
+SELECT
+    r.run_id,
+    r.started_at,
+    r.completed_at,
+    r.status AS run_status,
+    r.capture_status,
+    r.symbol,
+    r.interval,
+    r.data_timestamp,
+    r.strategy_version,
+    r.params_version,
+    r.feature_set_version,
+    r.risk_model_version,
+    d.algo_id,
+    d.signal,
+    d.action,
+    d.skipped_reason,
+    d.current_position_id,
+    d.resulting_position_id,
+    rb.signal_bar_open_time,
+    rb.signal_bar_close_time,
+    rb.signal_open,
+    rb.signal_high,
+    rb.signal_low,
+    rb.signal_close,
+    rb.signal_volume,
+    ind.rsi,
+    ind.macd_hist,
+    ind.bb_pos,
+    ind.atr,
+    macro.reference_date AS macro_reference_date,
+    macro.stale_hours AS macro_stale_hours,
+    macro.risk_overlay ->> 'regimeState' AS regime_state,
+    NULLIF(macro.risk_overlay #>> '{regimeRaw,fng}', '')::DOUBLE PRECISION AS fng,
+    NULLIF(macro.risk_overlay #>> '{regimeRaw,vix_now}', '')::DOUBLE PRECISION AS vix_now,
+    NULLIF(macro.risk_overlay #>> '{regimeRaw,vix_q40}', '')::DOUBLE PRECISION AS vix_q40,
+    f1.close AS close_plus_1bar,
+    f3.close AS close_plus_3bar,
+    f6.close AS close_plus_6bar,
+    (f1.close / NULLIF(rb.signal_close, 0.0) - 1.0) AS forward_return_1bar,
+    (f3.close / NULLIF(rb.signal_close, 0.0) - 1.0) AS forward_return_3bar,
+    (f6.close / NULLIF(rb.signal_close, 0.0) - 1.0) AS forward_return_6bar,
+    CASE d.signal
+        WHEN 'long' THEN (f1.close / NULLIF(rb.signal_close, 0.0) - 1.0)
+        WHEN 'short' THEN -(f1.close / NULLIF(rb.signal_close, 0.0) - 1.0)
+        ELSE NULL
+    END AS signal_return_1bar,
+    CASE d.signal
+        WHEN 'long' THEN (f3.close / NULLIF(rb.signal_close, 0.0) - 1.0)
+        WHEN 'short' THEN -(f3.close / NULLIF(rb.signal_close, 0.0) - 1.0)
+        ELSE NULL
+    END AS signal_return_3bar,
+    CASE d.signal
+        WHEN 'long' THEN (f6.close / NULLIF(rb.signal_close, 0.0) - 1.0)
+        WHEN 'short' THEN -(f6.close / NULLIF(rb.signal_close, 0.0) - 1.0)
+        ELSE NULL
+    END AS signal_return_6bar,
+    d.reason AS decision_reason
+FROM arena_runs r
+JOIN arena_decisions d
+  ON d.run_id = r.run_id
+LEFT JOIN run_bar rb
+  ON rb.run_id = r.run_id
+LEFT JOIN arena_indicator_snapshots ind
+  ON ind.run_id = r.run_id
+LEFT JOIN arena_macro_snapshots macro
+  ON macro.run_id = r.run_id
+LEFT JOIN bar_series f1
+  ON f1.exchange = rb.exchange
+ AND f1.symbol = rb.symbol
+ AND f1.interval = rb.interval
+ AND f1.bar_index = rb.bar_index + 1
+LEFT JOIN bar_series f3
+  ON f3.exchange = rb.exchange
+ AND f3.symbol = rb.symbol
+ AND f3.interval = rb.interval
+ AND f3.bar_index = rb.bar_index + 3
+LEFT JOIN bar_series f6
+  ON f6.exchange = rb.exchange
+ AND f6.symbol = rb.symbol
+ AND f6.interval = rb.interval
+ AND f6.bar_index = rb.bar_index + 6;
+
+
+-- =============================================================================
 -- RLS 정책 현황
 -- =============================================================================
 -- pg_policies 조회 결과 정책 없음 (No rows returned).
