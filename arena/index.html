@@ -257,6 +257,10 @@
           role="img"
           aria-label="Line chart showing cumulative return percentage for each algorithm since launch. Hover for values.">
         </canvas>
+        <div id="chartPlaceholder" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;flex-direction:column;gap:8px">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="1.5" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <span style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:1.5px;color:#334155">AWAITING FIRST TRADE CLOSE</span>
+        </div>
       </div>
     </div>
   </section>
@@ -309,8 +313,8 @@
 // │  Required RLS: paper_positions — public SELECT          │
 // │  Required Realtime: paper_positions enabled             │
 // └─────────────────────────────────────────────────────────┘
-const SUPABASE_URL      = '__SUPABASE_URL__';
-const SUPABASE_ANON_KEY = '__SUPABASE_ANON_KEY__';
+const SUPABASE_URL      = 'https://etscgpquupksucbyrvhh.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_mTGwRZeCCzBQnUORrFqQUg_iMFCSQes';
 
 const IS_MOCK = SUPABASE_URL.startsWith('__');
 
@@ -356,6 +360,8 @@ let positions = [];
 let eqChart = null;
 
 // ── Data processing ───────────────────────────────────────
+let latestBtcPrice = null; // updated by fetchBtcPrice()
+
 function algoStats(ps) {
   const out = {};
   for (const algo of ALGO_IDS) {
@@ -364,13 +370,23 @@ function algoStats(ps) {
     const open = all.find(p => p.status === 'open');
     const totalRet = done.reduce((s, p) => s + p.ret_pct, 0) * 100;
     const wins = done.filter(p => p.hit).length;
+
+    // unrealized P&L for open position (gross, no fee)
+    let unrealizedPct = null;
+    if (open && latestBtcPrice && open.open_price) {
+      const raw = (latestBtcPrice - open.open_price) / open.open_price;
+      unrealizedPct = (open.direction === 'long' ? raw : -raw) * 100;
+    }
+
     out[algo] = {
-      totalRet:   parseFloat(totalRet.toFixed(2)),
-      winRate:    done.length ? parseFloat((wins / done.length * 100).toFixed(1)) : 0,
-      closedN:    done.length,
-      totalN:     all.length,
-      pos:        open ? open.direction.toUpperCase() : 'FLAT',
-      openEntry:  open ? open.open_price : null,
+      totalRet:      parseFloat(totalRet.toFixed(2)),
+      winRate:       done.length ? parseFloat((wins / done.length * 100).toFixed(1)) : null,
+      closedN:       done.length,
+      totalN:        all.length,
+      pos:           open ? open.direction.toUpperCase() : 'FLAT',
+      openEntry:     open ? open.open_price : null,
+      unrealizedPct: unrealizedPct != null ? parseFloat(unrealizedPct.toFixed(2)) : null,
+      hasAnyTrade:   all.length > 0,
     };
   }
   return out;
@@ -431,15 +447,43 @@ function renderCards(stats) {
   document.getElementById('algoGrid').innerHTML = ALGO_IDS.map(algo => {
     const s = stats[algo];
     const cfg = ALGOS[algo];
-    const rc = s.totalRet >= 0 ? '#34D399' : '#F87171';
-    const sign = s.totalRet >= 0 ? '+' : '';
     const posCls = s.pos === 'LONG' ? 'pb-long' : s.pos === 'SHORT' ? 'pb-short' : 'pb-flat';
-    return `<div class="ac" style="--ac:${cfg.color}" role="article" aria-label="${algo}: ${sign}${s.totalRet}%">
+
+    // Main return display
+    let retHtml;
+    if (!s.hasAnyTrade) {
+      retHtml = `<div class="ac-ret" style="color:var(--muted)">—</div>`;
+    } else if (s.closedN === 0) {
+      // only open — show unrealized if available
+      if (s.unrealizedPct != null) {
+        const uc = s.unrealizedPct >= 0 ? '#34D399' : '#F87171';
+        const us = s.unrealizedPct >= 0 ? '+' : '';
+        retHtml = `<div class="ac-ret" style="color:${uc};opacity:.7">${us}${s.unrealizedPct.toFixed(2)}%<span style="font-size:9px;margin-left:4px;opacity:.6">unrlzd</span></div>`;
+      } else {
+        retHtml = `<div class="ac-ret" style="color:var(--muted)">—</div>`;
+      }
+    } else {
+      const rc = s.totalRet >= 0 ? '#34D399' : '#F87171';
+      const sign = s.totalRet >= 0 ? '+' : '';
+      retHtml = `<div class="ac-ret" style="color:${rc}">${sign}${s.totalRet.toFixed(2)}%</div>`;
+    }
+
+    // Stats line
+    let statsLine;
+    if (!s.hasAnyTrade) {
+      statsLine = `<div style="color:var(--muted);font-size:10px">no signals yet</div>`;
+    } else if (s.closedN === 0) {
+      statsLine = `<div>${s.totalN} open · awaiting close</div>`;
+    } else {
+      statsLine = `<div>${s.closedN} closed · ${s.winRate.toFixed(0)}% win</div>`;
+    }
+
+    return `<div class="ac" style="--ac:${cfg.color}" role="article" aria-label="${algo}">
       <div class="ac-name">${algo}</div>
-      <div class="ac-ret" style="color:${rc}">${sign}${s.totalRet.toFixed(2)}%</div>
+      ${retHtml}
       <div class="ac-bottom">
         <div class="ac-stats">
-          <div>${s.closedN} trades · ${s.winRate.toFixed(0)}% win</div>
+          ${statsLine}
           ${s.openEntry ? `<div class="ac-entry">@ $${s.openEntry.toLocaleString()}</div>` : ''}
         </div>
         <span class="pb ${posCls}" aria-label="Position: ${s.pos}">${s.pos}</span>
@@ -453,15 +497,21 @@ function renderLegend(stats) {
   document.getElementById('chartLegend').innerHTML = ALGO_IDS.map(algo => {
     const s = stats[algo];
     const cfg = ALGOS[algo];
-    const sign = s.totalRet >= 0 ? '+' : '';
-    const rc = s.totalRet >= 0 ? '#34D399' : '#F87171';
-    const style = cfg.dash
+    const lineStyle = cfg.dash
       ? `background:repeating-linear-gradient(90deg,${cfg.color} 0,${cfg.color} 5px,transparent 5px,transparent 8px)`
       : `background:${cfg.color}`;
+    let retLabel;
+    if (!s.hasAnyTrade || s.closedN === 0) {
+      retLabel = `<span style="color:var(--muted)">—</span>`;
+    } else {
+      const sign = s.totalRet >= 0 ? '+' : '';
+      const rc = s.totalRet >= 0 ? '#34D399' : '#F87171';
+      retLabel = `<span style="color:${rc};font-weight:500">${sign}${s.totalRet.toFixed(2)}%</span>`;
+    }
     return `<div class="li">
-      <span class="ll" style="${style}" aria-hidden="true"></span>
+      <span class="ll" style="${lineStyle}" aria-hidden="true"></span>
       <span>${algo}</span>
-      <span style="color:${rc};font-weight:500">${sign}${s.totalRet.toFixed(2)}%</span>
+      ${retLabel}
     </div>`;
   }).join('');
 }
@@ -469,6 +519,16 @@ function renderLegend(stats) {
 // ── Render: chart ─────────────────────────────────────────
 function renderChart(curves) {
   const ctx = document.getElementById('eqChart');
+  const placeholder = document.getElementById('chartPlaceholder');
+
+  if (!curves.labels.length) {
+    ctx.style.display = 'none';
+    if (placeholder) placeholder.style.display = 'flex';
+    return;
+  }
+  ctx.style.display = '';
+  if (placeholder) placeholder.style.display = 'none';
+
   if (eqChart) {
     eqChart.data.labels = curves.labels;
     eqChart.data.datasets = curves.datasets;
@@ -587,12 +647,15 @@ async function fetchBtcPrice() {
     if (!r.ok) return;
     const d = await r.json();
     const price = parseFloat(d.lastPrice);
+    latestBtcPrice = price;
     const chg = parseFloat(d.priceChangePercent);
     document.getElementById('btcPrice').textContent =
       '$' + price.toLocaleString('en-US', { maximumFractionDigits: 0 });
     const cel = document.getElementById('btcChg');
     cel.textContent = `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%`;
     cel.className = 'btc-chg ' + (chg >= 0 ? 'pos-c' : 'neg-c');
+    // refresh cards so unrealized P&L updates with new price
+    if (positions.length) renderCards(algoStats(positions));
   } catch (_) {}
 }
 
