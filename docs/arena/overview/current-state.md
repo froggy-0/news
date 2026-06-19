@@ -1,0 +1,368 @@
+# Arena Current State
+
+작성일: 2026-06-19
+
+## 한 줄 요약
+
+BTC Signal Arena는 EC2 상시 프로세스로 4H 페이퍼트레이딩을 수행하고, 판단 데이터와 백테스트 결과를 재현 가능한 연구 원장에 저장하는 단계까지 왔다. 아직 전략 성능을 판단하거나 파라미터 튜닝할 단계는 아니다.
+
+## 현재 운영 상태
+
+| 항목 | 상태 |
+| --- | --- |
+| 운영 경로 | EC2 `src/arena` |
+| 서버 | Seoul EC2, `arena.service` |
+| 거래 모드 | paper trading |
+| 대상 | `BTCUSDT`, `4h` |
+| 실행 주기 | 4H candle close 이후 `:05` |
+| 실시간 감시 | Binance WebSocket 1m kline으로 stop-loss 감지 |
+| DB | Supabase |
+| 최신 서비스 확인 | 2026-06-19 13:15 UTC `arena.service = active`, `SubState=running`, `ExecMainStatus=0` |
+| 최신 live run | `89c6ca1d-a62b-4c1e-97ae-c5b3d5a563cf` |
+| 최신 live run 상태 | `completed`, `capture_status=ok`, `capture_error_count=0` |
+| 최신 live version | code 기준 `strategy_version=arena-ec2-v5`, `params_version=arena-params-v6`, `feature_set_version=arena-features-v3`, `risk_model_version=portfolio-risk-v1` |
+| 최신 validation | 기존 baseline 기준 `pass=8`, `warn=3`, `fail=0`, `na=1` |
+
+## 지금까지 완료한 것
+
+### 1. 금융 모델링 결함 수정
+
+초기 결함:
+
+| 계층 | 결함 | 처리 |
+| --- | --- | --- |
+| 수집 | OHLC에서 close만 추출해 ATR 계산 불가 | OHLCV 수집으로 변경 |
+| 수집 | R2 macro 신선도 검증 없음 | `macro_stale_hours` 초과 시 macro 비활성화 |
+| 판단 | MACD hist 미세값에도 신호 발생 | ATR 대비 MACD threshold 추가 |
+| 판단 | `multi_factor` 롱/숏 비대칭 | 숏에도 MACD 필터 적용 |
+| 거래 | 최소 보유 기간 없음 | 알고리즘별 `MIN_HOLD_HOURS` 추가 |
+| 리스크 | 고정 5% 손절 | ATR 기반 동적 stop-loss 추가 |
+| 리스크 | `stop_loss_price` DB 미저장 | 포지션 원장에 저장 |
+
+### 2. 파라미터 인벤토리와 상수화
+
+- 거래/지표/스케줄/리스크 파라미터를 `src/arena/parameters.py` 중심으로 정리.
+- env override가 필요한 값은 `src/arena/config.py`에서 기본값을 `parameters.py`와 맞춤.
+- 파라미터 문서: [../reference/parameter-inventory.md](../reference/parameter-inventory.md)
+
+### 3. 포지션 재현성 보강
+
+`paper_positions`에 아래 재현 필드를 추가하고 open 시점에 저장한다.
+
+- `strategy_version`
+- `params_version`
+- `params_snapshot`
+- `indicator_snapshot`
+- `macro_snapshot`
+- `market_snapshot`
+- `signal_reason`
+- `risk_snapshot`
+- `data_timestamp`
+- `stop_loss_price`
+- `runtime`
+
+목적은 나중에 “왜 특정 시점에 이 알고리즘이 long/short/flat을 냈는가”를 복원하는 것이다.
+
+### 4. 데이터 수집 계층 분리
+
+라이브 거래 판단과 별개로 분석용 데이터레이크를 만들었다.
+
+| 레이어 | 테이블 |
+| --- | --- |
+| run | `arena_runs` |
+| raw market | `arena_ohlcv_bars`, `arena_run_ohlcv_bars` |
+| raw macro | `arena_macro_snapshots` |
+| derived indicators | `arena_indicator_snapshots` |
+| decisions | `arena_decisions` |
+
+capture hardening도 추가했다.
+
+- `capture_status`
+- `capture_error_count`
+- `capture_warnings`
+
+문서: [../architecture/data-lake-v0.md](../architecture/data-lake-v0.md)
+
+### 5. Strategy/Feature Mart
+
+추가 객체:
+
+- `arena_strategy_versions`
+- `arena_feature_registry`
+- `arena_decision_mart_v1`
+
+현재 feature registry는 8개 피처를 추적한다.
+
+- `rsi`
+- `macd_hist`
+- `bb_pos`
+- `atr`
+- `regime_state`
+- `fng`
+- `vix_now`
+- `vix_q40`
+
+문서: [../research/research-mart-v1.md](../research/research-mart-v1.md)
+
+### 6. Trading Rule Parity Layer
+
+라이브와 백테스트가 같은 규칙을 쓰도록 순수 모듈을 추가했다.
+
+파일:
+
+- `src/arena/execution_rules.py`
+
+공통화된 규칙:
+
+- UTC timestamp parsing/formatting
+- hold hours
+- min hold 판정
+- ATR stop-loss price
+- stop-loss trigger
+- fee/slippage adjusted return
+- params/market/signal snapshot 생성
+
+### 7. Backtest / Walk-forward Framework v1
+
+추가 객체:
+
+- `arena_backtest_runs`
+- `arena_backtest_trades`
+- `arena_backtest_equity_curve`
+- `arena_walk_forward_splits`
+- `arena_backtest_run_summary_v1`
+
+백테스트 CLI:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m arena.backtest --limit 300 --save
+```
+
+저장된 baseline:
+
+| 항목 | 값 |
+| --- | --- |
+| `backtest_run_id` | `4ce27c17-a6be-4aba-b872-88d5d7763abd` |
+| 기간 | 2026-05-31 07:59:59 UTC ~ 2026-06-19 11:59:59 UTC |
+| bar_count | 116 |
+| trade_count | 8 |
+| fee_bps | 5 |
+| slippage_bps | 0 |
+
+주의: 현재 baseline은 framework 검증용이지 전략 성능 판단용이 아니다.
+
+문서: [../research/backtest-framework-v1.md](../research/backtest-framework-v1.md)
+
+### 8. Backtest Validation Rubric
+
+추가 객체:
+
+- `arena_backtest_validation_runs`
+- `arena_backtest_validation_checks`
+- `arena_backtest_validation_summary_v1`
+
+검증 CLI:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m arena.backtest_validation --latest --save
+```
+
+최신 검증:
+
+| status | pass | warn | fail | na |
+| --- | ---: | ---: | ---: | ---: |
+| `warn` | 8 | 3 | 0 | 1 |
+
+warn 3개:
+
+- `macro_fetched_at_recorded`: 기존 run은 fetched_at 보강 전 생성되어 macro snapshot 감사력이 약함.
+- `end_of_data_exit_impact`: 강제 종료 PnL은 성과 해석에서 분리해야 함.
+- `research_sample_size`: 표본 부족.
+
+na 1개:
+
+- `stop_loss_fill_policy`: 이번 baseline에는 stop-loss trade가 없어 검증 대상 없음.
+
+### 9. Portfolio Risk Layer v1
+
+라이브와 백테스트 모두 알고리즘별 독립 포지션을 열기 전에 portfolio risk gate를 통과한다.
+
+추가 코드:
+
+- `src/arena/risk.py`
+
+기본 정책:
+
+| 항목 | 값 |
+| --- | ---: |
+| max open positions total | 3 |
+| max long positions | 2 |
+| max short positions | 2 |
+| max net long exposure | 2.0 |
+| max net short exposure | 2.0 |
+| daily loss limit | 5% |
+| algo max drawdown kill | 10% |
+| cooldown after kill | 24h |
+
+추가 객체:
+
+- `arena_risk_events`
+- `arena_risk_state`
+- `arena_backtest_risk_events`
+
+마이그레이션:
+
+```sql
+supabase/migrations/20260619_arena_portfolio_risk_layer.sql
+```
+
+적용 상태:
+
+- Supabase check `arena_portfolio_risk_layer_ready`: all true.
+- EC2 재배포 완료.
+- 과거 확인 run `89c6ca1d-a62b-4c1e-97ae-c5b3d5a563cf`는 `params_version=arena-params-v2`, `risk_model_version=portfolio-risk-v1`이었다. 현재 코드 기준은 상단 표의 `arena-params-v6`이므로 다음 live run에서 v6 기록을 확인한다.
+- 최신 run은 기존 open position 2개가 `hold`이고 나머지는 `flat_skip`이라 신규 risk gate event는 아직 없다.
+- 기존 open position은 `strategy_version=legacy`, `risk_snapshot={}` 상태다. 신규 open부터 `risk_snapshot`이 채워진다.
+
+### 10. Walk-forward / Report Mart
+
+- `src/arena/walk_forward.py` 구현 완료.
+- `arena_backtest_report_mart_v1`, `arena_backtest_algo_summary_v1` SQL 구현 완료.
+- 다음에는 생성/저장 상태를 SQL로 확인하고, 표본 부족이면 `research_only`로 해석한다.
+
+### 11. vNext Shadow Research
+
+추가 코드:
+
+- `src/arena/market_structure.py`
+- `src/arena/regime.py`
+- `src/arena/sleeves.py`
+- `src/arena/allocator.py`
+
+추가 SQL:
+
+```sql
+supabase/migrations/20260620_arena_market_structure_v1.sql
+```
+
+역할:
+
+- Binance futures funding/OI/basis/mark price raw capture.
+- 4H 판단 시점 market feature snapshot.
+- `regime_gate_v1`과 `trend_core_v1` shadow decision 저장.
+- 기존 `paper_positions`는 변경하지 않음.
+
+## 주요 결정
+
+| 결정 | 이유 |
+| --- | --- |
+| EC2를 primary 운영 경로로 사용 | 실시간 WebSocket stop-loss 감지가 필요하고 Lambda는 상시 스트림에 부적합 |
+| Lambda arena는 신규 개선 대상에서 제외 | EC2와 중복 거래/중복 로직/운영 혼선 위험 |
+| raw와 derived를 분리 | 지표 로직이 바뀌어도 raw OHLCV로 재계산 가능 |
+| 모든 판단 run을 저장 | 포지션이 없어도 알고리즘이 왜 skip/hold 했는지 분석해야 함 |
+| `strategy_version`과 snapshot 저장 | 나중에 특정 판단을 재현하기 위함 |
+| 백테스트 전 rule parity layer를 먼저 구축 | 라이브와 다른 규칙으로 백테스트하면 결과가 무의미함 |
+| 파라미터 튜닝 보류 | 짧은 표본과 shadow 미검증 상태에서는 과최적화 위험이 높음 |
+| walk-forward 전 portfolio risk layer를 먼저 적용 | 리스크 gate 없이 split을 만들면 실제 운영보다 과대평가될 수 있음 |
+| EC2 운영 배포는 rsync 방식으로 수행 | 현재 `/home/ubuntu/news`는 Git checkout이 아니라 경량 배포 디렉터리다 |
+| vNext는 shadow로만 시작 | 신규 전략이 기존 paper 포지션을 즉시 열면 성과 원장이 섞임 |
+
+## 현재 고민과 리스크
+
+| 리스크 | 현재 상태 | 대응 |
+| --- | --- | --- |
+| 표본 부족 | 아직 튜닝/우열 판단 불가 | 최소 수개월 포워드 데이터 필요 |
+| macro 과거 이력 부족 | `arena_macro_snapshots`는 최근부터 쌓이는 중 | 시간이 해결. 과거 R2 snapshot이 없다면 macro 전략 백테스트 제한 |
+| stop-loss 체결 검증 부족 | baseline에 stop-loss trade 없음 | 향후 stop-loss 발생 run에서 자동 검증 |
+| forced end-of-data 왜곡 | baseline에 2건 있음 | 성과 리포트에서 별도 분리 |
+| Lambda 중복 경로 | 코드가 남아 있음 | 운영 비활성 유지, 추후 legacy archive/삭제 검토 |
+| Supabase SQL Editor fetch 오류 | Dashboard 문제였고 API 조회는 정상 | 복잡한 view는 필요한 컬럼만 조회 |
+| market-structure SQL 미적용 | vNext 테이블은 새 migration 필요 | 사용자가 SQL Editor에서 실행 후 readiness 확인 |
+| shadow capture degraded | Binance fapi 또는 SQL 미적용 시 발생 가능 | 기존 paper trading 실패로 보지 않고 capture warning으로 해석 |
+| 중복 방향 노출 | portfolio risk gate 추가 | 신규 open 또는 risk block 발생 시 snapshot/event 확인 |
+| 원격 배포 방식 혼선 | `deploy/deploy.sh`는 git pull 전제이나 현재 EC2는 Git repo가 아님 | rsync 배포 명령을 runbook에 기록 |
+
+## 아직 하면 안 되는 것
+
+- 파라미터 튜닝
+- 승률/수익률을 근거로 알고리즘 우열 판단
+- `macd_momentum` baseline 수익률을 홍보/제품화 근거로 사용
+- `end_of_data` 포함 성과를 정상 청산 성과처럼 해석
+- Lambda와 EC2를 동시에 활성화
+
+## 다음 작업
+
+우선순위 순서:
+
+1. **Step 5A: market-structure SQL 적용**
+   - `/Users/giwon/code/news/supabase/migrations/20260620_arena_market_structure_v1.sql` 실행.
+   - `arena_market_structure_v1_ready`, `arena_shadow_vnext_ready` 확인.
+
+2. **Step 5B: shadow vNext live capture 확인**
+   - `arena_market_feature_snapshots` 최신 row 확인.
+   - `arena_shadow_decisions` 최신 row 확인.
+   - 기존 `paper_positions` 신규 open 여부와 분리 확인.
+
+3. **Step 5C: risk layer live verification**
+   - 신규 open 또는 `risk_blocked` 발생 후 `risk_decision`, `risk_snapshot`, `arena_risk_events` 확인.
+   - 기존 legacy open position은 snapshot이 비어 있으므로 신규 포지션 기준으로 판단한다.
+
+4. **Step 5D: walk-forward/report mart 적용 상태 확인**
+   - `arena.walk_forward --save` 실행.
+   - split 기반 train/test backtest dry-run.
+   - report mart에서 `research_only`, `end_of_data` 분리 확인.
+
+5. **Longer data accumulation**
+   - live forward test 누적.
+   - macro snapshot 장기 이력 확보.
+   - market-structure raw coverage 확보.
+
+6. **Rule parity gap tests**
+   - stop-loss trade가 발생하면 `stop_loss_fill_policy`가 pass/fail로 실제 검증되는지 확인.
+   - funding 포함 backtest에서 `ret_pct = gross - cost + funding` 검증.
+
+7. **운영 정리**
+   - `deploy/deploy.sh`를 현재 EC2 경량 배포 구조에 맞게 고치거나 Git checkout 방식으로 원격 구조를 통일한다.
+   - Lambda legacy 처리 방침 결정.
+
+8. **ML/RL Overlay는 나중**
+   - walk-forward split 최소 3개.
+   - validation critical/high fail 0.
+   - shadow 30일 이상.
+   - funding/OI/mark data coverage 90% 이상.
+
+9. **제품/리더보드는 나중**
+   - 최소 수개월, 가능하면 1,000개 이상의 live decision/position 기록 확보 후 공개 판단.
+
+## 검증 명령
+
+로컬 테스트:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest \
+  tests/test_arena_parameters.py \
+  tests/test_arena_data_lake.py \
+  tests/test_arena_execution_rules.py \
+  tests/test_arena_backtest.py \
+  tests/test_arena_backtest_validation.py \
+  tests/test_arena_risk.py -q
+```
+
+lint:
+
+```bash
+.venv/bin/python -m ruff check src/arena \
+  tests/test_arena_parameters.py \
+  tests/test_arena_data_lake.py \
+  tests/test_arena_execution_rules.py \
+  tests/test_arena_backtest.py \
+  tests/test_arena_backtest_validation.py \
+  tests/test_arena_risk.py \
+  scripts/verify_arena_data_lake.py
+```
+
+서비스 상태:
+
+```bash
+ssh -i ~/.ssh/arena_ed25519 ubuntu@3.39.201.112 'systemctl is-active arena.service'
+```

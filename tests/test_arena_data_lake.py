@@ -197,5 +197,11 @@ def test_record_strategy_metadata_upserts_strategy_and_features(monkeypatch) -> 
     feature_builder = fake_db.builders["arena_feature_registry"]
     assert feature_builder.on_conflict == "feature_set_version,feature_name"
     assert feature_builder.executed is True
-    assert len(feature_builder.rows) == 10
-    assert {row["feature_name"] for row in feature_builder.rows} >= {"rsi", "atr", "fng"}
+    assert len(feature_builder.rows) == 16
+    assert {row["feature_name"] for row in feature_builder.rows} >= {
+        "rsi",
+        "atr",
+        "fng",
+        "ema_fast",
+        "funding_rate_24h",
+    }

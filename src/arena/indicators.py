@@ -85,6 +85,56 @@ def bb_width(closes: list[float], period: int = parameters.BOLLINGER_PERIOD) -> 
     return band_width_pct
 
 
+def ema_value(closes: list[float], period: int) -> float:
+    values = _ema(closes, period)
+    if values:
+        return values[-1]
+    return closes[-1] if closes else 0.0
+
+
+def ema_slope(closes: list[float], period: int) -> float:
+    values = _ema(closes, period)
+    if len(values) < 2:
+        return 0.0
+    return values[-1] - values[-2]
+
+
+def return_over_bars(closes: list[float], bars: int) -> float:
+    if bars <= 0 or len(closes) <= bars:
+        return 0.0
+    base = closes[-bars - 1]
+    if base <= 0:
+        return 0.0
+    return closes[-1] / base - 1.0
+
+
+def realized_vol(closes: list[float], bars: int) -> float:
+    if bars <= 1 or len(closes) <= bars:
+        return 0.0
+    window = closes[-(bars + 1) :]
+    returns = []
+    for prev, current in zip(window, window[1:]):
+        if prev <= 0:
+            continue
+        returns.append(math.log(current / prev))
+    if len(returns) < 2:
+        return 0.0
+    mean = sum(returns) / len(returns)
+    variance = sum((ret - mean) ** 2 for ret in returns) / len(returns)
+    return math.sqrt(variance)
+
+
+def high_low_range_atr_ratio(
+    highs: list[float],
+    lows: list[float],
+    atr_value: float,
+    bars: int,
+) -> float:
+    if bars <= 0 or len(highs) < bars or len(lows) < bars or atr_value <= 0:
+        return 0.0
+    return (max(highs[-bars:]) - min(lows[-bars:])) / atr_value
+
+
 def atr(
     highs: list[float],
     lows: list[float],
@@ -114,11 +164,29 @@ def atr(
 
 def compute(highs: list[float], lows: list[float], closes: list[float]) -> dict[str, float]:
     hist, hist_prev = macd_histogram(closes)
+    atr_value = atr(highs, lows, closes)
+    close = closes[-1] if closes else 0.0
+    ema_fast = ema_value(closes, parameters.TREND_EMA_FAST_PERIOD)
+    ema_slow = ema_value(closes, parameters.TREND_EMA_SLOW_PERIOD)
     return {
         "rsi": rsi(closes),
         "macd_hist": hist,
         "macd_hist_prev": hist_prev,
         "bb_pos": bb_position(closes),
         "bb_width": bb_width(closes),
-        "atr": atr(highs, lows, closes),
+        "atr": atr_value,
+        "atr_pct": atr_value / close if close > 0 else 0.0,
+        "ema_fast": ema_fast,
+        "ema_slow": ema_slow,
+        "ema_fast_slope": ema_slope(closes, parameters.TREND_EMA_FAST_PERIOD),
+        "ema_slow_slope": ema_slope(closes, parameters.TREND_EMA_SLOW_PERIOD),
+        "return_24h": return_over_bars(closes, parameters.TREND_RETURN_24H_BARS),
+        "return_72h": return_over_bars(closes, parameters.TREND_RETURN_72H_BARS),
+        "realized_vol_24h": realized_vol(closes, parameters.TREND_REALIZED_VOL_24H_BARS),
+        "range_24h_atr": high_low_range_atr_ratio(
+            highs,
+            lows,
+            atr_value,
+            parameters.TREND_RETURN_24H_BARS,
+        ),
     }

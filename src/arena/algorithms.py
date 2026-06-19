@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from . import parameters
+from . import parameters, regime
 
 
 def regime_v2(macro: dict, ind: dict) -> str | None:
@@ -87,6 +87,39 @@ def multi_factor(macro: dict, ind: dict) -> str | None:
         r == parameters.REGIME_SHORT_STATE
         and ind["rsi"] > parameters.MULTI_FACTOR_SHORT_RSI_MIN
         and h < 0
+    ):
+        return "short"
+    return None
+
+
+def trend_core_v1(macro: dict, ind: dict) -> str | None:
+    """Shadow-only trend-following core.
+
+    Live paper trading is intentionally unchanged; this signal is evaluated via
+    sleeves/allocator and written to arena_shadow_decisions only.
+    """
+    regime_state = macro.get("arena_regime_state") or macro.get("regime_state")
+    h = ind["macd_hist"]
+    threshold = ind.get("atr", 0.0) * parameters.TREND_CORE_MACD_ATR_THRESHOLD_MULTIPLE
+    ema_fast = ind.get("ema_fast", 0.0)
+    ema_slow = ind.get("ema_slow", 0.0)
+    ema_fast_slope = ind.get("ema_fast_slope", 0.0)
+    rsi = ind.get("rsi", 50.0)
+
+    if (
+        regime_state == regime.REGIME_BULL_TREND
+        and ema_fast > ema_slow
+        and ema_fast_slope > 0
+        and h > threshold
+        and rsi < parameters.TREND_CORE_RSI_LONG_MAX
+    ):
+        return "long"
+    if (
+        regime_state == regime.REGIME_BEAR_TREND
+        and ema_fast < ema_slow
+        and ema_fast_slope < 0
+        and h < -threshold
+        and rsi > parameters.TREND_CORE_RSI_SHORT_MIN
     ):
         return "short"
     return None

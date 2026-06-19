@@ -19,6 +19,7 @@ RUNTIME = "ec2"
 BINANCE_SYMBOL = "BTCUSDT"
 BINANCE_KLINE_INTERVAL = "4h"
 BINANCE_KLINES_LIMIT = 150
+ARENA_SHADOW_VNEXT_ENABLED = True
 
 HTTP_TIMEOUT_SECONDS = 30
 WEBSOCKET_PING_INTERVAL_SECONDS = 20
@@ -69,12 +70,31 @@ MACD_MOMENTUM_BB_WIDTH_MIN = 3.5  # BB 폭 최소값 (% of SMA): 미달 시 횡�
 MULTI_FACTOR_LONG_RSI_MAX = 50.0
 MULTI_FACTOR_SHORT_RSI_MIN = 55.0
 
+TREND_EMA_FAST_PERIOD = 12
+TREND_EMA_SLOW_PERIOD = 26
+TREND_RETURN_24H_BARS = 6
+TREND_RETURN_72H_BARS = 18
+TREND_REALIZED_VOL_24H_BARS = 6
+TREND_CORE_RSI_LONG_MAX = 70.0
+TREND_CORE_RSI_SHORT_MIN = 30.0
+TREND_CORE_MACD_ATR_THRESHOLD_MULTIPLE = 0.10
+REGIME_STRESS_RETURN_ATR_MULTIPLE = 3.0
+REGIME_STRESS_RANGE_ATR_MULTIPLE = 5.0
+REGIME_TREND_BB_WIDTH_MIN = 3.5
+REGIME_SIDEWAYS_BB_WIDTH_MAX = 3.5
+REGIME_SIDEWAYS_RETURN_ATR_MULTIPLE = 1.0
+
+ALLOCATOR_BUDGET_TREND_CORE = 0.60
+ALLOCATOR_BUDGET_LEGACY_RULE = 0.40
+ALLOCATOR_BUDGET_CARRY = 0.00
+
 MIN_HOLD_HOURS: dict[str, float] = {
     "regime_v2": 24.0,
     "fng_contrarian": 24.0,
     "vix_rsi": 8.0,
     "macd_momentum": 8.0,  # 4H 단일바 노이즈 제거 (12h↑는 역효과 확인됨)
     "multi_factor": 8.0,
+    "trend_core_v1": 12.0,
 }
 MIN_HOLD_FALLBACK_HOURS = 4.0
 
@@ -98,6 +118,7 @@ def base_params_snapshot() -> dict[str, Any]:
             "symbol": BINANCE_SYMBOL,
             "kline_interval": BINANCE_KLINE_INTERVAL,
             "klines_limit": BINANCE_KLINES_LIMIT,
+            "shadow_vnext_enabled": ARENA_SHADOW_VNEXT_ENABLED,
         },
         "schedule": {
             "cron_hour": SCHEDULER_CRON_HOUR,
@@ -128,6 +149,14 @@ def base_params_snapshot() -> dict[str, Any]:
             "macd_atr_threshold_multiple": MACD_ATR_THRESHOLD_MULTIPLE,
             "multi_factor_long_rsi_max": MULTI_FACTOR_LONG_RSI_MAX,
             "multi_factor_short_rsi_min": MULTI_FACTOR_SHORT_RSI_MIN,
+            "trend_core_rsi_long_max": TREND_CORE_RSI_LONG_MAX,
+            "trend_core_rsi_short_min": TREND_CORE_RSI_SHORT_MIN,
+            "trend_core_macd_atr_threshold_multiple": (TREND_CORE_MACD_ATR_THRESHOLD_MULTIPLE),
+            "regime_stress_return_atr_multiple": REGIME_STRESS_RETURN_ATR_MULTIPLE,
+            "regime_stress_range_atr_multiple": REGIME_STRESS_RANGE_ATR_MULTIPLE,
+            "regime_trend_bb_width_min": REGIME_TREND_BB_WIDTH_MIN,
+            "regime_sideways_bb_width_max": REGIME_SIDEWAYS_BB_WIDTH_MAX,
+            "regime_sideways_return_atr_multiple": REGIME_SIDEWAYS_RETURN_ATR_MULTIPLE,
         },
         "risk_defaults": {
             "stop_loss_fallback_pct": STOP_LOSS_FALLBACK_PCT,
@@ -145,5 +174,10 @@ def base_params_snapshot() -> dict[str, Any]:
             "daily_loss_limit_pct": DAILY_LOSS_LIMIT_PCT,
             "algo_max_drawdown_kill_pct": ALGO_MAX_DRAWDOWN_KILL_PCT,
             "cooldown_after_kill_hours": COOLDOWN_AFTER_KILL_HOURS,
+        },
+        "allocator": {
+            "trend_core_budget": ALLOCATOR_BUDGET_TREND_CORE,
+            "legacy_rule_budget": ALLOCATOR_BUDGET_LEGACY_RULE,
+            "carry_budget": ALLOCATOR_BUDGET_CARRY,
         },
     }

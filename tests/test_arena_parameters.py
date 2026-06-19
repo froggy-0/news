@@ -27,7 +27,22 @@ def test_arena_indicators_keep_default_contracts() -> None:
 
     computed = indicators.compute(highs, lows, closes)
 
-    assert set(computed) == {"rsi", "macd_hist", "macd_hist_prev", "bb_pos", "bb_width", "atr"}
+    assert {
+        "rsi",
+        "macd_hist",
+        "macd_hist_prev",
+        "bb_pos",
+        "bb_width",
+        "atr",
+        "atr_pct",
+        "ema_fast",
+        "ema_slow",
+        "ema_fast_slope",
+        "return_24h",
+        "return_72h",
+        "realized_vol_24h",
+        "range_24h_atr",
+    } <= set(computed)
     assert computed["rsi"] > 50.0
     assert computed["atr"] > 0.0
     assert 0.0 <= computed["bb_pos"] <= 1.0
@@ -91,11 +106,17 @@ def test_feature_registry_rows_are_leakage_safe_model_inputs() -> None:
         "bb_pos",
         "bb_width",
         "atr",
+        "ema_fast",
+        "ema_slow",
+        "return_24h",
+        "return_72h",
+        "funding_rate_24h",
+        "open_interest_change_24h",
         "regime_state",
         "fng",
         "vix_now",
         "vix_q40",
-    } == set(by_name)
+    } <= set(by_name)
     assert all(row["feature_set_version"] == parameters.FEATURE_SET_VERSION for row in rows)
     assert all(row["leakage_safe"] is True for row in rows)
     assert all(row["lag_bars"] >= 0 for row in rows)

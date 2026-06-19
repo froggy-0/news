@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 from uuid import uuid4
 
-from . import algorithms, execution_rules, indicators, parameters, risk
+from . import algorithms, execution_rules, indicators, market_structure, parameters, risk
 
 StrategyFn = Callable[[dict[str, Any], dict[str, float]], str | None]
 
@@ -36,6 +36,7 @@ class ReplayFrame:
     bar: ReplayBar
     indicators: dict[str, float]
     macro: dict[str, Any] = field(default_factory=dict)
+    market_features: dict[str, Any] = field(default_factory=dict)
 
     @property
     def data_timestamp(self) -> datetime:
@@ -119,6 +120,10 @@ class BacktestTrade:
     close_price: float
     stop_loss_price: float
     ret_pct: float
+    gross_ret_pct: float
+    trading_cost_pct: float
+    funding_ret_pct: float
+    net_ret_pct: float
     hold_hours: float
     exit_reason: str
     params_snapshot: dict[str, Any]
@@ -135,6 +140,13 @@ class BacktestRiskEvent:
     event_type: str
     risk_decision: dict[str, Any]
     risk_snapshot: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class FundingEvent:
+    symbol: str
+    funding_time: datetime
+    funding_rate: float
 
 
 @dataclass(frozen=True)
@@ -260,7 +272,26 @@ def _close_position(
     close_price: float,
     exit_reason: str,
     settings: BacktestSettings,
+    funding_events: list[FundingEvent] | None = None,
 ) -> BacktestTrade:
+    gross_ret = execution_rules.direction_sign(position.direction) * (
+        close_price / position.open_price - 1.0
+    )
+    trading_cost = 2.0 * (settings.fee_bps + settings.slippage_bps) / 10_000.0
+    funding_rows = [
+        {
+            "funding_time": execution_rules.format_utc_timestamp(event.funding_time),
+            "funding_rate": event.funding_rate,
+        }
+        for event in (funding_events or [])
+    ]
+    funding_ret = market_structure.funding_return_pct(
+        direction=position.direction,
+        funding_rates=funding_rows,
+        open_time=position.open_time,
+        close_time=close_time,
+    )
+    net_ret = gross_ret - trading_cost + funding_ret
     return BacktestTrade(
         algo_id=position.algo_id,
         direction=position.direction,
@@ -271,13 +302,11 @@ def _close_position(
         open_price=position.open_price,
         close_price=close_price,
         stop_loss_price=position.stop_loss_price,
-        ret_pct=execution_rules.fee_adjusted_return_pct(
-            direction=position.direction,
-            open_price=position.open_price,
-            close_price=close_price,
-            fee_bps=settings.fee_bps,
-            slippage_bps=settings.slippage_bps,
-        ),
+        ret_pct=net_ret,
+        gross_ret_pct=gross_ret,
+        trading_cost_pct=trading_cost,
+        funding_ret_pct=funding_ret,
+        net_ret_pct=net_ret,
         hold_hours=execution_rules.hold_hours(position.open_time, close_time),
         exit_reason=exit_reason,
         params_snapshot=position.params_snapshot,
@@ -318,6 +347,7 @@ def run_replay(
     strategy_fns: dict[str, StrategyFn] | None = None,
     settings: BacktestSettings | None = None,
     backtest_run_id: str | None = None,
+    funding_events: list[FundingEvent] | None = None,
 ) -> BacktestResult:
     settings = settings or BacktestSettings()
     strategy_fns = strategy_fns or algorithms.ALGORITHMS
@@ -335,6 +365,7 @@ def run_replay(
     risk_events: list[BacktestRiskEvent] = []
     daily_realized_by_date: dict[str, float] = {}
     policy = _risk_policy(settings)
+    funding_events = sorted(funding_events or [], key=lambda event: event.funding_time)
     started_at = datetime.now(timezone.utc)
 
     def _maybe_reset_drawdown(algo_id: str, now: datetime) -> None:
@@ -380,6 +411,7 @@ def run_replay(
                     close_price=stop_fill,
                     exit_reason="stop_loss",
                     settings=settings,
+                    funding_events=funding_events,
                 )
                 trades.append(trade)
                 record_realized(algo_id, trade.ret_pct, trade.close_time)
@@ -404,6 +436,7 @@ def run_replay(
                         close_price=frame.bar.close,
                         exit_reason="signal_flat",
                         settings=settings,
+                        funding_events=funding_events,
                     )
                     trades.append(trade)
                     record_realized(algo_id, trade.ret_pct, trade.close_time)
@@ -430,6 +463,7 @@ def run_replay(
                     close_price=frame.bar.close,
                     exit_reason="signal_reverse",
                     settings=settings,
+                    funding_events=funding_events,
                 )
                 trades.append(trade)
                 record_realized(algo_id, trade.ret_pct, trade.close_time)
@@ -502,6 +536,7 @@ def run_replay(
                 close_price=last_frame.bar.close,
                 exit_reason="end_of_data",
                 settings=settings,
+                funding_events=funding_events,
             )
             trades.append(trade)
             record_realized(algo_id, trade.ret_pct, trade.close_time)
@@ -668,6 +703,7 @@ async def load_frames_from_supabase(
             bar=bar,
             indicators=indicators.compute(highs, lows, closes),
             macro=macro,
+            market_features={},
         )
         # date range filter: warmup bars are consumed above but not emitted
         if from_date is not None and bar.close_time < from_date:
@@ -676,6 +712,44 @@ async def load_frames_from_supabase(
             continue
         frames.append(frame)
     return frames
+
+
+async def load_funding_events_from_supabase(
+    db: Any,
+    *,
+    symbol: str = parameters.BINANCE_SYMBOL,
+    from_date: datetime | None = None,
+    to_date: datetime | None = None,
+) -> list[FundingEvent]:
+    builder = (
+        db.table("arena_funding_rates")
+        .select("symbol,funding_time,funding_rate")
+        .eq(
+            "symbol",
+            symbol,
+        )
+    )
+    if from_date is not None:
+        builder = builder.gt("funding_time", _ts(from_date))
+    if to_date is not None:
+        builder = builder.lte("funding_time", _ts(to_date))
+    try:
+        res = await builder.order("funding_time").limit(5000).execute()
+    except Exception:
+        return []
+    events: list[FundingEvent] = []
+    for row in res.data or []:
+        try:
+            events.append(
+                FundingEvent(
+                    symbol=row["symbol"],
+                    funding_time=_row_ts(row["funding_time"]),
+                    funding_rate=float(row["funding_rate"]),
+                )
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
+    return events
 
 
 def _ts(value: datetime) -> str:
@@ -707,6 +781,7 @@ def _run_row(result: BacktestResult) -> dict[str, Any]:
             "macro_stale_hours": settings.macro_stale_hours,
             "min_hold_hours": settings.min_hold_hours,
             "portfolio_risk": risk.policy_snapshot(_risk_policy(settings)),
+            "funding_model": "funding_events_open_exclusive_close_inclusive_v1",
             "close_open_at_end": settings.close_open_at_end,
         },
         "data_start": _ts(frames[0].data_timestamp) if frames else None,
@@ -734,6 +809,10 @@ def _trade_rows(result: BacktestResult) -> list[dict[str, Any]]:
             "close_price": trade.close_price,
             "stop_loss_price": trade.stop_loss_price,
             "ret_pct": trade.ret_pct,
+            "gross_ret_pct": trade.gross_ret_pct,
+            "trading_cost_pct": trade.trading_cost_pct,
+            "funding_ret_pct": trade.funding_ret_pct,
+            "net_ret_pct": trade.net_ret_pct,
             "hold_hours": trade.hold_hours,
             "exit_reason": trade.exit_reason,
             "params_snapshot": trade.params_snapshot,
@@ -860,13 +939,19 @@ async def _amain(args: argparse.Namespace) -> int:
         print("프레임 없음 — date range 또는 데이터를 확인하세요.")
         return 1
 
+    funding_events = await load_funding_events_from_supabase(
+        db,
+        symbol=args.symbol,
+        from_date=frames[0].bar.close_time if frames else None,
+        to_date=frames[-1].bar.close_time if frames else None,
+    )
     settings = BacktestSettings(
         symbol=args.symbol,
         interval=args.interval,
         slippage_bps=args.slippage_bps,
         close_open_at_end=not args.keep_open_at_end,
     )
-    result = run_replay(frames, settings=settings)
+    result = run_replay(frames, settings=settings, funding_events=funding_events)
     if args.save:
         await save_result_to_supabase(db, result)
     print(json.dumps(_run_row(result), ensure_ascii=False, indent=2))

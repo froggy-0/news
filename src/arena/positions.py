@@ -1,0 +1,195 @@
+"""Supabase async CRUD — paper_positions 테이블. 신호 변경 기반 오픈/클로즈."""
+
+from __future__ import annotations
+
+import logging
+from datetime import datetime, time, timezone
+from typing import Any
+
+from supabase import AsyncClient, acreate_client
+
+from . import config, execution_rules, parameters, state
+from .algorithms import ALGORITHMS
+
+logger = logging.getLogger(__name__)
+
+_client: AsyncClient | None = None
+
+
+async def init() -> None:
+    global _client
+    _client = await acreate_client(config.SUPABASE_URL, config.SUPABASE_KEY)
+    logger.info("Supabase client initialized")
+
+
+def _db() -> AsyncClient:
+    if _client is None:
+        raise RuntimeError("positions.init() not called")
+    return _client
+
+
+def db() -> AsyncClient:
+    return _db()
+
+
+async def refresh_open_positions() -> None:
+    """DB에서 오픈 포지션 로드 → state.open_positions 갱신."""
+    res = await _db().table("paper_positions").select("*").eq("status", "open").execute()
+    by_algo: dict[str, dict | None] = {k: None for k in ALGORITHMS}
+    for row in res.data:
+        by_algo[row["algo_id"]] = row
+    state.open_positions.update(by_algo)
+    logger.info(
+        "Open positions refreshed: %s", {k: v is not None for k, v in state.open_positions.items()}
+    )
+
+
+async def risk_metrics(now: datetime) -> dict[str, Any]:
+    """Return realized daily PnL and per-algo max drawdown from closed paper trades."""
+    now_utc = execution_rules.parse_utc_datetime(now)
+    day_start = datetime.combine(now_utc.date(), time.min, tzinfo=timezone.utc)
+    res = (
+        await _db()
+        .table("paper_positions")
+        .select("algo_id,ret_pct,close_time")
+        .eq("status", "closed")
+        .order("close_time")
+        .limit(10000)
+        .execute()
+    )
+
+    daily_realized = 0.0
+    equity_by_algo: dict[str, float] = {}
+    peak_by_algo: dict[str, float] = {}
+    drawdown_by_algo: dict[str, float] = {}
+    for row in res.data or []:
+        ret_pct = row.get("ret_pct")
+        if ret_pct is None:
+            continue
+        algo_id = row.get("algo_id")
+        if not algo_id:
+            continue
+        close_time = row.get("close_time")
+        if close_time and execution_rules.parse_utc_datetime(close_time) >= day_start:
+            daily_realized += float(ret_pct)
+
+        equity = equity_by_algo.get(algo_id, 1.0) * (1.0 + float(ret_pct))
+        peak = max(peak_by_algo.get(algo_id, 1.0), equity)
+        drawdown = equity / peak - 1.0
+        equity_by_algo[algo_id] = equity
+        peak_by_algo[algo_id] = peak
+        drawdown_by_algo[algo_id] = min(drawdown_by_algo.get(algo_id, 0.0), drawdown)
+
+    return {
+        "daily_realized_ret_pct": daily_realized,
+        "algo_drawdown_pct": drawdown_by_algo,
+    }
+
+
+async def open_position(
+    algo_id: str,
+    direction: str,
+    open_time: datetime,
+    open_price: float,
+    stop_loss_price: float,
+    *,
+    data_timestamp: datetime,
+    strategy_version: str,
+    params_version: str,
+    params_snapshot: dict[str, Any],
+    indicator_snapshot: dict[str, Any],
+    macro_snapshot: dict[str, Any],
+    market_snapshot: dict[str, Any],
+    signal_reason: dict[str, Any],
+    risk_snapshot: dict[str, Any] | None = None,
+) -> dict:
+    """포지션 오픈. stop_loss_price는 ATR 기반으로 계산된 절대 가격."""
+    payload = {
+        "algo_id": algo_id,
+        "direction": direction,
+        "status": "open",
+        "open_time": open_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "data_timestamp": data_timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "open_price": open_price,
+        "stop_loss_price": stop_loss_price,
+        "fee_bps": config.FEE_BPS,
+        "strategy_version": strategy_version,
+        "params_version": params_version,
+        "params_snapshot": params_snapshot,
+        "indicator_snapshot": indicator_snapshot,
+        "macro_snapshot": macro_snapshot,
+        "market_snapshot": market_snapshot,
+        "signal_reason": signal_reason,
+        "risk_snapshot": risk_snapshot or {},
+        "runtime": parameters.RUNTIME,
+    }
+    try:
+        res = await _db().table("paper_positions").insert(payload).execute()
+    except Exception as exc:
+        if "risk_snapshot" not in str(exc):
+            raise
+        logger.warning("paper_positions.risk_snapshot unavailable; retrying legacy insert")
+        payload.pop("risk_snapshot", None)
+        res = await _db().table("paper_positions").insert(payload).execute()
+    row = res.data[0]
+    logger.info(
+        "Opened: %s %s @ %.2f  SL=%.2f (id=%s)",
+        algo_id,
+        direction,
+        open_price,
+        stop_loss_price,
+        row["id"],
+    )
+    return row
+
+
+async def close_position(
+    position_id: int,
+    close_time: datetime,
+    close_price: float,
+    *,
+    is_stop_loss: bool = False,
+) -> float:
+    pos = (
+        await _db()
+        .table("paper_positions")
+        .select("algo_id, direction, open_price, open_time, fee_bps")
+        .eq("id", position_id)
+        .single()
+        .execute()
+    )
+    row = pos.data
+    ret_pct = execution_rules.fee_adjusted_return_pct(
+        direction=row["direction"],
+        open_price=row["open_price"],
+        close_price=close_price,
+        fee_bps=row["fee_bps"],
+    )
+    hold_hours = execution_rules.hold_hours(row["open_time"], close_time)
+
+    await (
+        _db()
+        .table("paper_positions")
+        .update(
+            {
+                "status": "closed",
+                "close_time": close_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "close_price": close_price,
+                "ret_pct": ret_pct,
+                "hit": ret_pct > 0,
+                "is_stop_loss": is_stop_loss,
+                "hold_hours": round(hold_hours, 2),
+            }
+        )
+        .eq("id", position_id)
+        .execute()
+    )
+    logger.info(
+        "Closed: %s %s ret=%.2f%% hold=%.1fh stop_loss=%s",
+        row["algo_id"],
+        row["direction"],
+        ret_pct * 100,
+        hold_hours,
+        is_stop_loss,
+    )
+    return ret_pct
