@@ -103,6 +103,34 @@ async def _safe_execute(label: str, builder: Any) -> CaptureWriteResult:
         return CaptureWriteResult(label=label, ok=False, error=str(exc))
 
 
+async def _safe_execute_optional_constraint(
+    label: str,
+    builder: Any,
+    *,
+    constraint_name: str,
+) -> CaptureWriteResult:
+    try:
+        await builder.execute()
+        return CaptureWriteResult(label=label, ok=True)
+    except Exception as exc:
+        if constraint_name in str(exc):
+            logger.info(
+                "Arena optional write skipped by current DB constraint: %s (%s)",
+                label,
+                constraint_name,
+            )
+            return CaptureWriteResult(label=f"{label}.schema_skipped", ok=True)
+        logger.warning("Arena data lake write failed: %s (%s)", label, exc)
+        return CaptureWriteResult(label=label, ok=False, error=str(exc))
+
+
+def _legacy_feature_registry_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {**row, "layer": "raw_market"} if row.get("layer") == "market_structure" else row
+        for row in rows
+    ]
+
+
 async def record_run_started(
     *,
     run_id: str,
@@ -151,15 +179,30 @@ async def record_strategy_metadata(
             on_conflict="strategy_version",
         ),
     )
+    feature_rows = feature_registry.feature_registry_rows()
     feature_result = await _safe_execute(
         "arena_feature_registry.upsert",
         positions.db()
         .table("arena_feature_registry")
         .upsert(
-            feature_registry.feature_registry_rows(),
+            feature_rows,
             on_conflict="feature_set_version,feature_name",
         ),
     )
+    if (
+        not feature_result.ok
+        and feature_result.error
+        and "arena_feature_registry_layer_check" in feature_result.error
+    ):
+        feature_result = await _safe_execute(
+            "arena_feature_registry.upsert.legacy_layer",
+            positions.db()
+            .table("arena_feature_registry")
+            .upsert(
+                _legacy_feature_registry_rows(feature_rows),
+                on_conflict="feature_set_version,feature_name",
+            ),
+        )
     return [strategy_result, feature_result]
 
 
@@ -364,17 +407,29 @@ async def record_market_structure_snapshot(
             )
         )
 
-    mark_rows = snapshot.mark_price_bars + snapshot.premium_index_bars
-    if mark_rows:
+    if snapshot.mark_price_bars:
         results.append(
             await _safe_execute(
                 "arena_mark_price_bars.upsert",
                 positions.db()
                 .table("arena_mark_price_bars")
                 .upsert(
-                    mark_rows,
+                    snapshot.mark_price_bars,
                     on_conflict="exchange,symbol,interval,price_type,open_time",
                 ),
+            )
+        )
+    if snapshot.premium_index_bars:
+        results.append(
+            await _safe_execute_optional_constraint(
+                "arena_mark_price_bars.premium_index.upsert",
+                positions.db()
+                .table("arena_mark_price_bars")
+                .upsert(
+                    snapshot.premium_index_bars,
+                    on_conflict="exchange,symbol,interval,price_type,open_time",
+                ),
+                constraint_name="arena_mark_price_bars_price_check",
             )
         )
 

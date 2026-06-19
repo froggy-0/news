@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timezone
 
 from arena import data_lake, parameters
+from arena.market_structure import MarketStructureSnapshot
 
 
 def test_parse_binance_kline_preserves_raw_ohlcv_contract() -> None:
@@ -205,3 +206,147 @@ def test_record_strategy_metadata_upserts_strategy_and_features(monkeypatch) -> 
         "ema_fast",
         "funding_rate_24h",
     }
+
+
+def test_record_strategy_metadata_falls_back_for_legacy_layer_constraint(monkeypatch) -> None:
+    class FakeBuilder:
+        def __init__(self, table_name: str, *, should_fail: bool = False) -> None:
+            self.table_name = table_name
+            self.should_fail = should_fail
+            self.rows = None
+            self.on_conflict = ""
+            self.executed = False
+
+        def upsert(self, rows, *, on_conflict: str):
+            self.rows = rows
+            self.on_conflict = on_conflict
+            return self
+
+        async def execute(self) -> None:
+            self.executed = True
+            if self.should_fail:
+                raise RuntimeError("arena_feature_registry_layer_check")
+
+    class FakeDb:
+        def __init__(self) -> None:
+            self.builders: dict[str, list[FakeBuilder]] = {}
+            self.feature_attempts = 0
+
+        def table(self, table_name: str) -> FakeBuilder:
+            should_fail = table_name == "arena_feature_registry" and self.feature_attempts == 0
+            if table_name == "arena_feature_registry":
+                self.feature_attempts += 1
+            builder = FakeBuilder(table_name, should_fail=should_fail)
+            self.builders.setdefault(table_name, []).append(builder)
+            return builder
+
+    fake_db = FakeDb()
+    monkeypatch.setattr(data_lake.positions, "db", lambda: fake_db)
+
+    results = asyncio.run(
+        data_lake.record_strategy_metadata(params_snapshot=parameters.base_params_snapshot())
+    )
+
+    assert [result.ok for result in results] == [True, True]
+    feature_attempts = fake_db.builders["arena_feature_registry"]
+    assert len(feature_attempts) == 2
+    assert any(row["layer"] == "market_structure" for row in feature_attempts[0].rows)
+    assert all(row["layer"] != "market_structure" for row in feature_attempts[1].rows)
+    assert {
+        row["layer"]
+        for row in feature_attempts[1].rows
+        if row["source_table"] == "arena_market_feature_snapshots"
+    } == {"raw_market"}
+
+
+def test_record_market_structure_snapshot_tolerates_legacy_premium_constraint(
+    monkeypatch,
+) -> None:
+    class FakeBuilder:
+        def __init__(self, table_name: str) -> None:
+            self.table_name = table_name
+            self.rows = None
+            self.on_conflict = ""
+            self.executed = False
+
+        def upsert(self, rows, *, on_conflict: str):
+            self.rows = rows
+            self.on_conflict = on_conflict
+            return self
+
+        async def execute(self) -> None:
+            self.executed = True
+            rows = self.rows if isinstance(self.rows, list) else [self.rows]
+            if (
+                self.table_name == "arena_mark_price_bars"
+                and rows
+                and rows[0].get("price_type") == "premium_index"
+            ):
+                raise RuntimeError("arena_mark_price_bars_price_check")
+
+    class FakeDb:
+        def __init__(self) -> None:
+            self.builders: dict[str, list[FakeBuilder]] = {}
+
+        def table(self, table_name: str) -> FakeBuilder:
+            builder = FakeBuilder(table_name)
+            self.builders.setdefault(table_name, []).append(builder)
+            return builder
+
+    fake_db = FakeDb()
+    monkeypatch.setattr(data_lake.positions, "db", lambda: fake_db)
+    fetched_at = datetime(2026, 6, 19, 1, 2, 3, tzinfo=timezone.utc)
+    snapshot = MarketStructureSnapshot(
+        symbol="BTCUSDT",
+        interval="4h",
+        data_timestamp=fetched_at,
+        fetched_at=fetched_at,
+        funding_rates=[],
+        open_interest=[],
+        basis=[],
+        mark_price_bars=[
+            {
+                "exchange": "binance",
+                "symbol": "BTCUSDT",
+                "interval": "4h",
+                "price_type": "mark_price",
+                "open_time": "2026-06-19T00:00:00Z",
+                "close_time": "2026-06-19T03:59:59Z",
+                "open": 100.0,
+                "high": 101.0,
+                "low": 99.0,
+                "close": 100.5,
+                "raw_payload": [],
+                "fetched_at": "2026-06-19T01:02:03Z",
+            }
+        ],
+        premium_index_bars=[
+            {
+                "exchange": "binance",
+                "symbol": "BTCUSDT",
+                "interval": "4h",
+                "price_type": "premium_index",
+                "open_time": "2026-06-19T00:00:00Z",
+                "close_time": "2026-06-19T03:59:59Z",
+                "open": -0.001,
+                "high": 0.001,
+                "low": -0.002,
+                "close": -0.0005,
+                "raw_payload": [],
+                "fetched_at": "2026-06-19T01:02:03Z",
+            }
+        ],
+        features={"quality_status": "ok"},
+        errors=[],
+    )
+
+    results = asyncio.run(
+        data_lake.record_market_structure_snapshot(run_id="run-3", snapshot=snapshot)
+    )
+
+    assert all(result.ok for result in results)
+    assert any(
+        result.label == "arena_mark_price_bars.premium_index.upsert.schema_skipped"
+        for result in results
+    )
+    assert len(fake_db.builders["arena_mark_price_bars"]) == 2

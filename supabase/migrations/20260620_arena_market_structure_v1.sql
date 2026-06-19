@@ -79,7 +79,10 @@ CREATE TABLE IF NOT EXISTS arena_mark_price_bars (
     CONSTRAINT arena_mark_price_bars_price_type_check
         CHECK (price_type IN ('mark_price', 'premium_index')),
     CONSTRAINT arena_mark_price_bars_price_check
-        CHECK (open > 0 AND high > 0 AND low > 0 AND close > 0),
+        CHECK (
+            price_type = 'premium_index'
+            OR (open > 0 AND high > 0 AND low > 0 AND close > 0)
+        ),
     CONSTRAINT arena_mark_price_bars_ohlc_shape_check
         CHECK (high >= low AND high >= open AND high >= close AND low <= open AND low <= close)
 );

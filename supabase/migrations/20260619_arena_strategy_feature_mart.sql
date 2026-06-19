@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS arena_feature_registry (
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (feature_set_version, feature_name),
     CONSTRAINT arena_feature_registry_layer_check
-        CHECK (layer IN ('raw_market', 'derived_indicator', 'macro', 'decision', 'label')),
+        CHECK (layer IN ('raw_market', 'derived_indicator', 'macro', 'decision', 'label', 'market_structure')),
     CONSTRAINT arena_feature_registry_risk_impact_check
         CHECK (risk_impact IN ('low', 'medium', 'high')),
     CONSTRAINT arena_feature_registry_lag_check
