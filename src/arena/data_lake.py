@@ -124,6 +124,27 @@ async def _safe_execute_optional_constraint(
         return CaptureWriteResult(label=label, ok=False, error=str(exc))
 
 
+async def _safe_execute_retryable_constraint(
+    label: str,
+    builder: Any,
+    *,
+    constraint_name: str,
+) -> CaptureWriteResult:
+    try:
+        await builder.execute()
+        return CaptureWriteResult(label=label, ok=True)
+    except Exception as exc:
+        if constraint_name in str(exc):
+            logger.info(
+                "Arena data lake write will retry with compatibility fallback: %s (%s)",
+                label,
+                constraint_name,
+            )
+        else:
+            logger.warning("Arena data lake write failed: %s (%s)", label, exc)
+        return CaptureWriteResult(label=label, ok=False, error=str(exc))
+
+
 def _legacy_feature_registry_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         {**row, "layer": "raw_market"} if row.get("layer") == "market_structure" else row
@@ -180,7 +201,7 @@ async def record_strategy_metadata(
         ),
     )
     feature_rows = feature_registry.feature_registry_rows()
-    feature_result = await _safe_execute(
+    feature_result = await _safe_execute_retryable_constraint(
         "arena_feature_registry.upsert",
         positions.db()
         .table("arena_feature_registry")
@@ -188,6 +209,7 @@ async def record_strategy_metadata(
             feature_rows,
             on_conflict="feature_set_version,feature_name",
         ),
+        constraint_name="arena_feature_registry_layer_check",
     )
     if (
         not feature_result.ok
