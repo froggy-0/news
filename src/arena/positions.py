@@ -18,7 +18,8 @@ _client: AsyncClient | None = None
 
 async def init() -> None:
     global _client
-    _client = await acreate_client(config.SUPABASE_URL, config.SUPABASE_KEY)
+    supabase_url, supabase_key = config.require_supabase_config()
+    _client = await acreate_client(supabase_url, supabase_key)
     logger.info("Supabase client initialized")
 
 

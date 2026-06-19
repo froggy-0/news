@@ -23,8 +23,8 @@ def _require(key: str) -> str:
     return val
 
 
-SUPABASE_URL: str = _require("SUPABASE_URL")
-SUPABASE_KEY: str = _require("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_URL: str = os.environ.get("SUPABASE_URL", "").strip()
+SUPABASE_KEY: str = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 R2_BASE_URL: str = os.environ.get("NEXT_PUBLIC_R2_BASE_URL", "").rstrip("/")
 ENABLE_ARENA_SHADOW_VNEXT: bool = _bool_env(
     "ENABLE_ARENA_SHADOW_VNEXT",
@@ -82,3 +82,7 @@ BINANCE_REST_URL = "https://api.binance.com/api/v3/klines"
 SYMBOL = parameters.BINANCE_SYMBOL
 KLINES_LIMIT = parameters.BINANCE_KLINES_LIMIT
 LATEST_JSON_URL = f"{R2_BASE_URL}/analytics/sentiment/latest.json" if R2_BASE_URL else ""
+
+
+def require_supabase_config() -> tuple[str, str]:
+    return _require("SUPABASE_URL"), _require("SUPABASE_SERVICE_ROLE_KEY")
