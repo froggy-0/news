@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sovereign Arena — BTC Paper Trading</title>
+  <meta name="description" content="BTC algorithmic paper trading arena — live performance dashboard">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&family=Exo+2:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+
+    :root{
+      --bg:#0F172A;
+      --surface:rgba(255,255,255,.04);
+      --surface-h:rgba(255,255,255,.07);
+      --border:rgba(255,255,255,.08);
+      --border-s:rgba(255,255,255,.14);
+      --text:#F1F5F9;
+      --muted:#64748B;
+      --muted2:#94A3B8;
+      --pos:#34D399;
+      --neg:#F87171;
+      --amber:#F59E0B;
+    }
+
+    body{
+      font-family:'Exo 2',sans-serif;
+      background:var(--bg);
+      color:var(--text);
+      min-height:100vh;
+      overflow-x:hidden;
+    }
+
+    body::before{
+      content:'';
+      position:fixed;inset:0;z-index:0;pointer-events:none;
+      background-image:
+        linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),
+        linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
+      background-size:44px 44px;
+    }
+
+    /* ── Header ─────────────────────────────── */
+    .hd{
+      position:sticky;top:0;z-index:50;
+      background:rgba(15,23,42,.88);
+      -webkit-backdrop-filter:blur(16px);
+      backdrop-filter:blur(16px);
+      border-bottom:1px solid var(--border);
+      padding:13px 24px;
+      display:flex;align-items:center;justify-content:space-between;
+    }
+
+    .hd-brand{display:flex;align-items:baseline;gap:12px}
+    .hd-title{
+      font-family:'Orbitron',sans-serif;
+      font-size:14px;font-weight:700;letter-spacing:2.5px;color:var(--amber);
+    }
+    .hd-sub{font-size:11px;color:var(--muted);letter-spacing:.4px}
+
+    .hd-right{display:flex;align-items:center;gap:20px}
+    .btc-wrap{display:flex;align-items:baseline;gap:7px}
+    .btc-price{
+      font-family:'Orbitron',sans-serif;
+      font-size:13px;font-weight:600;color:var(--text);
+    }
+    .btc-chg{font-size:11px;font-weight:500}
+    .pos-c{color:var(--pos)}.neg-c{color:var(--neg)}
+
+    .live-badge{
+      display:flex;align-items:center;gap:6px;
+      font-family:'Orbitron',sans-serif;font-size:9px;
+      letter-spacing:1.5px;color:var(--pos);
+    }
+    .live-dot{
+      width:6px;height:6px;border-radius:50%;background:var(--pos);
+      animation:pulse 2s ease-in-out infinite;
+    }
+
+    /* ── Main ───────────────────────────────── */
+    .wrap{
+      position:relative;z-index:1;
+      max-width:1440px;margin:0 auto;padding:24px;
+    }
+
+    /* ── Algo cards ─────────────────────────── */
+    .algo-grid{
+      display:grid;
+      grid-template-columns:repeat(5,minmax(0,1fr));
+      gap:10px;margin-bottom:18px;
+    }
+    @media(max-width:900px){.algo-grid{grid-template-columns:repeat(3,1fr)}}
+    @media(max-width:560px){.algo-grid{grid-template-columns:repeat(2,1fr)}.wrap{padding:12px}}
+
+    .ac{
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-top:2px solid var(--ac);
+      padding:14px 16px;
+      transition:background 180ms,border-color 180ms;
+      cursor:default;
+    }
+    .ac:hover{background:var(--surface-h);border-color:var(--border-s)}
+
+    .ac-name{
+      font-family:'Orbitron',sans-serif;
+      font-size:8px;letter-spacing:1.2px;
+      color:var(--ac);margin-bottom:7px;text-transform:uppercase;
+    }
+    .ac-ret{
+      font-family:'Orbitron',sans-serif;
+      font-size:21px;font-weight:700;line-height:1;margin-bottom:9px;
+    }
+    .ac-bottom{display:flex;justify-content:space-between;align-items:flex-end}
+    .ac-stats{font-size:10px;color:var(--muted);line-height:1.7}
+    .ac-entry{font-size:9px;color:var(--ac)}
+
+    .pb{
+      font-size:9px;font-family:'Orbitron',sans-serif;letter-spacing:.5px;
+      padding:3px 7px;border:1px solid currentColor;
+    }
+    .pb-long{color:#60A5FA}.pb-short{color:#F87171}.pb-flat{color:var(--muted)}
+
+    /* ── Panel ──────────────────────────────── */
+    .panel{
+      background:var(--surface);
+      border:1px solid var(--border);
+      padding:20px;margin-bottom:14px;
+    }
+    .ph{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+    .ptitle{
+      font-family:'Orbitron',sans-serif;
+      font-size:9px;letter-spacing:2px;
+      color:var(--muted2);text-transform:uppercase;
+    }
+    .pmeta{font-size:11px;color:var(--muted)}
+
+    /* ── Chart legend ───────────────────────── */
+    .legend{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:12px}
+    .li{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted2)}
+    .ll{width:18px;height:2px;flex-shrink:0;display:inline-block}
+
+    /* ── Trade log ──────────────────────────── */
+    .tlog-scroll{max-height:420px;overflow-y:auto}
+    .tlog-scroll::-webkit-scrollbar{width:3px}
+    .tlog-scroll::-webkit-scrollbar-track{background:transparent}
+    .tlog-scroll::-webkit-scrollbar-thumb{background:var(--border-s)}
+
+    .tbl{width:100%;border-collapse:collapse;font-size:12px}
+    .tbl th{
+      font-family:'Orbitron',sans-serif;font-size:8px;
+      letter-spacing:1.2px;color:var(--muted);text-transform:uppercase;font-weight:400;
+      padding:0 10px 10px 0;text-align:left;
+      border-bottom:1px solid var(--border);
+    }
+    .tbl td{
+      padding:9px 10px 9px 0;
+      border-bottom:1px solid rgba(255,255,255,.04);
+      vertical-align:middle;
+      font-family:'Exo 2',sans-serif;
+    }
+    .tbl tr:last-child td{border-bottom:none}
+    .tbl tr:hover td{background:rgba(255,255,255,.02)}
+
+    .dbadge{
+      font-size:9px;font-family:'Orbitron',sans-serif;
+      letter-spacing:.5px;padding:2px 6px;border:1px solid;
+    }
+    .dl{color:#60A5FA;border-color:rgba(96,165,250,.35)}
+    .ds{color:#F87171;border-color:rgba(248,113,113,.35)}
+
+    .abadge{
+      font-size:9px;font-family:'Orbitron',sans-serif;
+      letter-spacing:.3px;padding:2px 5px;border:1px solid;
+      max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+      display:inline-block;
+    }
+
+    .rp{color:var(--pos);font-weight:600}
+    .rn{color:var(--neg);font-weight:600}
+    .ro{color:var(--muted);font-size:11px}
+    .sl-tag{
+      font-size:8px;color:var(--neg);
+      background:rgba(248,113,113,.12);
+      padding:1px 4px;margin-left:4px;letter-spacing:.5px;
+    }
+
+    /* ── Footer ─────────────────────────────── */
+    .ft{
+      text-align:center;padding:20px 24px;
+      font-size:11px;color:var(--muted);
+      border-top:1px solid var(--border);
+    }
+
+    /* ── Skeleton ───────────────────────────── */
+    .sk{
+      background:linear-gradient(90deg,rgba(255,255,255,.04) 25%,rgba(255,255,255,.09) 50%,rgba(255,255,255,.04) 75%);
+      background-size:200% 100%;
+      animation:shimmer 1.5s infinite;
+      border-radius:2px;
+    }
+
+    /* ── Animations ─────────────────────────── */
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.2}}
+    @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+    @keyframes fadeSlide{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:translateY(0)}}
+    .new-row{animation:fadeSlide .3s ease}
+
+    @media(prefers-reduced-motion:reduce){
+      *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+    }
+  </style>
+</head>
+<body>
+
+<header class="hd" role="banner">
+  <div class="hd-brand">
+    <span class="hd-title">SOVEREIGN ARENA</span>
+    <span class="hd-sub">BTCUSDT · 4H · paper trading</span>
+  </div>
+  <div class="hd-right">
+    <div class="btc-wrap">
+      <span class="btc-price" id="btcPrice" aria-live="polite">—</span>
+      <span class="btc-chg pos-c" id="btcChg">—</span>
+    </div>
+    <div class="live-badge" aria-label="Live realtime data">
+      <span class="live-dot" aria-hidden="true"></span>
+      LIVE
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section aria-label="Algorithm performance summary">
+    <div class="algo-grid" id="algoGrid">
+      <!-- skeleton placeholders -->
+      <div class="ac" style="--ac:#64748B"><div class="sk" style="height:8px;width:60%;margin-bottom:10px"></div><div class="sk" style="height:21px;width:80%;margin-bottom:10px"></div><div class="sk" style="height:10px;width:90%"></div></div>
+      <div class="ac" style="--ac:#64748B"><div class="sk" style="height:8px;width:60%;margin-bottom:10px"></div><div class="sk" style="height:21px;width:80%;margin-bottom:10px"></div><div class="sk" style="height:10px;width:90%"></div></div>
+      <div class="ac" style="--ac:#64748B"><div class="sk" style="height:8px;width:60%;margin-bottom:10px"></div><div class="sk" style="height:21px;width:80%;margin-bottom:10px"></div><div class="sk" style="height:10px;width:90%"></div></div>
+      <div class="ac" style="--ac:#64748B"><div class="sk" style="height:8px;width:60%;margin-bottom:10px"></div><div class="sk" style="height:21px;width:80%;margin-bottom:10px"></div><div class="sk" style="height:10px;width:90%"></div></div>
+      <div class="ac" style="--ac:#64748B"><div class="sk" style="height:8px;width:60%;margin-bottom:10px"></div><div class="sk" style="height:21px;width:80%;margin-bottom:10px"></div><div class="sk" style="height:10px;width:90%"></div></div>
+    </div>
+  </section>
+
+  <section aria-label="Equity curves chart">
+    <div class="panel">
+      <div class="ph">
+        <span class="ptitle">Equity Curves</span>
+        <span class="pmeta">cumulative return % · launch → now</span>
+      </div>
+      <div class="legend" id="chartLegend" aria-hidden="true"></div>
+      <div style="position:relative;height:240px">
+        <canvas id="eqChart"
+          role="img"
+          aria-label="Line chart showing cumulative return percentage for each algorithm since launch. Hover for values.">
+        </canvas>
+      </div>
+    </div>
+  </section>
+
+  <section aria-label="Trade log">
+    <div class="panel">
+      <div class="ph">
+        <span class="ptitle">Trade Log</span>
+        <span class="pmeta" id="tradeCountLabel" aria-live="polite">loading…</span>
+      </div>
+      <div class="tlog-scroll" role="region" aria-label="Scrollable trade history">
+        <table class="tbl" role="table" aria-label="Trade history">
+          <thead>
+            <tr>
+              <th scope="col">Time (KST)</th>
+              <th scope="col">Algo</th>
+              <th scope="col">Dir</th>
+              <th scope="col">Entry</th>
+              <th scope="col">Exit</th>
+              <th scope="col">Return</th>
+              <th scope="col">Hold</th>
+            </tr>
+          </thead>
+          <tbody id="tradeLogBody">
+            <tr><td colspan="7" style="color:var(--muted);font-size:11px;padding:20px 0">Loading trade history…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="ft" role="contentinfo">
+  Paper trading only — no real capital at risk ·
+  <span id="stratVer">arena-ec2-v5</span> ·
+  <span id="lastUpdate"></span>
+</footer>
+
+<!-- ═══ Scripts ═══════════════════════════════════════════════ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+'use strict';
+
+// ┌─────────────────────────────────────────────────────────┐
+// │  CONFIG  — replace before deploy                        │
+// │                                                         │
+// │  Supabase → Project Settings → API                      │
+// │  Required RLS: paper_positions — public SELECT          │
+// │  Required Realtime: paper_positions enabled             │
+// └─────────────────────────────────────────────────────────┘
+const SUPABASE_URL      = '__SUPABASE_URL__';
+const SUPABASE_ANON_KEY = '__SUPABASE_ANON_KEY__';
+
+const IS_MOCK = SUPABASE_URL.startsWith('__');
+
+// ── Algo visual config ────────────────────────────────────
+const ALGOS = {
+  regime_v2:      { color: '#60A5FA' },
+  fng_contrarian: { color: '#F59E0B' },
+  vix_rsi:        { color: '#A78BFA', dash: [5, 3] },
+  macd_momentum:  { color: '#34D399' },
+  multi_factor:   { color: '#FB923C' },
+};
+const ALGO_IDS = Object.keys(ALGOS);
+
+// ── Mock data (mirrors paper_positions schema) ────────────
+const MOCK = [
+  { id:1,  algo_id:'regime_v2',      direction:'long',  status:'closed', open_time:'2026-06-01T04:05:00Z', close_time:'2026-06-03T12:05:00Z', open_price:98200,  close_price:99800,  ret_pct:0.0161,  hit:true,  hold_hours:56,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
+  { id:2,  algo_id:'regime_v2',      direction:'long',  status:'closed', open_time:'2026-06-07T08:05:00Z', close_time:'2026-06-10T04:05:00Z', open_price:101500, close_price:103200, ret_pct:0.0158,  hit:true,  hold_hours:68,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
+  { id:3,  algo_id:'regime_v2',      direction:'long',  status:'open',   open_time:'2026-06-17T20:05:00Z', close_time:null,                   open_price:103800, close_price:null,   ret_pct:null,    hit:null,  hold_hours:null, is_stop_loss:false, strategy_version:'arena-ec2-v5' },
+  { id:4,  algo_id:'fng_contrarian', direction:'short', status:'closed', open_time:'2026-06-02T04:05:00Z', close_time:'2026-06-04T04:05:00Z', open_price:99000,  close_price:99500,  ret_pct:-0.0060, hit:false, hold_hours:48,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
+  { id:5,  algo_id:'fng_contrarian', direction:'long',  status:'closed', open_time:'2026-06-05T12:05:00Z', close_time:'2026-06-09T00:05:00Z', open_price:100200, close_price:102100, ret_pct:0.0180,  hit:true,  hold_hours:84,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
+  { id:6,  algo_id:'fng_contrarian', direction:'long',  status:'closed', open_time:'2026-06-11T04:05:00Z', close_time:'2026-06-13T04:05:00Z', open_price:102800, close_price:103100, ret_pct:0.0020,  hit:true,  hold_hours:48,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
+  { id:7,  algo_id:'fng_contrarian', direction:'short', status:'closed', open_time:'2026-06-14T20:05:00Z', close_time:'2026-06-17T20:05:00Z', open_price:104200, close_price:103200, ret_pct:0.0086,  hit:true,  hold_hours:72,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
+  { id:8,  algo_id:'fng_contrarian', direction:'short', status:'closed', open_time:'2026-06-18T04:05:00Z', close_time:'2026-06-19T04:05:00Z', open_price:103200, close_price:103700, ret_pct:-0.0058, hit:false, hold_hours:24,   is_stop_loss:true,  strategy_version:'arena-ec2-v5' },
+  { id:9,  algo_id:'vix_rsi',        direction:'long',  status:'closed', open_time:'2026-06-03T04:05:00Z', close_time:'2026-06-04T12:05:00Z', open_price:100100, close_price:99800,  ret_pct:-0.0040, hit:false, hold_hours:32,   is_stop_loss:true,  strategy_version:'arena-ec2-v5' },
+  { id:10, algo_id:'vix_rsi',        direction:'long',  status:'closed', open_time:'2026-06-15T04:05:00Z', close_time:'2026-06-17T04:05:00Z', open_price:103900, close_price:103200, ret_pct:-0.0077, hit:false, hold_hours:48,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
+  { id:11, algo_id:'macd_momentum',  direction:'long',  status:'closed', open_time:'2026-06-01T12:05:00Z', close_time:'2026-06-02T20:05:00Z', open_price:98500,  close_price:99900,  ret_pct:0.0132,  hit:true,  hold_hours:32,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
+  { id:12, algo_id:'macd_momentum',  direction:'long',  status:'closed', open_time:'2026-06-04T04:05:00Z', close_time:'2026-06-06T04:05:00Z', open_price:100000, close_price:102000, ret_pct:0.0190,  hit:true,  hold_hours:48,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
+  { id:13, algo_id:'macd_momentum',  direction:'short', status:'closed', open_time:'2026-06-08T04:05:00Z', close_time:'2026-06-09T12:05:00Z', open_price:103200, close_price:101800, ret_pct:0.0126,  hit:true,  hold_hours:32,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
+  { id:14, algo_id:'macd_momentum',  direction:'long',  status:'closed', open_time:'2026-06-10T20:05:00Z', close_time:'2026-06-13T04:05:00Z', open_price:102500, close_price:104100, ret_pct:0.0146,  hit:true,  hold_hours:56,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
+  { id:15, algo_id:'macd_momentum',  direction:'short', status:'closed', open_time:'2026-06-14T04:05:00Z', close_time:'2026-06-15T12:05:00Z', open_price:104500, close_price:103500, ret_pct:0.0086,  hit:true,  hold_hours:32,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
+  { id:16, algo_id:'macd_momentum',  direction:'long',  status:'closed', open_time:'2026-06-16T04:05:00Z', close_time:'2026-06-17T04:05:00Z', open_price:103200, close_price:104800, ret_pct:0.0145,  hit:true,  hold_hours:24,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
+  { id:17, algo_id:'macd_momentum',  direction:'long',  status:'closed', open_time:'2026-06-18T06:05:00Z', close_time:'2026-06-19T02:05:00Z', open_price:105100, close_price:103800, ret_pct:0.0124,  hit:true,  hold_hours:20,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
+  { id:18, algo_id:'macd_momentum',  direction:'long',  status:'open',   open_time:'2026-06-19T10:05:00Z', close_time:null,                   open_price:104200, close_price:null,   ret_pct:null,    hit:null,  hold_hours:null, is_stop_loss:false, strategy_version:'arena-ec2-v5' },
+  { id:19, algo_id:'multi_factor',   direction:'long',  status:'closed', open_time:'2026-06-03T12:05:00Z', close_time:'2026-06-05T04:05:00Z', open_price:99500,  close_price:100800, ret_pct:0.0121,  hit:true,  hold_hours:40,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
+  { id:20, algo_id:'multi_factor',   direction:'long',  status:'closed', open_time:'2026-06-09T04:05:00Z', close_time:'2026-06-11T04:05:00Z', open_price:101800, close_price:102600, ret_pct:0.0069,  hit:true,  hold_hours:48,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
+  { id:21, algo_id:'multi_factor',   direction:'long',  status:'closed', open_time:'2026-06-13T12:05:00Z', close_time:'2026-06-15T00:05:00Z', open_price:103500, close_price:103800, ret_pct:0.0019,  hit:true,  hold_hours:36,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
+  { id:22, algo_id:'multi_factor',   direction:'short', status:'closed', open_time:'2026-06-16T12:05:00Z', close_time:'2026-06-18T04:05:00Z', open_price:104100, close_price:105000, ret_pct:-0.0099, hit:false, hold_hours:40,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
+  { id:23, algo_id:'multi_factor',   direction:'short', status:'open',   open_time:'2026-06-19T06:05:00Z', close_time:null,                   open_price:104500, close_price:null,   ret_pct:null,    hit:null,  hold_hours:null, is_stop_loss:false, strategy_version:'arena-ec2-v5' },
+];
+
+// ── State ─────────────────────────────────────────────────
+let positions = [];
+let eqChart = null;
+
+// ── Data processing ───────────────────────────────────────
+function algoStats(ps) {
+  const out = {};
+  for (const algo of ALGO_IDS) {
+    const all  = ps.filter(p => p.algo_id === algo);
+    const done = all.filter(p => p.status === 'closed' && p.ret_pct != null);
+    const open = all.find(p => p.status === 'open');
+    const totalRet = done.reduce((s, p) => s + p.ret_pct, 0) * 100;
+    const wins = done.filter(p => p.hit).length;
+    out[algo] = {
+      totalRet:   parseFloat(totalRet.toFixed(2)),
+      winRate:    done.length ? parseFloat((wins / done.length * 100).toFixed(1)) : 0,
+      closedN:    done.length,
+      totalN:     all.length,
+      pos:        open ? open.direction.toUpperCase() : 'FLAT',
+      openEntry:  open ? open.open_price : null,
+    };
+  }
+  return out;
+}
+
+function equityCurves(ps) {
+  const done = ps
+    .filter(p => p.status === 'closed' && p.close_time && p.ret_pct != null)
+    .sort((a, b) => new Date(a.close_time) - new Date(b.close_time));
+
+  if (!done.length) return { labels: [], datasets: [] };
+
+  const t0 = new Date(done[0].open_time);
+  t0.setHours(0, 0, 0, 0);
+  const t1 = new Date();
+
+  const labels = [];
+  const cur = new Date(t0);
+  while (cur <= t1) {
+    labels.push(cur.toISOString().split('T')[0]);
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  const datasets = ALGO_IDS.map(algo => {
+    const ap = done.filter(p => p.algo_id === algo)
+      .sort((a, b) => new Date(a.close_time) - new Date(b.close_time));
+    let cum = 0, idx = 0;
+    const data = labels.map(d => {
+      const end = new Date(d + 'T23:59:59Z');
+      while (idx < ap.length && new Date(ap[idx].close_time) <= end) {
+        cum += ap[idx].ret_pct * 100;
+        idx++;
+      }
+      return parseFloat(cum.toFixed(3));
+    });
+    const cfg = ALGOS[algo];
+    return {
+      label: algo, data,
+      borderColor: cfg.color,
+      backgroundColor: 'transparent',
+      borderWidth: 1.5,
+      pointRadius: 0,
+      tension: 0.4,
+      borderDash: cfg.dash || [],
+    };
+  });
+
+  const tickLabels = labels.map(d => {
+    const dt = new Date(d);
+    return `${dt.getMonth() + 1}/${dt.getDate()}`;
+  });
+
+  return { labels: tickLabels, datasets };
+}
+
+// ── Render: algo cards ────────────────────────────────────
+function renderCards(stats) {
+  document.getElementById('algoGrid').innerHTML = ALGO_IDS.map(algo => {
+    const s = stats[algo];
+    const cfg = ALGOS[algo];
+    const rc = s.totalRet >= 0 ? '#34D399' : '#F87171';
+    const sign = s.totalRet >= 0 ? '+' : '';
+    const posCls = s.pos === 'LONG' ? 'pb-long' : s.pos === 'SHORT' ? 'pb-short' : 'pb-flat';
+    return `<div class="ac" style="--ac:${cfg.color}" role="article" aria-label="${algo}: ${sign}${s.totalRet}%">
+      <div class="ac-name">${algo}</div>
+      <div class="ac-ret" style="color:${rc}">${sign}${s.totalRet.toFixed(2)}%</div>
+      <div class="ac-bottom">
+        <div class="ac-stats">
+          <div>${s.closedN} trades · ${s.winRate.toFixed(0)}% win</div>
+          ${s.openEntry ? `<div class="ac-entry">@ $${s.openEntry.toLocaleString()}</div>` : ''}
+        </div>
+        <span class="pb ${posCls}" aria-label="Position: ${s.pos}">${s.pos}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Render: legend ────────────────────────────────────────
+function renderLegend(stats) {
+  document.getElementById('chartLegend').innerHTML = ALGO_IDS.map(algo => {
+    const s = stats[algo];
+    const cfg = ALGOS[algo];
+    const sign = s.totalRet >= 0 ? '+' : '';
+    const rc = s.totalRet >= 0 ? '#34D399' : '#F87171';
+    const style = cfg.dash
+      ? `background:repeating-linear-gradient(90deg,${cfg.color} 0,${cfg.color} 5px,transparent 5px,transparent 8px)`
+      : `background:${cfg.color}`;
+    return `<div class="li">
+      <span class="ll" style="${style}" aria-hidden="true"></span>
+      <span>${algo}</span>
+      <span style="color:${rc};font-weight:500">${sign}${s.totalRet.toFixed(2)}%</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Render: chart ─────────────────────────────────────────
+function renderChart(curves) {
+  const ctx = document.getElementById('eqChart');
+  if (eqChart) {
+    eqChart.data.labels = curves.labels;
+    eqChart.data.datasets = curves.datasets;
+    eqChart.update('none');
+    return;
+  }
+  eqChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: curves.labels, datasets: curves.datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(15,23,42,.95)',
+          borderColor: 'rgba(255,255,255,.12)',
+          borderWidth: 1,
+          titleColor: '#94A3B8',
+          bodyColor: '#F1F5F9',
+          titleFont: { family: 'Exo 2', size: 11 },
+          bodyFont: { family: 'Orbitron', size: 10 },
+          callbacks: {
+            label: c => {
+              const v = c.parsed.y;
+              return ` ${c.dataset.label}: ${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,.04)' },
+          border: { color: 'rgba(255,255,255,.08)', display: false },
+          ticks: { color: '#475569', font: { family: 'Exo 2', size: 10 }, maxTicksLimit: 8, maxRotation: 0 }
+        },
+        y: {
+          grid: { color: 'rgba(255,255,255,.04)' },
+          border: { color: 'rgba(255,255,255,.08)', display: false },
+          ticks: {
+            color: '#475569',
+            font: { family: 'Exo 2', size: 10 },
+            callback: v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%'
+          }
+        }
+      }
+    }
+  });
+}
+
+// ── Render: trade log ─────────────────────────────────────
+function renderLog(ps) {
+  const sorted = [...ps].sort((a, b) => new Date(b.open_time) - new Date(a.open_time));
+  const openN = ps.filter(p => p.status === 'open').length;
+  document.getElementById('tradeCountLabel').textContent =
+    `${ps.length} total · ${openN} open`;
+
+  document.getElementById('tradeLogBody').innerHTML = sorted.map(p => {
+    const cfg = ALGOS[p.algo_id] || { color: '#94A3B8' };
+    const dt = new Date(p.open_time);
+    const ts = dt.toLocaleString('ko-KR', {
+      month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Seoul'
+    });
+    const dirCls = p.direction === 'long' ? 'dl' : 'ds';
+
+    let retHtml;
+    if (p.status === 'open') {
+      retHtml = '<span class="ro">open</span>';
+    } else if (p.ret_pct != null) {
+      const pct = (p.ret_pct * 100).toFixed(2);
+      const sign = p.ret_pct >= 0 ? '+' : '';
+      const sl = p.is_stop_loss ? '<span class="sl-tag">SL</span>' : '';
+      retHtml = `<span class="${p.ret_pct >= 0 ? 'rp' : 'rn'}">${sign}${pct}%${sl}</span>`;
+    } else {
+      retHtml = '<span class="ro">—</span>';
+    }
+
+    const exit = p.close_price
+      ? `$${p.close_price.toLocaleString()}`
+      : `<span style="color:var(--muted)">—</span>`;
+    const hold = p.hold_hours != null
+      ? `${Math.round(p.hold_hours)}h`
+      : `<span style="color:var(--muted)">—</span>`;
+
+    return `<tr>
+      <td style="color:var(--muted);font-size:11px">${ts}</td>
+      <td><span class="abadge" style="color:${cfg.color};border-color:${cfg.color}40">${p.algo_id}</span></td>
+      <td><span class="dbadge ${dirCls}">${p.direction.toUpperCase()}</span></td>
+      <td style="font-size:12px">$${p.open_price.toLocaleString()}</td>
+      <td style="font-size:12px;color:var(--muted2)">${exit}</td>
+      <td>${retHtml}</td>
+      <td style="color:var(--muted);font-size:11px">${hold}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Full render pipeline ──────────────────────────────────
+function renderAll(ps) {
+  positions = ps;
+  const stats = algoStats(ps);
+  const curves = equityCurves(ps);
+  renderCards(stats);
+  renderLegend(stats);
+  renderChart(curves);
+  renderLog(ps);
+  const el = document.getElementById('lastUpdate');
+  if (el) el.textContent = `updated ${new Date().toLocaleTimeString('ko-KR')}`;
+}
+
+// ── BTC price ticker ──────────────────────────────────────
+async function fetchBtcPrice() {
+  try {
+    const r = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT');
+    if (!r.ok) return;
+    const d = await r.json();
+    const price = parseFloat(d.lastPrice);
+    const chg = parseFloat(d.priceChangePercent);
+    document.getElementById('btcPrice').textContent =
+      '$' + price.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    const cel = document.getElementById('btcChg');
+    cel.textContent = `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%`;
+    cel.className = 'btc-chg ' + (chg >= 0 ? 'pos-c' : 'neg-c');
+  } catch (_) {}
+}
+
+// ── Supabase fetch ────────────────────────────────────────
+async function fetchPositions(client) {
+  const { data, error } = await client
+    .from('paper_positions')
+    .select(`
+      id, algo_id, direction, status,
+      open_time, close_time,
+      open_price, close_price,
+      ret_pct, hit, hold_hours,
+      is_stop_loss, strategy_version
+    `)
+    .order('open_time', { ascending: false })
+    .limit(500);
+
+  if (error) {
+    console.error('[Arena] fetch error:', error.message);
+    return null;
+  }
+  return data;
+}
+
+function setupRealtime(client) {
+  client
+    .channel('paper_positions_live')
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'paper_positions',
+    }, async () => {
+      const fresh = await fetchPositions(client);
+      if (fresh) renderAll(fresh);
+    })
+    .subscribe(status => {
+      const dot = document.querySelector('.live-dot');
+      if (dot) {
+        dot.style.background = status === 'SUBSCRIBED' ? '#34D399' : '#F59E0B';
+      }
+    });
+}
+
+// ── Init ──────────────────────────────────────────────────
+async function init() {
+  fetchBtcPrice();
+  setInterval(fetchBtcPrice, 60_000);
+
+  if (IS_MOCK) {
+    console.warn('[Arena] Mock mode — set SUPABASE_URL & SUPABASE_ANON_KEY to connect live data.');
+    renderAll(MOCK);
+    return;
+  }
+
+  const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const data = await fetchPositions(client);
+  if (data) {
+    renderAll(data);
+    setupRealtime(client);
+  } else {
+    console.warn('[Arena] Falling back to mock data.');
+    renderAll(MOCK);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
