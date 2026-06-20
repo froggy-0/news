@@ -17,8 +17,8 @@
 | Key | Default | Unit | Mutable | Risk | Used at | Notes |
 | --- | ---: | --- | --- | --- | --- | --- |
 | `arena.version.strategy` | `arena-ec2-v6` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:13` | live paper 전략 버전 |
-| `arena.version.params` | `arena-params-v7` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:14` | params snapshot schema 기준 |
-| `arena.version.features` | `arena-features-v4` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:15` | feature registry 기준 |
+| `arena.version.params` | `arena-params-v9` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:14` | params snapshot schema 기준 |
+| `arena.version.features` | `arena-features-v5` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:15` | feature registry 기준 |
 | `arena.runtime` | `ec2` | text | code_only | Medium | `/Users/giwon/code/news/src/arena/parameters.py:17` | Lambda와 EC2 성과 구분 |
 | `arena.market.symbol` | `BTCUSDT` | symbol | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:19` | 거래/수집 대상 |
 | `arena.market.kline_interval` | `4h` | candle | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:20` | 지표와 스케줄의 시간축 |
@@ -26,6 +26,9 @@
 | `arena.shadow_vnext.enabled` | `true` | bool | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:29` | shadow decision 기록 on/off |
 | `arena.frequency_shadow.enabled` | `false` | bool | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:33` | 1H frequency shadow scheduler on/off |
 | `arena.frequency_shadow.profiles` | `research_1h` | csv | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:89` | 활성화 시 자동 shadow profile 목록 |
+| `arena.realtime_collector.enabled` | `false` | bool | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:38` | 실시간 trade/book/depth feature 수집 on/off |
+| `arena.execution_gate.shadow_enabled` | `true` | bool | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:42` | paper 차단 없이 gate decision 저장 |
+| `arena.execution_gate.live_enabled` | `false` | bool | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:46` | true면 paper open 전 execution gate 차단 적용 |
 | `arena.net.http_timeout` | `30` | seconds | code_only | Low | `/Users/giwon/code/news/src/arena/parameters.py:24` | Binance/R2 fetch timeout |
 | `arena.schedule.hour` | `*/4` | cron | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:27` | 4H 판단 cadence |
 | `arena.schedule.minute` | `5` | minute | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:28` | candle close 직후 지연 실행 |
@@ -68,6 +71,18 @@
 | `arena.indicator_profile.intraday_native_v1` | `bar native` | profile | code_only | Medium | `/Users/giwon/code/news/src/arena/frequency.py:286` | RSI14/MACD12-26-9를 intraday bar 기준으로 사용, 기본값 아님 |
 | `arena.cost.research_1h.base` | `17.5` | bps round-trip incl buffer | code_only | High | `/Users/giwon/code/news/src/arena/frequency.py:237` | fee 5bps/leg, slippage 2bps/leg, spread 3bps RT, funding buffer 0.5bps/8h |
 | `arena.cost.research_15m.base` | `24.0` | bps round-trip incl buffer | code_only | High | `/Users/giwon/code/news/src/arena/frequency.py:245` | fee 5bps/leg, slippage 4bps/leg, spread 5bps RT, funding buffer 1bps/8h |
+
+## Arena Execution Gate
+
+| Key | Default | Unit | Mutable | Risk | Used at | Notes |
+| --- | ---: | --- | --- | --- | --- | --- |
+| `arena.execution_gate.ecr_multiple` | `3.0` | multiple | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:103` | expected_return_bps >= expected_cost_bps * multiple |
+| `arena.execution_gate.max_spread_bps` | `5.0` | bps | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:106` | spread 확대 시 no-trade |
+| `arena.execution_gate.max_slippage_bps` | `8.0` | bps | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:109` | 예상 slippage 초과 시 no-trade |
+| `arena.execution_gate.min_depth_score` | `0.5` | score | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:112` | depth 부족 시 no-trade |
+| `arena.execution_gate.max_latency_ms` | `750` | ms | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:115` | API 지연 초과 시 no-trade |
+| `arena.execution_gate.vol_spike_max` | `1.0` | score | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:118` | 변동성 spike 차단 |
+| `arena.execution_gate.min_depth_10bp_usd` | `1000000` | USD | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:121` | depth_score 계산 기준 |
 
 ## Arena Indicators
 
@@ -143,6 +158,12 @@
 | `arena_mark_price_bars` | table | db_versioned | High | `/Users/giwon/code/news/supabase/migrations/20260620_arena_market_structure_v1.sql:61` | mark price and premium index bars |
 | `arena_market_feature_snapshots` | table | db_versioned | High | `/Users/giwon/code/news/supabase/migrations/20260620_arena_market_structure_v1.sql:90` | 4H decision-aligned market features |
 | `arena_shadow_decisions` | table | db_versioned | High | `/Users/giwon/code/news/supabase/migrations/20260620_arena_market_structure_v1.sql:110` | vNext sleeve/allocator shadow results |
+| `arena_realtime_feature_bars` | table | db_versioned | High | `/Users/giwon/code/news/supabase/migrations/20260620_arena_realtime_execution_v1.sql:3` | 1분 execution feature 집계 |
+| `arena_execution_gates` | table | db_versioned | High | `/Users/giwon/code/news/supabase/migrations/20260620_arena_realtime_execution_v1.sql:33` | trade/no-trade gate decision 원장 |
+| `arena_parent_orders` | table | db_versioned | Medium | `/Users/giwon/code/news/supabase/migrations/20260620_arena_realtime_execution_v1.sql:72` | 향후 실제 주문 parent intent |
+| `arena_child_orders` | table | db_versioned | Medium | `/Users/giwon/code/news/supabase/migrations/20260620_arena_realtime_execution_v1.sql:93` | 향후 exchange child order |
+| `arena_executions` | table | db_versioned | High | `/Users/giwon/code/news/supabase/migrations/20260620_arena_realtime_execution_v1.sql:109` | 향후 fill 원장 |
+| `arena_execution_quality` | table | db_versioned | High | `/Users/giwon/code/news/supabase/migrations/20260620_arena_realtime_execution_v1.sql:131` | TCA/체결 품질 분석 |
 
 ## News Collection / Provider Runtime
 
@@ -194,11 +215,12 @@
 7. walk-forward generator와 report mart SQL 구현.
 8. market-structure/shadow vNext 코드와 migration 작성.
 9. frequency profile registry, 1H/15m OHLCV 수집 일반화, frequency backtest mart migration 작성.
+10. realtime execution feature collector와 shadow execution gate 작성.
 
 남은 작업:
 
 1. Lambda EventBridge rule `arena-trader-4h`가 켜져 있으면 비활성화 상태를 주기적으로 확인한다.
 2. news/provider/risk overlay 파라미터를 별도 policy registry로 분리할지 결정한다.
-3. `20260620_arena_market_structure_v1.sql`과 `20260620_arena_frequency_research_v1.sql`을 Supabase에 적용하고 readiness view를 확인한다.
-4. `BTCUSDT 1h 180d`, `BTCUSDT 15m 90~180d` raw OHLCV를 저장한다.
-5. shadow 30일 이상, validation critical/high fail 0 전까지 `trend_core_v1`은 live paper로 승격하지 않는다.
+3. `20260620_arena_realtime_execution_v1.sql`을 Supabase에 적용하고 readiness view를 확인한다.
+4. `arena_execution_gates` reject reason 분포를 최소 2주 이상 관찰한다.
+5. shadow 30일 이상, validation critical/high fail 0 전까지 `trend_core_v1`과 execution gate live 차단은 paper로 승격하지 않는다.

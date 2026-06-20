@@ -34,6 +34,18 @@ ENABLE_ARENA_FREQUENCY_SHADOW: bool = _bool_env(
     "ENABLE_ARENA_FREQUENCY_SHADOW",
     parameters.ARENA_FREQUENCY_SHADOW_ENABLED,
 )
+ENABLE_ARENA_REALTIME_COLLECTOR: bool = _bool_env(
+    "ENABLE_ARENA_REALTIME_COLLECTOR",
+    parameters.ARENA_REALTIME_COLLECTOR_ENABLED,
+)
+ENABLE_ARENA_EXECUTION_GATE_SHADOW: bool = _bool_env(
+    "ENABLE_ARENA_EXECUTION_GATE_SHADOW",
+    parameters.ARENA_EXECUTION_GATE_SHADOW_ENABLED,
+)
+ENABLE_ARENA_EXECUTION_GATE_LIVE: bool = _bool_env(
+    "ENABLE_ARENA_EXECUTION_GATE_LIVE",
+    parameters.ARENA_EXECUTION_GATE_LIVE_ENABLED,
+)
 
 STOP_LOSS_PCT: float = float(
     os.environ.get("STOP_LOSS_PCT", str(parameters.STOP_LOSS_FALLBACK_PCT))
@@ -85,10 +97,38 @@ SLACK_BOT_TOKEN: str = os.environ.get("SLACK_BOT_TOKEN", "").strip()
 SLACK_CHANNEL: str = os.environ.get("SLACK_CHANNEL", "").strip()
 
 BINANCE_WS_URL = "wss://stream.binance.com:9443/ws/btcusdt@kline_1m"
+BINANCE_COMBINED_WS_URL = "wss://stream.binance.com:9443/stream"
 BINANCE_REST_URL = "https://api.binance.com/api/v3/klines"
 BINANCE_BOOK_TICKER_URL = "https://api.binance.com/api/v3/ticker/bookTicker"
 SYMBOL = parameters.BINANCE_SYMBOL
 KLINES_LIMIT = parameters.BINANCE_KLINES_LIMIT
+REALTIME_FEATURE_WINDOW_SECONDS = int(
+    os.environ.get(
+        "REALTIME_FEATURE_WINDOW_SECONDS",
+        str(parameters.REALTIME_FEATURE_WINDOW_SECONDS),
+    )
+)
+EXEC_GATE_ECR_MULTIPLE: float = float(
+    os.environ.get("EXEC_GATE_ECR_MULTIPLE", str(parameters.EXEC_GATE_ECR_MULTIPLE))
+)
+EXEC_GATE_MAX_SPREAD_BPS: float = float(
+    os.environ.get("EXEC_GATE_MAX_SPREAD_BPS", str(parameters.EXEC_GATE_MAX_SPREAD_BPS))
+)
+EXEC_GATE_MAX_SLIPPAGE_BPS: float = float(
+    os.environ.get("EXEC_GATE_MAX_SLIPPAGE_BPS", str(parameters.EXEC_GATE_MAX_SLIPPAGE_BPS))
+)
+EXEC_GATE_MIN_DEPTH_SCORE: float = float(
+    os.environ.get("EXEC_GATE_MIN_DEPTH_SCORE", str(parameters.EXEC_GATE_MIN_DEPTH_SCORE))
+)
+EXEC_GATE_MAX_LATENCY_MS: float = float(
+    os.environ.get("EXEC_GATE_MAX_LATENCY_MS", str(parameters.EXEC_GATE_MAX_LATENCY_MS))
+)
+EXEC_GATE_VOL_SPIKE_MAX: float = float(
+    os.environ.get("EXEC_GATE_VOL_SPIKE_MAX", str(parameters.EXEC_GATE_VOL_SPIKE_MAX))
+)
+EXEC_GATE_MIN_DEPTH_10BP_USD: float = float(
+    os.environ.get("EXEC_GATE_MIN_DEPTH_10BP_USD", str(parameters.EXEC_GATE_MIN_DEPTH_10BP_USD))
+)
 LATEST_JSON_URL = f"{R2_BASE_URL}/analytics/sentiment/latest.json" if R2_BASE_URL else ""
 ARENA_FREQUENCY_SHADOW_PROFILES: tuple[str, ...] = tuple(
     profile.strip()

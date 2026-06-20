@@ -22,10 +22,14 @@ BINANCE_KLINES_LIMIT = 300
 ARENA_SHADOW_VNEXT_ENABLED = True
 ARENA_FREQUENCY_SHADOW_ENABLED = False
 ARENA_FREQUENCY_SHADOW_PROFILES = ("research_1h",)
+ARENA_REALTIME_COLLECTOR_ENABLED = False
+ARENA_EXECUTION_GATE_SHADOW_ENABLED = True
+ARENA_EXECUTION_GATE_LIVE_ENABLED = False
 
 HTTP_TIMEOUT_SECONDS = 30
 WEBSOCKET_PING_INTERVAL_SECONDS = 20
 WEBSOCKET_RECONNECT_DELAY_SECONDS = 5
+REALTIME_FEATURE_WINDOW_SECONDS = 60
 SCHEDULER_CRON_HOUR = "*/4"
 SCHEDULER_CRON_MINUTE = 5
 SERVER_IDLE_SLEEP_SECONDS = 3600
@@ -105,6 +109,14 @@ ALLOCATOR_BUDGET_TREND_CORE = 0.60
 ALLOCATOR_BUDGET_LEGACY_RULE = 0.40
 ALLOCATOR_BUDGET_CARRY = 0.00
 
+EXEC_GATE_ECR_MULTIPLE = 3.0
+EXEC_GATE_MAX_SPREAD_BPS = 5.0
+EXEC_GATE_MAX_SLIPPAGE_BPS = 8.0
+EXEC_GATE_MIN_DEPTH_SCORE = 0.5
+EXEC_GATE_MAX_LATENCY_MS = 750.0
+EXEC_GATE_VOL_SPIKE_MAX = 1.0
+EXEC_GATE_MIN_DEPTH_10BP_USD = 1_000_000.0
+
 MIN_HOLD_HOURS: dict[str, float] = {
     "supertrend": 12.0,
     "fng_contrarian": 24.0,
@@ -138,6 +150,8 @@ def base_params_snapshot() -> dict[str, Any]:
             "shadow_vnext_enabled": ARENA_SHADOW_VNEXT_ENABLED,
             "frequency_shadow_enabled": ARENA_FREQUENCY_SHADOW_ENABLED,
             "frequency_shadow_profiles": list(ARENA_FREQUENCY_SHADOW_PROFILES),
+            "realtime_collector_enabled": ARENA_REALTIME_COLLECTOR_ENABLED,
+            "realtime_feature_window_seconds": REALTIME_FEATURE_WINDOW_SECONDS,
         },
         "schedule": {
             "cron_hour": SCHEDULER_CRON_HOUR,
@@ -204,5 +218,16 @@ def base_params_snapshot() -> dict[str, Any]:
             "trend_core_budget": ALLOCATOR_BUDGET_TREND_CORE,
             "legacy_rule_budget": ALLOCATOR_BUDGET_LEGACY_RULE,
             "carry_budget": ALLOCATOR_BUDGET_CARRY,
+        },
+        "execution_gate": {
+            "shadow_enabled": ARENA_EXECUTION_GATE_SHADOW_ENABLED,
+            "live_enabled": ARENA_EXECUTION_GATE_LIVE_ENABLED,
+            "ecr_multiple": EXEC_GATE_ECR_MULTIPLE,
+            "max_spread_bps": EXEC_GATE_MAX_SPREAD_BPS,
+            "max_slippage_bps": EXEC_GATE_MAX_SLIPPAGE_BPS,
+            "min_depth_score": EXEC_GATE_MIN_DEPTH_SCORE,
+            "max_latency_ms": EXEC_GATE_MAX_LATENCY_MS,
+            "vol_spike_max": EXEC_GATE_VOL_SPIKE_MAX,
+            "min_depth_10bp_usd": EXEC_GATE_MIN_DEPTH_10BP_USD,
         },
     }

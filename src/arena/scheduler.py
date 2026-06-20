@@ -14,6 +14,7 @@ from . import (
     allocator,
     config,
     data_lake,
+    execution_gate,
     execution_rules,
     frequency,
     indicators,
@@ -202,6 +203,18 @@ def _risk_policy() -> risk.PortfolioRiskPolicy:
     )
 
 
+def _execution_gate_policy() -> execution_gate.ExecutionGatePolicy:
+    return execution_gate.ExecutionGatePolicy(
+        ecr_multiple=config.EXEC_GATE_ECR_MULTIPLE,
+        max_spread_bps=config.EXEC_GATE_MAX_SPREAD_BPS,
+        max_slippage_bps=config.EXEC_GATE_MAX_SLIPPAGE_BPS,
+        min_depth_score=config.EXEC_GATE_MIN_DEPTH_SCORE,
+        max_latency_ms=config.EXEC_GATE_MAX_LATENCY_MS,
+        vol_spike_max=config.EXEC_GATE_VOL_SPIKE_MAX,
+        min_depth_10bp_usd=config.EXEC_GATE_MIN_DEPTH_10BP_USD,
+    )
+
+
 async def _risk_state(now: datetime) -> risk.PortfolioRiskState:
     metrics = await positions.risk_metrics(now)
     return risk.PortfolioRiskState(
@@ -236,6 +249,33 @@ def _market_snapshot(
         bid=bid,
         ask=ask,
     )
+
+
+def _book_execution_features(
+    *,
+    bid: float | None,
+    ask: float | None,
+    price: float,
+    data_timestamp: datetime,
+) -> dict:
+    features = {
+        "source": "book_ticker_snapshot",
+        "data_timestamp": execution_rules.format_utc_timestamp(data_timestamp),
+        "last_price": price,
+    }
+    if bid and ask and bid > 0 and ask > 0:
+        mid = (bid + ask) / 2.0
+        spread_bps = (ask - bid) / mid * 10_000.0
+        features.update(
+            {
+                "last_bid": bid,
+                "last_ask": ask,
+                "spread_bps_avg": spread_bps,
+                "spread_bps_p95": spread_bps,
+                "expected_slippage_bps": spread_bps / 2.0,
+            }
+        )
+    return features
 
 
 def _signal_reason(algo_id: str, signal: str | None, ind: dict, macro: dict) -> dict:
@@ -295,6 +335,31 @@ async def _run_shadow_vnext(
                 sleeve_signal,
                 regime_snapshot=regime_decision.as_dict(),
                 risk_snapshot=risk_snapshot,
+            )
+            gate_decision = execution_gate.evaluate_execution_gate(
+                algo_id=sleeve_signal.algo_id,
+                signal=sleeve_signal.direction,
+                indicators=ind,
+                realtime_features=snapshot.features,
+                cost_scenario=cost_scenario,
+                risk_decision=None,
+                evaluated_at=data_timestamp,
+                policy=_execution_gate_policy(),
+            )
+            sleeve_reason = dict(sleeve_signal.reason)
+            sleeve_reason["execution_gate"] = gate_decision.as_dict()
+            sleeve_signal = sleeves.SleeveSignal(
+                sleeve_id=sleeve_signal.sleeve_id,
+                algo_id=sleeve_signal.algo_id,
+                direction=sleeve_signal.direction,
+                confidence=sleeve_signal.confidence,
+                raw_score=sleeve_signal.raw_score,
+                target_weight=sleeve_signal.target_weight,
+                reason=sleeve_reason,
+                feature_snapshot={
+                    **sleeve_signal.feature_snapshot,
+                    "execution_gate": gate_decision.as_dict(),
+                },
             )
             results.append(
                 await data_lake.record_shadow_decision(
@@ -440,9 +505,16 @@ async def _run_cycle() -> None:
 
     # 의사결정 시점 호가 스냅샷 (Tier 1 TCA 선행 데이터). 사이클당 1회 공유.
     bid, ask = await _fetch_book_ticker(profile.symbol)
+    execution_features = _book_execution_features(
+        bid=bid,
+        ask=ask,
+        price=price,
+        data_timestamp=data_timestamp,
+    )
 
     had_algo_error = False
     policy = _risk_policy()
+    gate_policy = _execution_gate_policy()
     portfolio_risk_state = await _risk_state(now)
     for algo_id, fn in ALGORITHMS.items():
         signal: str | None = None
@@ -450,6 +522,7 @@ async def _run_cycle() -> None:
         skipped_reason: str | None = None
         resulting_position_id: int | None = None
         risk_decision: risk.RiskDecision | None = None
+        gate_decision: execution_gate.ExecutionGateDecision | None = None
         current = state.open_positions.get(algo_id)
         current_position_id = current["id"] if current else None
         try:
@@ -542,6 +615,21 @@ async def _run_cycle() -> None:
                 )
                 continue
 
+            gate_decision = execution_gate.evaluate_execution_gate(
+                algo_id=algo_id,
+                signal=signal,
+                indicators=ind,
+                realtime_features=execution_features,
+                cost_scenario=cost_scenario,
+                risk_decision=risk_decision,
+                evaluated_at=now,
+                policy=gate_policy,
+            )
+            if config.ENABLE_ARENA_EXECUTION_GATE_LIVE and not gate_decision.allowed:
+                action = "execution_gate_blocked"
+                skipped_reason = gate_decision.reject_reason
+                continue
+
             sl_price = execution_rules.calc_stop_loss_price(
                 signal,
                 price,
@@ -600,6 +688,26 @@ async def _run_cycle() -> None:
             skipped_reason = str(exc)
             logger.error("알고 %s 오류: %s", algo_id, exc)
         finally:
+            if config.ENABLE_ARENA_EXECUTION_GATE_SHADOW:
+                gate_decision = gate_decision or execution_gate.evaluate_execution_gate(
+                    algo_id=algo_id,
+                    signal=signal,
+                    indicators=ind,
+                    realtime_features=execution_features,
+                    cost_scenario=cost_scenario,
+                    risk_decision=risk_decision,
+                    evaluated_at=now,
+                    policy=gate_policy,
+                )
+                capture_results.append(
+                    await data_lake.record_execution_gate(
+                        run_id=run_id,
+                        algo_id=algo_id,
+                        signal=signal,
+                        timeframe=profile.interval,
+                        decision=gate_decision,
+                    )
+                )
             capture_results.append(
                 await data_lake.record_decision(
                     run_id=run_id,

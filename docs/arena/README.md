@@ -16,6 +16,7 @@
 | [research/research-mart-v1.md](research/research-mart-v1.md) | strategy/feature registry와 decision mart | 분석 mart 변경 전 |
 | [research/backtest-framework-v1.md](research/backtest-framework-v1.md) | 백테스트, 검증 루브릭, 저장/검증 명령 | 백테스트/워크포워드 작업 전 |
 | [research/frequency-research-v1.md](research/frequency-research-v1.md) | 4H/1H/15m profile, 수집, 비용 모델, shadow 운영 | 빈도/거래 횟수 실험 전 |
+| [research/realtime-execution-gate-v1.md](research/realtime-execution-gate-v1.md) | 실시간 market observation, 체결 품질 gate, no-trade 원장 | 실시간 수집/조건부 매매 작업 전 |
 | [reference/parameter-inventory.md](reference/parameter-inventory.md) | 파라미터, 단위, 기본값, 리스크 영향 | 파라미터 변경 전 |
 | [operations/access-runbook.md](operations/access-runbook.md) | 현재 EC2/Supabase 접속, 상태 확인, 조회 명령 | 서버/DB 상태 확인 |
 | [operations/deploy-runbook.md](operations/deploy-runbook.md) | EC2 배포/재시작/검증 절차 | 배포/장애 대응 |
@@ -37,7 +38,8 @@
 - 전략 재현성: `strategy_version`, `params_snapshot`, `indicator_snapshot`, `macro_snapshot`, `data_timestamp` 저장 완료.
 - 리스크 레이어: `portfolio-risk-v1` DB 적용 및 EC2 재배포 완료.
 - 백테스트: baseline replay, validation, portfolio risk replay 저장 구조 완료.
-- Frequency research: 4H live 유지, 1H/15m research profile과 비용 mart 구현 완료. SQL 적용과 raw backfill 저장 필요.
+- Frequency research: 4H live 유지, 1H/15m research profile과 비용 mart 구현 완료. 1H/15m raw backfill 저장 완료.
+- Realtime execution gate: 실시간 feature collector와 shadow execution gate 구현 완료. SQL 적용 후 collector enable 가능.
 - 파라미터 튜닝: 아직 금지. 현재 표본은 116 bars / 8 trades로 부족.
 
 ## 문서 정리 원칙

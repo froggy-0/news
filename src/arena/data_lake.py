@@ -15,6 +15,7 @@ from typing import Any
 from uuid import uuid4
 
 from . import feature_registry, frequency, parameters, positions
+from .execution_gate import ExecutionGateDecision
 from .market_structure import MarketStructureSnapshot
 from .sleeves import AllocationDecision, SleeveSignal
 
@@ -642,6 +643,52 @@ async def record_shadow_decision(
         positions.db()
         .table("arena_shadow_decisions")
         .upsert(row, on_conflict="run_id,sleeve_id,algo_id"),
+    )
+
+
+async def record_realtime_feature_bar(row: dict[str, Any]) -> CaptureWriteResult:
+    return await _safe_execute_optional_schema(
+        "arena_realtime_feature_bars.upsert",
+        positions.db()
+        .table("arena_realtime_feature_bars")
+        .upsert(row, on_conflict="symbol,window_start,window_seconds"),
+        object_name="arena_realtime_feature_bars",
+    )
+
+
+async def record_execution_gate(
+    *,
+    run_id: str,
+    algo_id: str,
+    signal: str | None,
+    timeframe: str,
+    decision: ExecutionGateDecision,
+) -> CaptureWriteResult:
+    row = {
+        "run_id": run_id,
+        "algo_id": algo_id,
+        "signal": signal,
+        "timeframe": timeframe,
+        "signal_time": _ts(decision.evaluated_at),
+        "signal_score": decision.expected_return_bps,
+        "regime": decision.feature_snapshot.get("regime"),
+        "expected_return_bps": decision.expected_return_bps,
+        "expected_cost_bps": decision.expected_cost_bps,
+        "spread_bps": decision.spread_bps,
+        "expected_slippage_bps": decision.expected_slippage_bps,
+        "depth_score": decision.depth_score,
+        "volatility_score": decision.volatility_score,
+        "api_latency_ms": decision.api_latency_ms,
+        "decision": decision.decision,
+        "reject_reason": decision.reject_reason,
+        "feature_snapshot": decision.feature_snapshot,
+        "risk_snapshot": decision.risk_snapshot,
+        "gate_snapshot": decision.as_dict(),
+    }
+    return await _safe_execute_optional_schema(
+        "arena_execution_gates.upsert",
+        positions.db().table("arena_execution_gates").upsert(row, on_conflict="run_id,algo_id"),
+        object_name="arena_execution_gates",
     )
 
 

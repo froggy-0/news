@@ -9,6 +9,7 @@
 | service entry | `src/arena/server.py` | positions init, open positions refresh, scheduler/stream 동시 실행 |
 | scheduler | `src/arena/scheduler.py` | 4H OHLCV/macro 수집, indicators 계산, 알고리즘 실행, position open/close |
 | stream | `src/arena/stream.py` | Binance WebSocket 현재가 수신, stop-loss 감지 |
+| realtime market | `src/arena/realtime_market.py` | Binance trade/book/depth/kline stream을 1분 execution feature로 집계 |
 | positions | `src/arena/positions.py` | Supabase `paper_positions` CRUD |
 | algorithms | `src/arena/algorithms.py` | 5개 전략 신호 함수 |
 | indicators | `src/arena/indicators.py` | RSI, MACD hist, Bollinger position, ATR 계산 |
@@ -16,6 +17,7 @@
 | config | `src/arena/config.py` | env 기반 runtime config. secret 값은 문서화하지 않음 |
 | rule parity | `src/arena/execution_rules.py` | live/backtest 공통 실행 규칙 |
 | portfolio risk | `src/arena/risk.py` | max exposure, daily loss limit, algo MDD kill switch |
+| execution gate | `src/arena/execution_gate.py` | expected return, cost, spread, slippage, depth, latency 기반 trade/no-trade 판단 |
 | data lake writer | `src/arena/data_lake.py` | arena research table write |
 | feature registry | `src/arena/feature_registry.py` | strategy/feature metadata row 생성 |
 | backtest | `src/arena/backtest.py` | OHLCV/macro replay, 결과 저장 CLI |
@@ -29,6 +31,7 @@ Binance 4H OHLCV + R2 latest.json
   -> indicators.compute
   -> algorithms
   -> execution_rules
+  -> execution_gate shadow ledger
   -> positions.open/close_position
   -> paper_positions
   -> arena_runs / ohlcv / macro / indicators / decisions
@@ -41,6 +44,16 @@ Binance WebSocket 1m kline
   -> stream._check_stop_loss
   -> execution_rules.stop_loss_triggered
   -> positions.close_position(is_stop_loss=True)
+```
+
+Execution observation path:
+
+```text
+Binance trade/bookTicker/depth20/kline_1m streams
+  -> realtime_market.RealtimeFeatureAggregator
+  -> arena_realtime_feature_bars
+  -> scheduler/execution_gate shadow decisions
+  -> arena_execution_gates
 ```
 
 ## Research Data Flow
@@ -64,6 +77,12 @@ arena_ohlcv_bars + arena_macro_snapshots
 | `arena_macro_snapshots` | run | raw macro payload snapshot |
 | `arena_indicator_snapshots` | run | derived indicators |
 | `arena_decisions` | run/algo | signal/action/reason |
+| `arena_realtime_feature_bars` | symbol/window | spread/depth/imbalance/slippage/latency 1m feature |
+| `arena_execution_gates` | run/algo | shadow trade/no-trade gate decision |
+| `arena_parent_orders` | parent intent | future order intent ledger |
+| `arena_child_orders` | submitted order | future exchange order ledger |
+| `arena_executions` | fill | future execution/fill ledger |
+| `arena_execution_quality` | order/run | TCA and realized execution quality |
 | `arena_risk_events` | risk event | live portfolio risk gate block/kill events |
 | `arena_risk_state` | algo/risk_model | risk kill/cooldown state registry |
 | `arena_strategy_versions` | strategy_version | strategy release registry |
@@ -81,7 +100,7 @@ arena_ohlcv_bars + arena_macro_snapshots
 
 ## Migration Order
 
-적용 완료된 순서:
+작성/적용 순서:
 
 1. `supabase/migrations/20260619_paper_positions.sql`
 2. `supabase/migrations/20260619_arena_data_timestamp.sql`
@@ -93,6 +112,9 @@ arena_ohlcv_bars + arena_macro_snapshots
 8. `supabase/migrations/20260619_arena_backtest_framework.sql`
 9. `supabase/migrations/20260619_arena_backtest_validation.sql`
 10. `supabase/migrations/20260619_arena_portfolio_risk_layer.sql`
+11. `supabase/migrations/20260620_arena_market_structure_v1.sql`
+12. `supabase/migrations/20260620_arena_frequency_research_v1.sql`
+13. `supabase/migrations/20260620_arena_realtime_execution_v1.sql`
 
 ## Current Known Warnings
 

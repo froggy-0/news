@@ -6,7 +6,7 @@ import asyncio
 import logging
 import signal
 
-from . import positions, scheduler, stream
+from . import positions, realtime_market, scheduler, stream
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,6 +33,7 @@ async def _main() -> None:
     tasks = [
         asyncio.create_task(scheduler.run(), name="scheduler"),
         asyncio.create_task(stream.run(), name="stream"),
+        asyncio.create_task(realtime_market.run(), name="realtime_market"),
         asyncio.create_task(stop_event.wait(), name="stop"),
     ]
 
