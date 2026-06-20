@@ -11,9 +11,11 @@ BTC Signal Arena는 세 가지 레이어로 구성된다:
 
 ```
 레이어 1: 데이터 수집    — 거시 + 기술 지표 실시간 수집
-레이어 2: 알고리즘 엔진  — 5개 전략이 독립적으로 신호 생성 + 가상 거래
+레이어 2: 알고리즘 엔진  — 5개 전략이 독립적으로 신호 생성 + 현물 long/flat 가상 거래
 레이어 3: 공개 인터페이스 — 트랙레코드 리더보드 + 신호 알림
 ```
+
+현재 제품/운영 기준은 **BTC 현물 spot long/flat**이다. raw `short` 신호는 현물에서 숏 포지션을 여는 신호가 아니라, 보유 long 청산 또는 신규 진입 보류를 뜻한다. derivatives/perp-style long/short 거래는 research/shadow/backtest 검증 영역에만 둔다.
 
 ---
 
@@ -23,7 +25,7 @@ BTC Signal Arena는 세 가지 레이어로 구성된다:
 
 **요구사항:** 한 번 기록된 포지션은 수정·삭제 불가
 
-- 신호 발생 즉시 Supabase에 `open_time`, `open_price`, `algo_id`, `direction` 기록
+- 신호 발생 즉시 Supabase에 `open_time`, `open_price`, `algo_id`, `direction=long` 기록
 - 청산 시 `close_time`, `close_price`, `ret_pct`, `hit` 추가 기록
 - DB 레벨에서 UPDATE 제한 (closed 레코드의 핵심 필드)
 - 관리자도 과거 기록을 소급 수정할 수 없는 구조
@@ -46,7 +48,7 @@ BTC Signal Arena는 세 가지 레이어로 구성된다:
 **요구사항:** 각 알고리즘의 신호 조건이 문서로 공개되어야 함
 
 - 예: "regime_v2: BullQuiet 상태일 때만 long 포지션 진입"
-- 예: "multi_factor: BullQuiet AND RSI<50 AND MACD양수 동시 충족 시 long, BearPanic AND RSI>55 AND MACD음수 동시 충족 시 short"
+- 예: "multi_factor: BullQuiet AND RSI<50 AND MACD양수 동시 충족 시 long, BearPanic AND RSI>55 AND MACD음수 동시 충족 시 raw short/risk-off"
 - 사용자가 "왜 이 신호가 나왔는가"를 이해할 수 있어야 함
 
 **이유:** 블랙박스 AI 신호에 대한 불신이 높다. 논리 공개가 신뢰의 근거.
@@ -76,7 +78,9 @@ BTC Signal Arena는 세 가지 레이어로 구성된다:
 
 ### 3-1. 알고리즘 신호 방향
 
-- 각 알고리즘이 `long` / `short` / `flat` 세 가지 상태를 명확히 구분
+- 각 알고리즘이 raw `long` / `short` / `flat` 세 가지 상태를 명확히 구분
+- live/paper 실행은 raw 신호를 `long` / `flat`으로 변환한다.
+- raw `short`는 현물 신규 숏 진입이 아니라 long 청산 또는 no-trade다.
 - `flat`은 포지션 없음 (시장 관망)
 - `flat`에서 무리하게 신호를 강제하지 않음 (0 포지션도 전략)
 
@@ -95,7 +99,7 @@ BTC Signal Arena는 세 가지 레이어로 구성된다:
   regime_v2:       long  @ $105,200  (진입 2026-06-19 04:05)
   fng_contrarian:  flat  (포지션 없음)
   vix_rsi:         long  @ $104,800  (진입 2026-06-18 20:05)
-  macd_momentum:   short @ $106,100  (진입 2026-06-19 00:05)
+  macd_momentum:   flat  (raw short는 no-trade 또는 long 청산)
   multi_factor:    flat  (포지션 없음)
 ```
 

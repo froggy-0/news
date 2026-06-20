@@ -33,7 +33,7 @@ Phase 0 (완료)        Phase 1 (현재)        Phase 2               Phase 3
 
 **Phase 0 핵심 발견:**
 - BullQuiet Regime에서만 신호를 내는 것이 올바른 전략
-- BearPanic에서의 숏 포지션은 코인플립 수준 (50%) → 분리 처리
+- BearPanic에서의 raw short 신호는 현물 신규 진입이 아니라 risk-off/no-trade로 분리 처리
 - LLM 브리핑 비용 대비 효과 없음 → 비활성화, 알고리즘 검증에 집중
 
 ---
@@ -47,6 +47,8 @@ Phase 0 (완료)        Phase 1 (현재)        Phase 2               Phase 3
 
 1. **아레나 서버 상시 가동** (EC2 Seoul)
    - 5개 알고리즘이 4시간마다 독립적으로 신호 발생
+   - 현재 live/paper 거래는 BTC 현물 long/flat만 허용
+   - raw short 신호는 보유 long 청산 또는 no-trade로 기록
    - Binance 실시간 가격으로 스톱로스 실행
    - 모든 진입·청산이 Supabase에 타임스탬프와 함께 영구 기록
 
@@ -106,7 +108,7 @@ Phase 0 (완료)        Phase 1 (현재)        Phase 2               Phase 3
 
 2. **공개 원칙 (차별화 포인트)**
    - 모든 거래 내역 공개 (손실 포함)
-   - 필터 기능 제공: 기간별, 알고리즘별, 롱/숏별
+   - 필터 기능 제공: 기간별, 알고리즘별, long/flat/리스크오프별
    - 알고리즘 조건 문서화 공개 (블랙박스 아님)
 
 3. **뉴스레터 / 텔레그램**
@@ -164,12 +166,13 @@ API   — ₩49,900/월 — REST API 접근 (타 서비스 연동용)
 ```
 신뢰받은 알고리즘 (18개월 이상, 승률 60%+)
     ↓
-Upbit / Binance 자동매매 연동 옵션 제공
+Upbit / Binance 현물 자동매매 연동 옵션 제공
     ↓
 사용자가 자신의 API 키로 직접 연결 (플랫폼은 중개 안 함)
 ```
 
 - **주의:** 실거래 연동은 금융업 규제 리스크 최고 구간
+- 1차 실거래 브리지는 현물 long/flat만 허용한다.
 - 법률 자문 완료 후 결정
 - 구조: "신호를 따라 사용자 자신이 거래" 방식으로 책임 분리
 
@@ -181,10 +184,10 @@ Upbit / Binance 자동매매 연동 옵션 제공
 
 ```
 regime_v2       — BullQuiet=long, 기타=flat          (거시 기반)
-fng_contrarian  — FNG<30=long, FNG>70=short          (역발산)
+fng_contrarian  — FNG<30=long, FNG>70=risk-off/no-trade (역발산)
 vix_rsi         — VIX 안정 + RSI<50 = long           (복합)
 macd_momentum   — MACD histogram이 ATR 대비 유의미할 때 방향 추종 (기술)
-multi_factor    — BullQuiet 롱 / BearPanic 숏 + RSI/MACD 확인      (복합)
+multi_factor    — BullQuiet long / BearPanic risk-off + RSI/MACD 확인 (복합)
 ```
 
 ### 추가 예정 (데이터 확보 후)

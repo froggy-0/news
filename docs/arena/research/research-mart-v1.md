@@ -35,7 +35,7 @@ Label columns:
 - `forward_return_1bar`, `forward_return_3bar`, `forward_return_6bar`
 - `signal_return_1bar`, `signal_return_3bar`, `signal_return_6bar`
 
-`signal_return_*`는 `long`이면 forward return 그대로, `short`이면 부호 반전, flat이면 null이다.
+`signal_return_*`는 raw `long`이면 forward return 그대로, raw `short`이면 연구용으로 부호 반전, flat이면 null이다. 단, 현재 live/paper 거래는 현물 long/flat 기준이므로 raw `short` label은 derivatives/perp 실거래 성과가 아니라 risk-off/research label로만 해석한다.
 
 ## 운영 순서
 

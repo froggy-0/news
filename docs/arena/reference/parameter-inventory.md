@@ -16,8 +16,8 @@
 
 | Key | Default | Unit | Mutable | Risk | Used at | Notes |
 | --- | ---: | --- | --- | --- | --- | --- |
-| `arena.version.strategy` | `arena-ec2-v6` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:13` | live paper 전략 버전 |
-| `arena.version.params` | `arena-params-v9` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:14` | params snapshot schema 기준 |
+| `arena.version.strategy` | `arena-spot-v1` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:13` | live paper 전략 버전 |
+| `arena.version.params` | `arena-params-v11` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:14` | params snapshot schema 기준 |
 | `arena.version.features` | `arena-features-v5` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:15` | feature registry 기준 |
 | `arena.runtime` | `ec2` | text | code_only | Medium | `/Users/giwon/code/news/src/arena/parameters.py:17` | Lambda와 EC2 성과 구분 |
 | `arena.market.symbol` | `BTCUSDT` | symbol | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:19` | 거래/수집 대상 |
@@ -29,6 +29,10 @@
 | `arena.realtime_collector.enabled` | `true` | bool | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:38` | 실시간 trade/book/depth feature 수집 on/off |
 | `arena.execution_gate.shadow_enabled` | `true` | bool | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:42` | paper 차단 없이 gate decision 저장 |
 | `arena.execution_gate.live_enabled` | `false` | bool | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:46` | true면 paper open 전 execution gate 차단 적용 |
+| `arena.execution.target_product` | `spot` | product | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:50` | live/paper 실행 상품. 초기 실거래 전제는 현물 |
+| `arena.execution.position_semantics` | `spot_long_flat` | policy | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:51` | short position open 금지, long/flat만 허용 |
+| `arena.execution.short_signal_action` | `exit_or_no_trade` | policy | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:55` | raw short는 long 청산 또는 no-trade |
+| `arena.execution.allow_live_short` | `false` | bool | env_restart | Critical | `/Users/giwon/code/news/src/arena/config.py:59` | spot live/paper short open guard |
 | `arena.net.http_timeout` | `30` | seconds | code_only | Low | `/Users/giwon/code/news/src/arena/parameters.py:24` | Binance/R2 fetch timeout |
 | `arena.schedule.hour` | `*/4` | cron | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:27` | 4H 판단 cadence |
 | `arena.schedule.minute` | `5` | minute | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:28` | candle close 직후 지연 실행 |
@@ -43,9 +47,9 @@
 | `arena.risk.position_unit` | `1.0` | unit | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:54` | 알고리즘별 포지션 노출 단위 |
 | `arena.risk.max_open_positions_total` | `3` | positions | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:55` | 전체 동시 포지션 수 제한 |
 | `arena.risk.max_long_positions` | `2` | positions | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:58` | 같은 방향 long 중복 제한 |
-| `arena.risk.max_short_positions` | `2` | positions | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:61` | 같은 방향 short 중복 제한 |
+| `arena.risk.max_short_positions` | live spot effective `0` / config default `2` | positions | env_restart | High | `/Users/giwon/code/news/src/arena/scheduler.py:221` | live/paper spot에서는 0으로 강제. research/perp replay 호환용 config는 보존 |
 | `arena.risk.max_net_long_exposure` | `2.0` | unit | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:64` | net long exposure 상한 |
-| `arena.risk.max_net_short_exposure` | `2.0` | unit | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:67` | net short exposure 상한 |
+| `arena.risk.max_net_short_exposure` | live spot effective `0.0` / config default `2.0` | unit | env_restart | High | `/Users/giwon/code/news/src/arena/scheduler.py:222` | live/paper spot에서는 0으로 강제. research/perp replay 호환용 config는 보존 |
 | `arena.risk.daily_loss_limit_pct` | `0.05` | pct | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:70` | 일간 실현 손실 제한 |
 | `arena.risk.algo_max_drawdown_kill_pct` | `0.10` | pct | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:73` | 알고리즘별 MDD kill switch |
 | `arena.risk.cooldown_after_kill_hours` | `24` | hours | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:76` | kill 이후 재가동 대기 정책 |
@@ -111,13 +115,13 @@
 | Key | Default | Unit | Mutable | Risk | Used at | Notes |
 | --- | ---: | --- | --- | --- | --- | --- |
 | `arena.strategy.regime_long_state` | `BullQuiet` | label | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:61` | regime_v2 long |
-| `arena.strategy.regime_short_state` | `BearPanic` | label | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:62` | regime_v2 short |
+| `arena.strategy.regime_short_state` | `BearPanic` | label | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:62` | raw short/risk-off label |
 | `arena.strategy.fng_long_below` | `30` | index | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:63` | 공포 매수 |
-| `arena.strategy.fng_short_above` | `70` | index | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:64` | 탐욕 매도 |
+| `arena.strategy.fng_short_above` | `70` | index | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:64` | 탐욕 구간 risk-off/no-trade |
 | `arena.strategy.vix_rsi_long_max` | `50` | RSI | code_only | Medium | `/Users/giwon/code/news/src/arena/parameters.py:65` | vix_rsi long filter |
 | `arena.strategy.macd_atr_threshold_multiple` | `0.10` | ATR x | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:66` | MACD noise filter |
 | `arena.strategy.multi_factor_long_rsi_max` | `50` | RSI | code_only | Medium | `/Users/giwon/code/news/src/arena/parameters.py:70` | multi_factor long |
-| `arena.strategy.multi_factor_short_rsi_min` | `55` | RSI | code_only | Medium | `/Users/giwon/code/news/src/arena/parameters.py:71` | multi_factor short |
+| `arena.strategy.multi_factor_short_rsi_min` | `55` | RSI | code_only | Medium | `/Users/giwon/code/news/src/arena/parameters.py:71` | multi_factor raw short/risk-off |
 | `arena.strategy.trend_core_rsi_long_max` | `70` | RSI | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:78` | shadow trend_core_v1 long 과열 차단 |
 | `arena.strategy.trend_core_rsi_short_min` | `30` | RSI | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:79` | shadow trend_core_v1 short 과매도 차단 |
 | `arena.strategy.regime_stress_return_atr_multiple` | `3` | ATR pct x | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:81` | regime_gate_v1 stress 판정 |
@@ -149,6 +153,9 @@
 | `market_snapshot` | jsonb | db_versioned | High | `/Users/giwon/code/news/supabase/migrations/20260619_arena_position_snapshots.sql:11` | 진입 시점 가격/수집 상태 |
 | `signal_reason` | jsonb | db_versioned | Medium | `/Users/giwon/code/news/supabase/migrations/20260619_arena_position_snapshots.sql:12` | 신호 설명용 입력 묶음 |
 | `risk_snapshot` | jsonb | db_versioned | High | `/Users/giwon/code/news/supabase/migrations/20260619_arena_portfolio_risk_layer.sql:8` | 진입 시점 portfolio risk gate 결과 |
+| `product_type` | text | db_versioned | High | `/Users/giwon/code/news/supabase/migrations/20260620_arena_spot_semantics_v1.sql:13` | `spot` 또는 legacy/research product 구분 |
+| `position_semantics` | text | db_versioned | High | `/Users/giwon/code/news/supabase/migrations/20260620_arena_spot_semantics_v1.sql:14` | `spot_long_flat` 또는 `perp_long_short_sim` |
+| `close_reason` | text | db_versioned | Medium | `/Users/giwon/code/news/supabase/migrations/20260620_arena_spot_semantics_v1.sql:15` | spot risk-off, migration, flat close 구분 |
 | `runtime` | text | db_versioned | Medium | `/Users/giwon/code/news/supabase/migrations/20260619_arena_position_snapshots.sql:13` | EC2/Lambda 구분 |
 
 ## Shadow / Market Structure Ledger
@@ -157,7 +164,7 @@
 | --- | --- | --- | --- | --- | --- |
 | `arena_funding_rates` | table | db_versioned | High | `/Users/giwon/code/news/supabase/migrations/20260620_arena_market_structure_v1.sql:10` | 8H funding raw events |
 | `arena_open_interest_snapshots` | table | db_versioned | High | `/Users/giwon/code/news/supabase/migrations/20260620_arena_market_structure_v1.sql:25` | OI raw snapshots |
-| `arena_basis_snapshots` | table | db_versioned | Medium | `/Users/giwon/code/news/supabase/migrations/20260620_arena_market_structure_v1.sql:43` | futures basis raw snapshots |
+| `arena_basis_snapshots` | table | db_versioned | Medium | `/Users/giwon/code/news/supabase/migrations/20260620_arena_market_structure_v1.sql:43` | derivatives basis raw snapshots |
 | `arena_mark_price_bars` | table | db_versioned | High | `/Users/giwon/code/news/supabase/migrations/20260620_arena_market_structure_v1.sql:61` | mark price and premium index bars |
 | `arena_market_feature_snapshots` | table | db_versioned | High | `/Users/giwon/code/news/supabase/migrations/20260620_arena_market_structure_v1.sql:90` | 4H decision-aligned market features |
 | `arena_shadow_decisions` | table | db_versioned | High | `/Users/giwon/code/news/supabase/migrations/20260620_arena_market_structure_v1.sql:110` | vNext sleeve/allocator shadow results |

@@ -24,6 +24,7 @@ from . import (
     risk,
     slack_notify,
     sleeves,
+    spot_policy,
     state,
     tca_shadow,
 )
@@ -181,6 +182,15 @@ def _base_params_snapshot(
         indicator_profile_id=indicator_profile_id,
         cost_scenario_id=cost_scenario.cost_scenario_id,
     )
+    snapshot["execution_product"] = {
+        "target_product": config.TARGET_PRODUCT,
+        "position_semantics": config.POSITION_SEMANTICS,
+        "short_signal_action": config.SHORT_SIGNAL_ACTION,
+        "allow_live_short": config.ALLOW_LIVE_SHORT,
+        "research_perp_shadow_enabled": config.RESEARCH_PERP_SHADOW_ENABLED,
+        "spot_execution_only": True,
+        "derivatives_data_usage": "research_features_only",
+    }
     return snapshot
 
 
@@ -210,13 +220,17 @@ def _params_snapshot(
 
 
 def _risk_policy() -> risk.PortfolioRiskPolicy:
+    max_short_positions = 0 if config.TARGET_PRODUCT == "spot" else config.MAX_SHORT_POSITIONS
+    max_net_short_exposure = (
+        0.0 if config.TARGET_PRODUCT == "spot" else config.MAX_NET_SHORT_EXPOSURE
+    )
     return risk.PortfolioRiskPolicy(
         position_unit=config.POSITION_UNIT,
         max_open_positions_total=config.MAX_OPEN_POSITIONS_TOTAL,
         max_long_positions=config.MAX_LONG_POSITIONS,
-        max_short_positions=config.MAX_SHORT_POSITIONS,
+        max_short_positions=max_short_positions,
         max_net_long_exposure=config.MAX_NET_LONG_EXPOSURE,
-        max_net_short_exposure=config.MAX_NET_SHORT_EXPOSURE,
+        max_net_short_exposure=max_net_short_exposure,
         daily_loss_limit_pct=config.DAILY_LOSS_LIMIT_PCT,
         algo_max_drawdown_kill_pct=config.ALGO_MAX_DRAWDOWN_KILL_PCT,
         cooldown_after_kill_hours=config.COOLDOWN_AFTER_KILL_HOURS,
@@ -456,6 +470,8 @@ async def _run_cycle() -> None:
             indicator_profile_id=indicator_profile_id,
             cost_model_version=cost_scenario.cost_model_version,
             cost_scenario_id=cost_scenario.cost_scenario_id,
+            product_type=config.TARGET_PRODUCT,
+            position_semantics=config.POSITION_SEMANTICS,
         )
     )
     try:
@@ -569,33 +585,47 @@ async def _run_cycle() -> None:
     portfolio_risk_state = await _risk_state(now)
     for algo_id, fn in ALGORITHMS.items():
         signal: str | None = None
+        raw_signal: str | None = None
         action = "flat_skip"
         skipped_reason: str | None = None
         resulting_position_id: int | None = None
         risk_decision: risk.RiskDecision | None = None
         gate_decision: execution_gate.ExecutionGateDecision | None = None
+        product_decision: spot_policy.SpotExecutionDecision | None = None
         current = state.open_positions.get(algo_id)
         current_position_id = current["id"] if current else None
         try:
-            signal = fn(macro, ind)
+            raw_signal = fn(macro, ind)
+            product_decision = spot_policy.decide(raw_signal, current)
+            signal = product_decision.executable_signal
+            action = product_decision.action
+            skipped_reason = product_decision.skipped_reason
 
-            if signal is None:
+            if product_decision.should_close:
                 if current is not None:
-                    if not execution_rules.min_hold_ok(
-                        current,
-                        now,
-                        algo_id,
-                        parameters.MIN_HOLD_HOURS,
-                        parameters.MIN_HOLD_FALLBACK_HOURS,
+                    if (
+                        not execution_rules.min_hold_ok(
+                            current,
+                            now,
+                            algo_id,
+                            parameters.MIN_HOLD_HOURS,
+                            parameters.MIN_HOLD_FALLBACK_HOURS,
+                        )
+                        and not product_decision.legacy_short_close
+                        and raw_signal != "short"
                     ):
                         action = "min_hold_skip"
                         skipped_reason = "flat_signal_before_min_hold"
                         continue
-                    ret_pct = await positions.close_position(current["id"], now, price)
+                    ret_pct = await positions.close_position(
+                        current["id"],
+                        now,
+                        price,
+                        close_reason=product_decision.close_reason,
+                    )
                     hold_h = execution_rules.hold_hours(current["open_time"], now)
                     state.open_positions[algo_id] = None
                     portfolio_risk_state = await _risk_state(now)
-                    action = "close_flat"
                     await slack_notify.notify_close(
                         algo_id=algo_id,
                         direction=current["direction"],
@@ -605,43 +635,12 @@ async def _run_cycle() -> None:
                         hold_hours=hold_h,
                         position_id=current["id"],
                         is_stop_loss=False,
-                        close_reason="flat_signal",
+                        close_reason=product_decision.close_reason or "flat_signal",
                     )
                 continue
 
-            if current is not None:
-                if current["direction"] == signal:
-                    action = "hold"
-                    continue  # HOLD — 방향 동일
-                if not execution_rules.min_hold_ok(
-                    current,
-                    now,
-                    algo_id,
-                    parameters.MIN_HOLD_HOURS,
-                    parameters.MIN_HOLD_FALLBACK_HOURS,
-                ):
-                    logger.debug("%s: 최소 보유 시간 미경과 — 반전 스킵", algo_id)
-                    action = "min_hold_skip"
-                    skipped_reason = "reverse_signal_before_min_hold"
-                    continue
-                ret_pct = await positions.close_position(current["id"], now, price)
-                hold_h = execution_rules.hold_hours(current["open_time"], now)
-                state.open_positions[algo_id] = None
-                portfolio_risk_state = await _risk_state(now)
-                action = "reverse"
-                await slack_notify.notify_close(
-                    algo_id=algo_id,
-                    direction=current["direction"],
-                    open_price=current["open_price"],
-                    close_price=price,
-                    ret_pct=ret_pct,
-                    hold_hours=hold_h,
-                    position_id=current["id"],
-                    is_stop_loss=False,
-                    close_reason="reverse_signal",
-                )
-            else:
-                action = "open"
+            if not product_decision.should_open:
+                continue
 
             risk_decision = risk.evaluate_open(
                 algo_id=algo_id,
@@ -795,6 +794,11 @@ async def _run_cycle() -> None:
                     skipped_reason=skipped_reason,
                     risk_decision=risk_decision.as_dict() if risk_decision else None,
                     risk_snapshot=risk_decision.as_dict() if risk_decision else None,
+                    raw_signal=product_decision.raw_signal if product_decision else raw_signal,
+                    executable_signal=signal,
+                    product_policy_snapshot=(
+                        product_decision.policy_snapshot() if product_decision else None
+                    ),
                 )
             )
 
@@ -851,6 +855,8 @@ async def _run_frequency_shadow_cycle(profile_id: str) -> None:
             indicator_profile_id=indicator_profile_id,
             cost_model_version=cost_scenario.cost_model_version,
             cost_scenario_id=cost_scenario.cost_scenario_id,
+            product_type=config.TARGET_PRODUCT,
+            position_semantics=config.POSITION_SEMANTICS,
         )
     )
     try:

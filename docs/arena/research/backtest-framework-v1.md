@@ -4,13 +4,13 @@
 
 ## 목적
 
-파라미터 튜닝 전에 라이브 arena 봇과 같은 규칙으로 과거 4H 데이터를 재생하는 baseline 검증 프레임을 만든다.
+파라미터 튜닝 전에 live arena 봇과 같은 현물 long/flat 규칙으로 과거 4H 데이터를 재생하는 baseline 검증 프레임을 만든다. derivatives/perp-style long/short replay는 `--product usdm_perp_paper`를 명시한 research 전용 경로다.
 
 ## 현재 범위
 
 - 입력: `arena_ohlcv_bars` 원본 4H OHLCV, `arena_macro_snapshots` macro 원본 snapshot
 - 계산: replay 시점까지의 OHLCV만 사용해 RSI/MACD/BB/ATR 재계산
-- 실행 규칙: `src/arena/execution_rules.py` 공통 함수 사용
+- 실행 규칙: `src/arena/execution_rules.py`와 `src/arena/spot_policy.py` 공통 함수 사용
 - 리스크 규칙: `src/arena/risk.py` portfolio gate 공통 함수 사용
 - 결과 저장: backtest run, trade, equity curve, walk-forward split 테이블
 
@@ -25,11 +25,12 @@
 | 손절 체결가 | stop price 우선, gap이면 bar open 기준 보수적 체결 |
 | 수수료 | round-trip `fee_bps * 2` |
 | 슬리피지 | 기본 0 bps, backtest 옵션으로 추가 |
-| funding | `open_time < funding_time <= close_time` 합산 후 long 비용/short 수익으로 반영 |
+| product semantics | 기본 `spot`: raw short는 long 청산 또는 no-trade, short open 금지 |
+| funding | spot 기본값에서는 0. `--product usdm_perp_paper` research replay에서만 funding을 `open_time < funding_time <= close_time`으로 반영 |
 | 최소 보유 | signal 기반 flat/reverse exit에만 적용 |
 | stop-loss | 최소 보유와 무관하게 즉시 exit |
 | stale macro | `macro_stale_hours` 초과 시 macro 입력 비활성화 |
-| portfolio exposure | max open/long/short/net exposure 초과 시 신규 진입 차단 |
+| portfolio exposure | spot 기본값에서는 max open/long exposure를 기준으로 신규 진입 차단. short/net short는 research replay 호환용 |
 | risk kill switch | 일간 손실 제한, 알고리즘별 MDD kill switch를 replay |
 | 파라미터 | `params_snapshot`, `rules_snapshot`, `strategy_version` 저장 |
 
@@ -89,7 +90,7 @@ LIMIT 5;
 - `arena_portfolio_risk_layer_ready`: 적용 완료.
 - `arena_market_structure_v1_ready`: SQL 적용 후 확인 필요.
 - `arena_frequency_research_v1_ready`: SQL 적용 후 확인 필요.
-- funding 데이터가 없으면 `funding_ret_pct=0`으로 처리되어 기존 backtest와 동일하게 동작한다.
+- spot backtest에서는 funding이 항상 `0`이다. funding 포함 net return은 `--product usdm_perp_paper` research replay에서만 해석한다.
 - `--profile`, `--indicator-profile`, `--cost-scenario` 옵션으로 4H/1H/15m replay를 분리한다.
 - metrics에는 trades/day, turnover/day, cost drag, funding drag, gross/net return, end-of-data 제외 성과를 포함한다.
 
@@ -114,7 +115,7 @@ LIMIT 5;
 - forced `end_of_data` 포함/제외 성과를 분리.
 - risk event count와 risk-blocked signal count를 report mart에 포함.
 - stop-loss trade가 발생한 run에서 `stop_loss_fill_policy` 실제 pass/fail 확인.
-- funding 포함 run에서는 `gross_ret_pct`, `trading_cost_pct`, `funding_ret_pct`, `net_ret_pct`를 같이 본다.
+- spot run에서는 `gross_ret_pct`, `trading_cost_pct`, `net_ret_pct`를 본다. funding 포함 research run에서는 `funding_ret_pct`까지 같이 본다.
 
 ## Step 2B 검증 루브릭
 

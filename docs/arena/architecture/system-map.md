@@ -8,6 +8,7 @@
 | --- | --- | --- |
 | service entry | `src/arena/server.py` | positions init, open positions refresh, scheduler/stream 동시 실행 |
 | scheduler | `src/arena/scheduler.py` | 4H OHLCV/macro 수집, indicators 계산, 알고리즘 실행, position open/close |
+| spot policy | `src/arena/spot_policy.py` | raw long/short/flat 신호를 현물 long/flat 실행 action으로 변환 |
 | stream | `src/arena/stream.py` | Binance WebSocket 현재가 수신, stop-loss 감지 |
 | realtime market | `src/arena/realtime_market.py` | Binance trade/book/depth/kline stream을 1분 execution feature로 집계 |
 | positions | `src/arena/positions.py` | Supabase `paper_positions` CRUD |
@@ -30,6 +31,7 @@ Binance 4H OHLCV + R2 latest.json
   -> scheduler
   -> indicators.compute
   -> algorithms
+  -> spot_policy (raw short = close/no-trade, no short open)
   -> execution_rules
   -> execution_gate shadow ledger
   -> positions.open/close_position
@@ -83,6 +85,8 @@ arena_ohlcv_bars + arena_macro_snapshots
 | `arena_child_orders` | submitted order | future exchange order ledger |
 | `arena_executions` | fill | future execution/fill ledger |
 | `arena_execution_quality` | order/run | TCA and realized execution quality |
+| `arena_spot_position_mart_v1` | position | 현물 long-only paper outcome mart |
+| `arena_legacy_perp_sim_position_mart_v1` | position | 과거 synthetic long/short simulation 분리 mart |
 | `arena_risk_events` | risk event | live portfolio risk gate block/kill events |
 | `arena_risk_state` | algo/risk_model | risk kill/cooldown state registry |
 | `arena_strategy_versions` | strategy_version | strategy release registry |
@@ -115,6 +119,8 @@ arena_ohlcv_bars + arena_macro_snapshots
 11. `supabase/migrations/20260620_arena_market_structure_v1.sql`
 12. `supabase/migrations/20260620_arena_frequency_research_v1.sql`
 13. `supabase/migrations/20260620_arena_realtime_execution_v1.sql`
+14. `supabase/migrations/20260620_arena_tca_shadow_v1.sql`
+15. `supabase/migrations/20260620_arena_spot_semantics_v1.sql`
 
 ## Current Known Warnings
 
@@ -122,3 +128,4 @@ arena_ohlcv_bars + arena_macro_snapshots
 - `macro_fetched_at_recorded` warns for older backtest run because it was generated before `macro_snapshot.fetched_at` was added to backtest trade snapshots.
 - `research_sample_size` warns because 116 bars / 8 trades is too small for tuning.
 - `stop_loss_fill_policy` is `na` until a backtest run contains stop-loss trades.
+- Spot semantics SQL 적용 전이면 legacy synthetic short가 아직 open으로 보일 수 있다. 적용 후 신규 live/paper short open은 금지된다.

@@ -69,6 +69,8 @@ def test_backtest_min_hold_blocks_early_reverse_then_allows_later_reverse() -> N
     settings = backtest.BacktestSettings(
         close_open_at_end=False,
         min_hold_hours={"test_algo": 8.0},
+        product_type="usdm_perp_paper",
+        position_semantics="perp_long_short_sim",
     )
     result = backtest.run_replay(
         [
@@ -124,15 +126,47 @@ def test_backtest_run_row_is_json_ready_and_versioned() -> None:
     row = backtest._run_row(result)
 
     assert row["backtest_run_id"] == "00000000-0000-0000-0000-000000000001"
-    assert row["strategy_version"] == "arena-ec2-v7"
+    assert row["strategy_version"] == "arena-spot-v1"
     assert row["rules_snapshot"]["fee_bps"] == 5.0
     assert row["frequency_profile_id"] == "live_4h"
     assert row["indicator_profile_id"] == "time_normalized_v1"
     assert row["cost_model_version"] == "arena-cost-v2"
     assert row["cost_scenario_id"] == "base"
     assert row["rules_snapshot"]["portfolio_risk"]["max_open_positions_total"] == 3
+    assert row["rules_snapshot"]["execution_product"]["target_product"] == "spot"
+    assert row["rules_snapshot"]["execution_product"]["spot_execution_only"] is True
+    assert row["rules_snapshot"]["execution_product"]["allow_live_short"] is False
     assert row["bar_count"] == 2
     assert row["metrics"]["by_algo"]["test_algo"]["trade_count"] == 1
+
+
+def test_spot_backtest_maps_short_to_exit_or_no_trade() -> None:
+    signals = iter(["short", "long", "short"])
+
+    def scripted(macro, indicators):
+        return next(signals)
+
+    result = backtest.run_replay(
+        [
+            _frame(0, close=100.0),
+            _frame(1, close=101.0),
+            _frame(2, close=102.0),
+        ],
+        strategy_fns={"test_algo": scripted},
+        settings=backtest.BacktestSettings(
+            close_open_at_end=False,
+            product_type="spot",
+            position_semantics="spot_long_flat",
+        ),
+    )
+
+    assert len(result.trades) == 1
+    assert result.trades[0].direction == "long"
+    assert result.trades[0].exit_reason == "short_signal_spot_risk_off"
+    assert all(
+        point.open_position is None or point.open_position["direction"] == "long"
+        for point in result.equity_curve
+    )
 
 
 def test_backtest_frequency_metrics_include_cost_and_turnover() -> None:

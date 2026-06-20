@@ -236,7 +236,11 @@ def test_backtest_includes_funding_in_net_return() -> None:
     result = backtest.run_replay(
         [_frame(0, 100.0), _frame(1, 101.0)],
         strategy_fns={"funding_algo": scripted},
-        settings=backtest.BacktestSettings(close_open_at_end=True),
+        settings=backtest.BacktestSettings(
+            close_open_at_end=True,
+            product_type="usdm_perp_paper",
+            position_semantics="perp_long_short_sim",
+        ),
         funding_events=[
             backtest.FundingEvent(
                 symbol="BTCUSDT",

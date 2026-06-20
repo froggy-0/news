@@ -44,7 +44,7 @@
 
 - 결정: stop-loss backtest fill은 `stop_price_or_gap_open` 정책이다.
 - long: `low <= stop_loss_price`이면 체결, gap이면 `min(open, stop_loss_price)`.
-- short: `high >= stop_loss_price`이면 체결, gap이면 `max(open, stop_loss_price)`.
+- research/perp short: `high >= stop_loss_price`이면 체결, gap이면 `max(open, stop_loss_price)`.
 - 이유: 4H OHLC만으로는 intrabar tick 순서를 알 수 없다.
 - 영향: 실제보다 보수적일 수 있지만 과대평가를 줄인다.
 - 리스크: 같은 bar 안에서 stop과 signal이 모두 가능할 때 tick 순서 불확실성이 남는다.
@@ -76,6 +76,15 @@
 - 결정: walk-forward split/최적화 전에 `portfolio-risk-v1`을 라이브와 백테스트 양쪽에 적용한다.
 - 이유: 전체 노출 제한 없이 알고리즘별 독립 포지션만 replay하면 실제 운영보다 성과가 과대평가될 수 있다.
 - 영향: `src/arena/risk.py`, `arena_risk_events`, `arena_risk_state`, `arena_backtest_risk_events`, `risk_snapshot`을 추가했다.
-- 기본 정책: total 3 positions, long 2, short 2, net long/short 2.0, daily loss 5%, algo MDD kill 10%.
+- 기본 정책: total 3 positions, long 2, daily loss 5%, algo MDD kill 10%. short/net short 한도는 research/perp replay 호환용으로 남지만 live/paper spot 실행에는 사용하지 않는다.
 - 현재 상태: Supabase migration 적용 확인 후 EC2 `arena.service`에 재배포 완료.
 - 리스크: 기존 legacy open position은 risk snapshot이 비어 있다. 신규 open/risk block부터 snapshot/event가 채워진다.
+
+## D011. live/paper 거래 기준은 현물 spot long/flat으로 고정한다
+
+- 결정: 실거래 승격을 전제로 하는 Arena live/paper 경로는 `spot_long_flat`만 허용한다.
+- 이유: 초기 실거래는 현물 제약, 수수료, 체결 가능성을 먼저 정확히 맞춰야 한다. 일반 현물 계정에서는 short position을 열 수 없다.
+- 영향: raw `short` 신호는 신규 포지션 진입이 아니라 long 청산(`close_spot_risk_off`) 또는 no-trade(`spot_short_no_trade`)로 변환한다.
+- 영향: `paper_positions.direction='short'` 신규 open은 `positions.open_position()`에서 guard한다.
+- 영향: derivatives/perp funding/OI/basis/mark price와 long/short replay는 research/shadow/backtest 전용으로 유지한다.
+- 리스크: 과거 synthetic short 원장은 성과 해석을 오염시킬 수 있으므로 `legacy_perp_sim`으로 분리한다.

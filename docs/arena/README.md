@@ -33,6 +33,9 @@
 ## 현재 판정
 
 - 운영 경로: EC2 `src/arena`가 primary.
+- 거래 기준: 현재 live/paper 알고리즘과 거래 원장은 **현물 spot long/flat**만 허용한다.
+- raw `short` 신호는 신규 숏 포지션이 아니라 long 청산 또는 no-trade 판단 재료다.
+- derivatives/perp-style long/short, funding/OI/basis/mark price는 research/shadow/backtest 전용이며 실거래 승격 대상이 아니다.
 - Lambda arena 경로: 신규 개선 대상에서 제외. EC2와 동시 활성화하면 중복 거래 위험.
 - 데이터레이크: raw OHLCV, macro snapshot, indicator snapshot, decision ledger 분리 완료.
 - 전략 재현성: `strategy_version`, `params_snapshot`, `indicator_snapshot`, `macro_snapshot`, `data_timestamp` 저장 완료.
@@ -40,6 +43,7 @@
 - 백테스트: baseline replay, validation, portfolio risk replay 저장 구조 완료.
 - Frequency research: 4H live 유지, 1H/15m research profile과 비용 mart 구현 완료. 1H/15m raw backfill 저장 완료.
 - Realtime execution gate: 실시간 feature collector와 shadow execution gate 구현 완료. SQL 적용 후 collector enable 가능.
+- Spot semantics: `arena-spot-v1`, `arena-params-v11` 기준. legacy synthetic short는 `legacy_perp_sim`으로 분리한다.
 - 파라미터 튜닝: 아직 금지. 현재 표본은 116 bars / 8 trades로 부족.
 
 ## 문서 정리 원칙

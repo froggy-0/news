@@ -15,7 +15,16 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 from uuid import uuid4
 
-from . import algorithms, execution_rules, frequency, indicators, market_structure, parameters, risk
+from . import (
+    algorithms,
+    execution_rules,
+    frequency,
+    indicators,
+    market_structure,
+    parameters,
+    risk,
+    spot_policy,
+)
 
 StrategyFn = Callable[[dict[str, Any], dict[str, float]], str | None]
 
@@ -53,6 +62,8 @@ class BacktestSettings:
     params_version: str = parameters.PARAMS_VERSION
     feature_set_version: str = parameters.FEATURE_SET_VERSION
     risk_model_version: str = parameters.RISK_MODEL_VERSION
+    product_type: str = parameters.TARGET_PRODUCT
+    position_semantics: str = parameters.POSITION_SEMANTICS
     symbol: str = parameters.BINANCE_SYMBOL
     interval: str = parameters.BINANCE_KLINE_INTERVAL
     fee_bps: float = parameters.FEE_BPS
@@ -226,6 +237,14 @@ def _params_snapshot(algo_id: str, settings: BacktestSettings) -> dict[str, Any]
         "ecr_threshold": settings.ecr_threshold,
         "max_trades_per_day_per_algo": settings.max_trades_per_day_per_algo,
     }
+    snapshot["execution_product"] = {
+        "target_product": settings.product_type,
+        "position_semantics": settings.position_semantics,
+        "short_signal_action": parameters.SHORT_SIGNAL_ACTION,
+        "allow_live_short": settings.product_type != "spot",
+        "spot_execution_only": settings.product_type == "spot",
+        "derivatives_data_usage": "research_features_only",
+    }
     return snapshot
 
 
@@ -271,6 +290,14 @@ def _base_params_snapshot_from_settings(settings: BacktestSettings) -> dict[str,
             "cost_model_version": settings.cost_model_version,
             "cost_scenario_id": settings.cost_scenario_id,
         }
+    snapshot["execution_product"] = {
+        "target_product": settings.product_type,
+        "position_semantics": settings.position_semantics,
+        "short_signal_action": parameters.SHORT_SIGNAL_ACTION,
+        "allow_live_short": settings.product_type != "spot",
+        "spot_execution_only": settings.product_type == "spot",
+        "derivatives_data_usage": "research_features_only",
+    }
     return snapshot
 
 
@@ -313,6 +340,10 @@ def _stop_fill_price(position: SimPosition, bar: ReplayBar) -> float | None:
     return None
 
 
+def _position_product_type(position: SimPosition) -> str:
+    return str(position.params_snapshot.get("execution_product", {}).get("target_product") or "")
+
+
 def _close_position(
     position: SimPosition,
     *,
@@ -336,12 +367,14 @@ def _close_position(
         }
         for event in (funding_events or [])
     ]
-    funding_ret = market_structure.funding_return_pct(
-        direction=position.direction,
-        funding_rates=funding_rows,
-        open_time=position.open_time,
-        close_time=close_time,
-    )
+    funding_ret = 0.0
+    if _position_product_type(position) != "spot":
+        funding_ret = market_structure.funding_return_pct(
+            direction=position.direction,
+            funding_rates=funding_rows,
+            open_time=position.open_time,
+            close_time=close_time,
+        )
     net_ret = gross_ret - trading_cost + funding_ret
     return BacktestTrade(
         algo_id=position.algo_id,
@@ -496,7 +529,43 @@ def run_replay(
                 position = None
 
             macro = _clean_macro(frame.macro, frame.data_timestamp, settings)
-            signal = fn(macro, frame.indicators)
+            raw_signal = fn(macro, frame.indicators)
+            if settings.product_type == "spot":
+                product_decision = spot_policy.decide(
+                    raw_signal,
+                    position.as_live_position() if position else None,
+                )
+                if product_decision.should_close:
+                    if position and (
+                        raw_signal == "short"
+                        or execution_rules.min_hold_ok(
+                            position.as_live_position(),
+                            frame.bar.close_time,
+                            algo_id,
+                            settings.min_hold_hours,
+                            settings.min_hold_fallback_hours,
+                        )
+                    ):
+                        trade = _close_position(
+                            position,
+                            close_time=frame.bar.close_time,
+                            close_data_timestamp=frame.data_timestamp,
+                            close_price=frame.bar.close,
+                            exit_reason=product_decision.close_reason or product_decision.action,
+                            settings=settings,
+                            funding_events=funding_events,
+                        )
+                        trades.append(trade)
+                        record_realized(algo_id, trade.ret_pct, trade.close_time)
+                        frame_realized[algo_id] += trade.ret_pct
+                        positions_by_algo[algo_id] = None
+                    continue
+                if not product_decision.should_open:
+                    continue
+                signal = product_decision.executable_signal
+            else:
+                signal = raw_signal
+
             if signal is None:
                 if position and execution_rules.min_hold_ok(
                     position.as_live_position(),
@@ -879,6 +948,14 @@ def _run_row(result: BacktestResult) -> dict[str, Any]:
             "macro_stale_hours": settings.macro_stale_hours,
             "min_hold_hours": settings.min_hold_hours,
             "portfolio_risk": risk.policy_snapshot(_risk_policy(settings)),
+            "execution_product": {
+                "target_product": settings.product_type,
+                "position_semantics": settings.position_semantics,
+                "short_signal_action": parameters.SHORT_SIGNAL_ACTION,
+                "allow_live_short": settings.product_type != "spot",
+                "spot_execution_only": settings.product_type == "spot",
+                "derivatives_data_usage": "research_features_only",
+            },
             "funding_model": "funding_events_open_exclusive_close_inclusive_v1",
             "close_open_at_end": settings.close_open_at_end,
         },
@@ -1068,6 +1145,10 @@ async def _amain(args: argparse.Namespace) -> int:
         indicator_profile_id=indicator_profile_id,
         cost_model_version=cost_scenario.cost_model_version,
         cost_scenario_id=cost_scenario.cost_scenario_id,
+        product_type=args.product,
+        position_semantics=(
+            parameters.POSITION_SEMANTICS if args.product == "spot" else "perp_long_short_sim"
+        ),
         symbol=args.symbol,
         interval=interval,
         fee_bps=cost_scenario.fee_bps,
@@ -1094,6 +1175,12 @@ def main() -> int:
     parser.add_argument("--profile", default=frequency.LIVE_4H_PROFILE_ID)
     parser.add_argument("--indicator-profile", default=None)
     parser.add_argument("--cost-scenario", default=frequency.DEFAULT_COST_SCENARIO_ID)
+    parser.add_argument(
+        "--product",
+        choices=["spot", "usdm_perp_paper"],
+        default=parameters.TARGET_PRODUCT,
+        help="Replay semantics. spot maps short signals to exit/no-trade.",
+    )
     parser.add_argument("--interval", default=None, help="Override interval from --profile")
     parser.add_argument(
         "--limit", type=int, default=1000, help="--from-date/--to-date 미지정 시 최근 N bars 사용"

@@ -4,11 +4,11 @@
 
 ## 목적
 
-거래 빈도를 높이면 신호 수는 늘지만, 수수료/슬리피지/스프레드/funding 비용과 노이즈가 함께 커진다. 이 문서는 기존 4H paper trading을 유지하면서 1H/15m를 research/backtest/shadow 전용으로 검증하기 위한 구현 상태와 실행 절차를 기록한다.
+거래 빈도를 높이면 신호 수는 늘지만, 수수료/슬리피지/스프레드와 노이즈가 함께 커진다. 이 문서는 기존 4H 현물 long/flat paper trading을 유지하면서 1H/15m를 research/backtest/shadow 전용으로 검증하기 위한 구현 상태와 실행 절차를 기록한다. funding buffer는 derivatives/perp-style 연구 비용 시나리오로만 둔다.
 
 ## 현재 원칙
 
-- `live_4h`만 기존 paper position 생성 경로를 유지한다.
+- `live_4h`만 기존 paper position 생성 경로를 유지하되, 실행은 현물 long/flat만 허용한다.
 - `research_1h`는 raw/backtest/shadow 후보지만 기본 scheduler는 꺼져 있다.
 - `research_15m`는 raw/backtest 전용이다. readiness 전에는 scheduler에 연결하지 않는다.
 - `time_normalized_v1`이 기본 indicator profile이다. 4H RSI 14 bars의 56시간 의미를 1H 56 bars, 15m 224 bars로 환산한다.
@@ -33,7 +33,7 @@
 
 | profile | interval | mode | train/test/embargo | ECR | max trades/day/algo | 기본 상태 |
 | --- | --- | --- | --- | ---: | ---: | --- |
-| `live_4h` | `4h` | paper + research | 84d / 20d / 24h | 1.3 | 3 | live 유지 |
+| `live_4h` | `4h` | spot paper + research | 84d / 20d / 24h | 1.3 | 3 | live 유지 |
 | `research_1h` | `1h` | research + shadow 후보 | 90d / 21d / 24h | 1.5 | 6 | raw 저장 후 검증 |
 | `research_15m` | `15m` | raw + backtest | 60d / 14d / 12h | 1.7 | 12 | scheduler 미연결 |
 
@@ -103,6 +103,12 @@ PYTHONPATH=src .venv/bin/python -m arena.backtest --profile live_4h --cost-scena
 PYTHONPATH=src .venv/bin/python -m arena.backtest --profile research_1h --indicator-profile time_normalized_v1 --cost-scenario base --limit 1000
 ```
 
+derivatives/perp-style long/short 연구 replay가 필요할 때만 아래처럼 명시한다.
+
+```bash
+PYTHONPATH=src .venv/bin/python -m arena.backtest --profile research_1h --cost-scenario base --product usdm_perp_paper --limit 1000
+```
+
 frequency shadow 활성화는 1H raw/backtest가 정상화된 뒤에만 한다.
 
 ```bash
@@ -129,7 +135,7 @@ ARENA_FREQUENCY_SHADOW_PROFILES=research_1h
 - turnover per day
 - gross return
 - trading cost drag
-- funding drag
+- funding drag (derivatives/perp-style research replay에서만)
 - cost-to-gross ratio
 - end-of-data 제외 성과
 

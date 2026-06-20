@@ -4,9 +4,9 @@
 
 ## 목적
 
-데이터는 가능한 한 실시간으로 관측하되, 거래는 4H/1H 전략 신호와 체결 품질 조건이 동시에 충족될 때만 실행한다.
+데이터는 가능한 한 실시간으로 관측하되, 거래는 4H/1H 전략 신호와 체결 품질 조건이 동시에 충족될 때만 실행한다. 현재 실행 상품은 BTC 현물이며, gate가 통과해도 열 수 있는 포지션은 long뿐이다.
 
-이번 단계는 shadow-only다. 기본값에서 `paper_positions` 생성 로직은 변경하지 않는다.
+이번 단계는 shadow-first다. 기본값에서 gate는 `paper_positions` 생성을 차단하지 않는다. 단, spot semantics 적용 후 `paper_positions`는 현물 long/flat만 기록한다.
 
 ## 코드 구성
 

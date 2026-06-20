@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from arena import algorithms, feature_registry, frequency, indicators, parameters
+from arena import algorithms, config, feature_registry, frequency, indicators, parameters
 
 
 def test_arena_parameter_snapshot_is_json_serializable() -> None:
@@ -10,7 +10,7 @@ def test_arena_parameter_snapshot_is_json_serializable() -> None:
 
     assert snapshot["params_version"] == parameters.PARAMS_VERSION
     assert snapshot["feature_set_version"] == parameters.FEATURE_SET_VERSION
-    assert snapshot["params_version"] == "arena-params-v9"
+    assert snapshot["params_version"] == "arena-params-v11"
     assert snapshot["feature_set_version"] == "arena-features-v5"
     assert snapshot["risk_model_version"] == "portfolio-risk-v1"
     assert snapshot["runtime"] == "ec2"
@@ -18,11 +18,23 @@ def test_arena_parameter_snapshot_is_json_serializable() -> None:
     assert snapshot["market_data"]["frequency_shadow_enabled"] is False
     assert snapshot["market_data"]["frequency_shadow_profiles"] == ["research_1h"]
     assert snapshot["market_data"]["realtime_collector_enabled"] is True
+    assert snapshot["execution_product"]["target_product"] == "spot"
+    assert snapshot["execution_product"]["position_semantics"] == "spot_long_flat"
+    assert snapshot["execution_product"]["allow_live_short"] is False
+    assert snapshot["execution_product"]["spot_execution_only"] is True
+    assert snapshot["execution_product"]["derivatives_data_usage"] == "research_features_only"
     assert snapshot["execution_gate"]["shadow_order_notional_usd"] == 1_000.0
     assert snapshot["indicators"]["macd_fast_period"] == 12
     assert snapshot["risk_defaults"]["max_open_positions_total"] == 3
     assert snapshot["risk_defaults"]["daily_loss_limit_pct"] == 0.05
     json.dumps(snapshot)
+
+
+def test_live_config_is_hard_locked_to_spot_execution() -> None:
+    assert config.TARGET_PRODUCT == "spot"
+    assert config.POSITION_SEMANTICS == "spot_long_flat"
+    assert config.SHORT_SIGNAL_ACTION == "exit_or_no_trade"
+    assert config.ALLOW_LIVE_SHORT is False
 
 
 def test_frequency_profiles_convert_time_to_bars_and_costs() -> None:

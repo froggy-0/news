@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sovereign Arena — BTC Paper Trading</title>
-  <meta name="description" content="BTC algorithmic paper trading arena — live performance dashboard">
+  <title>Sovereign Arena — BTC Spot Paper Trading</title>
+  <meta name="description" content="BTC spot long/flat algorithmic paper trading arena — live performance dashboard">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&family=Exo+2:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -121,7 +121,7 @@
       font-size:9px;font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;letter-spacing:.5px;
       padding:3px 7px;border:1px solid currentColor;
     }
-    .pb-long{color:#60A5FA}.pb-short{color:#F87171}.pb-flat{color:var(--muted)}
+    .pb-long{color:#60A5FA}.pb-flat{color:var(--muted)}
 
     /* ── Panel ──────────────────────────────── */
     .panel{
@@ -306,7 +306,7 @@
 <header class="hd" role="banner">
   <div class="hd-brand">
     <span class="hd-title">SOVEREIGN ARENA</span>
-    <span class="hd-sub">BTCUSDT · 4H · 모의투자</span>
+    <span class="hd-sub">BTCUSDT · 4H · 현물 long/flat 모의투자</span>
   </div>
   <div class="hd-right">
     <div class="btc-wrap">
@@ -324,7 +324,7 @@
 
   <div class="port-strip" id="portfolioStrip" aria-label="Portfolio summary">
     <div>
-      <div class="port-label">포트폴리오 — 알고리즘당 $1,000</div>
+      <div class="port-label">현물 포트폴리오 — 알고리즘당 $1,000 · 숏 진입 없음</div>
     </div>
     <div class="port-block">
       <div class="port-title">총 자산</div>
@@ -376,8 +376,7 @@
       </div>
 
       <div class="mk-legend" aria-hidden="true">
-        <div>▲ <span>롱 진입</span></div>
-        <div>▼ <span>숏 진입</span></div>
+        <div>▲ <span>현물 매수</span></div>
         <div>● <span>청산</span></div>
         <div><span>색 = 알고리즘</span></div>
       </div>
@@ -406,8 +405,8 @@
 </main>
 
 <footer class="ft" role="contentinfo">
-  모의투자 전용 — 실제 자본 위험 없음 ·
-  <span id="stratVer">arena-ec2-v7</span> ·
+  현물 long/flat 모의투자 전용 — 선물 주문 없음 ·
+  <span id="stratVer">arena-spot-v1</span> ·
   <span id="lastUpdate"></span>
 </footer>
 
@@ -421,8 +420,8 @@
 // │  CONFIG  — replace before deploy                        │
 // │                                                         │
 // │  Supabase → Project Settings → API                      │
-// │  Required RLS: paper_positions — public SELECT          │
-// │  Required Realtime: paper_positions enabled             │
+// │  Required RLS: arena_spot_position_mart_v1 — public SELECT
+// │  Realtime trigger: paper_positions changes              │
 // └─────────────────────────────────────────────────────────┘
 const SUPABASE_URL      = 'https://etscgpquupksucbyrvhh.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_mTGwRZeCCzBQnUORrFqQUg_iMFCSQes';
@@ -440,31 +439,14 @@ const ALGOS = {
 const ALGO_IDS = Object.keys(ALGOS);
 const STARTING_CAPITAL = 1000; // virtual USD per algo
 
-// ── Mock data (mirrors paper_positions schema) ────────────
+// ── Mock data (mirrors arena_spot_position_mart_v1 schema) ─
 const MOCK = [
-  { id:1,  algo_id:'supertrend',     direction:'long',  status:'closed', open_time:'2026-06-01T04:05:00Z', close_time:'2026-06-03T12:05:00Z', open_price:98200,  close_price:99800,  ret_pct:0.0161,  hit:true,  hold_hours:56,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
-  { id:2,  algo_id:'supertrend',     direction:'long',  status:'closed', open_time:'2026-06-07T08:05:00Z', close_time:'2026-06-10T04:05:00Z', open_price:101500, close_price:103200, ret_pct:0.0158,  hit:true,  hold_hours:68,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
-  { id:3,  algo_id:'supertrend',     direction:'long',  status:'open',   open_time:'2026-06-17T20:05:00Z', close_time:null,                   open_price:103800, close_price:null,   ret_pct:null,    hit:null,  hold_hours:null, is_stop_loss:false, strategy_version:'arena-ec2-v7' },
-  { id:4,  algo_id:'fng_contrarian', direction:'short', status:'closed', open_time:'2026-06-02T04:05:00Z', close_time:'2026-06-04T04:05:00Z', open_price:99000,  close_price:99500,  ret_pct:-0.0060, hit:false, hold_hours:48,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
-  { id:5,  algo_id:'fng_contrarian', direction:'long',  status:'closed', open_time:'2026-06-05T12:05:00Z', close_time:'2026-06-09T00:05:00Z', open_price:100200, close_price:102100, ret_pct:0.0180,  hit:true,  hold_hours:84,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
-  { id:6,  algo_id:'fng_contrarian', direction:'long',  status:'closed', open_time:'2026-06-11T04:05:00Z', close_time:'2026-06-13T04:05:00Z', open_price:102800, close_price:103100, ret_pct:0.0020,  hit:true,  hold_hours:48,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
-  { id:7,  algo_id:'fng_contrarian', direction:'short', status:'closed', open_time:'2026-06-14T20:05:00Z', close_time:'2026-06-17T20:05:00Z', open_price:104200, close_price:103200, ret_pct:0.0086,  hit:true,  hold_hours:72,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
-  { id:8,  algo_id:'fng_contrarian', direction:'short', status:'closed', open_time:'2026-06-18T04:05:00Z', close_time:'2026-06-19T04:05:00Z', open_price:103200, close_price:103700, ret_pct:-0.0058, hit:false, hold_hours:24,   is_stop_loss:true,  strategy_version:'arena-ec2-v7' },
-  { id:9,  algo_id:'ema_cross',      direction:'long',  status:'closed', open_time:'2026-06-03T04:05:00Z', close_time:'2026-06-04T12:05:00Z', open_price:100100, close_price:99800,  ret_pct:-0.0040, hit:false, hold_hours:32,   is_stop_loss:true,  strategy_version:'arena-ec2-v7' },
-  { id:10, algo_id:'ema_cross',      direction:'long',  status:'closed', open_time:'2026-06-15T04:05:00Z', close_time:'2026-06-17T04:05:00Z', open_price:103900, close_price:103200, ret_pct:-0.0077, hit:false, hold_hours:48,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
-  { id:11, algo_id:'macd_momentum',  direction:'long',  status:'closed', open_time:'2026-06-01T12:05:00Z', close_time:'2026-06-02T20:05:00Z', open_price:98500,  close_price:99900,  ret_pct:0.0132,  hit:true,  hold_hours:32,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
-  { id:12, algo_id:'macd_momentum',  direction:'long',  status:'closed', open_time:'2026-06-04T04:05:00Z', close_time:'2026-06-06T04:05:00Z', open_price:100000, close_price:102000, ret_pct:0.0190,  hit:true,  hold_hours:48,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
-  { id:13, algo_id:'macd_momentum',  direction:'short', status:'closed', open_time:'2026-06-08T04:05:00Z', close_time:'2026-06-09T12:05:00Z', open_price:103200, close_price:101800, ret_pct:0.0126,  hit:true,  hold_hours:32,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
-  { id:14, algo_id:'macd_momentum',  direction:'long',  status:'closed', open_time:'2026-06-10T20:05:00Z', close_time:'2026-06-13T04:05:00Z', open_price:102500, close_price:104100, ret_pct:0.0146,  hit:true,  hold_hours:56,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
-  { id:15, algo_id:'macd_momentum',  direction:'short', status:'closed', open_time:'2026-06-14T04:05:00Z', close_time:'2026-06-15T12:05:00Z', open_price:104500, close_price:103500, ret_pct:0.0086,  hit:true,  hold_hours:32,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
-  { id:16, algo_id:'macd_momentum',  direction:'long',  status:'closed', open_time:'2026-06-16T04:05:00Z', close_time:'2026-06-17T04:05:00Z', open_price:103200, close_price:104800, ret_pct:0.0145,  hit:true,  hold_hours:24,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
-  { id:17, algo_id:'macd_momentum',  direction:'long',  status:'closed', open_time:'2026-06-18T06:05:00Z', close_time:'2026-06-19T02:05:00Z', open_price:105100, close_price:103800, ret_pct:0.0124,  hit:true,  hold_hours:20,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
-  { id:18, algo_id:'macd_momentum',  direction:'long',  status:'open',   open_time:'2026-06-19T10:05:00Z', close_time:null,                   open_price:104200, close_price:null,   ret_pct:null,    hit:null,  hold_hours:null, is_stop_loss:false, strategy_version:'arena-ec2-v7' },
-  { id:19, algo_id:'bb_squeeze',     direction:'long',  status:'closed', open_time:'2026-06-03T12:05:00Z', close_time:'2026-06-05T04:05:00Z', open_price:99500,  close_price:100800, ret_pct:0.0121,  hit:true,  hold_hours:40,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
-  { id:20, algo_id:'bb_squeeze',     direction:'long',  status:'closed', open_time:'2026-06-09T04:05:00Z', close_time:'2026-06-11T04:05:00Z', open_price:101800, close_price:102600, ret_pct:0.0069,  hit:true,  hold_hours:48,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
-  { id:21, algo_id:'bb_squeeze',     direction:'long',  status:'closed', open_time:'2026-06-13T12:05:00Z', close_time:'2026-06-15T00:05:00Z', open_price:103500, close_price:103800, ret_pct:0.0019,  hit:true,  hold_hours:36,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
-  { id:22, algo_id:'bb_squeeze',     direction:'short', status:'closed', open_time:'2026-06-16T12:05:00Z', close_time:'2026-06-18T04:05:00Z', open_price:104100, close_price:105000, ret_pct:-0.0099, hit:false, hold_hours:40,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
-  { id:23, algo_id:'bb_squeeze',     direction:'short', status:'open',   open_time:'2026-06-19T06:05:00Z', close_time:null,                   open_price:104500, close_price:null,   ret_pct:null,    hit:null,  hold_hours:null, is_stop_loss:false, strategy_version:'arena-ec2-v7' },
+  { id:1,  algo_id:'supertrend',     direction:'long', status:'closed', open_time:'2026-06-01T04:05:00Z', close_time:'2026-06-03T12:05:00Z', open_price:98200,  close_price:99800,  ret_pct:0.0161, hit:true,  hold_hours:56, is_stop_loss:false, strategy_version:'arena-spot-v1', product_type:'spot', position_semantics:'spot_long_flat' },
+  { id:2,  algo_id:'supertrend',     direction:'long', status:'open',   open_time:'2026-06-17T20:05:00Z', close_time:null,                   open_price:103800, close_price:null,   ret_pct:null,   hit:null,  hold_hours:null, is_stop_loss:false, strategy_version:'arena-spot-v1', product_type:'spot', position_semantics:'spot_long_flat' },
+  { id:3,  algo_id:'fng_contrarian', direction:'long', status:'closed', open_time:'2026-06-05T12:05:00Z', close_time:'2026-06-09T00:05:00Z', open_price:100200, close_price:102100, ret_pct:0.0180, hit:true,  hold_hours:84, is_stop_loss:false, strategy_version:'arena-spot-v1', product_type:'spot', position_semantics:'spot_long_flat' },
+  { id:4,  algo_id:'ema_cross',      direction:'long', status:'closed', open_time:'2026-06-15T04:05:00Z', close_time:'2026-06-17T04:05:00Z', open_price:103900, close_price:103200, ret_pct:-0.0077, hit:false, hold_hours:48, is_stop_loss:false, strategy_version:'arena-spot-v1', product_type:'spot', position_semantics:'spot_long_flat' },
+  { id:5,  algo_id:'macd_momentum',  direction:'long', status:'closed', open_time:'2026-06-10T20:05:00Z', close_time:'2026-06-13T04:05:00Z', open_price:102500, close_price:104100, ret_pct:0.0146, hit:true,  hold_hours:56, is_stop_loss:false, strategy_version:'arena-spot-v1', product_type:'spot', position_semantics:'spot_long_flat' },
+  { id:6,  algo_id:'bb_squeeze',     direction:'long', status:'closed', open_time:'2026-06-13T12:05:00Z', close_time:'2026-06-15T00:05:00Z', open_price:103500, close_price:103800, ret_pct:0.0019, hit:true,  hold_hours:36, is_stop_loss:false, strategy_version:'arena-spot-v1', product_type:'spot', position_semantics:'spot_long_flat' },
 ];
 
 // ── State ─────────────────────────────────────────────────
@@ -499,8 +481,8 @@ function algoStats(ps) {
     let equityTotal = equity;
     if (open && latestBtcPrice && open.open_price) {
       const raw = (latestBtcPrice - open.open_price) / open.open_price;
-      unrealizedPct = (open.direction === 'long' ? raw : -raw) * 100;
-      equityTotal = equity * (1 + (open.direction === 'long' ? raw : -raw));
+      unrealizedPct = raw * 100;
+      equityTotal = equity * (1 + raw);
     }
 
     const totalRet = done.reduce((s, p) => s + p.ret_pct, 0) * 100;
@@ -561,7 +543,7 @@ function renderCards(stats) {
   document.getElementById('algoGrid').innerHTML = ALGO_IDS.map(algo => {
     const s = stats[algo];
     const cfg = ALGOS[algo];
-    const posCls = s.pos === 'LONG' ? 'pb-long' : s.pos === 'SHORT' ? 'pb-short' : 'pb-flat';
+    const posCls = s.pos === 'LONG' ? 'pb-long' : 'pb-flat';
     const dec = latestDecisions[algo];
 
     // Equity display (always show $)
@@ -636,12 +618,12 @@ function renderPositionStrip() {
   el.innerHTML = opens
     .sort((a, b) => new Date(a.open_time) - new Date(b.open_time))
     .map(p => {
-      const dirColor = p.direction === 'long' ? '#60A5FA' : '#F87171';
-      const dirKo = p.direction === 'long' ? '롱' : '숏';
+      const dirColor = '#60A5FA';
+      const dirKo = '현물 매수';
       let unrlStr = '—', unrlColor = 'var(--muted)', pnlStr = '';
       if (latestBtcPrice && p.open_price) {
         const raw = (latestBtcPrice - p.open_price) / p.open_price;
-        const u = (p.direction === 'long' ? raw : -raw) * 100;
+        const u = raw * 100;
         unrlColor = u >= 0 ? 'var(--pos)' : 'var(--neg)';
         unrlStr = `${u >= 0 ? '+' : ''}${u.toFixed(2)}%`;
         pnlStr = `  ·  ${u >= 0 ? '+' : '-'}$${Math.abs(u / 100 * STARTING_CAPITAL).toFixed(0)}`;
@@ -686,13 +668,13 @@ function renderLog(ps) {
       month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Seoul'
     });
-    const dirCls = p.direction === 'long' ? 'dl' : 'ds';
+    const dirCls = 'dl';
 
     let retHtml;
     if (p.status === 'open') {
       if (latestBtcPrice && p.open_price) {
         const raw = (latestBtcPrice - p.open_price) / p.open_price;
-        const u = (p.direction === 'long' ? raw : -raw) * 100;
+        const u = raw * 100;
         retHtml = `<span class="${u >= 0 ? 'rp' : 'rn'}">${u >= 0 ? '+' : ''}${u.toFixed(2)}%<span class="open-pill">진입중</span></span>`;
       } else {
         retHtml = '<span class="ro">진입 중</span>';
@@ -716,7 +698,7 @@ function renderLog(ps) {
     return `<tr class="${p.status === 'open' ? 'open-row' : ''}">
       <td style="color:var(--muted);font-size:11px">${ts}</td>
       <td><span class="abadge" style="color:${cfg.color};border-color:${cfg.color}40">${p.algo_id}</span></td>
-      <td><span class="dbadge ${dirCls}">${p.direction.toUpperCase()}</span></td>
+      <td><span class="dbadge ${dirCls}">SPOT BUY</span></td>
       <td style="font-size:12px">$${p.open_price.toLocaleString()}</td>
       <td style="font-size:12px;color:var(--muted2)">${exit}</td>
       <td>${retHtml}</td>
@@ -812,13 +794,14 @@ function renderPriceChart() {
   if (ph) ph.style.display = 'none';
 
   const t0 = ohlcv[0].x;
-  const trades = positions.filter(p => activeTab === 'all' || p.algo_id === activeTab);
-  const longE = [], shortE = [], exits = [];
+  const trades = positions.filter(p =>
+    p.direction === 'long' && (activeTab === 'all' || p.algo_id === activeTab));
+  const longE = [], exits = [];
   for (const p of trades) {
     const ot = new Date(p.open_time).getTime();
     if (ot >= t0 && p.open_price) {
       const pt = { x: ot, y: p.open_price, _algo: p.algo_id, _dir: p.direction, _ret: p.ret_pct, _kind: '진입' };
-      (p.direction === 'long' ? longE : shortE).push(pt);
+      longE.push(pt);
     }
     if (p.status === 'closed' && p.close_time && p.close_price) {
       const ct = new Date(p.close_time).getTime();
@@ -829,7 +812,7 @@ function renderPriceChart() {
 
   // 거래 구간으로 x/y축 적응적 줌 (마커를 또렷이). 거래 없으면 최근 14일.
   const lastX = ohlcv[ohlcv.length - 1].x;
-  const markers = [...longE, ...shortE, ...exits];
+  const markers = [...longE, ...exits];
   let xMin, xMax;
   if (markers.length) {
     const xs = markers.map(m => m.x);
@@ -854,8 +837,7 @@ function renderPriceChart() {
 
   const datasets = [
     { label: 'BTC', data: ohlcv, showLine: true, pointRadius: 0, borderColor: 'rgba(148,163,184,.45)', borderWidth: 1, tension: .25, order: 5 },
-    { label: '롱 진입', data: longE, pointStyle: 'triangle', rotation: 0, radius: 8, backgroundColor: colOf(longE), borderColor: '#0F172A', borderWidth: 1.5, order: 1 },
-    { label: '숏 진입', data: shortE, pointStyle: 'triangle', rotation: 180, radius: 8, backgroundColor: colOf(shortE), borderColor: '#0F172A', borderWidth: 1.5, order: 1 },
+    { label: '현물 매수', data: longE, pointStyle: 'triangle', rotation: 0, radius: 8, backgroundColor: colOf(longE), borderColor: '#0F172A', borderWidth: 1.5, order: 1 },
     { label: '청산', data: exits, pointStyle: 'circle', radius: 5, backgroundColor: '#0F172A', borderColor: colOf(exits), borderWidth: 2, order: 2 },
   ];
 
@@ -892,7 +874,7 @@ function renderPriceChart() {
               const r = c.raw;
               if (r._kind) {
                 const ret = r._ret != null ? ` (${r._ret * 100 >= 0 ? '+' : ''}${(r._ret * 100).toFixed(2)}%)` : '';
-                return ` ${r._algo} · ${r._dir === 'long' ? '롱' : '숏'} ${r._kind} $${r.y.toLocaleString()}${ret}`;
+                return ` ${r._algo} · 현물 ${r._kind} $${r.y.toLocaleString()}${ret}`;
               }
               return ` BTC $${r.y.toLocaleString()}`;
             },
@@ -978,13 +960,13 @@ async function fetchDecisions(client) {
 
 async function fetchPositions(client) {
   const { data, error } = await client
-    .from('paper_positions')
+      .from('arena_spot_position_mart_v1')
     .select(`
       id, algo_id, direction, status,
       open_time, close_time,
       open_price, close_price, stop_loss_price,
       ret_pct, hit, hold_hours,
-      is_stop_loss, strategy_version
+      is_stop_loss, strategy_version, product_type, position_semantics
     `)
     .order('open_time', { ascending: false })
     .limit(500);
@@ -993,7 +975,10 @@ async function fetchPositions(client) {
     console.error('[Arena] fetch error:', error.message);
     return null;
   }
-  return data;
+  return (data || []).filter(p =>
+    p.direction === 'long' &&
+    p.product_type === 'spot' &&
+    p.position_semantics === 'spot_long_flat');
 }
 
 function setupRealtime(client) {

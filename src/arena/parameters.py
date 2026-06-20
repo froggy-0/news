@@ -10,8 +10,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-STRATEGY_VERSION = "arena-ec2-v7"
-PARAMS_VERSION = "arena-params-v9"
+STRATEGY_VERSION = "arena-spot-v1"
+PARAMS_VERSION = "arena-params-v11"
 FEATURE_SET_VERSION = "arena-features-v5"
 RISK_MODEL_VERSION = "portfolio-risk-v1"
 RUNTIME = "ec2"
@@ -25,6 +25,11 @@ ARENA_FREQUENCY_SHADOW_PROFILES = ("research_1h",)
 ARENA_REALTIME_COLLECTOR_ENABLED = True
 ARENA_EXECUTION_GATE_SHADOW_ENABLED = True
 ARENA_EXECUTION_GATE_LIVE_ENABLED = False
+TARGET_PRODUCT = "spot"
+POSITION_SEMANTICS = "spot_long_flat"
+SHORT_SIGNAL_ACTION = "exit_or_no_trade"
+ALLOW_LIVE_SHORT = False
+RESEARCH_PERP_SHADOW_ENABLED = True
 
 HTTP_TIMEOUT_SECONDS = 30
 WEBSOCKET_PING_INTERVAL_SECONDS = 20
@@ -155,6 +160,15 @@ def base_params_snapshot() -> dict[str, Any]:
             "frequency_shadow_profiles": list(ARENA_FREQUENCY_SHADOW_PROFILES),
             "realtime_collector_enabled": ARENA_REALTIME_COLLECTOR_ENABLED,
             "realtime_feature_window_seconds": REALTIME_FEATURE_WINDOW_SECONDS,
+        },
+        "execution_product": {
+            "target_product": TARGET_PRODUCT,
+            "position_semantics": POSITION_SEMANTICS,
+            "short_signal_action": SHORT_SIGNAL_ACTION,
+            "allow_live_short": ALLOW_LIVE_SHORT,
+            "research_perp_shadow_enabled": RESEARCH_PERP_SHADOW_ENABLED,
+            "spot_execution_only": True,
+            "derivatives_data_usage": "research_features_only",
         },
         "schedule": {
             "cron_hour": SCHEDULER_CRON_HOUR,

@@ -188,6 +188,8 @@ async def record_run_started(
     indicator_profile_id: str = frequency.DEFAULT_INDICATOR_PROFILE_ID,
     cost_model_version: str = frequency.COST_MODEL_VERSION,
     cost_scenario_id: str = frequency.DEFAULT_COST_SCENARIO_ID,
+    product_type: str = parameters.TARGET_PRODUCT,
+    position_semantics: str = parameters.POSITION_SEMANTICS,
 ) -> CaptureWriteResult:
     payload = {
         "run_id": run_id,
@@ -200,6 +202,8 @@ async def record_run_started(
         "params_version": parameters.PARAMS_VERSION,
         "feature_set_version": parameters.FEATURE_SET_VERSION,
         "risk_model_version": parameters.RISK_MODEL_VERSION,
+        "product_type": product_type,
+        "position_semantics": position_semantics,
         "frequency_profile_id": frequency_profile_id,
         "indicator_profile_id": indicator_profile_id,
         "cost_model_version": cost_model_version,
@@ -217,6 +221,8 @@ async def record_run_started(
             not in {
                 "feature_set_version",
                 "risk_model_version",
+                "product_type",
+                "position_semantics",
                 "frequency_profile_id",
                 "indicator_profile_id",
                 "cost_model_version",
@@ -583,11 +589,16 @@ async def record_decision(
     skipped_reason: str | None = None,
     risk_decision: dict[str, Any] | None = None,
     risk_snapshot: dict[str, Any] | None = None,
+    raw_signal: str | None = None,
+    executable_signal: str | None = None,
+    product_policy_snapshot: dict[str, Any] | None = None,
 ) -> CaptureWriteResult:
     row = {
         "run_id": run_id,
         "algo_id": algo_id,
         "signal": signal,
+        "raw_signal": raw_signal,
+        "executable_signal": executable_signal,
         "action": action,
         "reason": reason,
         "current_position_id": current_position_id,
@@ -595,19 +606,41 @@ async def record_decision(
         "skipped_reason": skipped_reason,
         "risk_decision": risk_decision or {},
         "risk_snapshot": risk_snapshot or {},
+        "product_policy_snapshot": product_policy_snapshot or {},
     }
     result = await _safe_execute(
         "arena_decisions.upsert",
         positions.db().table("arena_decisions").upsert(row, on_conflict="run_id,algo_id"),
     )
-    if not result.ok and (
-        "risk_decision" in str(result.error) or "risk_snapshot" in str(result.error)
+    if not result.ok and any(
+        key in str(result.error)
+        for key in (
+            "risk_decision",
+            "risk_snapshot",
+            "raw_signal",
+            "executable_signal",
+            "product_policy_snapshot",
+            "arena_decisions_action_check",
+        )
     ):
+        legacy_action = action
+        if action in {"spot_short_no_trade"}:
+            legacy_action = "flat_skip"
+        elif action in {"close_spot_risk_off", "close_legacy_short"}:
+            legacy_action = "close_flat"
         legacy_row = {
             key: value
             for key, value in row.items()
-            if key not in {"risk_decision", "risk_snapshot"}
+            if key
+            not in {
+                "risk_decision",
+                "risk_snapshot",
+                "raw_signal",
+                "executable_signal",
+                "product_policy_snapshot",
+            }
         }
+        legacy_row["action"] = legacy_action
         return await _safe_execute(
             "arena_decisions.upsert.legacy",
             positions.db()

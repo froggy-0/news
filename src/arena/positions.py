@@ -107,6 +107,8 @@ async def open_position(
     risk_snapshot: dict[str, Any] | None = None,
 ) -> dict:
     """포지션 오픈. stop_loss_price는 ATR 기반으로 계산된 절대 가격."""
+    if direction == "short" and config.TARGET_PRODUCT == "spot" and not config.ALLOW_LIVE_SHORT:
+        raise ValueError("spot paper/live execution cannot open short positions")
     payload = {
         "algo_id": algo_id,
         "direction": direction,
@@ -127,9 +129,17 @@ async def open_position(
         "signal_reason": signal_reason,
         "risk_snapshot": risk_snapshot or {},
         "runtime": parameters.RUNTIME,
+        "product_type": config.TARGET_PRODUCT,
+        "position_semantics": config.POSITION_SEMANTICS,
     }
     # 아직 마이그레이션 전인 DB(컬럼 부재)에서도 안전하게 동작하도록 선택 컬럼 fallback.
-    _optional_columns = ("risk_snapshot", "slippage_bps", "spread_bps_round_trip")
+    _optional_columns = (
+        "risk_snapshot",
+        "slippage_bps",
+        "spread_bps_round_trip",
+        "product_type",
+        "position_semantics",
+    )
     try:
         res = await _db().table("paper_positions").insert(payload).execute()
     except Exception as exc:
@@ -159,6 +169,7 @@ async def close_position(
     close_price: float,
     *,
     is_stop_loss: bool = False,
+    close_reason: str | None = None,
 ) -> float:
     pos = await _db().table("paper_positions").select("*").eq("id", position_id).single().execute()
     row = pos.data
@@ -173,23 +184,25 @@ async def close_position(
     )
     hold_hours = execution_rules.hold_hours(row["open_time"], close_time)
 
-    await (
-        _db()
-        .table("paper_positions")
-        .update(
-            {
-                "status": "closed",
-                "close_time": close_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "close_price": close_price,
-                "ret_pct": ret_pct,
-                "hit": ret_pct > 0,
-                "is_stop_loss": is_stop_loss,
-                "hold_hours": round(hold_hours, 2),
-            }
-        )
-        .eq("id", position_id)
-        .execute()
-    )
+    update_payload = {
+        "status": "closed",
+        "close_time": close_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "close_price": close_price,
+        "ret_pct": ret_pct,
+        "hit": ret_pct > 0,
+        "is_stop_loss": is_stop_loss,
+        "hold_hours": round(hold_hours, 2),
+    }
+    if close_reason:
+        update_payload["close_reason"] = close_reason
+
+    try:
+        await _db().table("paper_positions").update(update_payload).eq("id", position_id).execute()
+    except Exception as exc:
+        if "close_reason" not in str(exc):
+            raise
+        update_payload.pop("close_reason", None)
+        await _db().table("paper_positions").update(update_payload).eq("id", position_id).execute()
     logger.info(
         "Closed: %s %s ret=%.2f%% hold=%.1fh stop_loss=%s",
         row["algo_id"],

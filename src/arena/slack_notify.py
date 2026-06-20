@@ -125,7 +125,7 @@ def _signal_narrative(
     algo_id: str, direction: str, ind: dict[str, Any], macro: dict[str, Any]
 ) -> str:
     """알고리즘별 진입 근거를 한국어로 풀어서 설명."""
-    dir_ko = "롱 (매수)" if direction == "long" else "숏 (공매도)"
+    dir_ko = "현물 매수" if direction == "long" else "현물 실행 제외 신호"
     rsi = ind.get("rsi", 50.0)
 
     if algo_id == "supertrend":
@@ -145,7 +145,7 @@ def _signal_narrative(
             downside = (price - lower) / price * 100
             return (
                 f"슈퍼트렌드 방향이 *{st_dir}*으로 전환됨\n"
-                f"현재가 ${price:,.0f}이 상단 저항밴드 ${upper:,.0f} 아래 → {dir_ko} 진입\n"
+                f"현재가 ${price:,.0f}이 상단 저항밴드 ${upper:,.0f} 아래 → {dir_ko}\n"
                 f"하단 지지밴드 ${lower:,.0f}까지 하락 여력 *-{downside:.1f}%*"
             )
         return f"슈퍼트렌드 방향 *{st_dir}* → {dir_ko} 진입"
@@ -161,7 +161,7 @@ def _signal_narrative(
             )
         return (
             f"공포탐욕지수 *{fng_label}* 감지\n"
-            f"시장이 과도하게 낙관적일 때 역발산으로 {dir_ko} 진입\n"
+            f"시장이 과도하게 낙관적일 때 현물 신규 진입을 보류하거나 보유 long을 청산\n"
             f'_"남들이 탐욕스러울 때 두려워하라" — 워런 버핏_'
         )
 
@@ -215,7 +215,7 @@ def _close_narrative(
     is_stop_loss: bool,
 ) -> str:
     """청산 결과를 한국어로 풀어서 설명."""
-    dir_ko = "롱" if direction == "long" else "숏"
+    dir_ko = "현물 매수" if direction == "long" else "legacy synthetic short"
     algo_ko = _ALGO_KO.get(algo_id, algo_id)
     ret_str = f"{ret_pct * 100:+.2f}%"
     pnl_usd = ret_pct * VIRTUAL_CAPITAL
@@ -307,15 +307,20 @@ async def notify_open(
     client = _get_client()
     if client is None:
         return
+    if direction != "long":
+        logger.warning(
+            "Spot execution skipped non-long open notification: %s %s", algo_id, direction
+        )
+        return
 
-    dir_emoji = "🟢" if direction == "long" else "🔴"
-    dir_ko = "롱 진입" if direction == "long" else "숏 진입"
+    dir_emoji = "🟢"
+    dir_ko = "현물 매수 진입"
     algo_ko = _ALGO_KO.get(algo_id, algo_id)
     algo_en = _ALGO_EN.get(algo_id, algo_id.upper())
 
     sl_dist_pct = abs(price - stop_loss_price) / price * 100
     sl_dist_usd = abs(price - stop_loss_price)
-    sl_dir = "↑" if direction == "short" else "↓"
+    sl_dir = "↓"
 
     rsi = ind.get("rsi", 0.0)
     atr = ind.get("atr", 0.0)
@@ -388,7 +393,7 @@ async def notify_close(
     hit = ret_pct >= 0
     result_emoji = "✅" if hit else "❌"
     result_ko = "수익" if hit else "손실"
-    dir_ko = "롱" if direction == "long" else "숏"
+    dir_ko = "현물 매수" if direction == "long" else "legacy synthetic short"
     algo_ko = _ALGO_KO.get(algo_id, algo_id)
     algo_en = _ALGO_EN.get(algo_id, algo_id.upper())
 

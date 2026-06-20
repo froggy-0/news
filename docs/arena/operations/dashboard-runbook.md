@@ -13,7 +13,7 @@
 | CF Pages 프로젝트 | `arena` |
 | 코드 | `arena/index.html` (단일 파일 CSR) |
 | 배포 방식 | Wrangler CLI → Cloudflare Pages |
-| 데이터 소스 | Supabase `paper_positions` (anon key) |
+| 데이터 소스 | Supabase `arena_spot_position_mart_v1` (anon key) |
 
 ---
 
@@ -23,7 +23,7 @@
 1. **상단 헤더** — BTCUSDT 현재가 + 24H 등락 (60초 폴링)
 2. **알고리즘 카드** (5개) — 총 수익률, 포지션 상태, 미실현 손익
 3. **Equity Curve 차트** — 알고리즘별 누적 수익률 라인 (Chart.js)
-4. **Trade Log** — 모든 거래 내역 (open/closed), 최신순
+4. **Trade Log** — 현물 long 거래 내역 (open/closed), 최신순
 
 ### 상태 처리
 - **거래 없음**: `—` + "AWAITING FIRST TRADE CLOSE" placeholder
@@ -31,7 +31,7 @@
 - **closed 있음**: 실현 수익률 + equity curve
 
 ### 실시간 업데이트
-- Supabase Realtime WebSocket (`postgres_changes`) → 거래 발생 즉시 갱신
+- Supabase Realtime WebSocket (`paper_positions` `postgres_changes`) → 원장 변경 감지 후 spot mart 재조회
 - BTC 가격: Binance `/api/v3/ticker/24hr` 60초 폴링 → 미실현 손익 갱신
 
 ---
@@ -60,10 +60,13 @@ npx wrangler pages deploy arena/ --project-name arena --commit-dirty=true
 
 ## Supabase 설정 요구사항
 
-대시보드는 anon key(publishable)를 사용하므로 RLS 필요:
+대시보드는 anon key(publishable)를 사용하므로 RLS 또는 공개 view 읽기 정책이 필요:
 
 ```sql
--- paper_positions 공개 읽기 허용 (이미 적용됨)
+-- spot mart 공개 읽기 허용
+GRANT SELECT ON arena_spot_position_mart_v1 TO anon;
+
+-- realtime trigger용 원장 공개 읽기 또는 최소 변경 이벤트 허용
 CREATE POLICY "public_read" ON paper_positions
   FOR SELECT USING (true);
 
@@ -87,7 +90,7 @@ python3 -m http.server 8791 --directory arena
 ## 주요 JS 구조 (arena/index.html)
 
 ```
-fetchPositions()     — Supabase SELECT (최신 500건)
+fetchPositions()     — Supabase arena_spot_position_mart_v1 SELECT (최신 500건)
 algoStats(ps)        — 알고리즘별 통계 계산 + 미실현 손익
 renderCards(stats)   — 카드 렌더링
 equityCurves(ps)     — 날짜별 누적 수익률 계산
