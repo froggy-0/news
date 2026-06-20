@@ -244,6 +244,23 @@
       font-size:9px;color:var(--muted);
       letter-spacing:.3px;margin-top:3px;
     }
+
+    /* ── Algo tabs ──────────────────────────── */
+    .tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:2px}
+    .tab{
+      font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+      font-size:9px;letter-spacing:.8px;text-transform:uppercase;
+      padding:6px 12px;border:1px solid var(--border);
+      background:transparent;color:var(--muted);cursor:pointer;
+      transition:color 150ms,border-color 150ms,background 150ms;
+    }
+    .tab:hover{border-color:var(--border-s);color:var(--muted2)}
+    .tab.active{
+      border-color:var(--ac);color:var(--ac);
+      background:color-mix(in srgb,var(--ac) 12%,transparent);
+    }
+    .mk-legend{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:8px;font-size:10px;color:var(--muted2)}
+    .mk-legend span{color:var(--muted)}
   </style>
 </head>
 <body>
@@ -319,12 +336,32 @@
     </div>
   </section>
 
-  <section aria-label="Trade log">
+  <section aria-label="가격 차트와 매매 기록">
     <div class="panel">
       <div class="ph">
-        <span class="ptitle">트레이드 기록</span>
+        <span class="ptitle">매매 차트 &amp; 기록</span>
         <span class="pmeta" id="tradeCountLabel" aria-live="polite">불러오는 중…</span>
       </div>
+
+      <div class="tabs" id="algoTabs" role="tablist" aria-label="알고리즘 선택"></div>
+
+      <div style="position:relative;height:300px;margin:14px 0 10px">
+        <canvas id="priceChart"
+          role="img"
+          aria-label="실제 BTC 가격 위에 선택한 알고리즘의 진입·청산 지점을 마커로 표시한 차트.">
+        </canvas>
+        <div id="priceChartPlaceholder" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center">
+          <span style="font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:10px;letter-spacing:1.5px;color:#334155">가격 데이터 불러오는 중…</span>
+        </div>
+      </div>
+
+      <div class="mk-legend" aria-hidden="true">
+        <div>▲ <span>롱 진입</span></div>
+        <div>▼ <span>숏 진입</span></div>
+        <div>● <span>청산</span></div>
+        <div><span>색 = 알고리즘</span></div>
+      </div>
+
       <div class="tlog-scroll" role="region" aria-label="Scrollable trade history">
         <table class="tbl" role="table" aria-label="Trade history">
           <thead>
@@ -417,6 +454,13 @@ let latestDecisions = {}; // algo_id → latest arena_decisions row
 
 // ── Data processing ───────────────────────────────────────
 let latestBtcPrice = null; // updated by fetchBtcPrice()
+let ohlcv = [];            // Binance 4h klines: [{x: openTimeMs, y: close}]
+let priceChart = null;
+let activeTab = 'all';     // 'all' | algo_id
+const TAB_DEFS = [
+  { id: 'all', label: '전체', color: '#F59E0B' },
+  ...ALGO_IDS.map(a => ({ id: a, label: a, color: ALGOS[a].color })),
+];
 
 function algoStats(ps) {
   const out = {};
@@ -693,12 +737,19 @@ function renderChart(curves) {
 
 // ── Render: trade log ─────────────────────────────────────
 function renderLog(ps) {
-  const sorted = [...ps].sort((a, b) => new Date(b.open_time) - new Date(a.open_time));
-  const openN = ps.filter(p => p.status === 'open').length;
+  const view = activeTab === 'all' ? ps : ps.filter(p => p.algo_id === activeTab);
+  const sorted = [...view].sort((a, b) => new Date(b.open_time) - new Date(a.open_time));
+  const openN = view.filter(p => p.status === 'open').length;
+  const prefix = activeTab === 'all' ? '총' : `${activeTab} ·`;
   document.getElementById('tradeCountLabel').textContent =
-    `총 ${ps.length}건 · 진입 ${openN}건`;
+    `${prefix} ${view.length}건 · 진입 ${openN}건`;
 
-  document.getElementById('tradeLogBody').innerHTML = sorted.map(p => {
+  const body = document.getElementById('tradeLogBody');
+  if (!sorted.length) {
+    body.innerHTML = `<tr><td colspan="7" style="color:var(--muted);font-size:11px;padding:20px 0">해당 알고리즘 거래 없음</td></tr>`;
+    return;
+  }
+  body.innerHTML = sorted.map(p => {
     const cfg = ALGOS[p.algo_id] || { color: '#94A3B8' };
     const dt = new Date(p.open_time);
     const ts = dt.toLocaleString('ko-KR', {
@@ -772,6 +823,151 @@ function renderPortfolio(stats) {
     openCount === 1 ? '1개 진입 중' : `${openCount}개 진입 중`;
 }
 
+// ── Price chart (real BTC price + trade markers) ──────────
+function fmtTickMs(ms) {
+  const dt = new Date(ms);
+  return `${dt.getMonth() + 1}/${dt.getDate()}`;
+}
+function fmtFullTs(ms) {
+  return new Date(ms).toLocaleString('ko-KR', {
+    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+    hour12: false, timeZone: 'Asia/Seoul',
+  });
+}
+
+async function fetchKlines() {
+  try {
+    const r = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=4h&limit=300');
+    if (!r.ok) return;
+    const d = await r.json();
+    ohlcv = d.map(k => ({ x: k[0], y: parseFloat(k[4]) }));
+    renderPriceChart();
+  } catch (_) {}
+}
+
+function renderTabs() {
+  const el = document.getElementById('algoTabs');
+  if (!el) return;
+  el.innerHTML = TAB_DEFS.map(t =>
+    `<button class="tab ${activeTab === t.id ? 'active' : ''}" style="--ac:${t.color}" data-tab="${t.id}" role="tab" aria-selected="${activeTab === t.id}">${t.label}</button>`
+  ).join('');
+  el.querySelectorAll('.tab').forEach(b => {
+    b.addEventListener('click', () => {
+      if (activeTab === b.dataset.tab) return;
+      activeTab = b.dataset.tab;
+      renderTabs();
+      renderPriceChart();
+      renderLog(positions);
+    });
+  });
+}
+
+function renderPriceChart() {
+  const ctx = document.getElementById('priceChart');
+  const ph = document.getElementById('priceChartPlaceholder');
+  if (!ctx) return;
+  if (!ohlcv.length) {
+    ctx.style.display = 'none';
+    if (ph) ph.style.display = 'flex';
+    return;
+  }
+  ctx.style.display = '';
+  if (ph) ph.style.display = 'none';
+
+  const t0 = ohlcv[0].x;
+  const trades = positions.filter(p => activeTab === 'all' || p.algo_id === activeTab);
+  const longE = [], shortE = [], exits = [];
+  for (const p of trades) {
+    const ot = new Date(p.open_time).getTime();
+    if (ot >= t0 && p.open_price) {
+      const pt = { x: ot, y: p.open_price, _algo: p.algo_id, _dir: p.direction, _ret: p.ret_pct, _kind: '진입' };
+      (p.direction === 'long' ? longE : shortE).push(pt);
+    }
+    if (p.status === 'closed' && p.close_time && p.close_price) {
+      const ct = new Date(p.close_time).getTime();
+      if (ct >= t0) exits.push({ x: ct, y: p.close_price, _algo: p.algo_id, _dir: p.direction, _ret: p.ret_pct, _kind: '청산' });
+    }
+  }
+  const colOf = arr => arr.map(e => (ALGOS[e._algo] || {}).color || '#94A3B8');
+
+  // 거래 구간으로 x/y축 적응적 줌 (마커를 또렷이). 거래 없으면 최근 14일.
+  const lastX = ohlcv[ohlcv.length - 1].x;
+  const markers = [...longE, ...shortE, ...exits];
+  let xMin, xMax;
+  if (markers.length) {
+    const xs = markers.map(m => m.x);
+    const lo = Math.min(...xs), hi = Math.max(...xs);
+    const pad = Math.max((hi - lo) * 0.12, 12 * 3600 * 1000);
+    xMin = lo - pad;
+    xMax = Math.max(hi, lastX) + pad;
+  } else {
+    xMax = lastX;
+    xMin = lastX - 14 * 24 * 3600 * 1000;
+  }
+  const visY = ohlcv.filter(b => b.x >= xMin && b.x <= xMax).map(b => b.y)
+    .concat(markers.map(m => m.y));
+  let yMin, yMax;
+  if (visY.length) {
+    const lo = Math.min(...visY), hi = Math.max(...visY);
+    const pad = (hi - lo) * 0.1 || hi * 0.01;
+    yMin = lo - pad;
+    yMax = hi + pad;
+  }
+
+  const datasets = [
+    { label: 'BTC', data: ohlcv, showLine: true, pointRadius: 0, borderColor: 'rgba(148,163,184,.45)', borderWidth: 1, tension: .25, order: 5 },
+    { label: '롱 진입', data: longE, pointStyle: 'triangle', rotation: 0, radius: 8, backgroundColor: colOf(longE), borderColor: '#0F172A', borderWidth: 1.5, order: 1 },
+    { label: '숏 진입', data: shortE, pointStyle: 'triangle', rotation: 180, radius: 8, backgroundColor: colOf(shortE), borderColor: '#0F172A', borderWidth: 1.5, order: 1 },
+    { label: '청산', data: exits, pointStyle: 'circle', radius: 5, backgroundColor: '#0F172A', borderColor: colOf(exits), borderWidth: 2, order: 2 },
+  ];
+
+  if (priceChart) priceChart.destroy();
+  priceChart = new Chart(ctx, {
+    type: 'scatter',
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'nearest', intersect: true },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(15,23,42,.95)',
+          borderColor: 'rgba(255,255,255,.12)', borderWidth: 1,
+          titleColor: '#94A3B8', bodyColor: '#F1F5F9',
+          titleFont: { family: 'Exo 2', size: 11 }, bodyFont: { family: 'Exo 2', size: 11 },
+          callbacks: {
+            title: items => (items.length ? fmtFullTs(items[0].raw.x) : ''),
+            label: c => {
+              const r = c.raw;
+              if (r._kind) {
+                const ret = r._ret != null ? ` (${r._ret * 100 >= 0 ? '+' : ''}${(r._ret * 100).toFixed(2)}%)` : '';
+                return ` ${r._algo} · ${r._dir === 'long' ? '롱' : '숏'} ${r._kind} $${r.y.toLocaleString()}${ret}`;
+              }
+              return ` BTC $${r.y.toLocaleString()}`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          type: 'linear',
+          min: xMin, max: xMax,
+          grid: { color: 'rgba(255,255,255,.04)' },
+          border: { display: false },
+          ticks: { color: '#475569', font: { family: 'Exo 2', size: 10 }, maxTicksLimit: 8, maxRotation: 0, callback: v => fmtTickMs(v) },
+        },
+        y: {
+          min: yMin, max: yMax,
+          grid: { color: 'rgba(255,255,255,.04)' },
+          border: { display: false },
+          ticks: { color: '#475569', font: { family: 'Exo 2', size: 10 }, callback: v => '$' + (v / 1000).toFixed(1) + 'k' },
+        },
+      },
+    },
+  });
+}
+
 // ── Full render pipeline ──────────────────────────────────
 function renderAll(ps) {
   positions = ps;
@@ -781,6 +977,8 @@ function renderAll(ps) {
   renderCards(stats);
   renderLegend(stats);
   renderChart(curves);
+  renderTabs();
+  renderPriceChart();
   renderLog(ps);
   const verEl = document.getElementById('stratVer');
   if (verEl) {
@@ -870,6 +1068,9 @@ function setupRealtime(client) {
 async function init() {
   fetchBtcPrice();
   setInterval(fetchBtcPrice, 60_000);
+  fetchKlines();
+  setInterval(fetchKlines, 300_000);
+  renderTabs();
 
   if (IS_MOCK) {
     console.warn('[Arena] Mock mode — set SUPABASE_URL & SUPABASE_ANON_KEY to connect live data.');
