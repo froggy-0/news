@@ -261,6 +261,44 @@
     }
     .mk-legend{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:8px;font-size:10px;color:var(--muted2)}
     .mk-legend span{color:var(--muted)}
+
+    /* ── 현재 포지션 strip ───────────────────── */
+    .pos-strip{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 14px}
+    .pos-card{
+      flex:1 1 240px;min-width:210px;
+      background:var(--surface);border:1px solid var(--border);
+      border-left:3px solid var(--dir);
+      padding:11px 14px;
+    }
+    .pos-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px}
+    .pos-left{display:flex;align-items:center;gap:8px;min-width:0}
+    .pos-dir{
+      display:inline-flex;align-items:center;gap:4px;flex-shrink:0;
+      font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+      font-size:9px;letter-spacing:.5px;padding:3px 7px;
+      border:1px solid var(--dir);color:var(--dir);
+    }
+    .pos-algo{
+      font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+      font-size:9.5px;letter-spacing:.3px;color:var(--muted2);
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    }
+    .pos-unrl{
+      font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+      font-size:17px;font-weight:700;line-height:1;flex-shrink:0;
+    }
+    .pos-meta{font-size:11px;color:var(--muted2);line-height:1.7}
+    .pos-flat{color:var(--muted);font-size:12px;padding:12px 2px;letter-spacing:.3px}
+
+    /* ── tab focus + 진입중 행 강조 ──────────── */
+    .tab:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+    .tbl tr.open-row td{background:rgba(245,158,11,.05)}
+    .tbl tr.open-row td:first-child{box-shadow:inset 2px 0 0 var(--amber)}
+    .open-pill{
+      font-size:8px;font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+      letter-spacing:.4px;color:var(--amber);background:rgba(245,158,11,.12);
+      padding:1px 5px;margin-left:5px;
+    }
   </style>
 </head>
 <body>
@@ -316,26 +354,6 @@
     </div>
   </section>
 
-  <section aria-label="Equity curves chart">
-    <div class="panel">
-      <div class="ph">
-        <span class="ptitle">자산 곡선</span>
-        <span class="pmeta">누적 수익률 % · 시작 → 현재</span>
-      </div>
-      <div class="legend" id="chartLegend" aria-hidden="true"></div>
-      <div style="position:relative;height:240px">
-        <canvas id="eqChart"
-          role="img"
-          aria-label="Line chart showing cumulative return percentage for each algorithm since launch. Hover for values.">
-        </canvas>
-        <div id="chartPlaceholder" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;flex-direction:column;gap:8px">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="1.5" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-          <span style="font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:10px;letter-spacing:1.5px;color:#334155">첫 거래 청산 대기</span>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <section aria-label="가격 차트와 매매 기록">
     <div class="panel">
       <div class="ph">
@@ -345,7 +363,9 @@
 
       <div class="tabs" id="algoTabs" role="tablist" aria-label="알고리즘 선택"></div>
 
-      <div style="position:relative;height:300px;margin:14px 0 10px">
+      <div class="pos-strip" id="posStrip" aria-label="현재 포지션 상태" aria-live="polite"></div>
+
+      <div style="position:relative;height:320px;margin:4px 0 10px">
         <canvas id="priceChart"
           role="img"
           aria-label="실제 BTC 가격 위에 선택한 알고리즘의 진입·청산 지점을 마커로 표시한 차트.">
@@ -449,7 +469,6 @@ const MOCK = [
 
 // ── State ─────────────────────────────────────────────────
 let positions = [];
-let eqChart = null;
 let latestDecisions = {}; // algo_id → latest arena_decisions row
 
 // ── Data processing ───────────────────────────────────────
@@ -537,56 +556,6 @@ function signalHint(algo, dec) {
   return ALGO_NEEDS[algo] || null;
 }
 
-function equityCurves(ps) {
-  const done = ps
-    .filter(p => p.status === 'closed' && p.close_time && p.ret_pct != null)
-    .sort((a, b) => new Date(a.close_time) - new Date(b.close_time));
-
-  if (!done.length) return { labels: [], datasets: [] };
-
-  const t0 = new Date(done[0].open_time);
-  t0.setHours(0, 0, 0, 0);
-  const t1 = new Date();
-
-  const labels = [];
-  const cur = new Date(t0);
-  while (cur <= t1) {
-    labels.push(cur.toISOString().split('T')[0]);
-    cur.setDate(cur.getDate() + 1);
-  }
-
-  const datasets = ALGO_IDS.map(algo => {
-    const ap = done.filter(p => p.algo_id === algo)
-      .sort((a, b) => new Date(a.close_time) - new Date(b.close_time));
-    let cum = 0, idx = 0;
-    const data = labels.map(d => {
-      const end = new Date(d + 'T23:59:59Z');
-      while (idx < ap.length && new Date(ap[idx].close_time) <= end) {
-        cum += ap[idx].ret_pct * 100;
-        idx++;
-      }
-      return parseFloat(cum.toFixed(3));
-    });
-    const cfg = ALGOS[algo];
-    return {
-      label: algo, data,
-      borderColor: cfg.color,
-      backgroundColor: 'transparent',
-      borderWidth: 1.5,
-      pointRadius: 0,
-      tension: 0.4,
-      borderDash: cfg.dash || [],
-    };
-  });
-
-  const tickLabels = labels.map(d => {
-    const dt = new Date(d);
-    return `${dt.getMonth() + 1}/${dt.getDate()}`;
-  });
-
-  return { labels: tickLabels, datasets };
-}
-
 // ── Render: algo cards ────────────────────────────────────
 function renderCards(stats) {
   document.getElementById('algoGrid').innerHTML = ALGO_IDS.map(algo => {
@@ -647,92 +616,53 @@ function renderCards(stats) {
   }).join('');
 }
 
-// ── Render: legend ────────────────────────────────────────
-function renderLegend(stats) {
-  document.getElementById('chartLegend').innerHTML = ALGO_IDS.map(algo => {
-    const s = stats[algo];
-    const cfg = ALGOS[algo];
-    const lineStyle = cfg.dash
-      ? `background:repeating-linear-gradient(90deg,${cfg.color} 0,${cfg.color} 5px,transparent 5px,transparent 8px)`
-      : `background:${cfg.color}`;
-    let retLabel;
-    if (!s.hasAnyTrade || s.closedN === 0) {
-      retLabel = `<span style="color:var(--muted)">—</span>`;
-    } else {
-      const sign = s.totalRet >= 0 ? '+' : '';
-      const rc = s.totalRet >= 0 ? '#34D399' : '#F87171';
-      retLabel = `<span style="color:${rc};font-weight:500">${sign}${s.totalRet.toFixed(2)}%</span>`;
-    }
-    return `<div class="li">
-      <span class="ll" style="${lineStyle}" aria-hidden="true"></span>
-      <span>${algo}</span>
-      ${retLabel}
-    </div>`;
-  }).join('');
+// ── Render: 현재 포지션 status strip ──────────────────────
+function dirArrowSvg(dir) {
+  return dir === 'long'
+    ? '<svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><path d="M5 1 L9 8 L1 8 Z"/></svg>'
+    : '<svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><path d="M5 9 L1 2 L9 2 Z"/></svg>';
 }
 
-// ── Render: chart ─────────────────────────────────────────
-function renderChart(curves) {
-  const ctx = document.getElementById('eqChart');
-  const placeholder = document.getElementById('chartPlaceholder');
-
-  if (!curves.labels.length) {
-    ctx.style.display = 'none';
-    if (placeholder) placeholder.style.display = 'flex';
+function renderPositionStrip() {
+  const el = document.getElementById('posStrip');
+  if (!el) return;
+  const opens = positions.filter(p =>
+    p.status === 'open' && (activeTab === 'all' || p.algo_id === activeTab));
+  if (!opens.length) {
+    el.innerHTML = `<div class="pos-flat">${activeTab === 'all' ? '현재 진입 중인 포지션이 없습니다' : '현재 미진입 (FLAT)'}</div>`;
     return;
   }
-  ctx.style.display = '';
-  if (placeholder) placeholder.style.display = 'none';
-
-  if (eqChart) {
-    eqChart.data.labels = curves.labels;
-    eqChart.data.datasets = curves.datasets;
-    eqChart.update('none');
-    return;
-  }
-  eqChart = new Chart(ctx, {
-    type: 'line',
-    data: { labels: curves.labels, datasets: curves.datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: 'rgba(15,23,42,.95)',
-          borderColor: 'rgba(255,255,255,.12)',
-          borderWidth: 1,
-          titleColor: '#94A3B8',
-          bodyColor: '#F1F5F9',
-          titleFont: { family: 'Exo 2', size: 11 },
-          bodyFont: { family: 'Orbitron', size: 10 },
-          callbacks: {
-            label: c => {
-              const v = c.parsed.y;
-              return ` ${c.dataset.label}: ${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: { color: 'rgba(255,255,255,.04)' },
-          border: { color: 'rgba(255,255,255,.08)', display: false },
-          ticks: { color: '#475569', font: { family: 'Exo 2', size: 10 }, maxTicksLimit: 8, maxRotation: 0 }
-        },
-        y: {
-          grid: { color: 'rgba(255,255,255,.04)' },
-          border: { color: 'rgba(255,255,255,.08)', display: false },
-          ticks: {
-            color: '#475569',
-            font: { family: 'Exo 2', size: 10 },
-            callback: v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%'
-          }
-        }
+  const now = Date.now();
+  el.innerHTML = opens
+    .sort((a, b) => new Date(a.open_time) - new Date(b.open_time))
+    .map(p => {
+      const dirColor = p.direction === 'long' ? '#60A5FA' : '#F87171';
+      const dirKo = p.direction === 'long' ? '롱' : '숏';
+      let unrlStr = '—', unrlColor = 'var(--muted)', pnlStr = '';
+      if (latestBtcPrice && p.open_price) {
+        const raw = (latestBtcPrice - p.open_price) / p.open_price;
+        const u = (p.direction === 'long' ? raw : -raw) * 100;
+        unrlColor = u >= 0 ? 'var(--pos)' : 'var(--neg)';
+        unrlStr = `${u >= 0 ? '+' : ''}${u.toFixed(2)}%`;
+        pnlStr = `  ·  ${u >= 0 ? '+' : '-'}$${Math.abs(u / 100 * STARTING_CAPITAL).toFixed(0)}`;
       }
-    }
-  });
+      const holdH = (now - new Date(p.open_time).getTime()) / 3600000;
+      const cur = latestBtcPrice ? `$${Math.round(latestBtcPrice).toLocaleString()}` : '—';
+      let slStr = '';
+      if (p.stop_loss_price && p.open_price) {
+        const slPct = Math.abs(p.open_price - p.stop_loss_price) / p.open_price * 100;
+        slStr = `  ·  손절 $${Math.round(p.stop_loss_price).toLocaleString()} (-${slPct.toFixed(1)}%)`;
+      }
+      const algoLabel = activeTab === 'all' ? `<span class="pos-algo">${p.algo_id}</span>` : '';
+      return `<div class="pos-card" style="--dir:${dirColor}">
+        <div class="pos-top">
+          <span class="pos-left"><span class="pos-dir">${dirArrowSvg(p.direction)} ${dirKo}</span>${algoLabel}</span>
+          <span class="pos-unrl" style="color:${unrlColor}">${unrlStr}</span>
+        </div>
+        <div class="pos-meta">진입 $${Math.round(p.open_price).toLocaleString()} → 현재 ${cur}${pnlStr}</div>
+        <div class="pos-meta">보유 ${holdH.toFixed(1)}h${slStr}</div>
+      </div>`;
+    }).join('');
 }
 
 // ── Render: trade log ─────────────────────────────────────
@@ -760,7 +690,13 @@ function renderLog(ps) {
 
     let retHtml;
     if (p.status === 'open') {
-      retHtml = '<span class="ro">진입 중</span>';
+      if (latestBtcPrice && p.open_price) {
+        const raw = (latestBtcPrice - p.open_price) / p.open_price;
+        const u = (p.direction === 'long' ? raw : -raw) * 100;
+        retHtml = `<span class="${u >= 0 ? 'rp' : 'rn'}">${u >= 0 ? '+' : ''}${u.toFixed(2)}%<span class="open-pill">진입중</span></span>`;
+      } else {
+        retHtml = '<span class="ro">진입 중</span>';
+      }
     } else if (p.ret_pct != null) {
       const pct = (p.ret_pct * 100).toFixed(2);
       const sign = p.ret_pct >= 0 ? '+' : '';
@@ -777,7 +713,7 @@ function renderLog(ps) {
       ? `${Math.round(p.hold_hours)}h`
       : `<span style="color:var(--muted)">—</span>`;
 
-    return `<tr>
+    return `<tr class="${p.status === 'open' ? 'open-row' : ''}">
       <td style="color:var(--muted);font-size:11px">${ts}</td>
       <td><span class="abadge" style="color:${cfg.color};border-color:${cfg.color}40">${p.algo_id}</span></td>
       <td><span class="dbadge ${dirCls}">${p.direction.toUpperCase()}</span></td>
@@ -856,6 +792,7 @@ function renderTabs() {
       if (activeTab === b.dataset.tab) return;
       activeTab = b.dataset.tab;
       renderTabs();
+      renderPositionStrip();
       renderPriceChart();
       renderLog(positions);
     });
@@ -905,7 +842,8 @@ function renderPriceChart() {
     xMin = lastX - 14 * 24 * 3600 * 1000;
   }
   const visY = ohlcv.filter(b => b.x >= xMin && b.x <= xMax).map(b => b.y)
-    .concat(markers.map(m => m.y));
+    .concat(markers.map(m => m.y))
+    .concat(trades.filter(p => p.status === 'open' && p.stop_loss_price).map(p => p.stop_loss_price));
   let yMin, yMax;
   if (visY.length) {
     const lo = Math.min(...visY), hi = Math.max(...visY);
@@ -920,6 +858,18 @@ function renderPriceChart() {
     { label: '숏 진입', data: shortE, pointStyle: 'triangle', rotation: 180, radius: 8, backgroundColor: colOf(shortE), borderColor: '#0F172A', borderWidth: 1.5, order: 1 },
     { label: '청산', data: exits, pointStyle: 'circle', radius: 5, backgroundColor: '#0F172A', borderColor: colOf(exits), borderWidth: 2, order: 2 },
   ];
+
+  // 단일 알고 탭 + 진입 중이면 진입가·손절선 오버레이
+  if (activeTab !== 'all') {
+    const op = trades.find(p => p.status === 'open');
+    if (op && op.open_price) {
+      const c = (ALGOS[activeTab] || {}).color || '#94A3B8';
+      datasets.push({ label: '진입가', data: [{ x: xMin, y: op.open_price }, { x: xMax, y: op.open_price }], showLine: true, pointRadius: 0, borderColor: c, borderWidth: 1, borderDash: [5, 4], order: 4 });
+      if (op.stop_loss_price) {
+        datasets.push({ label: '손절선', data: [{ x: xMin, y: op.stop_loss_price }, { x: xMax, y: op.stop_loss_price }], showLine: true, pointRadius: 0, borderColor: 'rgba(248,113,113,.55)', borderWidth: 1, borderDash: [2, 3], order: 4 });
+      }
+    }
+  }
 
   if (priceChart) priceChart.destroy();
   priceChart = new Chart(ctx, {
@@ -972,12 +922,10 @@ function renderPriceChart() {
 function renderAll(ps) {
   positions = ps;
   const stats = algoStats(ps);
-  const curves = equityCurves(ps);
   renderPortfolio(stats);
   renderCards(stats);
-  renderLegend(stats);
-  renderChart(curves);
   renderTabs();
+  renderPositionStrip();
   renderPriceChart();
   renderLog(ps);
   const verEl = document.getElementById('stratVer');
@@ -1003,8 +951,11 @@ async function fetchBtcPrice() {
     const cel = document.getElementById('btcChg');
     cel.textContent = `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%`;
     cel.className = 'btc-chg ' + (chg >= 0 ? 'pos-c' : 'neg-c');
-    // refresh cards so unrealized P&L updates with new price
-    if (positions.length) renderCards(algoStats(positions));
+    // refresh cards + 포지션 스트립 so unrealized P&L updates with new price
+    if (positions.length) {
+      renderCards(algoStats(positions));
+      renderPositionStrip();
+    }
   } catch (_) {}
 }
 
@@ -1031,7 +982,7 @@ async function fetchPositions(client) {
     .select(`
       id, algo_id, direction, status,
       open_time, close_time,
-      open_price, close_price,
+      open_price, close_price, stop_loss_price,
       ret_pct, hit, hold_hours,
       is_stop_loss, strategy_version
     `)
