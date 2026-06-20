@@ -692,6 +692,24 @@ async def record_execution_gate(
     )
 
 
+async def record_shadow_tca_order(
+    *,
+    parent_order: dict[str, Any],
+    execution_quality: dict[str, Any],
+) -> list[CaptureWriteResult]:
+    parent_result = await _safe_execute_optional_schema(
+        "arena_parent_orders.insert",
+        positions.db().table("arena_parent_orders").insert(parent_order),
+        object_name="arena_parent_orders",
+    )
+    quality_result = await _safe_execute_optional_schema(
+        "arena_execution_quality.insert",
+        positions.db().table("arena_execution_quality").insert(execution_quality),
+        object_name="arena_execution_quality",
+    )
+    return [parent_result, quality_result]
+
+
 async def record_risk_event(
     *,
     run_id: str,

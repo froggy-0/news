@@ -25,6 +25,7 @@ from . import (
     slack_notify,
     sleeves,
     state,
+    tca_shadow,
 )
 from .algorithms import ALGORITHMS
 
@@ -137,6 +138,25 @@ async def _fetch_book_ticker(symbol: str) -> tuple[float | None, float | None]:
     except Exception as exc:
         logger.warning("bookTicker 수집 실패: %s", exc)
         return None, None
+
+
+async def _fetch_depth_snapshot(
+    symbol: str,
+) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
+    """의사결정 시점 depth20 스냅샷. 실패해도 shadow TCA만 degraded 처리된다."""
+    try:
+        url = f"{config.BINANCE_DEPTH_URL}?symbol={symbol}&limit=20"
+        async with httpx.AsyncClient(timeout=parameters.HTTP_TIMEOUT_SECONDS) as client:
+            res = await client.get(url)
+            res.raise_for_status()
+        data = res.json()
+        return (
+            tca_shadow.normalize_depth_levels(data.get("bids")),
+            tca_shadow.normalize_depth_levels(data.get("asks")),
+        )
+    except Exception as exc:
+        logger.warning("depth snapshot 수집 실패: %s", exc)
+        return [], []
 
 
 def _base_params_snapshot(
@@ -255,6 +275,8 @@ def _book_execution_features(
     *,
     bid: float | None,
     ask: float | None,
+    bids: list[tuple[float, float]] | None = None,
+    asks: list[tuple[float, float]] | None = None,
     price: float,
     data_timestamp: datetime,
 ) -> dict:
@@ -273,6 +295,30 @@ def _book_execution_features(
                 "spread_bps_avg": spread_bps,
                 "spread_bps_p95": spread_bps,
                 "expected_slippage_bps": spread_bps / 2.0,
+            }
+        )
+        bids = bids or []
+        asks = asks or []
+        bid_depth = tca_shadow.depth_within_bps(bids, mid=mid, side="bid")
+        ask_depth = tca_shadow.depth_within_bps(asks, mid=mid, side="ask")
+        min_depth = (
+            min(value for value in (bid_depth, ask_depth) if value is not None)
+            if (bid_depth is not None or ask_depth is not None)
+            else None
+        )
+        if min_depth is not None:
+            depth_penalty = max(
+                0.0,
+                config.EXEC_GATE_MIN_DEPTH_10BP_USD / max(min_depth, 1.0) - 1.0,
+            )
+            features["expected_slippage_bps"] = spread_bps / 2.0 + depth_penalty
+            features["depth_score"] = min_depth / config.EXEC_GATE_MIN_DEPTH_10BP_USD
+        features.update(
+            {
+                "depth_10bp_bid_usd": bid_depth,
+                "depth_10bp_ask_usd": ask_depth,
+                "depth_bids": bids,
+                "depth_asks": asks,
             }
         )
     return features
@@ -504,10 +550,15 @@ async def _run_cycle() -> None:
     )
 
     # 의사결정 시점 호가 스냅샷 (Tier 1 TCA 선행 데이터). 사이클당 1회 공유.
-    bid, ask = await _fetch_book_ticker(profile.symbol)
+    (bid, ask), (depth_bids, depth_asks) = await asyncio.gather(
+        _fetch_book_ticker(profile.symbol),
+        _fetch_depth_snapshot(profile.symbol),
+    )
     execution_features = _book_execution_features(
         bid=bid,
         ask=ask,
+        bids=depth_bids,
+        asks=depth_asks,
         price=price,
         data_timestamp=data_timestamp,
     )
@@ -708,6 +759,30 @@ async def _run_cycle() -> None:
                         decision=gate_decision,
                     )
                 )
+                if signal is not None and action in {
+                    "open",
+                    "reverse",
+                    "risk_blocked",
+                    "execution_gate_blocked",
+                }:
+                    rows = tca_shadow.build_shadow_tca_rows(
+                        run_id=run_id,
+                        algo_id=algo_id,
+                        signal=signal,
+                        timeframe=profile.interval,
+                        evaluated_at=now,
+                        gate_decision=gate_decision,
+                        cost_scenario=cost_scenario,
+                        target_notional_usd=config.SHADOW_ORDER_NOTIONAL_USD,
+                        timeout_sec=config.SHADOW_ORDER_TIMEOUT_SEC,
+                        arrival_benchmark_sec=config.SHADOW_ARRIVAL_BENCHMARK_SEC,
+                    )
+                    capture_results.extend(
+                        await data_lake.record_shadow_tca_order(
+                            parent_order=rows.parent_order,
+                            execution_quality=rows.execution_quality,
+                        )
+                    )
             capture_results.append(
                 await data_lake.record_decision(
                     run_id=run_id,

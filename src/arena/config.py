@@ -100,6 +100,7 @@ BINANCE_WS_URL = "wss://stream.binance.com:9443/ws/btcusdt@kline_1m"
 BINANCE_COMBINED_WS_URL = "wss://stream.binance.com:9443/stream"
 BINANCE_REST_URL = "https://api.binance.com/api/v3/klines"
 BINANCE_BOOK_TICKER_URL = "https://api.binance.com/api/v3/ticker/bookTicker"
+BINANCE_DEPTH_URL = "https://api.binance.com/api/v3/depth"
 SYMBOL = parameters.BINANCE_SYMBOL
 KLINES_LIMIT = parameters.BINANCE_KLINES_LIMIT
 REALTIME_FEATURE_WINDOW_SECONDS = int(
@@ -128,6 +129,18 @@ EXEC_GATE_VOL_SPIKE_MAX: float = float(
 )
 EXEC_GATE_MIN_DEPTH_10BP_USD: float = float(
     os.environ.get("EXEC_GATE_MIN_DEPTH_10BP_USD", str(parameters.EXEC_GATE_MIN_DEPTH_10BP_USD))
+)
+SHADOW_ORDER_NOTIONAL_USD: float = float(
+    os.environ.get("ARENA_SHADOW_ORDER_NOTIONAL_USD", str(parameters.SHADOW_ORDER_NOTIONAL_USD))
+)
+SHADOW_ORDER_TIMEOUT_SEC: int = int(
+    os.environ.get("ARENA_SHADOW_ORDER_TIMEOUT_SEC", str(parameters.SHADOW_ORDER_TIMEOUT_SEC))
+)
+SHADOW_ARRIVAL_BENCHMARK_SEC: int = int(
+    os.environ.get(
+        "ARENA_SHADOW_ARRIVAL_BENCHMARK_SEC",
+        str(parameters.SHADOW_ARRIVAL_BENCHMARK_SEC),
+    )
 )
 LATEST_JSON_URL = f"{R2_BASE_URL}/analytics/sentiment/latest.json" if R2_BASE_URL else ""
 ARENA_FREQUENCY_SHADOW_PROFILES: tuple[str, ...] = tuple(

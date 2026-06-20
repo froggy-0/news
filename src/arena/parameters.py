@@ -22,7 +22,7 @@ BINANCE_KLINES_LIMIT = 300
 ARENA_SHADOW_VNEXT_ENABLED = True
 ARENA_FREQUENCY_SHADOW_ENABLED = False
 ARENA_FREQUENCY_SHADOW_PROFILES = ("research_1h",)
-ARENA_REALTIME_COLLECTOR_ENABLED = False
+ARENA_REALTIME_COLLECTOR_ENABLED = True
 ARENA_EXECUTION_GATE_SHADOW_ENABLED = True
 ARENA_EXECUTION_GATE_LIVE_ENABLED = False
 
@@ -116,6 +116,9 @@ EXEC_GATE_MIN_DEPTH_SCORE = 0.5
 EXEC_GATE_MAX_LATENCY_MS = 750.0
 EXEC_GATE_VOL_SPIKE_MAX = 1.0
 EXEC_GATE_MIN_DEPTH_10BP_USD = 1_000_000.0
+SHADOW_ORDER_NOTIONAL_USD = 1_000.0
+SHADOW_ORDER_TIMEOUT_SEC = 30
+SHADOW_ARRIVAL_BENCHMARK_SEC = 1
 
 MIN_HOLD_HOURS: dict[str, float] = {
     "supertrend": 12.0,
@@ -229,5 +232,8 @@ def base_params_snapshot() -> dict[str, Any]:
             "max_latency_ms": EXEC_GATE_MAX_LATENCY_MS,
             "vol_spike_max": EXEC_GATE_VOL_SPIKE_MAX,
             "min_depth_10bp_usd": EXEC_GATE_MIN_DEPTH_10BP_USD,
+            "shadow_order_notional_usd": SHADOW_ORDER_NOTIONAL_USD,
+            "shadow_order_timeout_sec": SHADOW_ORDER_TIMEOUT_SEC,
+            "shadow_arrival_benchmark_sec": SHADOW_ARRIVAL_BENCHMARK_SEC,
         },
     }

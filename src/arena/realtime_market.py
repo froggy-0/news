@@ -442,12 +442,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Capture Arena realtime execution features.")
     parser.add_argument("--symbol", default=parameters.BINANCE_SYMBOL)
     parser.add_argument("--seconds", type=int, default=60)
+    parser.add_argument("--once", action="store_true", help="Capture a short dry-run sample.")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
-    rows = asyncio.run(
-        run_for_seconds(symbol=args.symbol, seconds=args.seconds, dry_run=args.dry_run)
-    )
+    seconds = 5 if args.once else args.seconds
+    dry_run = True if args.once else args.dry_run
+    rows = asyncio.run(run_for_seconds(symbol=args.symbol, seconds=seconds, dry_run=dry_run))
     print(json.dumps(rows, indent=2, default=str))
     return 0
 

@@ -22,11 +22,11 @@
 | `arena.runtime` | `ec2` | text | code_only | Medium | `/Users/giwon/code/news/src/arena/parameters.py:17` | Lambda와 EC2 성과 구분 |
 | `arena.market.symbol` | `BTCUSDT` | symbol | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:19` | 거래/수집 대상 |
 | `arena.market.kline_interval` | `4h` | candle | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:20` | 지표와 스케줄의 시간축 |
-| `arena.market.klines_limit` | `150` | candles | code_only | Medium | `/Users/giwon/code/news/src/arena/parameters.py:21` | 지표 warmup 길이 |
+| `arena.market.klines_limit` | `300` | candles | code_only | Medium | `/Users/giwon/code/news/src/arena/parameters.py:21` | 지표 warmup 길이 |
 | `arena.shadow_vnext.enabled` | `true` | bool | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:29` | shadow decision 기록 on/off |
 | `arena.frequency_shadow.enabled` | `false` | bool | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:33` | 1H frequency shadow scheduler on/off |
 | `arena.frequency_shadow.profiles` | `research_1h` | csv | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:89` | 활성화 시 자동 shadow profile 목록 |
-| `arena.realtime_collector.enabled` | `false` | bool | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:38` | 실시간 trade/book/depth feature 수집 on/off |
+| `arena.realtime_collector.enabled` | `true` | bool | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:38` | 실시간 trade/book/depth feature 수집 on/off |
 | `arena.execution_gate.shadow_enabled` | `true` | bool | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:42` | paper 차단 없이 gate decision 저장 |
 | `arena.execution_gate.live_enabled` | `false` | bool | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:46` | true면 paper open 전 execution gate 차단 적용 |
 | `arena.net.http_timeout` | `30` | seconds | code_only | Low | `/Users/giwon/code/news/src/arena/parameters.py:24` | Binance/R2 fetch timeout |
@@ -83,6 +83,9 @@
 | `arena.execution_gate.max_latency_ms` | `750` | ms | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:115` | API 지연 초과 시 no-trade |
 | `arena.execution_gate.vol_spike_max` | `1.0` | score | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:118` | 변동성 spike 차단 |
 | `arena.execution_gate.min_depth_10bp_usd` | `1000000` | USD | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:121` | depth_score 계산 기준 |
+| `arena.shadow_tca.order_notional_usd` | `1000` | USD | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:132` | shadow sweep/TCA 추정 주문 크기 |
+| `arena.shadow_tca.order_timeout_sec` | `30` | seconds | env_restart | Low | `/Users/giwon/code/news/src/arena/config.py:135` | 향후 child order lifecycle timeout 기준 |
+| `arena.shadow_tca.arrival_benchmark_sec` | `1` | seconds | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:138` | parent order arrival benchmark 정의 |
 
 ## Arena Indicators
 

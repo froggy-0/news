@@ -17,6 +17,8 @@ def test_arena_parameter_snapshot_is_json_serializable() -> None:
     assert snapshot["market_data"]["symbol"] == "BTCUSDT"
     assert snapshot["market_data"]["frequency_shadow_enabled"] is False
     assert snapshot["market_data"]["frequency_shadow_profiles"] == ["research_1h"]
+    assert snapshot["market_data"]["realtime_collector_enabled"] is True
+    assert snapshot["execution_gate"]["shadow_order_notional_usd"] == 1_000.0
     assert snapshot["indicators"]["macd_fast_period"] == 12
     assert snapshot["risk_defaults"]["max_open_positions_total"] == 3
     assert snapshot["risk_defaults"]["daily_loss_limit_pct"] == 0.05
