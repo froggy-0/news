@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from arena import algorithms, allocator, backtest, market_structure, regime, sleeves
+from arena import algorithms, allocator, backtest, frequency, market_structure, regime, sleeves
 
 
 def _dt(hour: int) -> datetime:
@@ -14,6 +14,7 @@ def _dt(hour: int) -> datetime:
 def _trend_indicators(**overrides) -> dict:
     data = {
         "rsi": 50.0,
+        "close": 100.0,
         "macd_hist": 1.0,
         "atr": 5.0,
         "atr_pct": 0.01,
@@ -171,6 +172,27 @@ def test_trend_core_v1_is_shadow_only_and_symmetric() -> None:
         == "short"
     )
     assert "trend_core_v1" not in algorithms.ALGORITHMS
+
+
+def test_trend_core_shadow_cost_filter_blocks_low_edge_signal() -> None:
+    profile = frequency.get_frequency_profile("research_1h")
+    cost = frequency.get_cost_scenario("research_1h", "base")
+
+    signal, regime_decision = sleeves.trend_core_sleeve(
+        _trend_indicators(close=100000.0, atr=1.0, macd_hist=0.11),
+        {},
+        {},
+        profile=profile,
+        cost_scenario=cost,
+    )
+
+    assert regime_decision.regime_state == regime.REGIME_BULL_TREND
+    assert signal.direction is None
+    assert signal.target_weight == 0.0
+    assert signal.reason["blocked_reason"] == "cost_aware_edge_below_threshold"
+    assert signal.reason["cost_filter"]["passed"] is False
+    assert signal.feature_snapshot["frequency_profile"]["frequency_profile_id"] == "research_1h"
+    assert signal.feature_snapshot["cost_scenario"]["cost_scenario_id"] == "base"
 
 
 def test_allocator_shadow_budget_does_not_create_live_position() -> None:

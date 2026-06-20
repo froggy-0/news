@@ -211,6 +211,39 @@
     @media(prefers-reduced-motion:reduce){
       *{animation-duration:.01ms!important;transition-duration:.01ms!important}
     }
+
+    /* ── Portfolio strip ─────────────────────────────────── */
+    .port-strip{
+      display:grid;
+      grid-template-columns:1fr repeat(3,auto);
+      align-items:center;gap:24px;
+      background:var(--surface);
+      border:1px solid var(--border);
+      padding:14px 20px;
+      margin-bottom:14px;
+    }
+    .port-label{
+      font-family:'Orbitron',sans-serif;
+      font-size:9px;letter-spacing:2px;color:var(--muted2);
+    }
+    .port-block{text-align:right}
+    .port-title{font-size:10px;color:var(--muted);margin-bottom:3px}
+    .port-val{
+      font-family:'Orbitron',sans-serif;
+      font-size:17px;font-weight:600;
+    }
+    .port-sub{font-size:11px;margin-top:2px}
+
+    /* ── Algo card equity row ────────────────────────────── */
+    .ac-equity{
+      font-family:'Orbitron',sans-serif;
+      font-size:13px;font-weight:600;
+      color:var(--muted2);margin-bottom:5px;
+    }
+    .ac-hint{
+      font-size:9px;color:var(--muted);
+      letter-spacing:.3px;margin-top:3px;
+    }
   </style>
 </head>
 <body>
@@ -233,6 +266,27 @@
 </header>
 
 <main class="wrap">
+
+  <div class="port-strip" id="portfolioStrip" aria-label="Portfolio summary">
+    <div>
+      <div class="port-label">PORTFOLIO — $1,000 per algo</div>
+    </div>
+    <div class="port-block">
+      <div class="port-title">TOTAL EQUITY</div>
+      <div class="port-val" id="portTotal">—</div>
+      <div class="port-sub" id="portTotalPct" style="color:var(--muted)">—</div>
+    </div>
+    <div class="port-block">
+      <div class="port-title">REALIZED P&amp;L</div>
+      <div class="port-val" id="portRealized">—</div>
+      <div class="port-sub" id="portRealizedPct" style="color:var(--muted)">closed only</div>
+    </div>
+    <div class="port-block">
+      <div class="port-title">OPEN POSITIONS</div>
+      <div class="port-val" id="portOpen" style="color:var(--muted2)">—</div>
+      <div class="port-sub" id="portOpenSub" style="color:var(--muted)">algos in market</div>
+    </div>
+  </div>
 
   <section aria-label="Algorithm performance summary">
     <div class="algo-grid" id="algoGrid">
@@ -320,44 +374,46 @@ const IS_MOCK = SUPABASE_URL.startsWith('__');
 
 // ── Algo visual config ────────────────────────────────────
 const ALGOS = {
-  regime_v2:      { color: '#60A5FA' },
+  supertrend:     { color: '#60A5FA' },
   fng_contrarian: { color: '#F59E0B' },
-  vix_rsi:        { color: '#A78BFA', dash: [5, 3] },
+  ema_cross:      { color: '#A78BFA', dash: [5, 3] },
   macd_momentum:  { color: '#34D399' },
-  multi_factor:   { color: '#FB923C' },
+  bb_squeeze:     { color: '#FB923C' },
 };
 const ALGO_IDS = Object.keys(ALGOS);
+const STARTING_CAPITAL = 1000; // virtual USD per algo
 
 // ── Mock data (mirrors paper_positions schema) ────────────
 const MOCK = [
-  { id:1,  algo_id:'regime_v2',      direction:'long',  status:'closed', open_time:'2026-06-01T04:05:00Z', close_time:'2026-06-03T12:05:00Z', open_price:98200,  close_price:99800,  ret_pct:0.0161,  hit:true,  hold_hours:56,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
-  { id:2,  algo_id:'regime_v2',      direction:'long',  status:'closed', open_time:'2026-06-07T08:05:00Z', close_time:'2026-06-10T04:05:00Z', open_price:101500, close_price:103200, ret_pct:0.0158,  hit:true,  hold_hours:68,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
-  { id:3,  algo_id:'regime_v2',      direction:'long',  status:'open',   open_time:'2026-06-17T20:05:00Z', close_time:null,                   open_price:103800, close_price:null,   ret_pct:null,    hit:null,  hold_hours:null, is_stop_loss:false, strategy_version:'arena-ec2-v5' },
-  { id:4,  algo_id:'fng_contrarian', direction:'short', status:'closed', open_time:'2026-06-02T04:05:00Z', close_time:'2026-06-04T04:05:00Z', open_price:99000,  close_price:99500,  ret_pct:-0.0060, hit:false, hold_hours:48,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
-  { id:5,  algo_id:'fng_contrarian', direction:'long',  status:'closed', open_time:'2026-06-05T12:05:00Z', close_time:'2026-06-09T00:05:00Z', open_price:100200, close_price:102100, ret_pct:0.0180,  hit:true,  hold_hours:84,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
-  { id:6,  algo_id:'fng_contrarian', direction:'long',  status:'closed', open_time:'2026-06-11T04:05:00Z', close_time:'2026-06-13T04:05:00Z', open_price:102800, close_price:103100, ret_pct:0.0020,  hit:true,  hold_hours:48,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
-  { id:7,  algo_id:'fng_contrarian', direction:'short', status:'closed', open_time:'2026-06-14T20:05:00Z', close_time:'2026-06-17T20:05:00Z', open_price:104200, close_price:103200, ret_pct:0.0086,  hit:true,  hold_hours:72,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
-  { id:8,  algo_id:'fng_contrarian', direction:'short', status:'closed', open_time:'2026-06-18T04:05:00Z', close_time:'2026-06-19T04:05:00Z', open_price:103200, close_price:103700, ret_pct:-0.0058, hit:false, hold_hours:24,   is_stop_loss:true,  strategy_version:'arena-ec2-v5' },
-  { id:9,  algo_id:'vix_rsi',        direction:'long',  status:'closed', open_time:'2026-06-03T04:05:00Z', close_time:'2026-06-04T12:05:00Z', open_price:100100, close_price:99800,  ret_pct:-0.0040, hit:false, hold_hours:32,   is_stop_loss:true,  strategy_version:'arena-ec2-v5' },
-  { id:10, algo_id:'vix_rsi',        direction:'long',  status:'closed', open_time:'2026-06-15T04:05:00Z', close_time:'2026-06-17T04:05:00Z', open_price:103900, close_price:103200, ret_pct:-0.0077, hit:false, hold_hours:48,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
-  { id:11, algo_id:'macd_momentum',  direction:'long',  status:'closed', open_time:'2026-06-01T12:05:00Z', close_time:'2026-06-02T20:05:00Z', open_price:98500,  close_price:99900,  ret_pct:0.0132,  hit:true,  hold_hours:32,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
-  { id:12, algo_id:'macd_momentum',  direction:'long',  status:'closed', open_time:'2026-06-04T04:05:00Z', close_time:'2026-06-06T04:05:00Z', open_price:100000, close_price:102000, ret_pct:0.0190,  hit:true,  hold_hours:48,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
-  { id:13, algo_id:'macd_momentum',  direction:'short', status:'closed', open_time:'2026-06-08T04:05:00Z', close_time:'2026-06-09T12:05:00Z', open_price:103200, close_price:101800, ret_pct:0.0126,  hit:true,  hold_hours:32,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
-  { id:14, algo_id:'macd_momentum',  direction:'long',  status:'closed', open_time:'2026-06-10T20:05:00Z', close_time:'2026-06-13T04:05:00Z', open_price:102500, close_price:104100, ret_pct:0.0146,  hit:true,  hold_hours:56,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
-  { id:15, algo_id:'macd_momentum',  direction:'short', status:'closed', open_time:'2026-06-14T04:05:00Z', close_time:'2026-06-15T12:05:00Z', open_price:104500, close_price:103500, ret_pct:0.0086,  hit:true,  hold_hours:32,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
-  { id:16, algo_id:'macd_momentum',  direction:'long',  status:'closed', open_time:'2026-06-16T04:05:00Z', close_time:'2026-06-17T04:05:00Z', open_price:103200, close_price:104800, ret_pct:0.0145,  hit:true,  hold_hours:24,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
-  { id:17, algo_id:'macd_momentum',  direction:'long',  status:'closed', open_time:'2026-06-18T06:05:00Z', close_time:'2026-06-19T02:05:00Z', open_price:105100, close_price:103800, ret_pct:0.0124,  hit:true,  hold_hours:20,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
-  { id:18, algo_id:'macd_momentum',  direction:'long',  status:'open',   open_time:'2026-06-19T10:05:00Z', close_time:null,                   open_price:104200, close_price:null,   ret_pct:null,    hit:null,  hold_hours:null, is_stop_loss:false, strategy_version:'arena-ec2-v5' },
-  { id:19, algo_id:'multi_factor',   direction:'long',  status:'closed', open_time:'2026-06-03T12:05:00Z', close_time:'2026-06-05T04:05:00Z', open_price:99500,  close_price:100800, ret_pct:0.0121,  hit:true,  hold_hours:40,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
-  { id:20, algo_id:'multi_factor',   direction:'long',  status:'closed', open_time:'2026-06-09T04:05:00Z', close_time:'2026-06-11T04:05:00Z', open_price:101800, close_price:102600, ret_pct:0.0069,  hit:true,  hold_hours:48,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
-  { id:21, algo_id:'multi_factor',   direction:'long',  status:'closed', open_time:'2026-06-13T12:05:00Z', close_time:'2026-06-15T00:05:00Z', open_price:103500, close_price:103800, ret_pct:0.0019,  hit:true,  hold_hours:36,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
-  { id:22, algo_id:'multi_factor',   direction:'short', status:'closed', open_time:'2026-06-16T12:05:00Z', close_time:'2026-06-18T04:05:00Z', open_price:104100, close_price:105000, ret_pct:-0.0099, hit:false, hold_hours:40,   is_stop_loss:false, strategy_version:'arena-ec2-v5' },
-  { id:23, algo_id:'multi_factor',   direction:'short', status:'open',   open_time:'2026-06-19T06:05:00Z', close_time:null,                   open_price:104500, close_price:null,   ret_pct:null,    hit:null,  hold_hours:null, is_stop_loss:false, strategy_version:'arena-ec2-v5' },
+  { id:1,  algo_id:'supertrend',     direction:'long',  status:'closed', open_time:'2026-06-01T04:05:00Z', close_time:'2026-06-03T12:05:00Z', open_price:98200,  close_price:99800,  ret_pct:0.0161,  hit:true,  hold_hours:56,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
+  { id:2,  algo_id:'supertrend',     direction:'long',  status:'closed', open_time:'2026-06-07T08:05:00Z', close_time:'2026-06-10T04:05:00Z', open_price:101500, close_price:103200, ret_pct:0.0158,  hit:true,  hold_hours:68,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
+  { id:3,  algo_id:'supertrend',     direction:'long',  status:'open',   open_time:'2026-06-17T20:05:00Z', close_time:null,                   open_price:103800, close_price:null,   ret_pct:null,    hit:null,  hold_hours:null, is_stop_loss:false, strategy_version:'arena-ec2-v7' },
+  { id:4,  algo_id:'fng_contrarian', direction:'short', status:'closed', open_time:'2026-06-02T04:05:00Z', close_time:'2026-06-04T04:05:00Z', open_price:99000,  close_price:99500,  ret_pct:-0.0060, hit:false, hold_hours:48,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
+  { id:5,  algo_id:'fng_contrarian', direction:'long',  status:'closed', open_time:'2026-06-05T12:05:00Z', close_time:'2026-06-09T00:05:00Z', open_price:100200, close_price:102100, ret_pct:0.0180,  hit:true,  hold_hours:84,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
+  { id:6,  algo_id:'fng_contrarian', direction:'long',  status:'closed', open_time:'2026-06-11T04:05:00Z', close_time:'2026-06-13T04:05:00Z', open_price:102800, close_price:103100, ret_pct:0.0020,  hit:true,  hold_hours:48,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
+  { id:7,  algo_id:'fng_contrarian', direction:'short', status:'closed', open_time:'2026-06-14T20:05:00Z', close_time:'2026-06-17T20:05:00Z', open_price:104200, close_price:103200, ret_pct:0.0086,  hit:true,  hold_hours:72,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
+  { id:8,  algo_id:'fng_contrarian', direction:'short', status:'closed', open_time:'2026-06-18T04:05:00Z', close_time:'2026-06-19T04:05:00Z', open_price:103200, close_price:103700, ret_pct:-0.0058, hit:false, hold_hours:24,   is_stop_loss:true,  strategy_version:'arena-ec2-v7' },
+  { id:9,  algo_id:'ema_cross',      direction:'long',  status:'closed', open_time:'2026-06-03T04:05:00Z', close_time:'2026-06-04T12:05:00Z', open_price:100100, close_price:99800,  ret_pct:-0.0040, hit:false, hold_hours:32,   is_stop_loss:true,  strategy_version:'arena-ec2-v7' },
+  { id:10, algo_id:'ema_cross',      direction:'long',  status:'closed', open_time:'2026-06-15T04:05:00Z', close_time:'2026-06-17T04:05:00Z', open_price:103900, close_price:103200, ret_pct:-0.0077, hit:false, hold_hours:48,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
+  { id:11, algo_id:'macd_momentum',  direction:'long',  status:'closed', open_time:'2026-06-01T12:05:00Z', close_time:'2026-06-02T20:05:00Z', open_price:98500,  close_price:99900,  ret_pct:0.0132,  hit:true,  hold_hours:32,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
+  { id:12, algo_id:'macd_momentum',  direction:'long',  status:'closed', open_time:'2026-06-04T04:05:00Z', close_time:'2026-06-06T04:05:00Z', open_price:100000, close_price:102000, ret_pct:0.0190,  hit:true,  hold_hours:48,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
+  { id:13, algo_id:'macd_momentum',  direction:'short', status:'closed', open_time:'2026-06-08T04:05:00Z', close_time:'2026-06-09T12:05:00Z', open_price:103200, close_price:101800, ret_pct:0.0126,  hit:true,  hold_hours:32,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
+  { id:14, algo_id:'macd_momentum',  direction:'long',  status:'closed', open_time:'2026-06-10T20:05:00Z', close_time:'2026-06-13T04:05:00Z', open_price:102500, close_price:104100, ret_pct:0.0146,  hit:true,  hold_hours:56,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
+  { id:15, algo_id:'macd_momentum',  direction:'short', status:'closed', open_time:'2026-06-14T04:05:00Z', close_time:'2026-06-15T12:05:00Z', open_price:104500, close_price:103500, ret_pct:0.0086,  hit:true,  hold_hours:32,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
+  { id:16, algo_id:'macd_momentum',  direction:'long',  status:'closed', open_time:'2026-06-16T04:05:00Z', close_time:'2026-06-17T04:05:00Z', open_price:103200, close_price:104800, ret_pct:0.0145,  hit:true,  hold_hours:24,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
+  { id:17, algo_id:'macd_momentum',  direction:'long',  status:'closed', open_time:'2026-06-18T06:05:00Z', close_time:'2026-06-19T02:05:00Z', open_price:105100, close_price:103800, ret_pct:0.0124,  hit:true,  hold_hours:20,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
+  { id:18, algo_id:'macd_momentum',  direction:'long',  status:'open',   open_time:'2026-06-19T10:05:00Z', close_time:null,                   open_price:104200, close_price:null,   ret_pct:null,    hit:null,  hold_hours:null, is_stop_loss:false, strategy_version:'arena-ec2-v7' },
+  { id:19, algo_id:'bb_squeeze',     direction:'long',  status:'closed', open_time:'2026-06-03T12:05:00Z', close_time:'2026-06-05T04:05:00Z', open_price:99500,  close_price:100800, ret_pct:0.0121,  hit:true,  hold_hours:40,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
+  { id:20, algo_id:'bb_squeeze',     direction:'long',  status:'closed', open_time:'2026-06-09T04:05:00Z', close_time:'2026-06-11T04:05:00Z', open_price:101800, close_price:102600, ret_pct:0.0069,  hit:true,  hold_hours:48,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
+  { id:21, algo_id:'bb_squeeze',     direction:'long',  status:'closed', open_time:'2026-06-13T12:05:00Z', close_time:'2026-06-15T00:05:00Z', open_price:103500, close_price:103800, ret_pct:0.0019,  hit:true,  hold_hours:36,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
+  { id:22, algo_id:'bb_squeeze',     direction:'short', status:'closed', open_time:'2026-06-16T12:05:00Z', close_time:'2026-06-18T04:05:00Z', open_price:104100, close_price:105000, ret_pct:-0.0099, hit:false, hold_hours:40,   is_stop_loss:false, strategy_version:'arena-ec2-v7' },
+  { id:23, algo_id:'bb_squeeze',     direction:'short', status:'open',   open_time:'2026-06-19T06:05:00Z', close_time:null,                   open_price:104500, close_price:null,   ret_pct:null,    hit:null,  hold_hours:null, is_stop_loss:false, strategy_version:'arena-ec2-v7' },
 ];
 
 // ── State ─────────────────────────────────────────────────
 let positions = [];
 let eqChart = null;
+let latestDecisions = {}; // algo_id → latest arena_decisions row
 
 // ── Data processing ───────────────────────────────────────
 let latestBtcPrice = null; // updated by fetchBtcPrice()
@@ -366,17 +422,25 @@ function algoStats(ps) {
   const out = {};
   for (const algo of ALGO_IDS) {
     const all  = ps.filter(p => p.algo_id === algo);
-    const done = all.filter(p => p.status === 'closed' && p.ret_pct != null);
+    const done = [...all.filter(p => p.status === 'closed' && p.ret_pct != null)]
+      .sort((a, b) => new Date(a.close_time) - new Date(b.close_time));
     const open = all.find(p => p.status === 'open');
-    const totalRet = done.reduce((s, p) => s + p.ret_pct, 0) * 100;
     const wins = done.filter(p => p.hit).length;
 
-    // unrealized P&L for open position (gross, no fee)
+    // compounded equity from closed trades
+    let equity = STARTING_CAPITAL;
+    for (const p of done) equity *= (1 + (p.ret_pct || 0));
+
+    // unrealized P&L for open position
     let unrealizedPct = null;
+    let equityTotal = equity;
     if (open && latestBtcPrice && open.open_price) {
       const raw = (latestBtcPrice - open.open_price) / open.open_price;
       unrealizedPct = (open.direction === 'long' ? raw : -raw) * 100;
+      equityTotal = equity * (1 + (open.direction === 'long' ? raw : -raw));
     }
+
+    const totalRet = done.reduce((s, p) => s + p.ret_pct, 0) * 100;
 
     out[algo] = {
       totalRet:      parseFloat(totalRet.toFixed(2)),
@@ -387,9 +451,46 @@ function algoStats(ps) {
       openEntry:     open ? open.open_price : null,
       unrealizedPct: unrealizedPct != null ? parseFloat(unrealizedPct.toFixed(2)) : null,
       hasAnyTrade:   all.length > 0,
+      equity:        parseFloat(equity.toFixed(2)),
+      equityTotal:   parseFloat(equityTotal.toFixed(2)),
+      pnl:           parseFloat((equityTotal - STARTING_CAPITAL).toFixed(2)),
     };
   }
   return out;
+}
+
+const ALGO_NEEDS = {
+  supertrend:     'ATR(10,3) band direction',
+  fng_contrarian: 'FNG < 30 or FNG > 70',
+  ema_cross:      '21 EMA / 55 EMA / 200 EMA alignment',
+  macd_momentum:  'MACD hist + RSI + BB filter',
+  bb_squeeze:     'BB width < 3.5% + position + RSI',
+};
+
+function signalHint(algo, dec) {
+  if (dec) {
+    const inp = (dec.reason && dec.reason.inputs) || {};
+    const act = dec.action || '';
+    if (act === 'hold') return null;
+    switch (algo) {
+      case 'supertrend':
+        if (inp.supertrend_dir != null) return `ST dir: ${inp.supertrend_dir > 0 ? 'up' : 'down'}`;
+        break;
+      case 'ema_cross':
+        if (inp.ema_21 != null) return `21/${inp.ema_21.toFixed(0)} 55/${inp.ema_55 != null ? inp.ema_55.toFixed(0) : '—'}`;
+        break;
+      case 'bb_squeeze':
+        if (inp.bb_width != null) return `BB width ${inp.bb_width.toFixed(1)}%`;
+        break;
+      case 'fng_contrarian':
+        if (inp.fng != null) return `FNG ${inp.fng}`;
+        break;
+      case 'macd_momentum':
+        if (inp.macd_hist != null) return `MACD ${inp.macd_hist.toFixed(0)}`;
+        break;
+    }
+  }
+  return ALGO_NEEDS[algo] || null;
 }
 
 function equityCurves(ps) {
@@ -448,20 +549,24 @@ function renderCards(stats) {
     const s = stats[algo];
     const cfg = ALGOS[algo];
     const posCls = s.pos === 'LONG' ? 'pb-long' : s.pos === 'SHORT' ? 'pb-short' : 'pb-flat';
+    const dec = latestDecisions[algo];
 
-    // Main return display
+    // Equity display (always show $)
+    const eqColor = s.pnl >= 0 ? '#34D399' : '#F87171';
+    const eqSign  = s.pnl >= 0 ? '+' : '';
+    const eqHtml = `<div class="ac-equity" style="color:${s.hasAnyTrade ? eqColor : 'var(--muted)'}" aria-label="Virtual equity">
+      ${s.hasAnyTrade ? `$${s.equityTotal.toFixed(0)}` : '$1,000'}
+      <span style="font-size:10px;opacity:.6;margin-left:4px">${s.hasAnyTrade ? `(${eqSign}${s.pnl.toFixed(2)})` : ''}</span>
+    </div>`;
+
+    // Return % line
     let retHtml;
     if (!s.hasAnyTrade) {
-      retHtml = `<div class="ac-ret" style="color:var(--muted)">—</div>`;
-    } else if (s.closedN === 0) {
-      // only open — show unrealized if available
-      if (s.unrealizedPct != null) {
-        const uc = s.unrealizedPct >= 0 ? '#34D399' : '#F87171';
-        const us = s.unrealizedPct >= 0 ? '+' : '';
-        retHtml = `<div class="ac-ret" style="color:${uc};opacity:.7">${us}${s.unrealizedPct.toFixed(2)}%<span style="font-size:9px;margin-left:4px;opacity:.6">unrlzd</span></div>`;
-      } else {
-        retHtml = `<div class="ac-ret" style="color:var(--muted)">—</div>`;
-      }
+      retHtml = `<div class="ac-ret" style="color:var(--muted);font-size:14px">awaiting signal</div>`;
+    } else if (s.closedN === 0 && s.unrealizedPct != null) {
+      const uc = s.unrealizedPct >= 0 ? '#34D399' : '#F87171';
+      const us = s.unrealizedPct >= 0 ? '+' : '';
+      retHtml = `<div class="ac-ret" style="color:${uc};opacity:.7">${us}${s.unrealizedPct.toFixed(2)}%<span style="font-size:9px;margin-left:4px;opacity:.6">unrlzd</span></div>`;
     } else {
       const rc = s.totalRet >= 0 ? '#34D399' : '#F87171';
       const sign = s.totalRet >= 0 ? '+' : '';
@@ -471,20 +576,26 @@ function renderCards(stats) {
     // Stats line
     let statsLine;
     if (!s.hasAnyTrade) {
-      statsLine = `<div style="color:var(--muted);font-size:10px">no signals yet</div>`;
+      statsLine = `<div style="color:var(--muted);font-size:10px">no trades yet</div>`;
     } else if (s.closedN === 0) {
-      statsLine = `<div>${s.totalN} open · awaiting close</div>`;
+      statsLine = `<div>1 open · awaiting close</div>`;
     } else {
       statsLine = `<div>${s.closedN} closed · ${s.winRate.toFixed(0)}% win</div>`;
     }
 
+    // Signal hint (why flat)
+    const hint = s.pos === 'FLAT' ? signalHint(algo, dec) : null;
+    const hintHtml = hint ? `<div class="ac-hint">${hint}</div>` : '';
+
     return `<div class="ac" style="--ac:${cfg.color}" role="article" aria-label="${algo}">
       <div class="ac-name">${algo}</div>
+      ${eqHtml}
       ${retHtml}
       <div class="ac-bottom">
         <div class="ac-stats">
           ${statsLine}
           ${s.openEntry ? `<div class="ac-entry">@ $${s.openEntry.toLocaleString()}</div>` : ''}
+          ${hintHtml}
         </div>
         <span class="pb ${posCls}" aria-label="Position: ${s.pos}">${s.pos}</span>
       </div>
@@ -627,11 +738,45 @@ function renderLog(ps) {
   }).join('');
 }
 
+// ── Render: portfolio strip ───────────────────────────────
+function renderPortfolio(stats) {
+  const totalStart = ALGO_IDS.length * STARTING_CAPITAL;
+  let totalEquity = 0, realizedEquity = 0, openCount = 0;
+  for (const algo of ALGO_IDS) {
+    const s = stats[algo];
+    totalEquity   += s.equityTotal;
+    realizedEquity += s.equity;
+    if (s.pos !== 'FLAT') openCount++;
+  }
+  const totalPnl    = totalEquity - totalStart;
+  const totalPct    = (totalPnl / totalStart) * 100;
+  const realPnl     = realizedEquity - totalStart;
+  const realPct     = (realPnl / totalStart) * 100;
+  const pnlColor    = totalPnl >= 0 ? '#34D399' : '#F87171';
+  const realColor   = realPnl  >= 0 ? '#34D399' : '#F87171';
+  const fmt = v => (v >= 0 ? '+' : '') + v.toFixed(2);
+
+  document.getElementById('portTotal').innerHTML =
+    `<span style="color:${pnlColor}">$${totalEquity.toFixed(0)}</span>`;
+  document.getElementById('portTotalPct').innerHTML =
+    `<span style="color:${pnlColor}">${fmt(totalPct)}% from $${totalStart.toLocaleString()}</span>`;
+
+  document.getElementById('portRealized').innerHTML =
+    `<span style="color:${realColor}">$${realizedEquity.toFixed(0)}</span>`;
+  document.getElementById('portRealizedPct').innerHTML =
+    `<span style="color:${realColor}">${fmt(realPct)}% · closed only</span>`;
+
+  document.getElementById('portOpen').textContent = openCount;
+  document.getElementById('portOpenSub').textContent =
+    openCount === 1 ? '1 algo in market' : `${openCount} algos in market`;
+}
+
 // ── Full render pipeline ──────────────────────────────────
 function renderAll(ps) {
   positions = ps;
   const stats = algoStats(ps);
   const curves = equityCurves(ps);
+  renderPortfolio(stats);
   renderCards(stats);
   renderLegend(stats);
   renderChart(curves);
@@ -660,6 +805,22 @@ async function fetchBtcPrice() {
 }
 
 // ── Supabase fetch ────────────────────────────────────────
+async function fetchDecisions(client) {
+  try {
+    const { data } = await client
+      .from('arena_decisions')
+      .select('algo_id, action, reason, created_at')
+      .order('created_at', { ascending: false })
+      .limit(25);
+    if (!data) return {};
+    const out = {};
+    for (const d of data) {
+      if (!out[d.algo_id]) out[d.algo_id] = d;
+    }
+    return out;
+  } catch (_) { return {}; }
+}
+
 async function fetchPositions(client) {
   const { data, error } = await client
     .from('paper_positions')
@@ -711,7 +872,11 @@ async function init() {
   }
 
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const data = await fetchPositions(client);
+  const [data, decisions] = await Promise.all([
+    fetchPositions(client),
+    fetchDecisions(client),
+  ]);
+  latestDecisions = decisions;
   if (data) {
     renderAll(data);
     setupRealtime(client);

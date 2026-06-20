@@ -78,6 +78,9 @@ def _settings_from_run(run: dict[str, Any]) -> dict[str, Any]:
     return {
         "fee_bps": float(run.get("fee_bps") or rules.get("fee_bps") or parameters.FEE_BPS),
         "slippage_bps": float(run.get("slippage_bps") or rules.get("slippage_bps") or 0.0),
+        "spread_bps_round_trip": float(
+            run.get("spread_bps_round_trip") or rules.get("spread_bps_round_trip") or 0.0
+        ),
         "macro_stale_hours": float(
             rules.get("macro_stale_hours")
             or risk_defaults.get("macro_stale_hours")
@@ -347,6 +350,7 @@ def _check_fee_recalculation(
             close_price=float(trade["close_price"]),
             fee_bps=settings["fee_bps"],
             slippage_bps=settings["slippage_bps"],
+            spread_bps_round_trip=settings["spread_bps_round_trip"],
         )
         expected = fee_adjusted + float(trade.get("funding_ret_pct") or 0.0)
         observed = float(trade["ret_pct"])

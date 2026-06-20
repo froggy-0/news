@@ -69,7 +69,7 @@ SELECT
     leakage_safe,
     risk_impact
 FROM arena_feature_registry
-WHERE feature_set_version = 'arena-features-v3'
+WHERE feature_set_version = 'arena-features-v4'
 ORDER BY layer, feature_name;
 ```
 
@@ -95,5 +95,6 @@ LIMIT 20;
 ## 다음 확장
 
 - walk-forward split table과 report mart는 구현되어 있으므로, sample size가 쌓이면 split별 결과를 누적 검증한다.
+- frequency research v1에서는 `arena_frequency_backtest_mart_v1`로 빈도별 비용/회전율을 비교한다.
 - realized PnL과 forward label을 같이 보는 `arena_position_outcome_mart_v1` 추가.
 - feature importance/ablation 결과를 저장하는 `arena_experiment_runs` 계층 추가.

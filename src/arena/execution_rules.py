@@ -101,12 +101,18 @@ def fee_adjusted_return_pct(
     close_price: float,
     fee_bps: float,
     slippage_bps: float = 0.0,
+    spread_bps_round_trip: float = 0.0,
     legs: float = 2.0,
 ) -> float:
+    """순수익률 = gross − 왕복 거래비용.
+
+    거래비용 = legs × (fee + slippage) + spread_bps_round_trip (왕복 1회 적용).
+    backtest.py의 net_ret 비용식과 동일하게 유지(live·backtest·검증 공용).
+    """
     if open_price <= 0:
         raise ValueError("open_price must be positive")
     gross = direction_sign(direction) * (close_price / open_price - 1.0)
-    trading_cost = legs * (fee_bps + slippage_bps) / 10_000.0
+    trading_cost = (legs * (fee_bps + slippage_bps) + spread_bps_round_trip) / 10_000.0
     return gross - trading_cost
 
 
@@ -139,6 +145,16 @@ def build_params_snapshot(
     return snapshot
 
 
+def quoted_spread_bps(bid: float | None, ask: float | None) -> float | None:
+    """의사결정 시점 호가 스프레드(bps). bid/ask 미수집 시 None."""
+    if bid is None or ask is None or bid <= 0 or ask <= 0 or ask < bid:
+        return None
+    mid = (bid + ask) / 2.0
+    if mid <= 0:
+        return None
+    return 10_000.0 * (ask - bid) / mid
+
+
 def build_market_snapshot(
     *,
     symbol: str,
@@ -149,7 +165,10 @@ def build_market_snapshot(
     low: float | None,
     closes_count: int,
     data_timestamp: datetime,
+    bid: float | None = None,
+    ask: float | None = None,
 ) -> dict[str, Any]:
+    spread_bps = quoted_spread_bps(bid, ask)
     return {
         "symbol": symbol,
         "interval": interval,
@@ -159,6 +178,10 @@ def build_market_snapshot(
         "high": high,
         "low": low,
         "closes_count": closes_count,
+        # 의사결정 시점 호가 스냅샷 (Tier 1 TCA 선행 데이터)
+        "bid": bid,
+        "ask": ask,
+        "quoted_spread_bps": round(spread_bps, 4) if spread_bps is not None else None,
     }
 
 

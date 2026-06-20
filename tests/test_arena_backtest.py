@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -123,11 +124,46 @@ def test_backtest_run_row_is_json_ready_and_versioned() -> None:
     row = backtest._run_row(result)
 
     assert row["backtest_run_id"] == "00000000-0000-0000-0000-000000000001"
-    assert row["strategy_version"] == "arena-ec2-v5"
+    assert row["strategy_version"] == "arena-ec2-v7"
     assert row["rules_snapshot"]["fee_bps"] == 5.0
+    assert row["frequency_profile_id"] == "live_4h"
+    assert row["indicator_profile_id"] == "time_normalized_v1"
+    assert row["cost_model_version"] == "arena-cost-v2"
+    assert row["cost_scenario_id"] == "base"
     assert row["rules_snapshot"]["portfolio_risk"]["max_open_positions_total"] == 3
     assert row["bar_count"] == 2
     assert row["metrics"]["by_algo"]["test_algo"]["trade_count"] == 1
+
+
+def test_backtest_frequency_metrics_include_cost_and_turnover() -> None:
+    def always_long(macro, indicators):
+        return "long"
+
+    settings = backtest.BacktestSettings(
+        close_open_at_end=True,
+        fee_bps=5.0,
+        slippage_bps=2.0,
+        spread_bps_round_trip=3.0,
+    )
+    result = backtest.run_replay(
+        [_frame(0, close=100.0), _frame(1, close=101.0)],
+        strategy_fns={"test_algo": always_long},
+        settings=settings,
+    )
+
+    trade = result.trades[0]
+    metrics = result.metrics["by_algo"]["test_algo"]
+
+    assert trade.gross_ret_pct == pytest.approx(0.01)
+    assert trade.trading_cost_pct == pytest.approx(0.0017)
+    assert trade.net_ret_pct == pytest.approx(0.0083)
+    assert metrics["gross_return_pct"] == pytest.approx(0.01)
+    assert metrics["trading_cost_drag_pct"] == pytest.approx(-0.0017)
+    assert metrics["cost_to_gross_ratio"] == pytest.approx(0.17)
+    assert metrics["trades_per_day"] == pytest.approx(6.0)
+    assert metrics["turnover_per_day"] == pytest.approx(12.0)
+    assert metrics["avg_hold_hours"] == pytest.approx(4.0)
+    assert metrics["total_return_ex_end_of_data_pct"] == 0.0
 
 
 def test_backtest_portfolio_risk_blocks_excess_long_exposure() -> None:
@@ -149,3 +185,74 @@ def test_backtest_portfolio_risk_blocks_excess_long_exposure() -> None:
     assert result.equity_curve[1].open_position is None
     assert len(result.risk_events) == 2
     assert {event.event_type for event in result.risk_events} == {"max_long_positions"}
+
+
+def test_load_frames_from_supabase_paginates_ohlcv_rows() -> None:
+    rows = [
+        {
+            "open_time": (_dt(0) + timedelta(hours=index)).isoformat().replace("+00:00", "Z"),
+            "close_time": (_dt(0) + timedelta(hours=index + 1)).isoformat().replace("+00:00", "Z"),
+            "open": 100.0 + index,
+            "high": 101.0 + index,
+            "low": 99.0 + index,
+            "close": 100.0 + index,
+            "volume": 1.0,
+        }
+        for index in range(1200)
+    ]
+
+    class FakeResult:
+        def __init__(self, data):
+            self.data = data
+
+    class FakeBuilder:
+        def __init__(self, table_name: str) -> None:
+            self.table_name = table_name
+            self.start = 0
+            self.end = 0
+            self.range_calls: list[tuple[int, int]] = []
+
+        def select(self, *_args, **_kwargs):
+            return self
+
+        def eq(self, *_args):
+            return self
+
+        def gte(self, *_args):
+            return self
+
+        def lte(self, *_args):
+            return self
+
+        def order(self, *_args, **_kwargs):
+            return self
+
+        def range(self, start: int, end: int):
+            self.start = start
+            self.end = end
+            self.range_calls.append((start, end))
+            return self
+
+        async def execute(self):
+            if self.table_name == "arena_macro_snapshots":
+                return FakeResult([])
+            return FakeResult(rows[self.start : self.end + 1])
+
+    class FakeDb:
+        def __init__(self) -> None:
+            self.ohlcv_builders: list[FakeBuilder] = []
+
+        def table(self, table_name: str):
+            builder = FakeBuilder(table_name)
+            if table_name == "arena_ohlcv_bars":
+                self.ohlcv_builders.append(builder)
+            return builder
+
+    db = FakeDb()
+    frames = asyncio.run(backtest.load_frames_from_supabase(db, limit=1200, warmup_bars=1))
+
+    assert len(frames) == 1200
+    assert [builder.range_calls[0] for builder in db.ohlcv_builders] == [
+        (0, 999),
+        (1000, 1199),
+    ]

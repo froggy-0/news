@@ -113,6 +113,8 @@ python3 /Users/giwon/code/news/scripts/verify_arena_data_lake.py
 
 - `arena_strategy_versions`, `arena_feature_registry`, `arena_decision_mart_v1`은 적용 완료.
 - `arena_backtest_*`, `arena_walk_forward_splits`, `arena_backtest_validation_*`은 적용 완료.
-- baseline report mart와 walk-forward split 생성기는 구현 완료다. 다음 확장은 market-structure raw capture와 vNext shadow decision ledger다.
-- 1H/1D multi-frequency 수집 시 `arena_runs`와 별도 `feature_set_version` 도입을 검토한다.
+- baseline report mart와 walk-forward split 생성기는 구현 완료다.
+- market-structure raw capture와 vNext shadow decision ledger는 코드/migration 작성 완료, SQL 적용 후 readiness 확인이 필요하다.
+- frequency research v1은 `live_4h`, `research_1h`, `research_15m` profile로 분리했다. 1H/15m raw OHLCV는 `arena_ohlcv_bars`의 기존 `symbol, interval` 키를 그대로 사용한다.
+- `arena_indicator_feature_bars`는 interval/profile별 derived indicator snapshot을 저장한다.
 - `feature_name/value` long-form feature table은 피처 수가 크게 늘어날 때 도입한다.

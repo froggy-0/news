@@ -10,16 +10,18 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-STRATEGY_VERSION = "arena-ec2-v5"
-PARAMS_VERSION = "arena-params-v6"
-FEATURE_SET_VERSION = "arena-features-v3"
+STRATEGY_VERSION = "arena-ec2-v7"
+PARAMS_VERSION = "arena-params-v9"
+FEATURE_SET_VERSION = "arena-features-v5"
 RISK_MODEL_VERSION = "portfolio-risk-v1"
 RUNTIME = "ec2"
 
 BINANCE_SYMBOL = "BTCUSDT"
 BINANCE_KLINE_INTERVAL = "4h"
-BINANCE_KLINES_LIMIT = 150
+BINANCE_KLINES_LIMIT = 300
 ARENA_SHADOW_VNEXT_ENABLED = True
+ARENA_FREQUENCY_SHADOW_ENABLED = False
+ARENA_FREQUENCY_SHADOW_PROFILES = ("research_1h",)
 
 HTTP_TIMEOUT_SECONDS = 30
 WEBSOCKET_PING_INTERVAL_SECONDS = 20
@@ -44,6 +46,21 @@ MAX_NET_SHORT_EXPOSURE = 2.0
 DAILY_LOSS_LIMIT_PCT = 0.05
 ALGO_MAX_DRAWDOWN_KILL_PCT = 0.10
 COOLDOWN_AFTER_KILL_HOURS = 24.0
+
+# Supertrend (ATR-based dynamic band trend signal)
+SUPERTREND_ATR_PERIOD = 10
+SUPERTREND_MULT = 3.0
+
+# Multi-period EMA (ema_cross algo)
+EMA_21_PERIOD = 21
+EMA_55_PERIOD = 55
+EMA_200_PERIOD = 200
+
+# BB Squeeze mean-reversion thresholds
+BB_SQUEEZE_WIDTH_MAX_PCT = 3.5
+BB_SQUEEZE_BB_POS_LONG_MIN = 0.60
+BB_SQUEEZE_BB_POS_SHORT_MAX = 0.40
+BB_SQUEEZE_RSI_THRESHOLD = 50.0
 
 RSI_PERIOD = 14
 RSI_NEUTRAL = 50.0
@@ -89,11 +106,11 @@ ALLOCATOR_BUDGET_LEGACY_RULE = 0.40
 ALLOCATOR_BUDGET_CARRY = 0.00
 
 MIN_HOLD_HOURS: dict[str, float] = {
-    "regime_v2": 24.0,
+    "supertrend": 12.0,
     "fng_contrarian": 24.0,
-    "vix_rsi": 8.0,
+    "ema_cross": 12.0,
     "macd_momentum": 8.0,  # 4H 단일바 노이즈 제거 (12h↑는 역효과 확인됨)
-    "multi_factor": 8.0,
+    "bb_squeeze": 8.0,
     "trend_core_v1": 12.0,
 }
 MIN_HOLD_FALLBACK_HOURS = 4.0
@@ -119,6 +136,8 @@ def base_params_snapshot() -> dict[str, Any]:
             "kline_interval": BINANCE_KLINE_INTERVAL,
             "klines_limit": BINANCE_KLINES_LIMIT,
             "shadow_vnext_enabled": ARENA_SHADOW_VNEXT_ENABLED,
+            "frequency_shadow_enabled": ARENA_FREQUENCY_SHADOW_ENABLED,
+            "frequency_shadow_profiles": list(ARENA_FREQUENCY_SHADOW_PROFILES),
         },
         "schedule": {
             "cron_hour": SCHEDULER_CRON_HOUR,
@@ -145,13 +164,19 @@ def base_params_snapshot() -> dict[str, Any]:
             "regime_short_state": REGIME_SHORT_STATE,
             "fng_long_below": FNG_LONG_BELOW,
             "fng_short_above": FNG_SHORT_ABOVE,
-            "vix_rsi_long_max": VIX_RSI_LONG_MAX,
+            "supertrend_atr_period": SUPERTREND_ATR_PERIOD,
+            "supertrend_mult": SUPERTREND_MULT,
+            "ema_21_period": EMA_21_PERIOD,
+            "ema_55_period": EMA_55_PERIOD,
+            "ema_200_period": EMA_200_PERIOD,
+            "bb_squeeze_width_max_pct": BB_SQUEEZE_WIDTH_MAX_PCT,
+            "bb_squeeze_bb_pos_long_min": BB_SQUEEZE_BB_POS_LONG_MIN,
+            "bb_squeeze_bb_pos_short_max": BB_SQUEEZE_BB_POS_SHORT_MAX,
+            "bb_squeeze_rsi_threshold": BB_SQUEEZE_RSI_THRESHOLD,
             "macd_atr_threshold_multiple": MACD_ATR_THRESHOLD_MULTIPLE,
-            "multi_factor_long_rsi_max": MULTI_FACTOR_LONG_RSI_MAX,
-            "multi_factor_short_rsi_min": MULTI_FACTOR_SHORT_RSI_MIN,
             "trend_core_rsi_long_max": TREND_CORE_RSI_LONG_MAX,
             "trend_core_rsi_short_min": TREND_CORE_RSI_SHORT_MIN,
-            "trend_core_macd_atr_threshold_multiple": (TREND_CORE_MACD_ATR_THRESHOLD_MULTIPLE),
+            "trend_core_macd_atr_threshold_multiple": TREND_CORE_MACD_ATR_THRESHOLD_MULTIPLE,
             "regime_stress_return_atr_multiple": REGIME_STRESS_RETURN_ATR_MULTIPLE,
             "regime_stress_range_atr_multiple": REGIME_STRESS_RANGE_ATR_MULTIPLE,
             "regime_trend_bb_width_min": REGIME_TREND_BB_WIDTH_MIN,

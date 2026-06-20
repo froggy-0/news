@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 
-from arena import parameters, walk_forward
+from arena import frequency, parameters, walk_forward
 
 
 def _bar(index: int) -> dict:
@@ -210,3 +211,75 @@ class TestVersionsStoredInSplit:
         assert s.strategy_version == "custom-v99"
         assert s.params_version == "params-v99"
         assert s.risk_model_version == "risk-v99"
+
+
+class TestProfileBasedSplits:
+    def test_research_1h_profile_uses_period_based_bar_counts(self) -> None:
+        profile = frequency.get_frequency_profile("research_1h")
+        counts = frequency.walk_forward_bar_counts(profile)
+        total = WARMUP + counts["train_bars"] + counts["embargo_bars"] + counts["test_bars"]
+
+        result = walk_forward.generate_splits(
+            _bars(total),
+            warmup_bars=WARMUP,
+            train_bars=counts["train_bars"],
+            test_bars=counts["test_bars"],
+            step_bars=counts["step_bars"],
+            embargo_bars=counts["embargo_bars"],
+            interval=profile.interval,
+            frequency_profile_id=profile.frequency_profile_id,
+            indicator_profile_id=profile.default_indicator_profile_id,
+        )
+
+        assert result.status == "ok"
+        assert result.frequency_profile_id == "research_1h"
+        assert result.splits[0].train_bar_count == 2160
+        assert result.splits[0].test_bar_count == 504
+        assert result.splits[0].embargo_bars == 24
+        assert "research_1h" in result.splits[0].split_name
+
+
+def test_load_bars_from_supabase_paginates_past_default_page_cap() -> None:
+    rows = [{"open_time": row["close_time"], **row} for row in _bars(2500)]
+
+    class FakeResult:
+        def __init__(self, data):
+            self.data = data
+
+    class FakeBuilder:
+        def __init__(self) -> None:
+            self.range_calls: list[tuple[int, int]] = []
+            self.start = 0
+            self.end = 0
+
+        def select(self, *_args):
+            return self
+
+        def eq(self, *_args):
+            return self
+
+        def order(self, *_args):
+            return self
+
+        def range(self, start: int, end: int):
+            self.start = start
+            self.end = end
+            self.range_calls.append((start, end))
+            return self
+
+        async def execute(self):
+            return FakeResult(rows[self.start : self.end + 1])
+
+    class FakeDb:
+        def __init__(self) -> None:
+            self.builder = FakeBuilder()
+
+        def table(self, table_name: str):
+            assert table_name == "arena_ohlcv_bars"
+            return self.builder
+
+    db = FakeDb()
+    loaded = asyncio.run(walk_forward.load_bars_from_supabase(db, limit=2500))
+
+    assert len(loaded) == 2500
+    assert db.builder.range_calls == [(0, 999), (1000, 1999), (2000, 2499)]

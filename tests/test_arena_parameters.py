@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from arena import algorithms, feature_registry, indicators, parameters
+from arena import algorithms, feature_registry, frequency, indicators, parameters
 
 
 def test_arena_parameter_snapshot_is_json_serializable() -> None:
@@ -10,14 +10,62 @@ def test_arena_parameter_snapshot_is_json_serializable() -> None:
 
     assert snapshot["params_version"] == parameters.PARAMS_VERSION
     assert snapshot["feature_set_version"] == parameters.FEATURE_SET_VERSION
-    assert snapshot["params_version"] == "arena-params-v6"
+    assert snapshot["params_version"] == "arena-params-v9"
+    assert snapshot["feature_set_version"] == "arena-features-v5"
     assert snapshot["risk_model_version"] == "portfolio-risk-v1"
     assert snapshot["runtime"] == "ec2"
     assert snapshot["market_data"]["symbol"] == "BTCUSDT"
+    assert snapshot["market_data"]["frequency_shadow_enabled"] is False
+    assert snapshot["market_data"]["frequency_shadow_profiles"] == ["research_1h"]
     assert snapshot["indicators"]["macd_fast_period"] == 12
     assert snapshot["risk_defaults"]["max_open_positions_total"] == 3
     assert snapshot["risk_defaults"]["daily_loss_limit_pct"] == 0.05
     json.dumps(snapshot)
+
+
+def test_frequency_profiles_convert_time_to_bars_and_costs() -> None:
+    live = frequency.get_frequency_profile("live_4h")
+    research_1h = frequency.get_frequency_profile("research_1h")
+    research_15m = frequency.get_frequency_profile("research_15m")
+
+    assert live.interval == "4h"
+    assert research_1h.interval == "1h"
+    assert research_15m.interval == "15m"
+
+    counts = frequency.walk_forward_bar_counts(research_1h)
+    assert counts == {
+        "train_bars": 2160,
+        "test_bars": 504,
+        "step_bars": 504,
+        "embargo_bars": 24,
+    }
+
+    base_1h = frequency.get_cost_scenario("research_1h", "base")
+    base_15m = frequency.get_cost_scenario("research_15m", "base")
+    assert base_1h.trading_cost_bps_round_trip == 17.0
+    assert base_1h.all_in_round_trip_bps == 17.5
+    assert base_15m.trading_cost_bps_round_trip == 23.0
+    assert base_15m.all_in_round_trip_bps == 24.0
+
+
+def test_time_normalized_indicator_profile_preserves_4h_and_scales_intraday() -> None:
+    live_settings = frequency.indicator_settings(interval="4h")
+    one_hour_settings = frequency.indicator_settings(interval="1h")
+    fifteen_min_settings = frequency.indicator_settings(interval="15m")
+    native_settings = frequency.indicator_settings(
+        interval="1h",
+        indicator_profile_id=frequency.INTRADAY_INDICATOR_PROFILE_ID,
+    )
+
+    assert live_settings.rsi_period == parameters.RSI_PERIOD
+    assert live_settings.macd_slow_period == parameters.MACD_SLOW_PERIOD
+    assert one_hour_settings.rsi_period == 56
+    assert one_hour_settings.macd_slow_period == 104
+    assert fifteen_min_settings.rsi_period == 224
+    assert fifteen_min_settings.macd_slow_period == 416
+    assert native_settings.rsi_period == parameters.RSI_PERIOD
+    assert one_hour_settings.return_24h_bars == 24
+    assert fifteen_min_settings.return_24h_bars == 96
 
 
 def test_arena_indicators_keep_default_contracts() -> None:
@@ -72,15 +120,6 @@ def test_macd_momentum_uses_atr_threshold() -> None:
         )
         is None
     )
-
-
-def test_multi_factor_is_symmetric_for_short_filter() -> None:
-    bull = {"regime_state": parameters.REGIME_LONG_STATE}
-    bear = {"regime_state": parameters.REGIME_SHORT_STATE}
-
-    assert algorithms.multi_factor(bull, {"rsi": 49.0, "macd_hist": 0.1}) == "long"
-    assert algorithms.multi_factor(bear, {"rsi": 56.0, "macd_hist": -0.1}) == "short"
-    assert algorithms.multi_factor(bear, {"rsi": 56.0, "macd_hist": 0.1}) is None
 
 
 def test_strategy_version_metadata_matches_parameter_versions() -> None:

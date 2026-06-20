@@ -97,6 +97,8 @@ async def open_position(
     data_timestamp: datetime,
     strategy_version: str,
     params_version: str,
+    slippage_bps: float = 0.0,
+    spread_bps_round_trip: float = 0.0,
     params_snapshot: dict[str, Any],
     indicator_snapshot: dict[str, Any],
     macro_snapshot: dict[str, Any],
@@ -114,6 +116,8 @@ async def open_position(
         "open_price": open_price,
         "stop_loss_price": stop_loss_price,
         "fee_bps": config.FEE_BPS,
+        "slippage_bps": slippage_bps,
+        "spread_bps_round_trip": spread_bps_round_trip,
         "strategy_version": strategy_version,
         "params_version": params_version,
         "params_snapshot": params_snapshot,
@@ -124,13 +128,18 @@ async def open_position(
         "risk_snapshot": risk_snapshot or {},
         "runtime": parameters.RUNTIME,
     }
+    # 아직 마이그레이션 전인 DB(컬럼 부재)에서도 안전하게 동작하도록 선택 컬럼 fallback.
+    _optional_columns = ("risk_snapshot", "slippage_bps", "spread_bps_round_trip")
     try:
         res = await _db().table("paper_positions").insert(payload).execute()
     except Exception as exc:
-        if "risk_snapshot" not in str(exc):
+        if not any(col in str(exc) for col in _optional_columns):
             raise
-        logger.warning("paper_positions.risk_snapshot unavailable; retrying legacy insert")
-        payload.pop("risk_snapshot", None)
+        logger.warning(
+            "paper_positions optional column unavailable (%s); retrying legacy insert", exc
+        )
+        for col in _optional_columns:
+            payload.pop(col, None)
         res = await _db().table("paper_positions").insert(payload).execute()
     row = res.data[0]
     logger.info(
@@ -151,20 +160,16 @@ async def close_position(
     *,
     is_stop_loss: bool = False,
 ) -> float:
-    pos = (
-        await _db()
-        .table("paper_positions")
-        .select("algo_id, direction, open_price, open_time, fee_bps")
-        .eq("id", position_id)
-        .single()
-        .execute()
-    )
+    pos = await _db().table("paper_positions").select("*").eq("id", position_id).single().execute()
     row = pos.data
+    # 풀 비용 적용: fee + slippage + spread(왕복). 레거시 행은 컬럼 부재 → 0.0 fallback.
     ret_pct = execution_rules.fee_adjusted_return_pct(
         direction=row["direction"],
         open_price=row["open_price"],
         close_price=close_price,
         fee_bps=row["fee_bps"],
+        slippage_bps=float(row.get("slippage_bps") or 0.0),
+        spread_bps_round_trip=float(row.get("spread_bps_round_trip") or 0.0),
     )
     hold_hours = execution_rules.hold_hours(row["open_time"], close_time)
 

@@ -15,11 +15,13 @@ from . import (
     config,
     data_lake,
     execution_rules,
+    frequency,
     indicators,
     market_structure,
     parameters,
     positions,
     risk,
+    slack_notify,
     sleeves,
     state,
 )
@@ -43,13 +45,14 @@ class MacroData(NamedTuple):
     source_url: str
 
 
-async def _fetch_ohlcv() -> OHLCV:
-    """Binance 4H OHLCV 수집. 미확정 오픈 캔들 제거."""
-    url = (
-        f"{config.BINANCE_REST_URL}"
-        f"?symbol={config.SYMBOL}&interval={parameters.BINANCE_KLINE_INTERVAL}"
-        f"&limit={config.KLINES_LIMIT}"
-    )
+async def _fetch_ohlcv(
+    *,
+    symbol: str,
+    interval: str,
+    limit: int,
+) -> OHLCV:
+    """Binance OHLCV 수집. 미확정 오픈 캔들 제거."""
+    url = f"{config.BINANCE_REST_URL}?symbol={symbol}&interval={interval}&limit={limit}"
     async with httpx.AsyncClient(timeout=parameters.HTTP_TIMEOUT_SECONDS) as client:
         res = await client.get(url)
         res.raise_for_status()
@@ -121,16 +124,66 @@ async def _fetch_macro() -> MacroData:
     )
 
 
-def _params_snapshot(algo_id: str) -> dict:
+async def _fetch_book_ticker(symbol: str) -> tuple[float | None, float | None]:
+    """의사결정 시점 최우선 호가(bid/ask) 수집. 실패해도 사이클에 영향 없음."""
+    try:
+        url = f"{config.BINANCE_BOOK_TICKER_URL}?symbol={symbol}"
+        async with httpx.AsyncClient(timeout=parameters.HTTP_TIMEOUT_SECONDS) as client:
+            res = await client.get(url)
+            res.raise_for_status()
+        data = res.json()
+        return float(data["bidPrice"]), float(data["askPrice"])
+    except Exception as exc:
+        logger.warning("bookTicker 수집 실패: %s", exc)
+        return None, None
+
+
+def _base_params_snapshot(
+    *,
+    profile: frequency.FrequencyProfile,
+    indicator_profile_id: str,
+    cost_scenario: frequency.CostScenario,
+) -> dict:
+    snapshot = parameters.base_params_snapshot()
+    snapshot["market_data"].update(
+        {
+            "symbol": profile.symbol,
+            "kline_interval": profile.interval,
+            "frequency_profile_id": profile.frequency_profile_id,
+            "indicator_profile_id": indicator_profile_id,
+            "cost_model_version": cost_scenario.cost_model_version,
+            "cost_scenario_id": cost_scenario.cost_scenario_id,
+        }
+    )
+    snapshot["frequency_research"] = frequency.profile_snapshot(
+        profile,
+        indicator_profile_id=indicator_profile_id,
+        cost_scenario_id=cost_scenario.cost_scenario_id,
+    )
+    return snapshot
+
+
+def _params_snapshot(
+    algo_id: str,
+    *,
+    profile: frequency.FrequencyProfile,
+    indicator_profile_id: str,
+    cost_scenario: frequency.CostScenario,
+) -> dict:
     return execution_rules.build_params_snapshot(
-        base_snapshot=parameters.base_params_snapshot(),
+        base_snapshot=_base_params_snapshot(
+            profile=profile,
+            indicator_profile_id=indicator_profile_id,
+            cost_scenario=cost_scenario,
+        ),
         algo_id=algo_id,
         stop_loss_fallback_pct=config.STOP_LOSS_PCT,
-        fee_bps=config.FEE_BPS,
+        fee_bps=cost_scenario.fee_bps,
         atr_multiple=config.ATR_MULTIPLE,
         stop_loss_min_pct=config.STOP_LOSS_MIN_PCT,
         stop_loss_max_pct=config.STOP_LOSS_MAX_PCT,
         macro_stale_hours=config.MACRO_STALE_HOURS,
+        slippage_bps=cost_scenario.slippage_bps,
         portfolio_risk=risk.policy_snapshot(_risk_policy()),
     )
 
@@ -161,16 +214,27 @@ def _data_timestamp(ohlcv: OHLCV, now: datetime) -> datetime:
     return ohlcv.last_close_time or now
 
 
-def _market_snapshot(price: float, ohlcv: OHLCV, data_timestamp: datetime) -> dict:
+def _market_snapshot(
+    price: float,
+    ohlcv: OHLCV,
+    data_timestamp: datetime,
+    *,
+    symbol: str,
+    interval: str,
+    bid: float | None = None,
+    ask: float | None = None,
+) -> dict:
     return execution_rules.build_market_snapshot(
-        symbol=config.SYMBOL,
-        interval=parameters.BINANCE_KLINE_INTERVAL,
+        symbol=symbol,
+        interval=interval,
         klines_limit=config.KLINES_LIMIT,
         price=price,
         high=ohlcv.highs[-1] if ohlcv.highs else None,
         low=ohlcv.lows[-1] if ohlcv.lows else None,
         closes_count=len(ohlcv.closes),
         data_timestamp=data_timestamp,
+        bid=bid,
+        ask=ask,
     )
 
 
@@ -192,14 +256,16 @@ async def _run_shadow_vnext(
     macro: dict,
     policy: risk.PortfolioRiskPolicy,
     portfolio_risk_state: risk.PortfolioRiskState,
+    profile: frequency.FrequencyProfile,
+    cost_scenario: frequency.CostScenario,
 ) -> list[data_lake.CaptureWriteResult]:
     if not config.ENABLE_ARENA_SHADOW_VNEXT:
         return []
     results: list[data_lake.CaptureWriteResult] = []
     try:
         snapshot = await market_structure.fetch_market_structure_snapshot(
-            symbol=config.SYMBOL,
-            interval=parameters.BINANCE_KLINE_INTERVAL,
+            symbol=profile.symbol,
+            interval=profile.interval,
             data_timestamp=data_timestamp,
             spot_close=price,
             limit=config.KLINES_LIMIT,
@@ -222,6 +288,8 @@ async def _run_shadow_vnext(
             ind,
             snapshot.features,
             macro,
+            profile=profile,
+            cost_scenario=cost_scenario,
         ):
             allocation = allocator.allocate_shadow(
                 sleeve_signal,
@@ -251,7 +319,17 @@ async def _run_cycle() -> None:
     run_id = data_lake.new_run_id()
     started_at = datetime.now(timezone.utc)
     capture_results: list[data_lake.CaptureWriteResult] = []
-    base_params_snapshot = parameters.base_params_snapshot()
+    profile = frequency.get_frequency_profile(frequency.LIVE_4H_PROFILE_ID)
+    indicator_profile_id = profile.default_indicator_profile_id
+    cost_scenario = frequency.get_cost_scenario(
+        profile.frequency_profile_id,
+        profile.default_cost_scenario_id,
+    )
+    base_params_snapshot = _base_params_snapshot(
+        profile=profile,
+        indicator_profile_id=indicator_profile_id,
+        cost_scenario=cost_scenario,
+    )
     logger.info("4H cycle start")
     capture_results.extend(
         await data_lake.record_strategy_metadata(params_snapshot=base_params_snapshot)
@@ -261,10 +339,23 @@ async def _run_cycle() -> None:
             run_id=run_id,
             started_at=started_at,
             params_snapshot=base_params_snapshot,
+            symbol=profile.symbol,
+            interval=profile.interval,
+            frequency_profile_id=profile.frequency_profile_id,
+            indicator_profile_id=indicator_profile_id,
+            cost_model_version=cost_scenario.cost_model_version,
+            cost_scenario_id=cost_scenario.cost_scenario_id,
         )
     )
     try:
-        ohlcv, macro_data = await asyncio.gather(_fetch_ohlcv(), _fetch_macro())
+        ohlcv, macro_data = await asyncio.gather(
+            _fetch_ohlcv(
+                symbol=profile.symbol,
+                interval=profile.interval,
+                limit=config.KLINES_LIMIT,
+            ),
+            _fetch_macro(),
+        )
     except Exception as exc:
         logger.error("데이터 수집 실패: %s", exc)
         await data_lake.record_run_completed(
@@ -287,7 +378,13 @@ async def _run_cycle() -> None:
         )
         return
 
-    ind = indicators.compute(ohlcv.highs, ohlcv.lows, ohlcv.closes)
+    ind = indicators.compute(
+        ohlcv.highs,
+        ohlcv.lows,
+        ohlcv.closes,
+        interval=profile.interval,
+        indicator_profile_id=indicator_profile_id,
+    )
     now = datetime.now(timezone.utc)
     data_timestamp = _data_timestamp(ohlcv, now)
     macro = macro_data.signal
@@ -297,6 +394,8 @@ async def _run_cycle() -> None:
             run_id=run_id,
             raw_klines=ohlcv.raw_klines,
             fetched_at=now,
+            symbol=profile.symbol,
+            interval=profile.interval,
         )
     )
     capture_results.append(
@@ -313,6 +412,21 @@ async def _run_cycle() -> None:
             run_id=run_id,
             data_timestamp=data_timestamp,
             indicators=ind,
+            symbol=profile.symbol,
+            interval=profile.interval,
+            indicator_profile_id=indicator_profile_id,
+            frequency_profile_id=profile.frequency_profile_id,
+        )
+    )
+    capture_results.append(
+        await data_lake.record_indicator_feature_bar(
+            run_id=run_id,
+            symbol=profile.symbol,
+            interval=profile.interval,
+            data_timestamp=data_timestamp,
+            indicators=ind,
+            indicator_profile_id=indicator_profile_id,
+            frequency_profile_id=profile.frequency_profile_id,
         )
     )
     logger.info(
@@ -323,6 +437,9 @@ async def _run_cycle() -> None:
         ind["atr"],
         macro,
     )
+
+    # 의사결정 시점 호가 스냅샷 (Tier 1 TCA 선행 데이터). 사이클당 1회 공유.
+    bid, ask = await _fetch_book_ticker(profile.symbol)
 
     had_algo_error = False
     policy = _risk_policy()
@@ -350,10 +467,22 @@ async def _run_cycle() -> None:
                         action = "min_hold_skip"
                         skipped_reason = "flat_signal_before_min_hold"
                         continue
-                    await positions.close_position(current["id"], now, price)
+                    ret_pct = await positions.close_position(current["id"], now, price)
+                    hold_h = execution_rules.hold_hours(current["open_time"], now)
                     state.open_positions[algo_id] = None
                     portfolio_risk_state = await _risk_state(now)
                     action = "close_flat"
+                    await slack_notify.notify_close(
+                        algo_id=algo_id,
+                        direction=current["direction"],
+                        open_price=current["open_price"],
+                        close_price=price,
+                        ret_pct=ret_pct,
+                        hold_hours=hold_h,
+                        position_id=current["id"],
+                        is_stop_loss=False,
+                        close_reason="flat_signal",
+                    )
                 continue
 
             if current is not None:
@@ -371,10 +500,22 @@ async def _run_cycle() -> None:
                     action = "min_hold_skip"
                     skipped_reason = "reverse_signal_before_min_hold"
                     continue
-                await positions.close_position(current["id"], now, price)
+                ret_pct = await positions.close_position(current["id"], now, price)
+                hold_h = execution_rules.hold_hours(current["open_time"], now)
                 state.open_positions[algo_id] = None
                 portfolio_risk_state = await _risk_state(now)
                 action = "reverse"
+                await slack_notify.notify_close(
+                    algo_id=algo_id,
+                    direction=current["direction"],
+                    open_price=current["open_price"],
+                    close_price=price,
+                    ret_pct=ret_pct,
+                    hold_hours=hold_h,
+                    position_id=current["id"],
+                    is_stop_loss=False,
+                    close_reason="reverse_signal",
+                )
             else:
                 action = "open"
 
@@ -418,15 +559,40 @@ async def _run_cycle() -> None:
                 data_timestamp=data_timestamp,
                 strategy_version=parameters.STRATEGY_VERSION,
                 params_version=parameters.PARAMS_VERSION,
-                params_snapshot=_params_snapshot(algo_id),
+                slippage_bps=cost_scenario.slippage_bps,
+                spread_bps_round_trip=cost_scenario.spread_bps_round_trip,
+                params_snapshot=_params_snapshot(
+                    algo_id,
+                    profile=profile,
+                    indicator_profile_id=indicator_profile_id,
+                    cost_scenario=cost_scenario,
+                ),
                 indicator_snapshot=ind,
                 macro_snapshot=macro,
-                market_snapshot=_market_snapshot(price, ohlcv, data_timestamp),
+                market_snapshot=_market_snapshot(
+                    price,
+                    ohlcv,
+                    data_timestamp,
+                    symbol=profile.symbol,
+                    interval=profile.interval,
+                    bid=bid,
+                    ask=ask,
+                ),
                 signal_reason=_signal_reason(algo_id, signal, ind, macro),
                 risk_snapshot=risk_decision.as_dict(),
             )
             state.open_positions[algo_id] = new_pos
             resulting_position_id = new_pos.get("id")
+            await slack_notify.notify_open(
+                algo_id=algo_id,
+                direction=signal,
+                price=price,
+                stop_loss_price=sl_price,
+                ind=ind,
+                macro=macro,
+                position_id=resulting_position_id,
+                strategy_version=parameters.STRATEGY_VERSION,
+            )
 
         except Exception as exc:
             had_algo_error = True
@@ -458,6 +624,8 @@ async def _run_cycle() -> None:
             macro=macro,
             policy=policy,
             portfolio_risk_state=portfolio_risk_state,
+            profile=profile,
+            cost_scenario=cost_scenario,
         )
     )
 
@@ -470,6 +638,150 @@ async def _run_cycle() -> None:
     )
 
 
+async def _run_frequency_shadow_cycle(profile_id: str) -> None:
+    profile = frequency.get_frequency_profile(profile_id)
+    indicator_profile_id = profile.default_indicator_profile_id
+    cost_scenario = frequency.get_cost_scenario(
+        profile.frequency_profile_id,
+        profile.default_cost_scenario_id,
+    )
+    run_id = data_lake.new_run_id()
+    started_at = datetime.now(timezone.utc)
+    capture_results: list[data_lake.CaptureWriteResult] = []
+    base_params_snapshot = _base_params_snapshot(
+        profile=profile,
+        indicator_profile_id=indicator_profile_id,
+        cost_scenario=cost_scenario,
+    )
+    logger.info("Frequency shadow cycle start: %s", profile.frequency_profile_id)
+    capture_results.extend(
+        await data_lake.record_strategy_metadata(params_snapshot=base_params_snapshot)
+    )
+    capture_results.append(
+        await data_lake.record_run_started(
+            run_id=run_id,
+            started_at=started_at,
+            params_snapshot=base_params_snapshot,
+            symbol=profile.symbol,
+            interval=profile.interval,
+            frequency_profile_id=profile.frequency_profile_id,
+            indicator_profile_id=indicator_profile_id,
+            cost_model_version=cost_scenario.cost_model_version,
+            cost_scenario_id=cost_scenario.cost_scenario_id,
+        )
+    )
+    try:
+        ohlcv, macro_data = await asyncio.gather(
+            _fetch_ohlcv(
+                symbol=profile.symbol,
+                interval=profile.interval,
+                limit=config.KLINES_LIMIT,
+            ),
+            _fetch_macro(),
+        )
+    except Exception as exc:
+        logger.error("Frequency shadow data failed (%s): %s", profile.frequency_profile_id, exc)
+        await data_lake.record_run_completed(
+            run_id=run_id,
+            completed_at=datetime.now(timezone.utc),
+            status="data_failed",
+            error_message=str(exc),
+            capture_results=capture_results,
+        )
+        return
+
+    if not ohlcv.closes:
+        await data_lake.record_run_completed(
+            run_id=run_id,
+            completed_at=datetime.now(timezone.utc),
+            status="data_failed",
+            error_message="empty_closes",
+            capture_results=capture_results,
+        )
+        return
+
+    now = datetime.now(timezone.utc)
+    data_timestamp = _data_timestamp(ohlcv, now)
+    macro = macro_data.signal
+    price = ohlcv.closes[-1]
+    ind = indicators.compute(
+        ohlcv.highs,
+        ohlcv.lows,
+        ohlcv.closes,
+        interval=profile.interval,
+        indicator_profile_id=indicator_profile_id,
+    )
+    capture_results.extend(
+        await data_lake.record_ohlcv_bars(
+            run_id=run_id,
+            raw_klines=ohlcv.raw_klines,
+            fetched_at=now,
+            symbol=profile.symbol,
+            interval=profile.interval,
+        )
+    )
+    capture_results.append(
+        await data_lake.record_macro_snapshot(
+            run_id=run_id,
+            fetched_at=macro_data.fetched_at or now,
+            source_url=macro_data.source_url,
+            payload=macro_data.payload,
+            signal=macro,
+        )
+    )
+    capture_results.append(
+        await data_lake.record_indicator_snapshot(
+            run_id=run_id,
+            data_timestamp=data_timestamp,
+            indicators=ind,
+            symbol=profile.symbol,
+            interval=profile.interval,
+            indicator_profile_id=indicator_profile_id,
+            frequency_profile_id=profile.frequency_profile_id,
+        )
+    )
+    capture_results.append(
+        await data_lake.record_indicator_feature_bar(
+            run_id=run_id,
+            symbol=profile.symbol,
+            interval=profile.interval,
+            data_timestamp=data_timestamp,
+            indicators=ind,
+            indicator_profile_id=indicator_profile_id,
+            frequency_profile_id=profile.frequency_profile_id,
+        )
+    )
+    policy = _risk_policy()
+    portfolio_risk_state = await _risk_state(now)
+    capture_results.extend(
+        await _run_shadow_vnext(
+            run_id=run_id,
+            data_timestamp=data_timestamp,
+            price=price,
+            ind=ind,
+            macro=macro,
+            policy=policy,
+            portfolio_risk_state=portfolio_risk_state,
+            profile=profile,
+            cost_scenario=cost_scenario,
+        )
+    )
+    await data_lake.record_run_completed(
+        run_id=run_id,
+        completed_at=datetime.now(timezone.utc),
+        status="completed",
+        data_timestamp=data_timestamp,
+        capture_results=capture_results,
+    )
+
+
+def _frequency_shadow_cron(profile: frequency.FrequencyProfile) -> dict[str, object]:
+    if profile.decision_cadence_minutes < 60:
+        return {"hour": "*", "minute": f"*/{profile.decision_cadence_minutes}"}
+    cadence_hours = max(1, profile.decision_cadence_minutes // 60)
+    return {"hour": "*" if cadence_hours == 1 else f"*/{cadence_hours}", "minute": 10}
+
+
 async def run() -> None:
     """APScheduler 시작 + 즉시 1회 실행. server.py에서 asyncio.gather()로 호출."""
     scheduler = AsyncIOScheduler(timezone="UTC")
@@ -479,10 +791,27 @@ async def run() -> None:
         hour=parameters.SCHEDULER_CRON_HOUR,
         minute=parameters.SCHEDULER_CRON_MINUTE,
     )
+    if config.ENABLE_ARENA_FREQUENCY_SHADOW:
+        for profile_id in config.ARENA_FREQUENCY_SHADOW_PROFILES:
+            profile = frequency.get_frequency_profile(profile_id)
+            cron = _frequency_shadow_cron(profile)
+            scheduler.add_job(
+                _run_frequency_shadow_cycle,
+                "cron",
+                args=[profile_id],
+                **cron,
+            )
     scheduler.start()
     logger.info("Scheduler started (cron every 4H at :%02d)", parameters.SCHEDULER_CRON_MINUTE)
 
     await _run_cycle()
+    if config.ENABLE_ARENA_FREQUENCY_SHADOW:
+        await asyncio.gather(
+            *[
+                _run_frequency_shadow_cycle(profile_id)
+                for profile_id in config.ARENA_FREQUENCY_SHADOW_PROFILES
+            ]
+        )
 
     try:
         while True:

@@ -7,12 +7,12 @@ from typing import Callable
 from . import parameters, regime
 
 
-def regime_v2(macro: dict, ind: dict) -> str | None:
-    """거시 regime만 사용. BullQuiet=long, BearPanic=short."""
-    r = macro.get("regime_state", "")
-    if r == parameters.REGIME_LONG_STATE:
+def supertrend(macro: dict, ind: dict) -> str | None:
+    """Supertrend ATR(10, 3.0) trend-following. direction=1→long, -1→short."""
+    direction = int(ind.get("supertrend_dir", 0))
+    if direction == 1:
         return "long"
-    if r == parameters.REGIME_SHORT_STATE:
+    if direction == -1:
         return "short"
     return None
 
@@ -29,14 +29,17 @@ def fng_contrarian(macro: dict, ind: dict) -> str | None:
     return None
 
 
-def vix_rsi(macro: dict, ind: dict) -> str | None:
-    """VIX 안정 구간 + RSI 과매수 미달 시 매수."""
-    vix_now = macro.get("vix_now")
-    vix_q40 = macro.get("vix_q40")
-    if vix_now is None or vix_q40 is None:
+def ema_cross(macro: dict, ind: dict) -> str | None:
+    """Triple EMA trend alignment: 21 > 55 > 200 → long; 21 < 55 < 200 → short."""
+    ema_21 = ind.get("ema_21", 0.0)
+    ema_55 = ind.get("ema_55", 0.0)
+    ema_200 = ind.get("ema_200", 0.0)
+    if ema_21 <= 0 or ema_55 <= 0 or ema_200 <= 0:
         return None
-    if vix_now < vix_q40 and ind["rsi"] < parameters.VIX_RSI_LONG_MAX:
+    if ema_21 > ema_55 > ema_200:
         return "long"
+    if ema_21 < ema_55 < ema_200:
+        return "short"
     return None
 
 
@@ -69,24 +72,26 @@ def macd_momentum(macro: dict, ind: dict) -> str | None:
     return None
 
 
-def multi_factor(macro: dict, ind: dict) -> str | None:
-    """BullQuiet + RSI<50 + MACD양 복합. BearPanic + RSI>55 + MACD음 숏.
+def bb_squeeze(macro: dict, ind: dict) -> str | None:
+    """Bollinger Band squeeze breakout: trade direction when BB is compressed.
 
-    수정(이전): 숏 조건에 MACD 확인이 없어 롱/숏 간 비대칭 존재.
-    수정(이후): 숏도 MACD < 0 추가 → 양방향 동일한 엄격도 적용.
+    Squeeze = bb_width < threshold. Within squeeze, bb_pos + RSI confirm direction.
     """
-    r = macro.get("regime_state", "")
-    h = ind["macd_hist"]
+    bb_w = ind.get("bb_width", 100.0)
+    bb_pos = ind.get("bb_pos", 0.5)
+    rsi = ind.get("rsi", 50.0)
+
+    if bb_w > parameters.BB_SQUEEZE_WIDTH_MAX_PCT:
+        return None
+
     if (
-        r == parameters.REGIME_LONG_STATE
-        and ind["rsi"] < parameters.MULTI_FACTOR_LONG_RSI_MAX
-        and h > 0
+        bb_pos >= parameters.BB_SQUEEZE_BB_POS_LONG_MIN
+        and rsi > parameters.BB_SQUEEZE_RSI_THRESHOLD
     ):
         return "long"
     if (
-        r == parameters.REGIME_SHORT_STATE
-        and ind["rsi"] > parameters.MULTI_FACTOR_SHORT_RSI_MIN
-        and h < 0
+        bb_pos <= parameters.BB_SQUEEZE_BB_POS_SHORT_MAX
+        and rsi < parameters.BB_SQUEEZE_RSI_THRESHOLD
     ):
         return "short"
     return None
@@ -126,9 +131,9 @@ def trend_core_v1(macro: dict, ind: dict) -> str | None:
 
 
 ALGORITHMS: dict[str, Callable[[dict, dict], str | None]] = {
-    "regime_v2": regime_v2,
+    "supertrend": supertrend,
     "fng_contrarian": fng_contrarian,
-    "vix_rsi": vix_rsi,
+    "ema_cross": ema_cross,
     "macd_momentum": macd_momentum,
-    "multi_factor": multi_factor,
+    "bb_squeeze": bb_squeeze,
 }

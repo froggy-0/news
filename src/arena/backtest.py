@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 from uuid import uuid4
 
-from . import algorithms, execution_rules, indicators, market_structure, parameters, risk
+from . import algorithms, execution_rules, frequency, indicators, market_structure, parameters, risk
 
 StrategyFn = Callable[[dict[str, Any], dict[str, float]], str | None]
 
@@ -45,6 +45,10 @@ class ReplayFrame:
 
 @dataclass(frozen=True)
 class BacktestSettings:
+    frequency_profile_id: str = frequency.LIVE_4H_PROFILE_ID
+    indicator_profile_id: str = frequency.DEFAULT_INDICATOR_PROFILE_ID
+    cost_model_version: str = frequency.COST_MODEL_VERSION
+    cost_scenario_id: str = frequency.DEFAULT_COST_SCENARIO_ID
     strategy_version: str = parameters.STRATEGY_VERSION
     params_version: str = parameters.PARAMS_VERSION
     feature_set_version: str = parameters.FEATURE_SET_VERSION
@@ -53,6 +57,10 @@ class BacktestSettings:
     interval: str = parameters.BINANCE_KLINE_INTERVAL
     fee_bps: float = parameters.FEE_BPS
     slippage_bps: float = 0.0
+    spread_bps_round_trip: float = 0.0
+    funding_buffer_bps_per_8h: float = 0.0
+    ecr_threshold: float = 1.3
+    max_trades_per_day_per_algo: float = 3.0
     atr_multiple: float = parameters.ATR_MULTIPLE
     stop_loss_min_pct: float = parameters.STOP_LOSS_MIN_PCT
     stop_loss_max_pct: float = parameters.STOP_LOSS_MAX_PCT
@@ -196,7 +204,7 @@ def _clean_macro(
 
 
 def _params_snapshot(algo_id: str, settings: BacktestSettings) -> dict[str, Any]:
-    return execution_rules.build_params_snapshot(
+    snapshot = execution_rules.build_params_snapshot(
         base_snapshot=parameters.base_params_snapshot(),
         algo_id=algo_id,
         stop_loss_fallback_pct=settings.stop_loss_fallback_pct,
@@ -208,6 +216,17 @@ def _params_snapshot(algo_id: str, settings: BacktestSettings) -> dict[str, Any]
         slippage_bps=settings.slippage_bps,
         portfolio_risk=risk.policy_snapshot(_risk_policy(settings)),
     )
+    snapshot["frequency_research"] = {
+        "frequency_profile_id": settings.frequency_profile_id,
+        "indicator_profile_id": settings.indicator_profile_id,
+        "cost_model_version": settings.cost_model_version,
+        "cost_scenario_id": settings.cost_scenario_id,
+        "spread_bps_round_trip": settings.spread_bps_round_trip,
+        "funding_buffer_bps_per_8h": settings.funding_buffer_bps_per_8h,
+        "ecr_threshold": settings.ecr_threshold,
+        "max_trades_per_day_per_algo": settings.max_trades_per_day_per_algo,
+    }
+    return snapshot
 
 
 def _risk_policy(settings: BacktestSettings) -> risk.PortfolioRiskPolicy:
@@ -223,6 +242,36 @@ def _risk_policy(settings: BacktestSettings) -> risk.PortfolioRiskPolicy:
         algo_max_drawdown_kill_pct=settings.algo_max_drawdown_kill_pct,
         cooldown_after_kill_hours=settings.cooldown_after_kill_hours,
     )
+
+
+def _base_params_snapshot_from_settings(settings: BacktestSettings) -> dict[str, Any]:
+    snapshot = parameters.base_params_snapshot()
+    snapshot["market_data"].update(
+        {
+            "symbol": settings.symbol,
+            "kline_interval": settings.interval,
+            "frequency_profile_id": settings.frequency_profile_id,
+            "indicator_profile_id": settings.indicator_profile_id,
+            "cost_model_version": settings.cost_model_version,
+            "cost_scenario_id": settings.cost_scenario_id,
+        }
+    )
+    try:
+        profile = frequency.get_frequency_profile(settings.frequency_profile_id)
+        cost = frequency.get_cost_scenario(settings.frequency_profile_id, settings.cost_scenario_id)
+        snapshot["frequency_research"] = frequency.profile_snapshot(
+            profile,
+            indicator_profile_id=settings.indicator_profile_id,
+            cost_scenario_id=cost.cost_scenario_id,
+        )
+    except ValueError:
+        snapshot["frequency_research"] = {
+            "frequency_profile_id": settings.frequency_profile_id,
+            "indicator_profile_id": settings.indicator_profile_id,
+            "cost_model_version": settings.cost_model_version,
+            "cost_scenario_id": settings.cost_scenario_id,
+        }
+    return snapshot
 
 
 def _open_position(
@@ -277,7 +326,9 @@ def _close_position(
     gross_ret = execution_rules.direction_sign(position.direction) * (
         close_price / position.open_price - 1.0
     )
-    trading_cost = 2.0 * (settings.fee_bps + settings.slippage_bps) / 10_000.0
+    trading_cost = (
+        2.0 * (settings.fee_bps + settings.slippage_bps) + settings.spread_bps_round_trip
+    ) / 10_000.0
     funding_rows = [
         {
             "funding_time": execution_rules.format_utc_timestamp(event.funding_time),
@@ -322,17 +373,42 @@ def _metric_summary(
     trades: list[BacktestTrade],
     equity_by_algo: dict[str, float],
     max_drawdown_by_algo: dict[str, float],
+    frames: list[ReplayFrame],
 ) -> dict[str, Any]:
     by_algo: dict[str, Any] = {}
+    data_days = 0.0
+    if len(frames) >= 2:
+        data_days = max(
+            (frames[-1].data_timestamp - frames[0].data_timestamp).total_seconds() / 86400.0,
+            1e-9,
+        )
     for algo_id in algo_ids:
         algo_trades = [trade for trade in trades if trade.algo_id == algo_id]
         wins = [trade for trade in algo_trades if trade.ret_pct > 0]
+        gross_return = sum(trade.gross_ret_pct for trade in algo_trades)
+        trading_cost = sum(trade.trading_cost_pct for trade in algo_trades)
+        funding_return = sum(trade.funding_ret_pct for trade in algo_trades)
+        non_eod_return = sum(
+            trade.ret_pct for trade in algo_trades if trade.exit_reason != "end_of_data"
+        )
         by_algo[algo_id] = {
             "trade_count": len(algo_trades),
             "win_rate": len(wins) / len(algo_trades) if algo_trades else None,
             "total_return_pct": equity_by_algo[algo_id] - 1.0,
+            "total_return_ex_end_of_data_pct": non_eod_return if algo_trades else 0.0,
+            "gross_return_pct": gross_return,
+            "trading_cost_drag_pct": -trading_cost,
+            "funding_drag_pct": funding_return,
+            "cost_to_gross_ratio": (trading_cost / abs(gross_return)) if gross_return else None,
+            "trades_per_day": (len(algo_trades) / data_days) if data_days else None,
+            "turnover_per_day": (2.0 * len(algo_trades) / data_days) if data_days else None,
             "avg_trade_ret_pct": (
                 sum(trade.ret_pct for trade in algo_trades) / len(algo_trades)
+                if algo_trades
+                else None
+            ),
+            "avg_hold_hours": (
+                sum(trade.hold_hours for trade in algo_trades) / len(algo_trades)
                 if algo_trades
                 else None
             ),
@@ -570,8 +646,9 @@ def run_replay(
             trades=trades,
             equity_by_algo=equity_by_algo,
             max_drawdown_by_algo=max_drawdown_by_algo,
+            frames=sorted_frames,
         ),
-        params_snapshot=parameters.base_params_snapshot(),
+        params_snapshot=_base_params_snapshot_from_settings(settings),
     )
 
 
@@ -616,13 +693,9 @@ def _latest_macro_for_time(
     return (_macro_signal_from_snapshot(selected, decision_time) if selected else {}, index)
 
 
-def _interval_hours(interval: str) -> int:
+def _interval_hours(interval: str) -> float:
     """'4h' → 4, '1h' → 1, '1d' → 24."""
-    if interval.endswith("d"):
-        return int(interval[:-1]) * 24
-    if interval.endswith("h"):
-        return int(interval[:-1])
-    return 4
+    return frequency.interval_to_hours(interval)
 
 
 async def load_frames_from_supabase(
@@ -632,6 +705,7 @@ async def load_frames_from_supabase(
     interval: str = parameters.BINANCE_KLINE_INTERVAL,
     limit: int = 1000,
     warmup_bars: int = parameters.MACD_SLOW_PERIOD + parameters.MACD_SIGNAL_PERIOD,
+    indicator_profile_id: str = frequency.DEFAULT_INDICATOR_PROFILE_ID,
     from_date: datetime | None = None,
     to_date: datetime | None = None,
 ) -> list[ReplayFrame]:
@@ -643,26 +717,36 @@ async def load_frames_from_supabase(
     """
     from datetime import timedelta
 
-    builder = (
-        db.table("arena_ohlcv_bars")
-        .select("open_time,close_time,open,high,low,close,volume")
-        .eq("symbol", symbol)
-        .eq("interval", interval)
-    )
+    async def fetch_bar_rows(*, desc: bool, row_limit: int) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        page_size = 1000
+        for start in range(0, row_limit, page_size):
+            end = min(start + page_size, row_limit) - 1
+            builder = (
+                db.table("arena_ohlcv_bars")
+                .select("open_time,close_time,open,high,low,close,volume")
+                .eq("symbol", symbol)
+                .eq("interval", interval)
+            )
+            if from_date is not None:
+                pre_start = from_date - timedelta(
+                    hours=_interval_hours(interval) * (warmup_bars + 5)
+                )
+                builder = builder.gte("open_time", _ts(pre_start))
+            if to_date is not None:
+                builder = builder.lte("close_time", _ts(to_date))
+            res = await builder.order("open_time", desc=desc).range(start, end).execute()
+            page = res.data or []
+            rows.extend(page)
+            if len(page) < page_size:
+                break
+        return rows
 
     if from_date is not None or to_date is not None:
-        if from_date is not None:
-            # fetch extra bars before from_date to warm up indicators
-            pre_start = from_date - timedelta(hours=_interval_hours(interval) * (warmup_bars + 5))
-            builder = builder.gte("open_time", _ts(pre_start))
-        if to_date is not None:
-            builder = builder.lte("close_time", _ts(to_date))
-        builder = builder.order("open_time").limit(5000)
+        bar_rows = await fetch_bar_rows(desc=False, row_limit=max(limit, 20_000))
     else:
-        builder = builder.order("open_time", desc=True).limit(limit)
-
-    bars_res = await builder.execute()
-    bar_rows = sorted(bars_res.data, key=lambda row: row["open_time"])
+        bar_rows = await fetch_bar_rows(desc=True, row_limit=limit)
+    bar_rows = sorted(bar_rows, key=lambda row: row["open_time"])
 
     macro_filter: dict[str, Any] = {}
     if from_date is not None:
@@ -701,7 +785,13 @@ async def load_frames_from_supabase(
         macro, macro_index = _latest_macro_for_time(macro_rows, bar.close_time, macro_index)
         frame = ReplayFrame(
             bar=bar,
-            indicators=indicators.compute(highs, lows, closes),
+            indicators=indicators.compute(
+                highs,
+                lows,
+                closes,
+                interval=interval,
+                indicator_profile_id=indicator_profile_id,
+            ),
             macro=macro,
             market_features={},
         )
@@ -771,10 +861,18 @@ def _run_row(result: BacktestResult) -> dict[str, Any]:
         "params_version": settings.params_version,
         "feature_set_version": settings.feature_set_version,
         "risk_model_version": settings.risk_model_version,
+        "frequency_profile_id": settings.frequency_profile_id,
+        "indicator_profile_id": settings.indicator_profile_id,
+        "cost_model_version": settings.cost_model_version,
+        "cost_scenario_id": settings.cost_scenario_id,
         "params_snapshot": result.params_snapshot,
         "rules_snapshot": {
             "fee_bps": settings.fee_bps,
             "slippage_bps": settings.slippage_bps,
+            "spread_bps_round_trip": settings.spread_bps_round_trip,
+            "funding_buffer_bps_per_8h": settings.funding_buffer_bps_per_8h,
+            "ecr_threshold": settings.ecr_threshold,
+            "max_trades_per_day_per_algo": settings.max_trades_per_day_per_algo,
             "atr_multiple": settings.atr_multiple,
             "stop_loss_min_pct": settings.stop_loss_min_pct,
             "stop_loss_max_pct": settings.stop_loss_max_pct,
@@ -927,11 +1025,31 @@ async def _amain(args: argparse.Namespace) -> int:
         from_date, to_date = await _resolve_split_dates(db, args.split, args.window)
         print(f"split={args.split} window={args.window}: {_ts(from_date)} ~ {_ts(to_date)}")
 
+    profile = frequency.get_frequency_profile(args.profile)
+    indicator_profile_id = args.indicator_profile or profile.default_indicator_profile_id
+    cost_scenario = frequency.get_cost_scenario(args.profile, args.cost_scenario)
+    interval = args.interval or profile.interval
+    slippage_bps = (
+        args.slippage_bps if args.slippage_bps is not None else cost_scenario.slippage_bps
+    )
+    warmup_bars = max(
+        parameters.MACD_SLOW_PERIOD + parameters.MACD_SIGNAL_PERIOD,
+        frequency.indicator_settings(
+            interval=interval,
+            indicator_profile_id=indicator_profile_id,
+        ).macd_slow_period
+        + frequency.indicator_settings(
+            interval=interval,
+            indicator_profile_id=indicator_profile_id,
+        ).macd_signal_period,
+    )
     frames = await load_frames_from_supabase(
         db,
         symbol=args.symbol,
-        interval=args.interval,
+        interval=interval,
         limit=args.limit,
+        warmup_bars=warmup_bars,
+        indicator_profile_id=indicator_profile_id,
         from_date=from_date,
         to_date=to_date,
     )
@@ -946,10 +1064,22 @@ async def _amain(args: argparse.Namespace) -> int:
         to_date=frames[-1].bar.close_time if frames else None,
     )
     settings = BacktestSettings(
+        frequency_profile_id=profile.frequency_profile_id,
+        indicator_profile_id=indicator_profile_id,
+        cost_model_version=cost_scenario.cost_model_version,
+        cost_scenario_id=cost_scenario.cost_scenario_id,
         symbol=args.symbol,
-        interval=args.interval,
-        slippage_bps=args.slippage_bps,
+        interval=interval,
+        fee_bps=cost_scenario.fee_bps,
+        slippage_bps=slippage_bps,
+        spread_bps_round_trip=cost_scenario.spread_bps_round_trip,
+        funding_buffer_bps_per_8h=cost_scenario.funding_buffer_bps_per_8h,
+        ecr_threshold=profile.ecr_threshold,
+        max_trades_per_day_per_algo=profile.max_trades_per_day_per_algo,
+        min_hold_hours=dict(profile.min_hold_hours),
+        min_hold_fallback_hours=profile.min_hold_fallback_hours,
         close_open_at_end=not args.keep_open_at_end,
+        warmup_bars=warmup_bars,
     )
     result = run_replay(frames, settings=settings, funding_events=funding_events)
     if args.save:
@@ -961,7 +1091,10 @@ async def _amain(args: argparse.Namespace) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run arena rule-parity backtest.")
     parser.add_argument("--symbol", default=parameters.BINANCE_SYMBOL)
-    parser.add_argument("--interval", default=parameters.BINANCE_KLINE_INTERVAL)
+    parser.add_argument("--profile", default=frequency.LIVE_4H_PROFILE_ID)
+    parser.add_argument("--indicator-profile", default=None)
+    parser.add_argument("--cost-scenario", default=frequency.DEFAULT_COST_SCENARIO_ID)
+    parser.add_argument("--interval", default=None, help="Override interval from --profile")
     parser.add_argument(
         "--limit", type=int, default=1000, help="--from-date/--to-date 미지정 시 최근 N bars 사용"
     )
@@ -993,7 +1126,7 @@ def main() -> int:
         default=None,
         help="--split 사용 시 train 또는 test window 선택",
     )
-    parser.add_argument("--slippage-bps", type=float, default=0.0)
+    parser.add_argument("--slippage-bps", type=float, default=None)
     parser.add_argument("--keep-open-at-end", action="store_true")
     parser.add_argument("--save", action="store_true")
     return asyncio.run(_amain(parser.parse_args()))

@@ -1,4 +1,4 @@
-"""backfill_arena_ohlcv.py — Binance 공개 API로 BTCUSDT 4H 과거 데이터를 arena_ohlcv_bars에 채운다.
+"""backfill_arena_ohlcv.py — Binance 공개 API로 OHLCV 과거 데이터를 arena_ohlcv_bars에 채운다.
 
 인증 불필요. arena_ohlcv_bars의 upsert constraint(exchange,symbol,interval,open_time)로
 중복 없이 안전하게 적재.
@@ -6,7 +6,8 @@
 사용법:
     .venv/bin/python scripts/backfill_arena_ohlcv.py
     .venv/bin/python scripts/backfill_arena_ohlcv.py --days 365
-    .venv/bin/python scripts/backfill_arena_ohlcv.py --days 730 --dry-run
+    .venv/bin/python scripts/backfill_arena_ohlcv.py --symbol BTCUSDT --interval 1h --days 180
+    .venv/bin/python scripts/backfill_arena_ohlcv.py --symbol BTCUSDT --interval 15m --days 180 --dry-run
 """
 
 from __future__ import annotations
@@ -35,11 +36,11 @@ def _ts(ms: int) -> str:
     return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _parse_kline(kline: list) -> dict:
+def _parse_kline(kline: list, *, symbol: str, interval: str) -> dict:
     return {
         "exchange": EXCHANGE,
-        "symbol": SYMBOL,
-        "interval": INTERVAL,
+        "symbol": symbol,
+        "interval": interval,
         "open_time": _ts(int(kline[0])),
         "open": float(kline[1]),
         "high": float(kline[2]),
@@ -61,6 +62,9 @@ async def fetch_klines(
     client: httpx.AsyncClient,
     start_ms: int,
     end_ms: int,
+    *,
+    symbol: str,
+    interval: str,
 ) -> list[dict]:
     """start_ms ~ end_ms 범위 kline을 페이지네이션으로 모두 수집."""
     rows: list[dict] = []
@@ -68,8 +72,8 @@ async def fetch_klines(
 
     while current_ms < end_ms:
         params = {
-            "symbol": SYMBOL,
-            "interval": INTERVAL,
+            "symbol": symbol,
+            "interval": interval,
             "startTime": current_ms,
             "endTime": end_ms,
             "limit": BARS_PER_REQUEST,
@@ -80,16 +84,28 @@ async def fetch_klines(
         if not batch:
             break
 
+        complete_count = 0
+        complete_first_open_ms: int | None = None
+        complete_last_close_ms: int | None = None
         for kline in batch:
-            rows.append(_parse_kline(kline))
+            if int(kline[6]) > end_ms:
+                continue
+            if complete_first_open_ms is None:
+                complete_first_open_ms = int(kline[0])
+            complete_last_close_ms = int(kline[6])
+            rows.append(_parse_kline(kline, symbol=symbol, interval=interval))
+            complete_count += 1
 
         # 다음 페이지 시작 = 마지막 bar의 close_time + 1ms
         current_ms = int(batch[-1][6]) + 1
+        range_label = (
+            f"[{_ts(complete_first_open_ms)} ~ {_ts(complete_last_close_ms)}]"
+            if complete_first_open_ms is not None and complete_last_close_ms is not None
+            else "[no complete bars]"
+        )
 
         print(
-            f"  fetched {len(batch):4d} bars  "
-            f"[{_ts(int(batch[0][0]))} ~ {_ts(int(batch[-1][6]))}]  "
-            f"total={len(rows)}",
+            f"  fetched {complete_count:4d} complete bars  {range_label}  total={len(rows)}",
             flush=True,
         )
 
@@ -101,15 +117,15 @@ async def fetch_klines(
 
 
 async def save_to_supabase(rows: list[dict], dry_run: bool) -> int:
+    if dry_run:
+        print(f"  [dry-run] {len(rows)}행 upsert 생략")
+        return len(rows)
+
     from supabase._async.client import create_client
 
     url = os.environ["SUPABASE_URL"]
     key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
     db = await create_client(url, key)
-
-    if dry_run:
-        print(f"  [dry-run] {len(rows)}행 upsert 생략")
-        return len(rows)
 
     # run_id 컬럼이 NOT NULL이면 upsert 실패 — 먼저 테이블 확인 후 제거
     # arena_ohlcv_bars에는 run_id가 있지만 backfill 행은 run_id 없음
@@ -134,12 +150,21 @@ async def save_to_supabase(rows: list[dict], dry_run: bool) -> int:
 async def main(args: argparse.Namespace) -> None:
     now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
     start_ms = now_ms - int(args.days * 24 * 3600 * 1000)
+    bars_per_day = int(round(24 / _interval_hours(args.interval)))
 
-    print(f"Backfill: {SYMBOL} {INTERVAL}  {args.days}일  [{_ts(start_ms)} ~ {_ts(now_ms)}]")
-    print(f"예상 bars: ~{args.days * 6}개 ({args.days}일 × 6bar/day)\n")
+    print(
+        f"Backfill: {args.symbol} {args.interval}  {args.days}일  [{_ts(start_ms)} ~ {_ts(now_ms)}]"
+    )
+    print(f"예상 bars: ~{args.days * bars_per_day}개 ({args.days}일 × {bars_per_day}bar/day)\n")
 
     async with httpx.AsyncClient() as client:
-        rows = await fetch_klines(client, start_ms, now_ms)
+        rows = await fetch_klines(
+            client,
+            start_ms,
+            now_ms,
+            symbol=args.symbol,
+            interval=args.interval,
+        )
 
     print(f"\n총 {len(rows)}개 bar 수집 완료")
 
@@ -152,12 +177,27 @@ async def main(args: argparse.Namespace) -> None:
     print(f"\n완료: {saved}행 처리")
     print(f"usable bars (warmup 35 제외): ~{max(0, saved - 35)}")
     print(
-        f"walk-forward 가능 여부: {'✓' if saved - 35 >= 626 else f'✗ ({626 - (saved - 35)}개 부족)'}"
+        f"legacy 4H walk-forward 기준 가능 여부: "
+        f"{'yes' if saved - 35 >= 626 else f'no ({626 - (saved - 35)}개 부족)'}"
     )
+
+
+def _interval_hours(interval: str) -> float:
+    if interval.endswith("m"):
+        return int(interval[:-1]) / 60.0
+    if interval.endswith("h"):
+        return float(interval[:-1])
+    if interval.endswith("d"):
+        return float(interval[:-1]) * 24.0
+    raise argparse.ArgumentTypeError(f"unsupported interval: {interval!r}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--symbol", default=SYMBOL, help="Binance symbol (기본 BTCUSDT)")
+    parser.add_argument(
+        "--interval", default=INTERVAL, help="Binance kline interval (예: 15m, 1h, 4h)"
+    )
     parser.add_argument(
         "--days", type=int, default=180, help="과거 몇 일치 수집 (기본 180일 = ~1080 bars)"
     )

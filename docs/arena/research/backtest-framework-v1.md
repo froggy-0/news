@@ -88,7 +88,10 @@ LIMIT 5;
 - baseline validation 저장 완료.
 - `arena_portfolio_risk_layer_ready`: 적용 완료.
 - `arena_market_structure_v1_ready`: SQL 적용 후 확인 필요.
+- `arena_frequency_research_v1_ready`: SQL 적용 후 확인 필요.
 - funding 데이터가 없으면 `funding_ret_pct=0`으로 처리되어 기존 backtest와 동일하게 동작한다.
+- `--profile`, `--indicator-profile`, `--cost-scenario` 옵션으로 4H/1H/15m replay를 분리한다.
+- metrics에는 trades/day, turnover/day, cost drag, funding drag, gross/net return, end-of-data 제외 성과를 포함한다.
 
 최신 baseline:
 
@@ -103,8 +106,10 @@ LIMIT 5;
 
 ## 다음 단계
 
-- walk-forward split 생성/저장 상태 확인.
-- baseline report mart 적용 상태 확인.
+- frequency SQL 적용 후 `arena_frequency_research_v1_ready` 확인.
+- `BTCUSDT 1h 180d`, `BTCUSDT 15m 90~180d` raw OHLCV 저장.
+- `arena.walk_forward --profile research_1h --save` 실행.
+- `arena.backtest --profile research_1h --cost-scenario base --limit 1000` 실행.
 - sample size 부족 시 `research_only`로 자동 표시.
 - forced `end_of_data` 포함/제외 성과를 분리.
 - risk event count와 risk-blocked signal count를 report mart에 포함.

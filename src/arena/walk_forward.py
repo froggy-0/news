@@ -23,7 +23,7 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
-from . import execution_rules, parameters
+from . import execution_rules, frequency, parameters
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,8 @@ class WalkForwardSplit:
     strategy_version: str
     params_version: str
     risk_model_version: str
+    frequency_profile_id: str
+    indicator_profile_id: str
     train_start: datetime
     train_end: datetime
     test_start: datetime
@@ -56,6 +58,8 @@ class WalkForwardSplit:
             "strategy_version": self.strategy_version,
             "params_version": self.params_version,
             "risk_model_version": self.risk_model_version,
+            "frequency_profile_id": self.frequency_profile_id,
+            "indicator_profile_id": self.indicator_profile_id,
             "train_start": ts(self.train_start),
             "train_end": ts(self.train_end),
             "test_start": ts(self.test_start),
@@ -67,6 +71,8 @@ class WalkForwardSplit:
                     "train_bar_count": self.train_bar_count,
                     "test_bar_count": self.test_bar_count,
                     "wf_version": parameters.WF_VERSION,
+                    "frequency_profile_id": self.frequency_profile_id,
+                    "indicator_profile_id": self.indicator_profile_id,
                 }
             ),
         }
@@ -82,6 +88,8 @@ class WalkForwardSplit:
             "strategy_version": self.strategy_version,
             "params_version": self.params_version,
             "risk_model_version": self.risk_model_version,
+            "frequency_profile_id": self.frequency_profile_id,
+            "indicator_profile_id": self.indicator_profile_id,
             "train_start": ts(self.train_start),
             "train_end": ts(self.train_end),
             "test_start": ts(self.test_start),
@@ -101,6 +109,8 @@ class WalkForwardResult:
     available_bars: int
     min_required_bars: int
     warmup_bars: int
+    frequency_profile_id: str = frequency.LIVE_4H_PROFILE_ID
+    indicator_profile_id: str = frequency.DEFAULT_INDICATOR_PROFILE_ID
     splits: list[WalkForwardSplit] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -112,6 +122,8 @@ class WalkForwardResult:
             "available_bars": self.available_bars,
             "min_required_bars": self.min_required_bars,
             "warmup_bars": self.warmup_bars,
+            "frequency_profile_id": self.frequency_profile_id,
+            "indicator_profile_id": self.indicator_profile_id,
             "split_count": len(self.splits),
             "splits": [s.as_dict() for s in self.splits],
         }
@@ -134,6 +146,8 @@ def generate_splits(
     strategy_version: str = parameters.STRATEGY_VERSION,
     params_version: str = parameters.PARAMS_VERSION,
     risk_model_version: str = parameters.RISK_MODEL_VERSION,
+    frequency_profile_id: str = frequency.LIVE_4H_PROFILE_ID,
+    indicator_profile_id: str = frequency.DEFAULT_INDICATOR_PROFILE_ID,
 ) -> WalkForwardResult:
     """Generate expanding-anchor walk-forward splits from a sorted bar list.
 
@@ -164,6 +178,8 @@ def generate_splits(
             available_bars=available,
             min_required_bars=min_required,
             warmup_bars=warmup_bars,
+            frequency_profile_id=frequency_profile_id,
+            indicator_profile_id=indicator_profile_id,
             splits=[],
         )
 
@@ -178,7 +194,10 @@ def generate_splits(
         # test:  usable[test_start_idx .. test_end_idx - 1]
         test_start_idx = test_end_idx - test_bars
 
-        split_name = f"{symbol}_{interval}_{parameters.WF_VERSION}_s{split_num:02d}"
+        if frequency_profile_id == frequency.LIVE_4H_PROFILE_ID:
+            split_name = f"{symbol}_{interval}_{parameters.WF_VERSION}_s{split_num:02d}"
+        else:
+            split_name = f"{symbol}_{interval}_{frequency_profile_id}_{parameters.WF_VERSION}_s{split_num:02d}"
 
         splits.append(
             WalkForwardSplit(
@@ -190,6 +209,8 @@ def generate_splits(
                 strategy_version=strategy_version,
                 params_version=params_version,
                 risk_model_version=risk_model_version,
+                frequency_profile_id=frequency_profile_id,
+                indicator_profile_id=indicator_profile_id,
                 train_start=_parse_ts(usable[0]["close_time"]),
                 train_end=_parse_ts(usable[train_end_idx - 1]["close_time"]),
                 test_start=_parse_ts(usable[test_start_idx]["close_time"]),
@@ -211,6 +232,8 @@ def generate_splits(
         available_bars=available,
         min_required_bars=min_required,
         warmup_bars=warmup_bars,
+        frequency_profile_id=frequency_profile_id,
+        indicator_profile_id=indicator_profile_id,
         splits=splits,
     )
 
@@ -222,16 +245,24 @@ async def load_bars_from_supabase(
     interval: str = parameters.BINANCE_KLINE_INTERVAL,
     limit: int = 5000,
 ) -> list[dict[str, Any]]:
-    res = (
-        await db.table("arena_ohlcv_bars")
-        .select("open_time,close_time")
-        .eq("symbol", symbol)
-        .eq("interval", interval)
-        .order("open_time")
-        .limit(limit)
-        .execute()
-    )
-    return res.data or []
+    rows: list[dict[str, Any]] = []
+    page_size = 1000
+    for start in range(0, limit, page_size):
+        end = min(start + page_size, limit) - 1
+        res = (
+            await db.table("arena_ohlcv_bars")
+            .select("open_time,close_time")
+            .eq("symbol", symbol)
+            .eq("interval", interval)
+            .order("open_time")
+            .range(start, end)
+            .execute()
+        )
+        page = res.data or []
+        rows.extend(page)
+        if len(page) < page_size:
+            break
+    return rows
 
 
 async def save_splits_to_supabase(
@@ -263,11 +294,35 @@ async def _amain(args: argparse.Namespace) -> int:
     await positions.init()
     db = positions.db()
 
-    bars = await load_bars_from_supabase(db, symbol=args.symbol, interval=args.interval)
+    profile = frequency.get_frequency_profile(args.profile)
+    interval = args.interval or profile.interval
+    indicator_profile_id = args.indicator_profile or profile.default_indicator_profile_id
+    wf_counts = frequency.walk_forward_bar_counts(profile)
+    warmup_bars = max(
+        parameters.MACD_SLOW_PERIOD + parameters.MACD_SIGNAL_PERIOD,
+        frequency.indicator_settings(
+            interval=interval,
+            indicator_profile_id=indicator_profile_id,
+        ).macd_slow_period
+        + frequency.indicator_settings(
+            interval=interval,
+            indicator_profile_id=indicator_profile_id,
+        ).macd_signal_period,
+    )
+    bars = await load_bars_from_supabase(
+        db, symbol=args.symbol, interval=interval, limit=args.limit
+    )
     result = generate_splits(
         bars,
         symbol=args.symbol,
-        interval=args.interval,
+        interval=interval,
+        warmup_bars=warmup_bars,
+        train_bars=wf_counts["train_bars"],
+        test_bars=wf_counts["test_bars"],
+        step_bars=wf_counts["step_bars"],
+        embargo_bars=wf_counts["embargo_bars"],
+        frequency_profile_id=profile.frequency_profile_id,
+        indicator_profile_id=indicator_profile_id,
     )
 
     print(json.dumps(result.as_dict(), ensure_ascii=False, indent=2))
@@ -292,7 +347,10 @@ async def _amain(args: argparse.Namespace) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate arena walk-forward splits.")
     parser.add_argument("--symbol", default=parameters.BINANCE_SYMBOL)
-    parser.add_argument("--interval", default=parameters.BINANCE_KLINE_INTERVAL)
+    parser.add_argument("--profile", default=frequency.LIVE_4H_PROFILE_ID)
+    parser.add_argument("--indicator-profile", default=None)
+    parser.add_argument("--interval", default=None, help="Override interval from --profile")
+    parser.add_argument("--limit", type=int, default=20000)
     parser.add_argument("--save", action="store_true", help="Upsert splits to Supabase.")
     return asyncio.run(_amain(parser.parse_args()))
 

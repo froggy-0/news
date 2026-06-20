@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from . import config, feature_registry, parameters, positions
+from . import feature_registry, frequency, parameters, positions
 from .market_structure import MarketStructureSnapshot
 from .sleeves import AllocationDecision, SleeveSignal
 
@@ -45,12 +45,19 @@ def payload_hash(payload: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def parse_binance_kline(kline: list[Any], *, run_id: str, fetched_at: datetime) -> dict[str, Any]:
+def parse_binance_kline(
+    kline: list[Any],
+    *,
+    run_id: str | None,
+    fetched_at: datetime,
+    symbol: str = parameters.BINANCE_SYMBOL,
+    interval: str = parameters.BINANCE_KLINE_INTERVAL,
+) -> dict[str, Any]:
     return {
         "run_id": run_id,
         "exchange": "binance",
-        "symbol": config.SYMBOL,
-        "interval": parameters.BINANCE_KLINE_INTERVAL,
+        "symbol": symbol,
+        "interval": interval,
         "open_time": _ts(datetime.fromtimestamp(int(kline[0]) / 1000, tz=timezone.utc)),
         "open": float(kline[1]),
         "high": float(kline[2]),
@@ -124,6 +131,23 @@ async def _safe_execute_optional_constraint(
         return CaptureWriteResult(label=label, ok=False, error=str(exc))
 
 
+async def _safe_execute_optional_schema(
+    label: str,
+    builder: Any,
+    *,
+    object_name: str,
+) -> CaptureWriteResult:
+    try:
+        await builder.execute()
+        return CaptureWriteResult(label=label, ok=True)
+    except Exception as exc:
+        if object_name in str(exc):
+            logger.info("Arena optional schema write skipped: %s (%s)", label, object_name)
+            return CaptureWriteResult(label=f"{label}.schema_skipped", ok=True)
+        logger.warning("Arena data lake write failed: %s (%s)", label, exc)
+        return CaptureWriteResult(label=label, ok=False, error=str(exc))
+
+
 async def _safe_execute_retryable_constraint(
     label: str,
     builder: Any,
@@ -157,18 +181,28 @@ async def record_run_started(
     run_id: str,
     started_at: datetime,
     params_snapshot: dict[str, Any],
+    symbol: str = parameters.BINANCE_SYMBOL,
+    interval: str = parameters.BINANCE_KLINE_INTERVAL,
+    frequency_profile_id: str = frequency.LIVE_4H_PROFILE_ID,
+    indicator_profile_id: str = frequency.DEFAULT_INDICATOR_PROFILE_ID,
+    cost_model_version: str = frequency.COST_MODEL_VERSION,
+    cost_scenario_id: str = frequency.DEFAULT_COST_SCENARIO_ID,
 ) -> CaptureWriteResult:
     payload = {
         "run_id": run_id,
         "started_at": _ts(started_at),
         "status": "started",
         "runtime": parameters.RUNTIME,
-        "symbol": config.SYMBOL,
-        "interval": parameters.BINANCE_KLINE_INTERVAL,
+        "symbol": symbol,
+        "interval": interval,
         "strategy_version": parameters.STRATEGY_VERSION,
         "params_version": parameters.PARAMS_VERSION,
         "feature_set_version": parameters.FEATURE_SET_VERSION,
         "risk_model_version": parameters.RISK_MODEL_VERSION,
+        "frequency_profile_id": frequency_profile_id,
+        "indicator_profile_id": indicator_profile_id,
+        "cost_model_version": cost_model_version,
+        "cost_scenario_id": cost_scenario_id,
         "params_snapshot": params_snapshot,
     }
     result = await _safe_execute(
@@ -178,7 +212,15 @@ async def record_run_started(
         legacy_payload = {
             key: value
             for key, value in payload.items()
-            if key not in {"feature_set_version", "risk_model_version"}
+            if key
+            not in {
+                "feature_set_version",
+                "risk_model_version",
+                "frequency_profile_id",
+                "indicator_profile_id",
+                "cost_model_version",
+                "cost_scenario_id",
+            }
         }
         return await _safe_execute(
             "arena_runs.start.legacy",
@@ -269,9 +311,18 @@ async def record_ohlcv_bars(
     run_id: str,
     raw_klines: list[list[Any]],
     fetched_at: datetime,
+    symbol: str = parameters.BINANCE_SYMBOL,
+    interval: str = parameters.BINANCE_KLINE_INTERVAL,
 ) -> list[CaptureWriteResult]:
     rows = [
-        parse_binance_kline(kline, run_id=run_id, fetched_at=fetched_at) for kline in raw_klines
+        parse_binance_kline(
+            kline,
+            run_id=run_id,
+            fetched_at=fetched_at,
+            symbol=symbol,
+            interval=interval,
+        )
+        for kline in raw_klines
     ]
     if not rows:
         return []
@@ -323,14 +374,23 @@ async def record_indicator_snapshot(
     run_id: str,
     data_timestamp: datetime,
     indicators: dict[str, float],
+    symbol: str = parameters.BINANCE_SYMBOL,
+    interval: str = parameters.BINANCE_KLINE_INTERVAL,
+    indicator_profile_id: str = frequency.DEFAULT_INDICATOR_PROFILE_ID,
+    frequency_profile_id: str = frequency.LIVE_4H_PROFILE_ID,
 ) -> CaptureWriteResult:
+    indicator_params = frequency.indicator_settings(
+        interval=interval,
+        indicator_profile_id=indicator_profile_id,
+    ).as_dict()
     row = {
         "run_id": run_id,
-        "symbol": config.SYMBOL,
-        "interval": parameters.BINANCE_KLINE_INTERVAL,
+        "symbol": symbol,
+        "interval": interval,
         "data_timestamp": _ts(data_timestamp),
         "params_version": parameters.PARAMS_VERSION,
-        "indicator_params": parameters.base_params_snapshot()["indicators"],
+        "indicator_profile_id": indicator_profile_id,
+        "indicator_params": indicator_params,
         "rsi": indicators.get("rsi"),
         "macd_hist": indicators.get("macd_hist"),
         "macd_hist_prev": indicators.get("macd_hist_prev"),
@@ -357,6 +417,7 @@ async def record_indicator_snapshot(
             for key, value in row.items()
             if key
             not in {
+                "indicator_profile_id",
                 "macd_hist_prev",
                 "bb_width",
                 "atr_pct",
@@ -375,6 +436,39 @@ async def record_indicator_snapshot(
             positions.db().table("arena_indicator_snapshots").insert(legacy_row),
         )
     return result
+
+
+async def record_indicator_feature_bar(
+    *,
+    run_id: str,
+    symbol: str,
+    interval: str,
+    data_timestamp: datetime,
+    indicators: dict[str, float],
+    indicator_profile_id: str,
+    frequency_profile_id: str,
+) -> CaptureWriteResult:
+    row = {
+        "symbol": symbol,
+        "interval": interval,
+        "indicator_profile_id": indicator_profile_id,
+        "frequency_profile_id": frequency_profile_id,
+        "data_timestamp": _ts(data_timestamp),
+        "run_id": run_id,
+        "params_version": parameters.PARAMS_VERSION,
+        "indicator_params": frequency.indicator_settings(
+            interval=interval,
+            indicator_profile_id=indicator_profile_id,
+        ).as_dict(),
+        "features": indicators,
+    }
+    return await _safe_execute_optional_schema(
+        "arena_indicator_feature_bars.upsert",
+        positions.db()
+        .table("arena_indicator_feature_bars")
+        .upsert(row, on_conflict="symbol,interval,indicator_profile_id,data_timestamp"),
+        object_name="arena_indicator_feature_bars",
+    )
 
 
 async def record_market_structure_snapshot(

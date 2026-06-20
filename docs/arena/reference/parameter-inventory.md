@@ -16,14 +16,16 @@
 
 | Key | Default | Unit | Mutable | Risk | Used at | Notes |
 | --- | ---: | --- | --- | --- | --- | --- |
-| `arena.version.strategy` | `arena-ec2-v5` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:13` | live paper 전략 버전 |
-| `arena.version.params` | `arena-params-v6` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:14` | params snapshot schema 기준 |
-| `arena.version.features` | `arena-features-v3` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:15` | feature registry 기준 |
+| `arena.version.strategy` | `arena-ec2-v6` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:13` | live paper 전략 버전 |
+| `arena.version.params` | `arena-params-v7` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:14` | params snapshot schema 기준 |
+| `arena.version.features` | `arena-features-v4` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:15` | feature registry 기준 |
 | `arena.runtime` | `ec2` | text | code_only | Medium | `/Users/giwon/code/news/src/arena/parameters.py:17` | Lambda와 EC2 성과 구분 |
 | `arena.market.symbol` | `BTCUSDT` | symbol | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:19` | 거래/수집 대상 |
 | `arena.market.kline_interval` | `4h` | candle | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:20` | 지표와 스케줄의 시간축 |
 | `arena.market.klines_limit` | `150` | candles | code_only | Medium | `/Users/giwon/code/news/src/arena/parameters.py:21` | 지표 warmup 길이 |
 | `arena.shadow_vnext.enabled` | `true` | bool | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:29` | shadow decision 기록 on/off |
+| `arena.frequency_shadow.enabled` | `false` | bool | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:33` | 1H frequency shadow scheduler on/off |
+| `arena.frequency_shadow.profiles` | `research_1h` | csv | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:89` | 활성화 시 자동 shadow profile 목록 |
 | `arena.net.http_timeout` | `30` | seconds | code_only | Low | `/Users/giwon/code/news/src/arena/parameters.py:24` | Binance/R2 fetch timeout |
 | `arena.schedule.hour` | `*/4` | cron | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:27` | 4H 판단 cadence |
 | `arena.schedule.minute` | `5` | minute | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:28` | candle close 직후 지연 실행 |
@@ -44,6 +46,28 @@
 | `arena.risk.daily_loss_limit_pct` | `0.05` | pct | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:70` | 일간 실현 손실 제한 |
 | `arena.risk.algo_max_drawdown_kill_pct` | `0.10` | pct | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:73` | 알고리즘별 MDD kill switch |
 | `arena.risk.cooldown_after_kill_hours` | `24` | hours | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:76` | kill 이후 재가동 대기 정책 |
+
+## Arena Frequency Research
+
+| Key | Default | Unit | Mutable | Risk | Used at | Notes |
+| --- | ---: | --- | --- | --- | --- | --- |
+| `arena.frequency.live_4h.interval` | `4h` | candle | code_only | High | `/Users/giwon/code/news/src/arena/frequency.py:164` | 기존 live paper cadence 유지 |
+| `arena.frequency.live_4h.train_days` | `84` | days | code_only | Medium | `/Users/giwon/code/news/src/arena/frequency.py:171` | WF train window, 4H 기준 504 bars |
+| `arena.frequency.live_4h.test_days` | `20` | days | code_only | Medium | `/Users/giwon/code/news/src/arena/frequency.py:172` | WF test window, 4H 기준 120 bars |
+| `arena.frequency.live_4h.ecr` | `1.3` | multiple | code_only | High | `/Users/giwon/code/news/src/arena/frequency.py:174` | 비용 대비 edge cushion |
+| `arena.frequency.research_1h.interval` | `1h` | candle | code_only | High | `/Users/giwon/code/news/src/arena/frequency.py:179` | research/shadow 후보, paper position 미생성 |
+| `arena.frequency.research_1h.train_days` | `90` | days | code_only | Medium | `/Users/giwon/code/news/src/arena/frequency.py:186` | WF train window, 1H 기준 2160 bars |
+| `arena.frequency.research_1h.test_days` | `21` | days | code_only | Medium | `/Users/giwon/code/news/src/arena/frequency.py:187` | WF test window, 1H 기준 504 bars |
+| `arena.frequency.research_1h.embargo_hours` | `24` | hours | code_only | High | `/Users/giwon/code/news/src/arena/frequency.py:188` | train/test leakage 완충 |
+| `arena.frequency.research_1h.max_trades_per_day_per_algo` | `6` | trades/day | code_only | High | `/Users/giwon/code/news/src/arena/frequency.py:190` | 고빈도 과매매 상한 |
+| `arena.frequency.research_15m.interval` | `15m` | candle | code_only | High | `/Users/giwon/code/news/src/arena/frequency.py:194` | raw/backtest 전용, scheduler 미연결 |
+| `arena.frequency.research_15m.train_days` | `60` | days | code_only | Medium | `/Users/giwon/code/news/src/arena/frequency.py:201` | WF train window, 15m 기준 5760 bars |
+| `arena.frequency.research_15m.test_days` | `14` | days | code_only | Medium | `/Users/giwon/code/news/src/arena/frequency.py:202` | WF test window, 15m 기준 1344 bars |
+| `arena.frequency.research_15m.ecr` | `1.7` | multiple | code_only | High | `/Users/giwon/code/news/src/arena/frequency.py:204` | 더 높은 비용/노이즈 cushion |
+| `arena.indicator_profile.time_normalized_v1` | `4H time equivalent` | profile | code_only | High | `/Users/giwon/code/news/src/arena/frequency.py:277` | 4H RSI14=56h 의미를 1H/15m로 환산 |
+| `arena.indicator_profile.intraday_native_v1` | `bar native` | profile | code_only | Medium | `/Users/giwon/code/news/src/arena/frequency.py:286` | RSI14/MACD12-26-9를 intraday bar 기준으로 사용, 기본값 아님 |
+| `arena.cost.research_1h.base` | `17.5` | bps round-trip incl buffer | code_only | High | `/Users/giwon/code/news/src/arena/frequency.py:237` | fee 5bps/leg, slippage 2bps/leg, spread 3bps RT, funding buffer 0.5bps/8h |
+| `arena.cost.research_15m.base` | `24.0` | bps round-trip incl buffer | code_only | High | `/Users/giwon/code/news/src/arena/frequency.py:245` | fee 5bps/leg, slippage 4bps/leg, spread 5bps RT, funding buffer 1bps/8h |
 
 ## Arena Indicators
 
@@ -169,11 +193,12 @@
 6. portfolio risk layer v1 적용.
 7. walk-forward generator와 report mart SQL 구현.
 8. market-structure/shadow vNext 코드와 migration 작성.
+9. frequency profile registry, 1H/15m OHLCV 수집 일반화, frequency backtest mart migration 작성.
 
 남은 작업:
 
 1. Lambda EventBridge rule `arena-trader-4h`가 켜져 있으면 비활성화 상태를 주기적으로 확인한다.
 2. news/provider/risk overlay 파라미터를 별도 policy registry로 분리할지 결정한다.
-3. `20260620_arena_market_structure_v1.sql`을 Supabase에 적용하고 readiness view를 확인한다.
-4. shadow 30일 이상, validation critical/high fail 0 전까지 `trend_core_v1`은 live paper로 승격하지 않는다.
-5. `slippage_bps` 기본값은 현재 0이다. 실거래 근접성 검증 단계에서 추정값을 별도 버전으로 도입한다.
+3. `20260620_arena_market_structure_v1.sql`과 `20260620_arena_frequency_research_v1.sql`을 Supabase에 적용하고 readiness view를 확인한다.
+4. `BTCUSDT 1h 180d`, `BTCUSDT 15m 90~180d` raw OHLCV를 저장한다.
+5. shadow 30일 이상, validation critical/high fail 0 전까지 `trend_core_v1`은 live paper로 승격하지 않는다.

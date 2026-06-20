@@ -30,6 +30,10 @@ ENABLE_ARENA_SHADOW_VNEXT: bool = _bool_env(
     "ENABLE_ARENA_SHADOW_VNEXT",
     parameters.ARENA_SHADOW_VNEXT_ENABLED,
 )
+ENABLE_ARENA_FREQUENCY_SHADOW: bool = _bool_env(
+    "ENABLE_ARENA_FREQUENCY_SHADOW",
+    parameters.ARENA_FREQUENCY_SHADOW_ENABLED,
+)
 
 STOP_LOSS_PCT: float = float(
     os.environ.get("STOP_LOSS_PCT", str(parameters.STOP_LOSS_FALLBACK_PCT))
@@ -77,11 +81,23 @@ COOLDOWN_AFTER_KILL_HOURS: float = float(
     os.environ.get("COOLDOWN_AFTER_KILL_HOURS", str(parameters.COOLDOWN_AFTER_KILL_HOURS))
 )
 
+SLACK_BOT_TOKEN: str = os.environ.get("SLACK_BOT_TOKEN", "").strip()
+SLACK_CHANNEL: str = os.environ.get("SLACK_CHANNEL", "").strip()
+
 BINANCE_WS_URL = "wss://stream.binance.com:9443/ws/btcusdt@kline_1m"
 BINANCE_REST_URL = "https://api.binance.com/api/v3/klines"
+BINANCE_BOOK_TICKER_URL = "https://api.binance.com/api/v3/ticker/bookTicker"
 SYMBOL = parameters.BINANCE_SYMBOL
 KLINES_LIMIT = parameters.BINANCE_KLINES_LIMIT
 LATEST_JSON_URL = f"{R2_BASE_URL}/analytics/sentiment/latest.json" if R2_BASE_URL else ""
+ARENA_FREQUENCY_SHADOW_PROFILES: tuple[str, ...] = tuple(
+    profile.strip()
+    for profile in os.environ.get(
+        "ARENA_FREQUENCY_SHADOW_PROFILES",
+        ",".join(parameters.ARENA_FREQUENCY_SHADOW_PROFILES),
+    ).split(",")
+    if profile.strip()
+)
 
 
 def require_supabase_config() -> tuple[str, str]:
