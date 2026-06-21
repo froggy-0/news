@@ -133,6 +133,25 @@ def compute_regime_state(df: pd.DataFrame) -> RegimeState:
     )
     etf_flow_z = _last_rolling_zscore(df.get(etf_flow_col, pd.Series(dtype=float)))
 
+    # --- arena 알고리즘 보강용 일간 피처 (모두 lag1/backward-looking, 누수 방지) ---
+    # 체결 공격성: 테이커 매수 우위 z-score. 양수 = 공격적 매수 우위(돌파 동의),
+    # 음수 = 공격적 매도 우위. regime_trend 돌파의 주문흐름 확인에 사용.
+    taker_imb_z = _last_valid(df.get("btc_taker_imbalance_zscore_30d_lag1", pd.Series(dtype=float)))
+    # 선물 롱숏 포지셔닝: lag1 원시값에서 롤링 z. 큰 양수 = 롱 군중 과밀(contrarian veto).
+    lsr_col = (
+        "btc_long_short_ratio_lag1"
+        if "btc_long_short_ratio_lag1" in df.columns
+        else "btc_long_short_ratio"
+    )
+    lsr_z = _last_rolling_zscore(df.get(lsr_col, pd.Series(dtype=float)))
+    # 200일 이동평균 상회 여부(0/1) — 구조적 강세장 게이트(Faber 2007, TSMOM).
+    above_ma200_col = (
+        "btc_above_ma200_lag1" if "btc_above_ma200_lag1" in df.columns else "btc_above_ma200"
+    )
+    above_ma200 = _last_valid(df.get(above_ma200_col, pd.Series(dtype=float)))
+    # 90일 고점 대비 낙폭(<=0, 0=신고가) — 역발산 품질·리스크 사이징 컨텍스트.
+    drawdown_90d = _last_valid(df.get("btc_drawdown_90d", pd.Series(dtype=float)))
+
     # 롤링 분위수: 사전 계산 컬럼 우선, 없으면 .tail() fallback
     vix_q_high = _read_precomputed_or_fallback(
         df, "vix_q80_90d", vix_series, _VIX_WINDOW, _VIX_MIN_PERIODS, _VIX_QUANTILE_HIGH
@@ -167,6 +186,11 @@ def compute_regime_state(df: pd.DataFrame) -> RegimeState:
         "fng_q70": fng_q70,
         "oi_divergence_flag": oi_div,
         "etf_flow_zscore": etf_flow_z,
+        # arena 알고리즘 보강용 일간 피처 (graceful: 미수집 시 None)
+        "taker_imbalance_zscore": taker_imb_z,
+        "long_short_ratio_zscore": lsr_z,
+        "btc_above_ma200": above_ma200,
+        "btc_drawdown_90d": drawdown_90d,
     }
 
     # --- 분류 로직 ---

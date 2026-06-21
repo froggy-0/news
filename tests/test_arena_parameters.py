@@ -10,8 +10,8 @@ def test_arena_parameter_snapshot_is_json_serializable() -> None:
 
     assert snapshot["params_version"] == parameters.PARAMS_VERSION
     assert snapshot["feature_set_version"] == parameters.FEATURE_SET_VERSION
-    assert snapshot["params_version"] == "arena-params-v14"
-    assert snapshot["feature_set_version"] == "arena-features-v5"
+    assert snapshot["params_version"] == "arena-params-v15"
+    assert snapshot["feature_set_version"] == "arena-features-v6"
     assert snapshot["risk_model_version"] == "portfolio-risk-v1"
     assert snapshot["runtime"] == "ec2"
     assert snapshot["market_data"]["symbol"] == "BTCUSDT"
