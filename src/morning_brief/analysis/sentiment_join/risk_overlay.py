@@ -151,6 +151,13 @@ def compute_regime_state(df: pd.DataFrame) -> RegimeState:
     above_ma200 = _last_valid(df.get(above_ma200_col, pd.Series(dtype=float)))
     # 90일 고점 대비 낙폭(<=0, 0=신고가) — 역발산 품질·리스크 사이징 컨텍스트.
     drawdown_90d = _last_valid(df.get("btc_drawdown_90d", pd.Series(dtype=float)))
+    # 시장 폭: Binance top10 알트 중 7일 수익률 양(+) 비율(0~1) — 광범위 참여 확인.
+    breadth_up_ratio = _last_valid(df.get("binance_top10_up_ratio_7d_lag1", pd.Series(dtype=float)))
+    # 스테이블코인(USDT+USDC) 7일 공급 증가율의 롤링 z — 큰 음수 = 유동성 수축(롱 보류).
+    # 근거: 공급 증가 = 대기 매수력(deployable capital), 수축 = 자본 이탈.
+    stablecoin_supply_z = _last_rolling_zscore(
+        df.get("usdt_usdc_supply_change_7d_lag1", pd.Series(dtype=float))
+    )
 
     # 롤링 분위수: 사전 계산 컬럼 우선, 없으면 .tail() fallback
     vix_q_high = _read_precomputed_or_fallback(
@@ -191,6 +198,8 @@ def compute_regime_state(df: pd.DataFrame) -> RegimeState:
         "long_short_ratio_zscore": lsr_z,
         "btc_above_ma200": above_ma200,
         "btc_drawdown_90d": drawdown_90d,
+        "breadth_up_ratio": breadth_up_ratio,
+        "stablecoin_supply_zscore": stablecoin_supply_z,
     }
 
     # --- 분류 로직 ---
