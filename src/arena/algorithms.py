@@ -52,6 +52,21 @@ def _funding_hot(macro: dict) -> bool:
         return False
 
 
+def _oi_diverged(macro: dict) -> bool:
+    """OI-가격 7일 방향 불일치 여부 — flag>0 시 True (추세 미확인, 모멘텀 롱 억제).
+
+    가격 7일수익률과 OI 7일변화의 부호가 반대(=추세가 포지셔닝으로 확인되지 않음).
+    현물 long-only에서 모멘텀/추세 진입의 건전성 필터로 사용. 미수집(None) 시 False.
+    """
+    flag = macro.get("oi_divergence_flag")
+    if flag is None:
+        return False
+    try:
+        return float(flag) > 0.0
+    except (TypeError, ValueError):
+        return False
+
+
 def _etf_outflow_heavy(macro: dict) -> bool:
     """기관 ETF 대량 유출 여부 — z-score < 임계 시 True (롱 보류).
 
@@ -140,6 +155,7 @@ def regime_trend(macro: dict, ind: dict) -> str | None:
       ⑦ 200일 MA 상회 (구조적 강세 게이트 — 일간)
       ⑧ 테이커 매수 우위로 돌파 확인 (주문흐름 동의 — 일간)
       ⑨ 롱숏비 군중 과밀 아님 (일간)
+      ⑩ OI-가격 7일 방향 불일치 아님 (추세 확인 — 일간)
     그 외 모든 경우 flat.
     """
     state = _regime_state(macro)
@@ -166,6 +182,7 @@ def regime_trend(macro: dict, ind: dict) -> str | None:
         and not _below_ma200(macro)
         and _taker_confirms(macro)
         and not _lsr_crowded(macro)
+        and not _oi_diverged(macro)
     ):
         return "long"
     return None
@@ -221,7 +238,7 @@ def macd_momentum(macro: dict, ind: dict) -> str | None:
     """MACD 히스토그램 모멘텀 — 증가 중인 강한 모멘텀만 매수.
 
     ATR 임계값 초과 + 히스토그램 증가 + RSI 과열 미도달 + BB 확장 + ADX 추세.
-    펀딩 과열·risk-off 레짐·200일 MA 하회·롱숏 과밀에서는 보류. 숏 없음.
+    펀딩 과열·risk-off 레짐·200일 MA 하회·롱숏 과밀·OI 방향불일치에서는 보류. 숏 없음.
     """
     h = ind["macd_hist"]
     h_prev = ind.get("macd_hist_prev", h)
@@ -238,6 +255,7 @@ def macd_momentum(macro: dict, ind: dict) -> str | None:
         or _etf_outflow_heavy(macro)
         or _below_ma200(macro)
         or _lsr_crowded(macro)
+        or _oi_diverged(macro)
     ):
         return None
     if (
