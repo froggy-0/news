@@ -14,7 +14,7 @@ from typing import Any
 
 import websockets
 
-from . import config, data_lake, execution_rules, parameters, realtime_risk
+from . import config, data_lake, execution_rules, market_structure, parameters, realtime_risk
 
 logger = logging.getLogger(__name__)
 
@@ -511,6 +511,7 @@ async def _record_feature_and_risk(
     decision = realtime_risk.evaluate_realtime_risk(
         feature_row=row,
         history_rows=aggregator.recent_rows[:-1],
+        market_features=market_structure.get_latest_market_features(),
         recent_scores=aggregator.recent_risk_scores,
         evaluated_at=datetime.now(timezone.utc),
     )

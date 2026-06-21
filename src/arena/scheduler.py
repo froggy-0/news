@@ -456,6 +456,8 @@ async def _run_shadow_vnext(
             spot_close=price,
             limit=config.KLINES_LIMIT,
         )
+        # 같은 프로세스의 realtime 수집기가 futures_stress 계산에 쓰도록 최신 features 공유
+        market_structure.set_latest_market_features(snapshot.features)
         results.extend(
             await data_lake.record_market_structure_snapshot(
                 run_id=run_id,
