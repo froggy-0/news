@@ -29,8 +29,16 @@ _RISK_OFF_REGIMES = {
 
 
 def _regime_state(macro: dict) -> str | None:
-    """로컬 4h 레짐 우선, 없으면 매크로 오버레이 레짐."""
-    return macro.get("arena_regime_state") or macro.get("regime_state")
+    """로컬 4h 레짐 우선, 없거나 'unknown'(규칙 미매칭)이면 매크로 오버레이 레짐으로 폴백.
+
+    이전 버그: arena_regime_state='unknown'이 truthy라 `or` 폴백이 작동 안 해
+    매크로가 BullQuiet여도 로컬이 혼조(unknown)면 regime_trend가 영구 차단됐음.
+    게이트=일간 오버레이 / 트리거=4h 기술지표 철학과 일치(혼조 시 게이트는 일간 레짐 사용).
+    """
+    local = macro.get("arena_regime_state")
+    if local and local != regime.REGIME_UNKNOWN:
+        return local
+    return macro.get("regime_state")
 
 
 def _is_bullish(state: str | None) -> bool:

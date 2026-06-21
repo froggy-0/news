@@ -52,7 +52,7 @@ async def risk_metrics(now: datetime) -> dict[str, Any]:
     res = (
         await _db()
         .table("paper_positions")
-        .select("algo_id,ret_pct,close_time")
+        .select("algo_id,ret_pct,close_time,position_weight")
         .eq("status", "closed")
         .order("close_time")
         .limit(10000)
@@ -70,11 +70,14 @@ async def risk_metrics(now: datetime) -> dict[str, Any]:
         algo_id = row.get("algo_id")
         if not algo_id:
             continue
+        # 변동성 타깃 가중 적용 — 대시보드/백테스트 equity 회계와 일관(실제 자본 기준).
+        weight = float(row.get("position_weight") or 1.0)
+        weighted_ret = weight * float(ret_pct)
         close_time = row.get("close_time")
         if close_time and execution_rules.parse_utc_datetime(close_time) >= day_start:
-            daily_realized += float(ret_pct)
+            daily_realized += weighted_ret
 
-        equity = equity_by_algo.get(algo_id, 1.0) * (1.0 + float(ret_pct))
+        equity = equity_by_algo.get(algo_id, 1.0) * (1.0 + weighted_ret)
         peak = max(peak_by_algo.get(algo_id, 1.0), equity)
         drawdown = equity / peak - 1.0
         equity_by_algo[algo_id] = equity
@@ -191,6 +194,11 @@ async def close_position(
 ) -> float:
     pos = await _db().table("paper_positions").select("*").eq("id", position_id).single().execute()
     row = pos.data
+    # 중복 청산 가드: stream(1m)과 scheduler(4h)가 같은 포지션을 await 사이 인터리브로
+    # 이중 close 호출할 수 있음. 이미 closed면 기존 ret_pct를 반환하고 재기록하지 않음.
+    if row.get("status") == "closed":
+        logger.info("close_position skip(이미 closed): id=%s", position_id)
+        return float(row.get("ret_pct") or 0.0)
     # 풀 비용 적용: fee + slippage + spread(왕복). 레거시 행은 컬럼 부재 → 0.0 fallback.
     ret_pct = execution_rules.fee_adjusted_return_pct(
         direction=row["direction"],
@@ -214,13 +222,31 @@ async def close_position(
     if close_reason:
         update_payload["close_reason"] = close_reason
 
+    # status='open' 조건부 update — 동시 호출 시 두 번째는 0행 영향(원자적 가드).
     try:
-        await _db().table("paper_positions").update(update_payload).eq("id", position_id).execute()
+        res = (
+            await _db()
+            .table("paper_positions")
+            .update(update_payload)
+            .eq("id", position_id)
+            .eq("status", "open")
+            .execute()
+        )
     except Exception as exc:
         if "close_reason" not in str(exc):
             raise
         update_payload.pop("close_reason", None)
-        await _db().table("paper_positions").update(update_payload).eq("id", position_id).execute()
+        res = (
+            await _db()
+            .table("paper_positions")
+            .update(update_payload)
+            .eq("id", position_id)
+            .eq("status", "open")
+            .execute()
+        )
+    if not res.data:
+        logger.info("close_position no-op(이미 closed, race): id=%s", position_id)
+        return float(row.get("ret_pct") or ret_pct)
     logger.info(
         "Closed: %s %s ret=%.2f%% hold=%.1fh stop_loss=%s",
         row["algo_id"],

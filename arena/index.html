@@ -404,6 +404,9 @@ const ALGOS = {
 };
 const ALGO_IDS = Object.keys(ALGOS);
 const STARTING_CAPITAL = 1000;
+// 현물 왕복 거래비용 = 2×(fee 5 + slip 1) + spread 1 = 13bps (arena-cost-v2).
+// 미실현손익은 청산 시 이 비용이 차감되므로 표시에 미리 반영(낙관 편향 제거).
+const ROUND_TRIP_COST_PCT = 0.0013;
 
 const TAB_LABELS = {
   all: '전체',
@@ -495,8 +498,10 @@ function algoStats(ps) {
       const w = open.position_weight != null ? open.position_weight : 1;
       openWeight = w;
       const raw = (latestBtcPrice - open.open_price) / open.open_price;
-      unrealizedPct = raw * 100;          // 원시 가격 변동(직관적 표시)
-      equityTotal = equity * (1 + w * raw); // 가중 자산
+      // 청산 시 차감될 왕복 비용을 미리 반영한 순(net) 미실현손익.
+      const net = raw - ROUND_TRIP_COST_PCT;
+      unrealizedPct = net * 100;          // 비용 차감 후(실현 시 실제 반영값)
+      equityTotal = equity * (1 + w * net); // 가중 자산
     }
 
     // 수익률 = 가중 자산 기준 (표시 자산과 일치)

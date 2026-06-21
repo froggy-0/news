@@ -22,6 +22,7 @@ from . import (
     indicators,
     market_structure,
     parameters,
+    regime,
     risk,
     spot_policy,
 )
@@ -102,6 +103,7 @@ class SimPosition:
     open_price: float
     stop_loss_price: float
     trail_distance: float
+    position_weight: float
     entry_data_timestamp: datetime
     params_snapshot: dict[str, Any]
     indicator_snapshot: dict[str, Any]
@@ -139,6 +141,7 @@ class BacktestTrade:
     open_price: float
     close_price: float
     stop_loss_price: float
+    position_weight: float
     ret_pct: float
     gross_ret_pct: float
     trading_cost_pct: float
@@ -319,6 +322,13 @@ def _open_position(
         stop_loss_min_pct=settings.stop_loss_min_pct,
         stop_loss_max_pct=settings.stop_loss_max_pct,
     )
+    # 변동성 타깃 사이징 — live(scheduler)와 동일 가중치를 백테스트 equity에도 반영.
+    position_weight = execution_rules.vol_target_weight(
+        float(frame.indicators.get("realized_vol_24h") or 0.0),
+        target_vol=parameters.VOL_TARGET_PER_BAR,
+        weight_min=parameters.VOL_WEIGHT_MIN,
+        weight_max=parameters.VOL_WEIGHT_MAX,
+    )
     return SimPosition(
         algo_id=algo_id,
         direction=direction,
@@ -326,6 +336,7 @@ def _open_position(
         open_price=frame.bar.close,
         stop_loss_price=stop_loss_price,
         trail_distance=execution_rules.trail_distance_from_stop(frame.bar.close, stop_loss_price),
+        position_weight=position_weight,
         entry_data_timestamp=frame.data_timestamp,
         params_snapshot=_params_snapshot(algo_id, settings),
         indicator_snapshot=dict(frame.indicators),
@@ -413,6 +424,7 @@ def _close_position(
         open_price=position.open_price,
         close_price=close_price,
         stop_loss_price=position.stop_loss_price,
+        position_weight=position.position_weight,
         ret_pct=net_ret,
         gross_ret_pct=gross_ret,
         trading_cost_pct=trading_cost,
@@ -515,13 +527,17 @@ def run_replay(
             max_drawdown_by_algo[algo_id] = 0.0
             killed_at_by_algo[algo_id] = None
 
-    def record_realized(algo_id: str, ret_pct: float, close_time: datetime) -> None:
-        equity_by_algo[algo_id] *= 1.0 + ret_pct
+    def record_realized(
+        algo_id: str, ret_pct: float, close_time: datetime, weight: float = 1.0
+    ) -> None:
+        # 변동성 타깃 가중 적용 — live 대시보드/risk_metrics와 동일한 equity 회계.
+        weighted_ret = weight * ret_pct
+        equity_by_algo[algo_id] *= 1.0 + weighted_ret
         peak_by_algo[algo_id] = max(peak_by_algo[algo_id], equity_by_algo[algo_id])
         drawdown = equity_by_algo[algo_id] / peak_by_algo[algo_id] - 1.0
         max_drawdown_by_algo[algo_id] = min(max_drawdown_by_algo[algo_id], drawdown)
         day_key = close_time.date().isoformat()
-        daily_realized_by_date[day_key] = daily_realized_by_date.get(day_key, 0.0) + ret_pct
+        daily_realized_by_date[day_key] = daily_realized_by_date.get(day_key, 0.0) + weighted_ret
 
     def risk_state_for(frame: ReplayFrame) -> risk.PortfolioRiskState:
         # cooldown 만료 여부를 먼저 확인해 drawdown 리셋
@@ -550,12 +566,17 @@ def run_replay(
                     funding_events=funding_events,
                 )
                 trades.append(trade)
-                record_realized(algo_id, trade.ret_pct, trade.close_time)
-                frame_realized[algo_id] += trade.ret_pct
+                record_realized(algo_id, trade.ret_pct, trade.close_time, trade.position_weight)
+                frame_realized[algo_id] += trade.position_weight * trade.ret_pct
                 positions_by_algo[algo_id] = None
                 position = None
 
             macro = _clean_macro(frame.macro, frame.data_timestamp, settings)
+            # 라이브 scheduler와 동일하게 로컬 4h 레짐을 주입(패리티). 미주입 시 백테스트는
+            # 오버레이 레짐을, 라이브는 로컬 레짐을 써 regime_trend 게이팅이 달라졌었음.
+            macro["arena_regime_state"] = regime.classify_regime(
+                frame.indicators, {}, macro
+            ).regime_state
             raw_signal = fn(macro, frame.indicators)
             if settings.product_type == "spot":
                 product_decision = spot_policy.decide(
@@ -583,8 +604,10 @@ def run_replay(
                             funding_events=funding_events,
                         )
                         trades.append(trade)
-                        record_realized(algo_id, trade.ret_pct, trade.close_time)
-                        frame_realized[algo_id] += trade.ret_pct
+                        record_realized(
+                            algo_id, trade.ret_pct, trade.close_time, trade.position_weight
+                        )
+                        frame_realized[algo_id] += trade.position_weight * trade.ret_pct
                         positions_by_algo[algo_id] = None
                     continue
                 if not product_decision.should_open:
@@ -611,8 +634,8 @@ def run_replay(
                         funding_events=funding_events,
                     )
                     trades.append(trade)
-                    record_realized(algo_id, trade.ret_pct, trade.close_time)
-                    frame_realized[algo_id] += trade.ret_pct
+                    record_realized(algo_id, trade.ret_pct, trade.close_time, trade.position_weight)
+                    frame_realized[algo_id] += trade.position_weight * trade.ret_pct
                     positions_by_algo[algo_id] = None
                 continue
 
@@ -638,8 +661,8 @@ def run_replay(
                     funding_events=funding_events,
                 )
                 trades.append(trade)
-                record_realized(algo_id, trade.ret_pct, trade.close_time)
-                frame_realized[algo_id] += trade.ret_pct
+                record_realized(algo_id, trade.ret_pct, trade.close_time, trade.position_weight)
+                frame_realized[algo_id] += trade.position_weight * trade.ret_pct
 
             risk_decision = risk.evaluate_open(
                 algo_id=algo_id,
@@ -714,7 +737,7 @@ def run_replay(
                 funding_events=funding_events,
             )
             trades.append(trade)
-            record_realized(algo_id, trade.ret_pct, trade.close_time)
+            record_realized(algo_id, trade.ret_pct, trade.close_time, trade.position_weight)
             positions_by_algo[algo_id] = None
             drawdown = equity_by_algo[algo_id] / peak_by_algo[algo_id] - 1.0
             for index in range(len(equity_curve) - 1, -1, -1):
