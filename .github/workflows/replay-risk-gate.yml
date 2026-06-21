@@ -1,0 +1,70 @@
+name: Replay Realtime Risk Gate
+
+# 실시간 risk 게이트(BLOCK_ENTRY/CAUTION)가 실제로 나쁜 진입을 막는지 월 1회 검증.
+# 순수 쿼리 + 산술 (LLM 불필요). 결과는 Actions 로그 + artifact, (선택) Slack.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 1 * *" # 매월 1일 00:00 UTC (= KST 09:00)
+
+jobs:
+  replay-risk-gate:
+    name: Replay realtime risk gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
+        with:
+          python-version: "3.11"
+
+      - name: Install minimal dependencies
+        run: pip install --disable-pip-version-check supabase python-dotenv
+
+      - name: Run replay risk-gate validation
+        id: replay
+        shell: bash
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || '' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || '' }}
+        run: |
+          set -o pipefail
+          python scripts/analysis/replay_realtime_risk_gate.py \
+            --windows 240,480,1440 --verdict-window 240 \
+            | tee replay_report.txt
+          echo "verdict_line=$(grep '^VERDICT:' replay_report.txt || echo 'VERDICT: (none)')" >> "$GITHUB_OUTPUT"
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: replay-risk-gate-report
+          path: replay_report.txt
+          if-no-files-found: warn
+
+      - name: Slack summary (선택 — SLACK_BOT_TOKEN 시크릿 설정 시에만 동작)
+        if: always()
+        shell: bash
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN || '' }}
+          SLACK_CHANNEL: ${{ vars.SLACK_CHANNEL || secrets.SLACK_CHANNEL || '' }}
+          VERDICT_LINE: ${{ steps.replay.outputs.verdict_line }}
+        run: |
+          if [ -z "$SLACK_BOT_TOKEN" ] || [ -z "$SLACK_CHANNEL" ]; then
+            echo "[slack] SLACK_BOT_TOKEN/SLACK_CHANNEL 미설정 — Slack 전송 건너뜀"
+            exit 0
+          fi
+          curl -sf -X POST https://slack.com/api/chat.postMessage \
+            -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+            -H "Content-type: application/json; charset=utf-8" \
+            --data "$(printf '{"channel":"%s","text":"🛡️ Realtime risk gate replay — %s"}' "$SLACK_CHANNEL" "$VERDICT_LINE")" \
+            || echo "[slack] 전송 실패(무시)"
