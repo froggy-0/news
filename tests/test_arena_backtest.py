@@ -126,7 +126,7 @@ def test_backtest_run_row_is_json_ready_and_versioned() -> None:
     row = backtest._run_row(result)
 
     assert row["backtest_run_id"] == "00000000-0000-0000-0000-000000000001"
-    assert row["strategy_version"] == "arena-spot-v3"
+    assert row["strategy_version"] == "arena-spot-v4"
     assert row["rules_snapshot"]["fee_bps"] == 5.0
     assert row["frequency_profile_id"] == "live_4h"
     assert row["indicator_profile_id"] == "time_normalized_v1"

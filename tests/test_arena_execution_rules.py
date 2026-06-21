@@ -72,6 +72,64 @@ def test_stop_loss_triggered_prefers_persisted_price_and_fallback_pct() -> None:
     )
 
 
+def test_trail_distance_from_stop_is_absolute_atr_distance() -> None:
+    # 진입가 100, 초기 손절 97 (long) → 거리 3.0
+    assert execution_rules.trail_distance_from_stop(100.0, 97.0) == pytest.approx(3.0)
+    # short: 진입가 100, 초기 손절 103 → 거리 3.0
+    assert execution_rules.trail_distance_from_stop(100.0, 103.0) == pytest.approx(3.0)
+
+
+def test_ratchet_trailing_stop_is_monotonic_in_profit_direction() -> None:
+    # long: 가격 상승 → 손절가 끌어올림(price − distance), 하락해도 안 내려감
+    stop = 97.0  # 진입 100, 거리 3
+    stop = execution_rules.ratchet_trailing_stop(
+        direction="long", current_price=110.0, current_stop=stop, trail_distance=3.0
+    )
+    assert stop == pytest.approx(107.0)  # 110 − 3, 이익 고정
+    # 가격이 다시 105로 내려도 손절가는 단조(안 내려감)
+    stop2 = execution_rules.ratchet_trailing_stop(
+        direction="long", current_price=105.0, current_stop=stop, trail_distance=3.0
+    )
+    assert stop2 == pytest.approx(107.0)
+    # short: 가격 하락 → 손절가 끌어내림
+    s = execution_rules.ratchet_trailing_stop(
+        direction="short", current_price=90.0, current_stop=103.0, trail_distance=3.0
+    )
+    assert s == pytest.approx(93.0)
+
+
+def test_ratchet_no_op_at_entry_and_with_zero_distance() -> None:
+    # 진입 시점: price=open=100, stop=97, distance=3 → max(97, 100−3)=97 변화 없음
+    assert (
+        execution_rules.ratchet_trailing_stop(
+            direction="long", current_price=100.0, current_stop=97.0, trail_distance=3.0
+        )
+        == 97.0
+    )
+    # 거리 0/음수면 그대로 반환 (legacy 행 graceful)
+    assert (
+        execution_rules.ratchet_trailing_stop(
+            direction="long", current_price=200.0, current_stop=97.0, trail_distance=0.0
+        )
+        == 97.0
+    )
+
+
+def test_is_trailing_exit_distinguishes_ratcheted_from_initial_stop() -> None:
+    # long 진입 100, 거리 3 → 초기 손절 97. 손절가가 97이면 트레일링 아님
+    assert not execution_rules.is_trailing_exit(
+        direction="long", open_price=100.0, stop_loss_price=97.0, trail_distance=3.0
+    )
+    # 손절가가 105로 래칫됐으면(이익 고정) 트레일링 청산
+    assert execution_rules.is_trailing_exit(
+        direction="long", open_price=100.0, stop_loss_price=105.0, trail_distance=3.0
+    )
+    # short 진입 100, 거리 3 → 초기 103. 손절가 95면 트레일링
+    assert execution_rules.is_trailing_exit(
+        direction="short", open_price=100.0, stop_loss_price=95.0, trail_distance=3.0
+    )
+
+
 def test_fee_adjusted_return_pct_matches_live_round_trip_costs() -> None:
     assert execution_rules.fee_adjusted_return_pct(
         direction="long",

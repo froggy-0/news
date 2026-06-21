@@ -68,6 +68,63 @@ def calc_stop_loss_price(
     raise ValueError(f"unsupported direction: {direction}")
 
 
+def trail_distance_from_stop(open_price: float, stop_loss_price: float) -> float:
+    """진입 시 트레일링 거리 = |진입가 − 초기 손절가| (절대 가격 단위).
+
+    초기 손절가가 이미 ATR×multiple(클램핑 포함) 거리이므로 이를 그대로 재사용해
+    래칫 첫 시점에 손절가가 변하지 않도록(self-consistent) 한다.
+    """
+    return abs(open_price - stop_loss_price)
+
+
+def ratchet_trailing_stop(
+    *,
+    direction: str,
+    current_price: float,
+    current_stop: float,
+    trail_distance: float,
+) -> float:
+    """래칫 트레일링 스톱: S_t = max(S_{t-1}, P_t − d) (long) / min(S_{t-1}, P_t + d) (short).
+
+    수익 방향으로만 손절가를 단조 이동(절대 손실 방향으로 안 움직임).
+    arxiv 2602.11708 "Systematic Trend-Following with Adaptive Portfolio Construction"
+    의 동적 트레일링 스톱 공식(α=2.5 ATR plateau, ablation 시 Sharpe −0.73 악화) 적용.
+    trail_distance(=진입 시 ATR 거리)는 호출자가 고정 보관. backtest·live 공용 순수 함수.
+    """
+    if trail_distance <= 0:
+        return current_stop
+    if direction == "long":
+        return max(current_stop, current_price - trail_distance)
+    if direction == "short":
+        return min(current_stop, current_price + trail_distance)
+    raise ValueError(f"unsupported direction: {direction}")
+
+
+def is_trailing_exit(
+    *,
+    direction: str,
+    open_price: float,
+    stop_loss_price: float,
+    trail_distance: float,
+    eps: float = 1e-9,
+) -> bool:
+    """손절가가 진입 시 초기 위치보다 수익 방향으로 래칫됐는지 여부.
+
+    True면 트레일링이 작동해 잠긴 손절(때로는 이익 고정), False면 초기 손절 그대로.
+    close_reason 라벨링용(trailing_stop vs stop_loss).
+    """
+    if trail_distance <= 0:
+        return False
+    initial_stop = (
+        open_price - trail_distance if direction == "long" else open_price + trail_distance
+    )
+    if direction == "long":
+        return stop_loss_price > initial_stop + eps
+    if direction == "short":
+        return stop_loss_price < initial_stop - eps
+    return False
+
+
 def stop_loss_triggered(
     *,
     direction: str,

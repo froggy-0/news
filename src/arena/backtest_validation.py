@@ -416,7 +416,9 @@ def _check_stop_loss_fill(
     trades: list[dict[str, Any]],
     bars: list[dict[str, Any]],
 ) -> ValidationCheck:
-    stop_trades = [trade for trade in trades if trade.get("exit_reason") == "stop_loss"]
+    stop_trades = [
+        trade for trade in trades if trade.get("exit_reason") in {"stop_loss", "trailing_stop"}
+    ]
     if not stop_trades:
         return ValidationCheck(
             check_name="stop_loss_fill_policy",

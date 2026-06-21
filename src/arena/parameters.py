@@ -10,8 +10,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-STRATEGY_VERSION = "arena-spot-v3"
-PARAMS_VERSION = "arena-params-v17"
+STRATEGY_VERSION = "arena-spot-v4"
+PARAMS_VERSION = "arena-params-v18"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v1"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
@@ -49,6 +49,14 @@ FEE_BPS = 5.0
 ATR_MULTIPLE = 2.5
 STOP_LOSS_MIN_PCT = 0.02
 STOP_LOSS_MAX_PCT = 0.08
+
+# 래칫 트레일링 스톱 (arena-spot-v4, 2026-06-21 신규)
+# arxiv 2602.11708: S_t = max(S_{t-1}, P_t − α·ATR), α=2.5 plateau[2.0,3.5], 6h봉 최적.
+# 트레일링 거리는 진입 시 (open − initial_stop) = ATR_MULTIPLE×ATR(클램핑) 거리를 그대로 재사용.
+# 단조 래칫이라 손실 방향으론 절대 안 움직임 → 초기 손절 대비 무조건 안전(수익 고정만 추가).
+TRAILING_STOP_ENABLED = True
+# 인메모리 래칫은 매 틱 갱신, DB persist는 ≥이 bps 이동 시에만(쓰기 빈도 제한).
+TRAIL_PERSIST_STEP_BPS = 5.0
 MACRO_STALE_HOURS = 48.0  # 일간 매크로(FNG/VIX/ETF) — 브리프 1일 지연 허용
 
 POSITION_UNIT = 1.0
@@ -303,6 +311,8 @@ def base_params_snapshot() -> dict[str, Any]:
             "atr_multiple": ATR_MULTIPLE,
             "stop_loss_min_pct": STOP_LOSS_MIN_PCT,
             "stop_loss_max_pct": STOP_LOSS_MAX_PCT,
+            "trailing_stop_enabled": TRAILING_STOP_ENABLED,
+            "trail_persist_step_bps": TRAIL_PERSIST_STEP_BPS,
             "macro_stale_hours": MACRO_STALE_HOURS,
             "position_unit": POSITION_UNIT,
             "max_open_positions_total": MAX_OPEN_POSITIONS_TOTAL,

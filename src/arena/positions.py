@@ -110,6 +110,8 @@ async def open_position(
     """포지션 오픈. stop_loss_price는 ATR 기반으로 계산된 절대 가격."""
     if direction == "short" and config.TARGET_PRODUCT == "spot" and not config.ALLOW_LIVE_SHORT:
         raise ValueError("spot paper/live execution cannot open short positions")
+    # 래칫 트레일링 거리 = |진입가 − 초기 손절가| (ATR×multiple 클램핑 거리 재사용).
+    trail_distance = execution_rules.trail_distance_from_stop(open_price, stop_loss_price)
     payload = {
         "algo_id": algo_id,
         "direction": direction,
@@ -118,6 +120,7 @@ async def open_position(
         "data_timestamp": data_timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "open_price": open_price,
         "stop_loss_price": stop_loss_price,
+        "trail_distance": trail_distance,
         "position_weight": position_weight,
         "fee_bps": config.FEE_BPS,
         "slippage_bps": slippage_bps,
@@ -142,6 +145,7 @@ async def open_position(
         "product_type",
         "position_semantics",
         "position_weight",
+        "trail_distance",
     )
     try:
         res = await _db().table("paper_positions").insert(payload).execute()
@@ -164,6 +168,17 @@ async def open_position(
         row["id"],
     )
     return row
+
+
+async def update_stop_loss(position_id: int, new_stop_loss_price: float) -> None:
+    """래칫된 트레일링 손절가를 DB에 persist. 매 틱이 아닌 임계 이동 시에만 호출."""
+    await (
+        _db()
+        .table("paper_positions")
+        .update({"stop_loss_price": new_stop_loss_price})
+        .eq("id", position_id)
+        .execute()
+    )
 
 
 async def close_position(

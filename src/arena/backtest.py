@@ -101,6 +101,7 @@ class SimPosition:
     open_time: datetime
     open_price: float
     stop_loss_price: float
+    trail_distance: float
     entry_data_timestamp: datetime
     params_snapshot: dict[str, Any]
     indicator_snapshot: dict[str, Any]
@@ -324,6 +325,7 @@ def _open_position(
         open_time=frame.bar.close_time,
         open_price=frame.bar.close,
         stop_loss_price=stop_loss_price,
+        trail_distance=execution_rules.trail_distance_from_stop(frame.bar.close, stop_loss_price),
         entry_data_timestamp=frame.data_timestamp,
         params_snapshot=_params_snapshot(algo_id, settings),
         indicator_snapshot=dict(frame.indicators),
@@ -338,6 +340,31 @@ def _stop_fill_price(position: SimPosition, bar: ReplayBar) -> float | None:
     if position.direction == "short" and bar.high >= position.stop_loss_price:
         return max(bar.open, position.stop_loss_price)
     return None
+
+
+def _stop_exit_reason(position: SimPosition) -> str:
+    """초기 손절 vs 트레일링 래칫 손절 구분 (live stream.py와 동일 라벨)."""
+    if execution_rules.is_trailing_exit(
+        direction=position.direction,
+        open_price=position.open_price,
+        stop_loss_price=position.stop_loss_price,
+        trail_distance=position.trail_distance,
+    ):
+        return "trailing_stop"
+    return "stop_loss"
+
+
+def _ratchet_sim_position(position: SimPosition, bar: ReplayBar) -> None:
+    """봉 종가 기준 트레일링 손절가 래칫(인플레이스). look-ahead 방지를 위해
+    스톱 트리거 체크가 끝난 뒤 호출 → 갱신값은 다음 봉부터 적용."""
+    if not parameters.TRAILING_STOP_ENABLED or position.trail_distance <= 0:
+        return
+    position.stop_loss_price = execution_rules.ratchet_trailing_stop(
+        direction=position.direction,
+        current_price=bar.close,
+        current_stop=position.stop_loss_price,
+        trail_distance=position.trail_distance,
+    )
 
 
 def _position_product_type(position: SimPosition) -> str:
@@ -518,7 +545,7 @@ def run_replay(
                     close_time=frame.bar.close_time,
                     close_data_timestamp=frame.data_timestamp,
                     close_price=stop_fill,
-                    exit_reason="stop_loss",
+                    exit_reason=_stop_exit_reason(position),
                     settings=settings,
                     funding_events=funding_events,
                 )
@@ -655,6 +682,9 @@ def run_replay(
             drawdown = equity_by_algo[algo_id] / peak_by_algo[algo_id] - 1.0
             max_drawdown_by_algo[algo_id] = min(max_drawdown_by_algo[algo_id], drawdown)
             open_position = positions_by_algo[algo_id]
+            # 봉 종가 기준 트레일링 래칫 — 스톱 트리거 체크(프레임 상단) 이후라 look-ahead 없음.
+            if open_position is not None:
+                _ratchet_sim_position(open_position, frame.bar)
             equity_curve.append(
                 EquityPoint(
                     algo_id=algo_id,
