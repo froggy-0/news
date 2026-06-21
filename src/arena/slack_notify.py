@@ -1,6 +1,7 @@
-"""Slack Block Kit 알림 — Arena 트레이딩 이벤트 (한국어).
+"""Slack Block Kit 알림 — Arena 트레이딩 이벤트 + EC2 에러 알림 (한국어).
 
 포지션 오픈/클로즈 시 Block Kit 리치 메세지 전송.
+컴포넌트 에러 발생 시 notify_error()로 API/상태코드/메시지 알림.
 SLACK_BOT_TOKEN · SLACK_CHANNEL 미설정 시 무음 처리 (서비스 중단 없음).
 """
 
@@ -43,6 +44,10 @@ _MIN_HOLD: dict[str, float] = parameters.MIN_HOLD_HOURS
 # ── 클라이언트 싱글턴 ────────────────────────────────────────────────────────────
 
 _client: AsyncWebClient | None = None
+
+# ── 에러 알림 쿨다운 (컴포넌트별 30분, 스팸 방지) ─────────────────────────────────
+_ERROR_COOLDOWN_SECONDS = 1800
+_last_error_notified: dict[str, datetime] = {}
 
 
 def _get_client() -> AsyncWebClient | None:
@@ -446,6 +451,72 @@ async def notify_close(
     ]
 
     fallback = f"{result_emoji} {algo_ko} {dir_ko} 청산  {ret_str}  보유 {hold_hours:.1f}h"
+    await _post(client, fallback, blocks)
+
+
+# ── 에러 알림 ────────────────────────────────────────────────────────────────────
+
+
+async def notify_error(
+    component: str,
+    error: Exception | str,
+    *,
+    url: str | None = None,
+    http_status: int | None = None,
+    run_id: str | None = None,
+    severity: str = "error",
+) -> None:
+    """EC2 컴포넌트 에러를 Slack에 알림. 동일 컴포넌트 30분 쿨다운.
+
+    Args:
+        component: 오류 발생 컴포넌트명 ("Binance OHLCV", "R2 매크로", "WebSocket" 등)
+        error: 예외 객체 또는 에러 문자열
+        url: 호출한 API URL (선택)
+        http_status: HTTP 상태 코드 (httpx.HTTPStatusError에서 자동 추출 가능)
+        run_id: 현재 4H 사이클 run_id (선택)
+        severity: "critical" (사이클 중단급) | "error" (경고급)
+    """
+    client = _get_client()
+    if client is None:
+        return
+
+    now = datetime.now(timezone.utc)
+    last = _last_error_notified.get(component)
+    if last and (now - last).total_seconds() < _ERROR_COOLDOWN_SECONDS:
+        logger.debug("Slack 에러 알림 쿨다운: %s", component)
+        return
+    _last_error_notified[component] = now
+
+    import httpx as _httpx  # lazy — avoid hard dep at module level
+
+    if http_status is None and isinstance(error, _httpx.HTTPStatusError):
+        http_status = error.response.status_code
+
+    error_str = str(error)[:300]
+    error_type = type(error).__name__ if not isinstance(error, str) else "오류"
+    status_line = f"HTTP {http_status}" if http_status else error_type
+
+    severity_emoji = "🚨" if severity == "critical" else "⚠️"
+
+    lines = [
+        f"*컴포넌트*: `{component}`",
+        f"*상태*: {status_line}",
+    ]
+    if url:
+        short_url = url if len(url) <= 80 else url[:77] + "..."
+        lines.append(f"*API*: `{short_url}`")
+    lines.append(f"*메시지*: ```{error_str}```")
+    if run_id:
+        lines.append(f"*Run ID*: `{run_id}`")
+
+    blocks: list[dict[str, Any]] = [
+        _header(f"{severity_emoji} Arena EC2 오류 — {component}"),
+        _section_text("\n".join(lines)),
+        _divider(),
+        _context(parameters.STRATEGY_VERSION, _now_utc_str()),
+    ]
+
+    fallback = f"{severity_emoji} {component}: {status_line} — {error_str[:100]}"
     await _post(client, fallback, blocks)
 
 

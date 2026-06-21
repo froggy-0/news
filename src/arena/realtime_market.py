@@ -14,7 +14,15 @@ from typing import Any
 
 import websockets
 
-from . import config, data_lake, execution_rules, market_structure, parameters, realtime_risk
+from . import (
+    config,
+    data_lake,
+    execution_rules,
+    market_structure,
+    parameters,
+    realtime_risk,
+    slack_notify,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -423,6 +431,9 @@ def _stream_url(symbol: str) -> str:
     return f"{config.BINANCE_COMBINED_WS_URL}?streams={streams}"
 
 
+_WS_ALERT_THRESHOLD = 3  # 연속 N회 실패 시 Slack 알림
+
+
 async def run(*, symbol: str = parameters.BINANCE_SYMBOL) -> None:
     if not config.ENABLE_ARENA_REALTIME_COLLECTOR:
         logger.info("Arena realtime collector disabled")
@@ -432,6 +443,7 @@ async def run(*, symbol: str = parameters.BINANCE_SYMBOL) -> None:
         symbol=symbol,
         window_seconds=config.REALTIME_FEATURE_WINDOW_SECONDS,
     )
+    consecutive_failures = 0
     while True:
         try:
             async with websockets.connect(
@@ -439,6 +451,7 @@ async def run(*, symbol: str = parameters.BINANCE_SYMBOL) -> None:
                 ping_interval=parameters.WEBSOCKET_PING_INTERVAL_SECONDS,
             ) as ws:
                 logger.info("Arena realtime collector connected")
+                consecutive_failures = 0  # 연결 성공 시 리셋
                 async for raw in ws:
                     event = parse_realtime_message(raw)
                     if event is not None:
@@ -450,11 +463,22 @@ async def run(*, symbol: str = parameters.BINANCE_SYMBOL) -> None:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
+            consecutive_failures += 1
             logger.warning(
-                "Arena realtime collector error: %s; reconnecting in %ss",
+                "Arena realtime collector error (연속 %d회): %s; reconnecting in %ss",
+                consecutive_failures,
                 exc,
                 parameters.WEBSOCKET_RECONNECT_DELAY_SECONDS,
             )
+            if consecutive_failures >= _WS_ALERT_THRESHOLD:
+                await slack_notify.notify_error(
+                    "Binance WebSocket",
+                    exc,
+                    url=_stream_url(symbol),
+                    severity="critical"
+                    if consecutive_failures >= _WS_ALERT_THRESHOLD * 2
+                    else "error",
+                )
             await asyncio.sleep(parameters.WEBSOCKET_RECONNECT_DELAY_SECONDS)
 
 

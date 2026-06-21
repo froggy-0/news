@@ -562,25 +562,53 @@ async def _run_cycle() -> None:
             position_semantics=config.POSITION_SEMANTICS,
         )
     )
-    try:
-        ohlcv, macro_data = await asyncio.gather(
-            _fetch_ohlcv(
-                symbol=profile.symbol,
-                interval=profile.interval,
-                limit=config.KLINES_LIMIT,
-            ),
-            _fetch_macro(),
+    # return_exceptions=True 로 각 API 실패를 독립적으로 감지
+    ohlcv_res, macro_res = await asyncio.gather(
+        _fetch_ohlcv(
+            symbol=profile.symbol,
+            interval=profile.interval,
+            limit=config.KLINES_LIMIT,
+        ),
+        _fetch_macro(),
+        return_exceptions=True,
+    )
+
+    if isinstance(ohlcv_res, BaseException):
+        logger.error("Binance OHLCV 수집 실패 (사이클 중단): %s", ohlcv_res)
+        asyncio.ensure_future(
+            slack_notify.notify_error(
+                "Binance OHLCV",
+                ohlcv_res,
+                url=config.BINANCE_REST_URL,
+                run_id=run_id,
+                severity="critical",
+            )
         )
-    except Exception as exc:
-        logger.error("데이터 수집 실패: %s", exc)
         await data_lake.record_run_completed(
             run_id=run_id,
             completed_at=datetime.now(timezone.utc),
             status="data_failed",
-            error_message=str(exc),
+            error_message=str(ohlcv_res),
             capture_results=capture_results,
         )
         return
+
+    ohlcv: OHLCV = ohlcv_res
+
+    if isinstance(macro_res, BaseException):
+        logger.warning("R2 매크로 수집 실패 (빈 매크로로 계속): %s", macro_res)
+        asyncio.ensure_future(
+            slack_notify.notify_error(
+                "R2 매크로",
+                macro_res,
+                url=config.LATEST_JSON_URL,
+                run_id=run_id,
+                severity="error",
+            )
+        )
+        macro_data = MacroData({}, {}, None, config.LATEST_JSON_URL)
+    else:
+        macro_data: MacroData = macro_res
 
     if not ohlcv.closes:
         logger.error("closes 비어있음 — 사이클 스킵")
@@ -849,7 +877,15 @@ async def _run_cycle() -> None:
             had_algo_error = True
             action = "error"
             skipped_reason = str(exc)
-            logger.error("알고 %s 오류: %s", algo_id, exc)
+            logger.error("알고 %s 오류: %s", algo_id, exc, exc_info=True)
+            asyncio.ensure_future(
+                slack_notify.notify_error(
+                    f"알고리즘 — {algo_id}",
+                    exc,
+                    run_id=run_id,
+                    severity="error",
+                )
+            )
         finally:
             if config.ENABLE_ARENA_EXECUTION_GATE_SHADOW:
                 gate_decision = gate_decision or execution_gate.evaluate_execution_gate(
@@ -1086,11 +1122,27 @@ def _frequency_shadow_cron(profile: frequency.FrequencyProfile) -> dict[str, obj
     return {"hour": "*" if cadence_hours == 1 else f"*/{cadence_hours}", "minute": 10}
 
 
+async def _run_cycle_safe() -> None:
+    """_run_cycle 래퍼 — APScheduler가 삼키는 예상치 못한 최상위 예외를 Slack으로 전달."""
+    try:
+        await _run_cycle()
+    except Exception as exc:
+        logger.exception("4H 사이클 예상치 못한 오류: %s", exc)
+        try:
+            await slack_notify.notify_error(
+                "Arena 4H 사이클",
+                exc,
+                severity="critical",
+            )
+        except Exception:
+            pass
+
+
 async def run() -> None:
     """APScheduler 시작 + 즉시 1회 실행. server.py에서 asyncio.gather()로 호출."""
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(
-        _run_cycle,
+        _run_cycle_safe,
         "cron",
         hour=parameters.SCHEDULER_CRON_HOUR,
         minute=parameters.SCHEDULER_CRON_MINUTE,
