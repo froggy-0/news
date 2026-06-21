@@ -114,6 +114,7 @@ async def _fetch_macro() -> MacroData:
 
     overlay = data.get("riskOverlay", {})
     raw = overlay.get("regimeRaw", {})
+    sovereign = data.get("sovereignIndex", {}) or {}
     return MacroData(
         {
             "regime_state": overlay.get("regimeState", ""),
@@ -125,6 +126,18 @@ async def _fetch_macro() -> MacroData:
             "oi_divergence_flag": raw.get("oi_divergence_flag"),
             # 기관 ETF 순유입 z-score — 펀더멘털 레짐 스위치 (대량 유출 시 롱 보류)
             "etf_flow_zscore": raw.get("etf_flow_zscore"),
+            # 구조적 강세 게이트 + 군중 과밀 + 주문흐름 확인 + 낙폭 컨텍스트
+            # (regimeRaw 미수집 시 None → 알고리즘이 graceful 처리, veto 없음)
+            "btc_above_ma200": raw.get("btc_above_ma200"),
+            "long_short_ratio_zscore": raw.get("long_short_ratio_zscore"),
+            "taker_imbalance_zscore": raw.get("taker_imbalance_zscore"),
+            "btc_drawdown_90d": raw.get("btc_drawdown_90d"),
+            # 변동성 환경 라벨 (사이징/신뢰도 컨텍스트)
+            "vol_level": overlay.get("volLevel"),
+            "vol_trend": overlay.get("volTrend"),
+            # OOS 검증 종합 센티먼트 지수 (risk_on/risk_off/neutral)
+            "sovereign_score": sovereign.get("score"),
+            "sovereign_label": sovereign.get("signalLabel"),
             "reference_date": ref_date or None,
             "stale_hours": round(stale_h, 2) if stale_h is not None else None,
         },

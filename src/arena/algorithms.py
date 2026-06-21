@@ -66,6 +66,67 @@ def _etf_outflow_heavy(macro: dict) -> bool:
         return False
 
 
+def _below_ma200(macro: dict) -> bool:
+    """200일 이동평균 하회(구조적 약세) 여부 — 추세추종/모멘텀 롱 게이트.
+
+    근거: Faber(2007), Moskowitz·Ooi·Pedersen(2012, Time Series Momentum) — 장기
+    추세 필터 아래에서 롱을 보류하면 하락장 노출·whipsaw가 줄어 위험조정수익 개선.
+    btc_above_ma200(0/1)은 일간 parquet에서 옴. 미수집(None) 시 게이트 미적용(False).
+    """
+    if not parameters.MA200_REGIME_GATE_ENABLED:
+        return False
+    above = macro.get("btc_above_ma200")
+    if above is None:
+        return False
+    try:
+        return float(above) < 1.0
+    except (TypeError, ValueError):
+        return False
+
+
+def _lsr_crowded(macro: dict) -> bool:
+    """선물 롱숏비 군중 과밀 여부 — z-score 극단 시 True (crowded long, veto).
+
+    근거: 극단 롱숏비는 과밀 롱 → 조정 선행 신호. 단독 예측력은 약해 진입 트리거가
+    아닌 veto로만 사용. 미수집(None) 시 False.
+    """
+    z = macro.get("long_short_ratio_zscore")
+    if z is None:
+        return False
+    try:
+        return float(z) >= parameters.LSR_CROWDED_ZSCORE
+    except (TypeError, ValueError):
+        return False
+
+
+def _taker_confirms(macro: dict) -> bool:
+    """체결 공격성(테이커 매수 우위)이 돌파에 동의하는지 — 돌파 확인용.
+
+    z > 임계 = 공격적 매수 우위. 미수집(None) 시 True(확인 통과 — 차단하지 않음).
+    """
+    z = macro.get("taker_imbalance_zscore")
+    if z is None:
+        return True
+    try:
+        return float(z) > parameters.TAKER_CONFIRM_ZSCORE
+    except (TypeError, ValueError):
+        return True
+
+
+def _drawdown_sufficient(macro: dict) -> bool:
+    """90일 고점 대비 낙폭이 역발산 진입 품질 기준을 만족하는지.
+
+    btc_drawdown_90d <= 임계(-0.10) = 충분한 낙폭. 미수집(None) 시 True(게이트 미적용).
+    """
+    dd = macro.get("btc_drawdown_90d")
+    if dd is None:
+        return True
+    try:
+        return float(dd) <= parameters.FNG_CONTRARIAN_MIN_DRAWDOWN
+    except (TypeError, ValueError):
+        return True
+
+
 def regime_trend(macro: dict, ind: dict) -> str | None:
     """추세추종 코어 — Donchian 돌파 + 레짐/ADX/EMA 필터 (Zarattini 2025 근거).
 
@@ -76,6 +137,9 @@ def regime_trend(macro: dict, ind: dict) -> str | None:
       ④ EMA 정배열 + 단기 EMA 상승
       ⑤ RSI 과열 미도달
       ⑥ 펀딩 과열 아님
+      ⑦ 200일 MA 상회 (구조적 강세 게이트 — 일간)
+      ⑧ 테이커 매수 우위로 돌파 확인 (주문흐름 동의 — 일간)
+      ⑨ 롱숏비 군중 과밀 아님 (일간)
     그 외 모든 경우 flat.
     """
     state = _regime_state(macro)
@@ -99,6 +163,9 @@ def regime_trend(macro: dict, ind: dict) -> str | None:
         and rsi < parameters.TREND_CORE_RSI_LONG_MAX
         and not _funding_hot(macro)
         and not _etf_outflow_heavy(macro)
+        and not _below_ma200(macro)
+        and _taker_confirms(macro)
+        and not _lsr_crowded(macro)
     ):
         return "long"
     return None
@@ -109,11 +176,17 @@ def fng_contrarian(macro: dict, ind: dict) -> str | None:
 
     단, risk-off 레짐(BearPanic/bear_trend/stress)에서는 진입 보류
     (단독 FNG 공포는 대부분 하락장 중간이라는 보고서 근거). 탐욕 구간 flat, 숏 없음.
+
+    품질 게이트(일간): 극단 공포만으로는 즉시 바닥이 아닌 경우가 많으므로
+    90일 고점 대비 충분한 낙폭(<= -10%)이 동반될 때만 진입 — 역발산 진입 품질 향상.
+    역추세 전략이므로 200일 MA 게이트는 적용하지 않는다.
     """
     fng = macro.get("fng")
     if fng is None:
         return None
     if _is_risk_off(_regime_state(macro)):
+        return None
+    if not _drawdown_sufficient(macro):
         return None
     if fng < parameters.FNG_LONG_BELOW:
         return "long"
@@ -124,7 +197,7 @@ def vix_rsi(macro: dict, ind: dict) -> str | None:
     """VIX 수준 + RSI 필터 — 시장 공포 완화 + 과열 미도달 시 매수.
 
     VIX가 40th percentile 이하(calm) AND RSI < 50 → 롱.
-    vix_q40 미수집 시 vix_now < 20 fallback. risk-off 레짐에서는 보류.
+    vix_q40 미수집 시 vix_now < 20 fallback. risk-off 레짐 또는 200일 MA 하회 시 보류.
     """
     vix_now = macro.get("vix_now")
     vix_q40 = macro.get("vix_q40")
@@ -133,6 +206,8 @@ def vix_rsi(macro: dict, ind: dict) -> str | None:
     if vix_now is None:
         return None
     if _is_risk_off(_regime_state(macro)):
+        return None
+    if _below_ma200(macro):
         return None
 
     vix_calm = (vix_now < vix_q40) if vix_q40 else (vix_now < 20.0)
@@ -146,7 +221,7 @@ def macd_momentum(macro: dict, ind: dict) -> str | None:
     """MACD 히스토그램 모멘텀 — 증가 중인 강한 모멘텀만 매수.
 
     ATR 임계값 초과 + 히스토그램 증가 + RSI 과열 미도달 + BB 확장 + ADX 추세.
-    펀딩 과열·risk-off 레짐에서는 보류. 숏 없음.
+    펀딩 과열·risk-off 레짐·200일 MA 하회·롱숏 과밀에서는 보류. 숏 없음.
     """
     h = ind["macd_hist"]
     h_prev = ind.get("macd_hist_prev", h)
@@ -157,7 +232,13 @@ def macd_momentum(macro: dict, ind: dict) -> str | None:
 
     if bb_w < parameters.MACD_MOMENTUM_BB_WIDTH_MIN:
         return None
-    if _is_risk_off(_regime_state(macro)) or _funding_hot(macro) or _etf_outflow_heavy(macro):
+    if (
+        _is_risk_off(_regime_state(macro))
+        or _funding_hot(macro)
+        or _etf_outflow_heavy(macro)
+        or _below_ma200(macro)
+        or _lsr_crowded(macro)
+    ):
         return None
     if (
         h > threshold
@@ -177,7 +258,8 @@ def multi_factor(macro: dict, ind: dict) -> str | None:
     f3: VIX calm (vix_now < vix_q40) — 미수집 시 우호적 처리
     f4: RSI < 50 (과열 전)
     f5: 펀딩 과열 아님 (롱 과밀 회피)
-    단, risk-off 레짐 또는 기관 ETF 대량 유출이면 즉시 보류(veto).
+    단, risk-off 레짐·기관 ETF 대량 유출·200일 MA 하회·롱숏 과밀이면 즉시 보류(veto).
+    (일간 구조 게이트는 veto로 두고, 5팩터 4-of-5 코어 로직은 그대로 유지)
     """
     state = _regime_state(macro)
     fng = macro.get("fng")
@@ -185,7 +267,12 @@ def multi_factor(macro: dict, ind: dict) -> str | None:
     vix_q40 = macro.get("vix_q40")
     rsi = ind.get("rsi", 50.0)
 
-    if _is_risk_off(state) or _etf_outflow_heavy(macro):
+    if (
+        _is_risk_off(state)
+        or _etf_outflow_heavy(macro)
+        or _below_ma200(macro)
+        or _lsr_crowded(macro)
+    ):
         return None
 
     f1 = _is_bullish(state)
