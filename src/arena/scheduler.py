@@ -132,6 +132,9 @@ async def _fetch_macro() -> MacroData:
             "long_short_ratio_zscore": raw.get("long_short_ratio_zscore"),
             "taker_imbalance_zscore": raw.get("taker_imbalance_zscore"),
             "btc_drawdown_90d": raw.get("btc_drawdown_90d"),
+            # 시장 폭 + 온체인 유동성 (복합 투표 알고 건전성 필터)
+            "breadth_up_ratio": raw.get("breadth_up_ratio"),
+            "stablecoin_supply_zscore": raw.get("stablecoin_supply_zscore"),
             # 변동성 환경 라벨 (사이징/신뢰도 컨텍스트)
             "vol_level": overlay.get("volLevel"),
             "vol_trend": overlay.get("volTrend"),

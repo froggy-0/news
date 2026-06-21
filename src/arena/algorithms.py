@@ -128,6 +128,34 @@ def _taker_confirms(macro: dict) -> bool:
         return True
 
 
+def _breadth_collapsed(macro: dict) -> bool:
+    """시장 폭 붕괴 여부 — top10 알트 참여율이 임계 미만이면 True (협소 랠리 보류).
+
+    breadth_up_ratio < 임계 = BTC 단독/협소 상승(건전성 낮음). 미수집(None) 시 False.
+    """
+    r = macro.get("breadth_up_ratio")
+    if r is None:
+        return False
+    try:
+        return float(r) < parameters.BREADTH_HEALTHY_MIN
+    except (TypeError, ValueError):
+        return False
+
+
+def _stablecoin_contracting(macro: dict) -> bool:
+    """온체인 유동성 수축 여부 — 스테이블코인 공급증가율 z가 임계 미만이면 True.
+
+    z < 임계 = 자본 이탈(대기 매수력 감소). 미수집(None) 시 False — 차단하지 않음.
+    """
+    z = macro.get("stablecoin_supply_zscore")
+    if z is None:
+        return False
+    try:
+        return float(z) < parameters.STABLECOIN_CONTRACTION_Z
+    except (TypeError, ValueError):
+        return False
+
+
 def _drawdown_sufficient(macro: dict) -> bool:
     """90일 고점 대비 낙폭이 역발산 진입 품질 기준을 만족하는지.
 
@@ -276,8 +304,9 @@ def multi_factor(macro: dict, ind: dict) -> str | None:
     f3: VIX calm (vix_now < vix_q40) — 미수집 시 우호적 처리
     f4: RSI < 50 (과열 전)
     f5: 펀딩 과열 아님 (롱 과밀 회피)
-    단, risk-off 레짐·기관 ETF 대량 유출·200일 MA 하회·롱숏 과밀이면 즉시 보류(veto).
-    (일간 구조 게이트는 veto로 두고, 5팩터 4-of-5 코어 로직은 그대로 유지)
+    단, risk-off 레짐·기관 ETF 대량 유출·200일 MA 하회·롱숏 과밀·시장폭 붕괴·
+    온체인 유동성 수축이면 즉시 보류(veto).
+    (일간 구조/유동성 게이트는 veto로 두고, 5팩터 4-of-5 코어 로직은 그대로 유지)
     """
     state = _regime_state(macro)
     fng = macro.get("fng")
@@ -290,6 +319,8 @@ def multi_factor(macro: dict, ind: dict) -> str | None:
         or _etf_outflow_heavy(macro)
         or _below_ma200(macro)
         or _lsr_crowded(macro)
+        or _breadth_collapsed(macro)
+        or _stablecoin_contracting(macro)
     ):
         return None
 

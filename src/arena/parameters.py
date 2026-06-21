@@ -11,8 +11,8 @@ from copy import deepcopy
 from typing import Any
 
 STRATEGY_VERSION = "arena-spot-v3"
-PARAMS_VERSION = "arena-params-v15"
-FEATURE_SET_VERSION = "arena-features-v6"
+PARAMS_VERSION = "arena-params-v16"
+FEATURE_SET_VERSION = "arena-features-v7"
 RISK_MODEL_VERSION = "portfolio-risk-v1"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
 RUNTIME = "ec2"
@@ -124,6 +124,16 @@ TAKER_CONFIRM_ZSCORE = 0.0
 # 90일 고점 대비 충분한 낙폭이 동반될 때 역발산 진입 품질이 높아진다.
 #   btc_drawdown_90d <= -0.10 (10% 이상 낙폭) 조건. 미수집 시 게이트 미적용.
 FNG_CONTRARIAN_MIN_DRAWDOWN = -0.10
+
+# 시장 폭(breadth) 건전성: Binance top10 알트 중 7일 수익률 양(+) 비율.
+#   이 값 미만이면 BTC 단독/협소 랠리 → 복합 투표 알고 진입 보류.
+#   미수집(None) 시 게이트 미적용. 0~1 유계라 절대 임계값 사용.
+BREADTH_HEALTHY_MIN = 0.30
+
+# 온체인 유동성: 스테이블코인(USDT+USDC) 7일 공급증가율 롤링 z.
+#   이 값 미만이면 유동성 수축(자본 이탈) → 복합 투표 알고 롱 보류.
+#   근거: 공급 증가=대기 매수력, 수축=자본 이탈(SSR 연구). etf 유출과 동일 임계.
+STABLECOIN_CONTRACTION_Z = -1.5
 
 RSI_PERIOD = 14
 RSI_NEUTRAL = 50.0
@@ -274,6 +284,8 @@ def base_params_snapshot() -> dict[str, Any]:
             "lsr_crowded_zscore": LSR_CROWDED_ZSCORE,
             "taker_confirm_zscore": TAKER_CONFIRM_ZSCORE,
             "fng_contrarian_min_drawdown": FNG_CONTRARIAN_MIN_DRAWDOWN,
+            "breadth_healthy_min": BREADTH_HEALTHY_MIN,
+            "stablecoin_contraction_z": STABLECOIN_CONTRACTION_Z,
             "regime_stress_return_atr_multiple": REGIME_STRESS_RETURN_ATR_MULTIPLE,
             "regime_stress_range_atr_multiple": REGIME_STRESS_RANGE_ATR_MULTIPLE,
             "regime_trend_bb_width_min": REGIME_TREND_BB_WIDTH_MIN,
