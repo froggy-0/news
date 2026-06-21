@@ -30,7 +30,7 @@ from . import (
     state,
     tca_shadow,
 )
-from .algorithms import ALGORITHMS
+from .algorithms import ALGORITHMS, explain_signal, primary_flat_skip_reason
 
 logger = logging.getLogger(__name__)
 
@@ -425,12 +425,14 @@ def _decision_from_snapshot(features: dict, now: datetime) -> realtime_risk.Real
 
 
 def _signal_reason(algo_id: str, signal: str | None, ind: dict, macro: dict) -> dict:
-    return execution_rules.build_signal_reason(
+    reason = execution_rules.build_signal_reason(
         algo_id=algo_id,
         signal=signal,
         indicators=ind,
         macro=macro,
     )
+    reason["diagnostics"] = explain_signal(algo_id, macro, ind)
+    return reason
 
 
 async def _run_shadow_vnext(
@@ -720,6 +722,8 @@ async def _run_cycle() -> None:
             signal = product_decision.executable_signal
             action = product_decision.action
             skipped_reason = product_decision.skipped_reason
+            if action == "flat_skip" and skipped_reason is None:
+                skipped_reason = primary_flat_skip_reason(algo_id, macro, ind)
 
             if product_decision.should_close:
                 if current is not None:

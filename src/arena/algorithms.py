@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Any, Callable
 
 from . import parameters, regime
 
@@ -354,3 +354,226 @@ ALGORITHMS: dict[str, Callable[[dict, dict], str | None]] = {
     "macd_momentum": macd_momentum,
     "multi_factor": multi_factor,
 }
+
+
+def _diag_base(algo_id: str, raw_signal: str | None, macro: dict) -> dict[str, Any]:
+    state = _regime_state(macro)
+    return {
+        "algo_id": algo_id,
+        "raw_signal": raw_signal,
+        "effective_regime_state": state,
+        "overlay_regime_state": macro.get("regime_state"),
+        "vetoes": [],
+        "failed_conditions": [],
+        "passed_conditions": [],
+        "factors": {},
+        "thresholds": {},
+    }
+
+
+def _record_condition(
+    diag: dict[str, Any],
+    name: str,
+    passed: bool,
+    *,
+    veto: bool = False,
+) -> None:
+    target = "passed_conditions" if passed else "failed_conditions"
+    diag[target].append(name)
+    if veto and not passed:
+        diag["vetoes"].append(name)
+
+
+def _finish_diag(diag: dict[str, Any]) -> dict[str, Any]:
+    diag["veto_count"] = len(diag["vetoes"])
+    diag["failed_count"] = len(diag["failed_conditions"])
+    diag["factor_score"] = sum(1 for value in diag["factors"].values() if value is True)
+    return diag
+
+
+def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
+    """Return deterministic signal diagnostics without changing strategy behavior.
+
+    이 함수는 P1 로스터 진단용이다. 전략 함수의 raw signal과 같은 조건식을
+    재평가해 `reason.diagnostics.vetoes` 집계를 가능하게 한다.
+    """
+    try:
+        raw_signal = ALGORITHMS[algo_id](macro, ind) if algo_id in ALGORITHMS else None
+    except (KeyError, TypeError, ValueError) as exc:
+        diag = _diag_base(algo_id, None, macro)
+        diag["failed_conditions"].append("diagnostics_input_error")
+        diag["diagnostics_error"] = str(exc)
+        return _finish_diag(diag)
+    diag = _diag_base(algo_id, raw_signal, macro)
+    state = _regime_state(macro)
+
+    if algo_id == "regime_trend":
+        close = ind.get("close", 0.0)
+        dc_upper = ind.get("donchian_upper", 0.0)
+        adx = ind.get("adx", 0.0)
+        ema_fast = ind.get("ema_fast", 0.0)
+        ema_slow = ind.get("ema_slow", 0.0)
+        ema_fast_slope = ind.get("ema_fast_slope", 0.0)
+        rsi = ind.get("rsi", 50.0)
+        diag["thresholds"].update(
+            {
+                "adx_trend_min": parameters.ADX_TREND_MIN,
+                "rsi_long_max": parameters.TREND_CORE_RSI_LONG_MAX,
+            }
+        )
+        _record_condition(diag, "bullish_regime", _is_bullish(state), veto=True)
+        _record_condition(
+            diag,
+            "donchian_breakout",
+            bool(dc_upper and dc_upper > 0 and close > dc_upper),
+            veto=True,
+        )
+        _record_condition(diag, "adx_trending", adx >= parameters.ADX_TREND_MIN, veto=True)
+        _record_condition(
+            diag,
+            "ema_aligned_up",
+            ema_fast > ema_slow and ema_fast_slope > 0,
+            veto=True,
+        )
+        _record_condition(
+            diag,
+            "rsi_below_long_max",
+            rsi < parameters.TREND_CORE_RSI_LONG_MAX,
+            veto=True,
+        )
+        _record_condition(diag, "funding_not_hot", not _funding_hot(macro), veto=True)
+        _record_condition(diag, "etf_outflow_not_heavy", not _etf_outflow_heavy(macro), veto=True)
+        _record_condition(diag, "above_ma200_or_missing", not _below_ma200(macro), veto=True)
+        _record_condition(diag, "taker_confirms", _taker_confirms(macro), veto=True)
+        _record_condition(diag, "lsr_not_crowded", not _lsr_crowded(macro), veto=True)
+        _record_condition(diag, "oi_not_diverged", not _oi_diverged(macro), veto=True)
+        return _finish_diag(diag)
+
+    if algo_id == "fng_contrarian":
+        fng = macro.get("fng")
+        diag["thresholds"]["fng_long_below"] = parameters.FNG_LONG_BELOW
+        _record_condition(diag, "fng_present", fng is not None, veto=True)
+        _record_condition(diag, "not_risk_off", not _is_risk_off(state), veto=True)
+        _record_condition(
+            diag, "drawdown_sufficient_or_missing", _drawdown_sufficient(macro), veto=True
+        )
+        _record_condition(
+            diag,
+            "fng_extreme_fear",
+            fng is not None and fng < parameters.FNG_LONG_BELOW,
+            veto=True,
+        )
+        return _finish_diag(diag)
+
+    if algo_id == "vix_rsi":
+        vix_now = macro.get("vix_now")
+        vix_q40 = macro.get("vix_q40")
+        rsi = ind.get("rsi", 50.0)
+        vix_calm = False
+        if vix_now is not None:
+            vix_calm = (vix_now < vix_q40) if vix_q40 else (vix_now < 20.0)
+        diag["thresholds"]["rsi_long_max"] = parameters.VIX_RSI_LONG_MAX
+        _record_condition(diag, "vix_present", vix_now is not None, veto=True)
+        _record_condition(diag, "not_risk_off", not _is_risk_off(state), veto=True)
+        _record_condition(diag, "above_ma200_or_missing", not _below_ma200(macro), veto=True)
+        _record_condition(diag, "vix_calm", vix_calm, veto=True)
+        _record_condition(diag, "rsi_below_long_max", rsi < parameters.VIX_RSI_LONG_MAX, veto=True)
+        return _finish_diag(diag)
+
+    if algo_id == "macd_momentum":
+        h = ind.get("macd_hist", 0.0)
+        h_prev = ind.get("macd_hist_prev", h)
+        threshold = ind.get("atr", 0.0) * parameters.MACD_ATR_THRESHOLD_MULTIPLE
+        rsi = ind.get("rsi", 50.0)
+        bb_w = ind.get("bb_width", 100.0)
+        adx = ind.get("adx", 0.0)
+        diag["thresholds"].update(
+            {
+                "macd_atr_threshold": threshold,
+                "bb_width_min": parameters.MACD_MOMENTUM_BB_WIDTH_MIN,
+                "rsi_long_max": parameters.MACD_MOMENTUM_RSI_LONG_MAX,
+                "adx_trend_min": parameters.ADX_TREND_MIN,
+            }
+        )
+        _record_condition(
+            diag,
+            "bb_width_sufficient",
+            bb_w >= parameters.MACD_MOMENTUM_BB_WIDTH_MIN,
+            veto=True,
+        )
+        _record_condition(diag, "not_risk_off", not _is_risk_off(state), veto=True)
+        _record_condition(diag, "funding_not_hot", not _funding_hot(macro), veto=True)
+        _record_condition(diag, "etf_outflow_not_heavy", not _etf_outflow_heavy(macro), veto=True)
+        _record_condition(diag, "above_ma200_or_missing", not _below_ma200(macro), veto=True)
+        _record_condition(diag, "lsr_not_crowded", not _lsr_crowded(macro), veto=True)
+        _record_condition(diag, "oi_not_diverged", not _oi_diverged(macro), veto=True)
+        _record_condition(diag, "macd_above_atr_threshold", h > threshold, veto=True)
+        _record_condition(diag, "macd_hist_increasing", h > h_prev, veto=True)
+        _record_condition(
+            diag,
+            "rsi_below_long_max",
+            rsi < parameters.MACD_MOMENTUM_RSI_LONG_MAX,
+            veto=True,
+        )
+        _record_condition(diag, "adx_trending", adx >= parameters.ADX_TREND_MIN, veto=True)
+        return _finish_diag(diag)
+
+    if algo_id == "multi_factor":
+        fng = macro.get("fng")
+        vix_now = macro.get("vix_now")
+        vix_q40 = macro.get("vix_q40")
+        rsi = ind.get("rsi", 50.0)
+        diag["thresholds"].update(
+            {
+                "factor_score_min": 4,
+                "fng_max": 60.0,
+                "rsi_long_max": parameters.MULTI_FACTOR_LONG_RSI_MAX,
+            }
+        )
+        _record_condition(diag, "not_risk_off", not _is_risk_off(state), veto=True)
+        _record_condition(diag, "etf_outflow_not_heavy", not _etf_outflow_heavy(macro), veto=True)
+        _record_condition(diag, "above_ma200_or_missing", not _below_ma200(macro), veto=True)
+        _record_condition(diag, "lsr_not_crowded", not _lsr_crowded(macro), veto=True)
+        _record_condition(diag, "breadth_not_collapsed", not _breadth_collapsed(macro), veto=True)
+        _record_condition(
+            diag,
+            "stablecoin_not_contracting",
+            not _stablecoin_contracting(macro),
+            veto=True,
+        )
+
+        factors = {
+            "bullish_regime": _is_bullish(state),
+            "fng_below_60": fng is not None and fng < 60.0,
+            "vix_calm_or_missing": (
+                vix_now is None
+                or (vix_q40 is not None and vix_now < vix_q40)
+                or (vix_q40 is None and vix_now < 20.0)
+            ),
+            "rsi_below_long_max": rsi < parameters.MULTI_FACTOR_LONG_RSI_MAX,
+            "funding_not_hot": not _funding_hot(macro),
+        }
+        diag["factors"] = factors
+        _record_condition(
+            diag,
+            "factor_score_at_least_4",
+            sum(1 for value in factors.values() if value) >= 4,
+            veto=True,
+        )
+        return _finish_diag(diag)
+
+    diag["failed_conditions"].append("unknown_algo")
+    return _finish_diag(diag)
+
+
+def primary_flat_skip_reason(algo_id: str, macro: dict, ind: dict) -> str | None:
+    diagnostic = explain_signal(algo_id, macro, ind)
+    if diagnostic.get("raw_signal") is not None:
+        return None
+    vetoes = diagnostic.get("vetoes") or []
+    if vetoes:
+        return f"veto:{vetoes[0]}"
+    failed = diagnostic.get("failed_conditions") or []
+    if failed:
+        return f"condition:{failed[0]}"
+    return "flat_no_signal"
