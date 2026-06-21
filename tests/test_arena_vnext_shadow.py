@@ -156,6 +156,25 @@ def test_regime_gate_classifies_bull_bear_sideways_and_stress() -> None:
     )
 
 
+def test_relaxed_regime_variant_reduces_unknown_with_two_of_three_votes() -> None:
+    indicators = _trend_indicators(
+        return_24h=0.02,
+        return_72h=-0.01,
+        bb_width=2.0,
+        ema_fast=101.0,
+        ema_slow=100.0,
+        ema_fast_slope=0.1,
+    )
+
+    assert regime.classify_regime(indicators).regime_state == regime.REGIME_UNKNOWN
+    relaxed = regime.classify_regime_variant(
+        indicators,
+        variant=regime.REGIME_VARIANT_RELAXED_2OF3,
+    )
+    assert relaxed.regime_state == regime.REGIME_BULL_TREND
+    assert relaxed.reason["bb_width_used_as_gate"] is False
+
+
 def test_trend_core_shadow_uses_spot_long_only_regime_trend() -> None:
     bull_macro = {"arena_regime_state": regime.REGIME_BULL_TREND}
     bear_macro = {"arena_regime_state": regime.REGIME_BEAR_TREND}

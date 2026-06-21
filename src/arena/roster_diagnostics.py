@@ -124,6 +124,7 @@ async def summarize_backtest_frames(
     symbol: str,
     profile_id: str,
     indicator_profile_id: str | None,
+    regime_variant: str,
     limit: int,
 ) -> dict[str, Any]:
     profile = frequency.get_frequency_profile(profile_id)
@@ -134,6 +135,7 @@ async def summarize_backtest_frames(
         indicator_profile_id=indicator_profile,
         symbol=symbol,
         interval=interval,
+        regime_variant=regime_variant,
     )
     frames = await backtest.load_frames_from_supabase(
         db,
@@ -146,8 +148,11 @@ async def summarize_backtest_frames(
     summary: dict[str, dict[str, Any]] = {}
     for frame in frames:
         macro = backtest._clean_macro(frame.macro, frame.data_timestamp, settings)
-        macro["arena_regime_state"] = regime.classify_regime(
-            frame.indicators, frame.market_features, macro
+        macro["arena_regime_state"] = regime.classify_regime_variant(
+            frame.indicators,
+            frame.market_features,
+            macro,
+            variant=regime_variant,
         ).regime_state
         for algo_id in algorithms.ALGORITHMS:
             diagnostic = algorithms.explain_signal(algo_id, macro, frame.indicators)
@@ -158,6 +163,7 @@ async def summarize_backtest_frames(
         "profile": profile_id,
         "interval": interval,
         "indicator_profile": indicator_profile,
+        "regime_variant": regime_variant,
         "frame_count": len(frames),
         "by_algo": summary,
     }
@@ -175,6 +181,7 @@ async def _amain(args: argparse.Namespace) -> int:
             symbol=args.symbol,
             profile_id=args.profile,
             indicator_profile_id=args.indicator_profile,
+            regime_variant=args.regime_variant,
             limit=args.limit,
         )
     print(json.dumps(_json_ready(result), ensure_ascii=False, indent=2, default=str))
@@ -188,6 +195,11 @@ def main() -> int:
     parser.add_argument("--symbol", default="BTCUSDT")
     parser.add_argument("--profile", default=frequency.LIVE_4H_PROFILE_ID)
     parser.add_argument("--indicator-profile", default=None)
+    parser.add_argument(
+        "--regime-variant",
+        choices=[regime.REGIME_VARIANT_STRICT, regime.REGIME_VARIANT_RELAXED_2OF3],
+        default=regime.REGIME_VARIANT_STRICT,
+    )
     return asyncio.run(_amain(parser.parse_args()))
 
 

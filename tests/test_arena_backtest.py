@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from arena import backtest
+from arena import backtest, realtime_risk
 
 
 def _dt(hour: int) -> datetime:
@@ -21,6 +21,7 @@ def _frame(
     close: float = 100.0,
     atr: float = 1.0,
     macro: dict | None = None,
+    market_features: dict | None = None,
 ) -> backtest.ReplayFrame:
     open_time = _dt(0) + timedelta(hours=4 * index)
     close_time = open_time + timedelta(hours=4)
@@ -35,6 +36,7 @@ def _frame(
         ),
         indicators={"rsi": 50.0, "macd_hist": 0.0, "bb_pos": 0.5, "atr": atr},
         macro=macro or {},
+        market_features=market_features or {},
     )
 
 
@@ -133,6 +135,9 @@ def test_backtest_run_row_is_json_ready_and_versioned() -> None:
     assert row["cost_model_version"] == "arena-cost-v2"
     assert row["cost_scenario_id"] == "base"
     assert row["rules_snapshot"]["portfolio_risk"]["max_open_positions_total"] == 3
+    assert row["rules_snapshot"]["regime_variant"] == "strict_v1"
+    assert row["params_snapshot"]["regime_research"]["regime_variant"] == "strict_v1"
+    assert row["rules_snapshot"]["live_gate_replay"]["replay_execution_gate_blocks"] is False
     assert row["rules_snapshot"]["execution_product"]["target_product"] == "spot"
     assert row["rules_snapshot"]["execution_product"]["spot_execution_only"] is True
     assert row["rules_snapshot"]["execution_product"]["allow_live_short"] is False
@@ -163,6 +168,59 @@ def test_spot_backtest_maps_short_to_exit_or_no_trade() -> None:
     assert len(result.trades) == 1
     assert result.trades[0].direction == "long"
     assert result.trades[0].exit_reason == "short_signal_spot_risk_off"
+
+
+def test_backtest_can_replay_live_execution_gate_blocks() -> None:
+    def always_long(macro, indicators):
+        return "long"
+
+    result = backtest.run_replay(
+        [
+            _frame(
+                0,
+                market_features={
+                    "execution_gate_allowed": False,
+                    "execution_gate_reject_reason": "spread_too_wide",
+                },
+            ),
+            _frame(1, close=101.0),
+        ],
+        strategy_fns={"test_algo": always_long},
+        settings=backtest.BacktestSettings(
+            close_open_at_end=False,
+            replay_execution_gate_blocks=True,
+        ),
+    )
+
+    assert result.trades == []
+    assert result.risk_events[0].event_type == "spread_too_wide"
+    assert result.risk_events[0].risk_snapshot["source"] == "live_gate_replay"
+
+
+def test_backtest_can_replay_live_realtime_risk_blocks() -> None:
+    def always_long(macro, indicators):
+        return "long"
+
+    result = backtest.run_replay(
+        [
+            _frame(
+                0,
+                market_features={
+                    "realtime_risk_fresh": True,
+                    "realtime_risk_state": realtime_risk.STATE_BLOCK_ENTRY,
+                },
+            ),
+            _frame(1, close=101.0),
+        ],
+        strategy_fns={"test_algo": always_long},
+        settings=backtest.BacktestSettings(
+            close_open_at_end=False,
+            replay_realtime_risk_blocks=True,
+        ),
+    )
+
+    assert result.trades == []
+    assert result.risk_events[0].event_type == "realtime_risk:BLOCK_ENTRY"
     assert all(
         point.open_position is None or point.open_position["direction"] == "long"
         for point in result.equity_curve

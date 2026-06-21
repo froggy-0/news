@@ -22,6 +22,7 @@ from . import (
     indicators,
     market_structure,
     parameters,
+    realtime_risk,
     regime,
     risk,
     spot_policy,
@@ -63,6 +64,7 @@ class BacktestSettings:
     params_version: str = parameters.PARAMS_VERSION
     feature_set_version: str = parameters.FEATURE_SET_VERSION
     risk_model_version: str = parameters.RISK_MODEL_VERSION
+    regime_variant: str = regime.REGIME_VARIANT_STRICT
     product_type: str = parameters.TARGET_PRODUCT
     position_semantics: str = parameters.POSITION_SEMANTICS
     symbol: str = parameters.BINANCE_SYMBOL
@@ -91,6 +93,8 @@ class BacktestSettings:
     daily_loss_limit_pct: float = parameters.DAILY_LOSS_LIMIT_PCT
     algo_max_drawdown_kill_pct: float = parameters.ALGO_MAX_DRAWDOWN_KILL_PCT
     cooldown_after_kill_hours: float = parameters.COOLDOWN_AFTER_KILL_HOURS
+    replay_execution_gate_blocks: bool = False
+    replay_realtime_risk_blocks: bool = False
     close_open_at_end: bool = True
     warmup_bars: int = parameters.MACD_SLOW_PERIOD + parameters.MACD_SIGNAL_PERIOD
 
@@ -241,6 +245,14 @@ def _params_snapshot(algo_id: str, settings: BacktestSettings) -> dict[str, Any]
         "ecr_threshold": settings.ecr_threshold,
         "max_trades_per_day_per_algo": settings.max_trades_per_day_per_algo,
     }
+    snapshot["regime_research"] = {
+        "regime_variant": settings.regime_variant,
+        "live_default_regime_variant": regime.REGIME_VARIANT_STRICT,
+    }
+    snapshot["live_gate_replay"] = {
+        "replay_execution_gate_blocks": settings.replay_execution_gate_blocks,
+        "replay_realtime_risk_blocks": settings.replay_realtime_risk_blocks,
+    }
     snapshot["execution_product"] = {
         "target_product": settings.product_type,
         "position_semantics": settings.position_semantics,
@@ -294,6 +306,14 @@ def _base_params_snapshot_from_settings(settings: BacktestSettings) -> dict[str,
             "cost_model_version": settings.cost_model_version,
             "cost_scenario_id": settings.cost_scenario_id,
         }
+    snapshot["regime_research"] = {
+        "regime_variant": settings.regime_variant,
+        "live_default_regime_variant": regime.REGIME_VARIANT_STRICT,
+    }
+    snapshot["live_gate_replay"] = {
+        "replay_execution_gate_blocks": settings.replay_execution_gate_blocks,
+        "replay_realtime_risk_blocks": settings.replay_realtime_risk_blocks,
+    }
     snapshot["execution_product"] = {
         "target_product": settings.product_type,
         "position_semantics": settings.position_semantics,
@@ -363,6 +383,21 @@ def _stop_exit_reason(position: SimPosition) -> str:
     ):
         return "trailing_stop"
     return "stop_loss"
+
+
+def _live_gate_block_reason(frame: ReplayFrame, settings: BacktestSettings) -> str | None:
+    features = frame.market_features or {}
+    if settings.replay_execution_gate_blocks and features.get("execution_gate_allowed") is False:
+        return str(features.get("execution_gate_reject_reason") or "execution_gate_blocked")
+    if settings.replay_realtime_risk_blocks and features.get("realtime_risk_fresh") is True:
+        risk_state = features.get("realtime_risk_state")
+        if risk_state in {
+            realtime_risk.STATE_BLOCK_ENTRY,
+            realtime_risk.STATE_EXIT_CANDIDATE,
+            realtime_risk.STATE_FORCE_EXIT_CANDIDATE,
+        }:
+            return f"realtime_risk:{risk_state}"
+    return None
 
 
 def _ratchet_sim_position(position: SimPosition, bar: ReplayBar) -> None:
@@ -574,8 +609,11 @@ def run_replay(
             macro = _clean_macro(frame.macro, frame.data_timestamp, settings)
             # 라이브 scheduler와 동일하게 로컬 4h 레짐을 주입(패리티). 미주입 시 백테스트는
             # 오버레이 레짐을, 라이브는 로컬 레짐을 써 regime_trend 게이팅이 달라졌었음.
-            macro["arena_regime_state"] = regime.classify_regime(
-                frame.indicators, {}, macro
+            macro["arena_regime_state"] = regime.classify_regime_variant(
+                frame.indicators,
+                {},
+                macro,
+                variant=settings.regime_variant,
             ).regime_state
             raw_signal = fn(macro, frame.indicators)
             if settings.product_type == "spot":
@@ -689,6 +727,23 @@ def run_replay(
                     and killed_at_by_algo[algo_id] is None
                 ):
                     killed_at_by_algo[algo_id] = frame.bar.close_time
+                continue
+
+            live_gate_block_reason = _live_gate_block_reason(frame, settings)
+            if live_gate_block_reason:
+                risk_events.append(
+                    BacktestRiskEvent(
+                        algo_id=algo_id,
+                        data_timestamp=frame.data_timestamp,
+                        signal=signal,
+                        event_type=live_gate_block_reason,
+                        risk_decision={"allowed": False, "reason": live_gate_block_reason},
+                        risk_snapshot={
+                            "source": "live_gate_replay",
+                            "market_features": frame.market_features,
+                        },
+                    )
+                )
                 continue
 
             positions_by_algo[algo_id] = _open_position(
@@ -1001,6 +1056,11 @@ def _run_row(result: BacktestResult) -> dict[str, Any]:
             "macro_stale_hours": settings.macro_stale_hours,
             "min_hold_hours": settings.min_hold_hours,
             "portfolio_risk": risk.policy_snapshot(_risk_policy(settings)),
+            "regime_variant": settings.regime_variant,
+            "live_gate_replay": {
+                "replay_execution_gate_blocks": settings.replay_execution_gate_blocks,
+                "replay_realtime_risk_blocks": settings.replay_realtime_risk_blocks,
+            },
             "execution_product": {
                 "target_product": settings.product_type,
                 "position_semantics": settings.position_semantics,
@@ -1198,6 +1258,9 @@ async def _amain(args: argparse.Namespace) -> int:
         indicator_profile_id=indicator_profile_id,
         cost_model_version=cost_scenario.cost_model_version,
         cost_scenario_id=cost_scenario.cost_scenario_id,
+        regime_variant=args.regime_variant,
+        replay_execution_gate_blocks=args.replay_execution_gate_blocks,
+        replay_realtime_risk_blocks=args.replay_realtime_risk_blocks,
         product_type=args.product,
         position_semantics=(
             parameters.POSITION_SEMANTICS if args.product == "spot" else "perp_long_short_sim"
@@ -1267,6 +1330,14 @@ def main() -> int:
         help="--split 사용 시 train 또는 test window 선택",
     )
     parser.add_argument("--slippage-bps", type=float, default=None)
+    parser.add_argument(
+        "--regime-variant",
+        choices=[regime.REGIME_VARIANT_STRICT, regime.REGIME_VARIANT_RELAXED_2OF3],
+        default=regime.REGIME_VARIANT_STRICT,
+        help="Research-only local regime classifier variant.",
+    )
+    parser.add_argument("--replay-execution-gate-blocks", action="store_true")
+    parser.add_argument("--replay-realtime-risk-blocks", action="store_true")
     parser.add_argument("--keep-open-at-end", action="store_true")
     parser.add_argument("--save", action="store_true")
     return asyncio.run(_amain(parser.parse_args()))
