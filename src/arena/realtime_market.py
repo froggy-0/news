@@ -14,7 +14,7 @@ from typing import Any
 
 import websockets
 
-from . import config, data_lake, execution_rules, parameters
+from . import config, data_lake, execution_rules, parameters, realtime_risk
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,9 @@ class RealtimeFeatureAggregator:
     latest_asks: list[tuple[float, float]] = field(default_factory=list)
     raw_counts: dict[str, int] = field(default_factory=dict)
     quality_errors: list[str] = field(default_factory=list)
+    recent_rows: list[dict[str, Any]] = field(default_factory=list)
+    recent_risk_scores: list[float] = field(default_factory=list)
+    previous_risk_state: str | None = None
 
     def add(self, event: ParsedRealtimeEvent) -> None:
         self.window_start = self.window_start or _floor_time(event.event_time, self.window_seconds)
@@ -93,6 +96,9 @@ class RealtimeFeatureAggregator:
             raw_counts=dict(self.raw_counts),
             quality_errors=list(self.quality_errors),
         )
+        enrich_feature_row_with_history(row, self.recent_rows)
+        self.recent_rows.append(row)
+        self.recent_rows = self.recent_rows[-config.REALTIME_RISK_HISTORY_WINDOWS :]
         self._reset(window_end)
         return row
 
@@ -219,6 +225,60 @@ def _realized_vol(closes: list[float]) -> float | None:
     return math.sqrt(variance)
 
 
+def _min_depth(row: dict[str, Any]) -> float | None:
+    bid_depth = _float(row.get("depth_10bp_bid_usd"))
+    ask_depth = _float(row.get("depth_10bp_ask_usd"))
+    if bid_depth is None or ask_depth is None:
+        return None
+    return min(bid_depth, ask_depth)
+
+
+def _median(values: list[float]) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2.0
+
+
+def enrich_feature_row_with_history(
+    row: dict[str, Any],
+    history_rows: list[dict[str, Any]],
+) -> None:
+    recent = [*history_rows[-4:], row]
+    prices = [value for item in recent for value in [_float(item.get("last_price"))] if value]
+    row["realized_volatility_5m"] = _realized_vol(prices)
+    if len(prices) >= 2 and prices[-2] > 0:
+        row["mid_return_1m"] = prices[-1] / prices[-2] - 1.0
+    else:
+        row["mid_return_1m"] = None
+    if prices:
+        peak = max(prices)
+        row["short_drawdown_5m"] = prices[-1] / peak - 1.0 if peak > 0 else None
+    else:
+        row["short_drawdown_5m"] = None
+
+    previous_spread = _float(history_rows[-1].get("spread_bps_avg")) if history_rows else None
+    current_spread = _float(row.get("spread_bps_avg"))
+    row["spread_widening_bps_per_min"] = (
+        current_spread - previous_spread
+        if current_spread is not None and previous_spread is not None
+        else None
+    )
+
+    current_depth = _min_depth(row)
+    baseline_depth = _median(
+        [value for item in history_rows[-20:] for value in [_min_depth(item)] if value is not None]
+    )
+    row["depth_collapse_ratio"] = (
+        max(0.0, 1.0 - current_depth / baseline_depth)
+        if current_depth is not None and baseline_depth and baseline_depth > 0
+        else None
+    )
+
+
 def parse_realtime_message(
     raw: str, *, received_at: datetime | None = None
 ) -> ParsedRealtimeEvent | None:
@@ -302,6 +362,7 @@ def build_feature_row(
     imbalance = ((bid_depth or 0.0) - (ask_depth or 0.0)) / depth_total if depth_total > 0 else None
     taker_total = trade_buy_quote + trade_sell_quote
     taker_ratio = trade_buy_quote / taker_total if taker_total > 0 else None
+    aggressive_sell_ratio = trade_sell_quote / taker_total if taker_total > 0 else None
     spread_avg = sum(spreads_bps) / len(spreads_bps) if spreads_bps else None
     realized_vol_1m = _realized_vol(kline_closes)
     volume_spike = 1.0 if kline_volumes and kline_volumes[-1] > 2.0 * _mean(kline_volumes) else 0.0
@@ -318,6 +379,8 @@ def build_feature_row(
         "depth_10bp_ask_usd": ask_depth,
         "orderbook_imbalance": imbalance,
         "taker_buy_sell_ratio": taker_ratio,
+        "aggressive_sell_ratio": aggressive_sell_ratio,
+        "trade_quote_volume": taker_total if taker_total > 0 else None,
         "realized_volatility_1m": realized_vol_1m,
         "realized_volatility_5m": None,
         "volume_spike": volume_spike,
@@ -383,7 +446,7 @@ async def run(*, symbol: str = parameters.BINANCE_SYMBOL) -> None:
                     if aggregator.should_flush(datetime.now(timezone.utc)):
                         row = aggregator.flush()
                         if row:
-                            await data_lake.record_realtime_feature_bar(row)
+                            await _record_feature_and_risk(aggregator, row)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -436,6 +499,34 @@ async def run_for_seconds(
         if not dry_run:
             await data_lake.record_realtime_feature_bar(row)
     return rows
+
+
+async def _record_feature_and_risk(
+    aggregator: RealtimeFeatureAggregator,
+    row: dict[str, Any],
+) -> None:
+    await data_lake.record_realtime_feature_bar(row)
+    if not config.ENABLE_ARENA_REALTIME_RISK:
+        return
+    decision = realtime_risk.evaluate_realtime_risk(
+        feature_row=row,
+        history_rows=aggregator.recent_rows[:-1],
+        recent_scores=aggregator.recent_risk_scores,
+        evaluated_at=datetime.now(timezone.utc),
+    )
+    await data_lake.record_realtime_risk_state(decision)
+    if decision.risk_score is not None:
+        aggregator.recent_risk_scores.append(decision.risk_score)
+        aggregator.recent_risk_scores = aggregator.recent_risk_scores[
+            -config.REALTIME_RISK_HISTORY_WINDOWS :
+        ]
+    if aggregator.previous_risk_state != decision.risk_state:
+        await data_lake.record_realtime_risk_event(
+            decision=decision,
+            previous_state=aggregator.previous_risk_state,
+            event_type="state_transition",
+        )
+        aggregator.previous_risk_state = decision.risk_state
 
 
 def main() -> int:

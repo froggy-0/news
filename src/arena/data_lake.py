@@ -14,9 +14,10 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from . import feature_registry, frequency, parameters, positions
+from . import execution_rules, feature_registry, frequency, parameters, positions
 from .execution_gate import ExecutionGateDecision
 from .market_structure import MarketStructureSnapshot
+from .realtime_risk import RealtimeRiskDecision
 from .sleeves import AllocationDecision, SleeveSignal
 
 logger = logging.getLogger(__name__)
@@ -680,13 +681,136 @@ async def record_shadow_decision(
 
 
 async def record_realtime_feature_bar(row: dict[str, Any]) -> CaptureWriteResult:
-    return await _safe_execute_optional_schema(
+    result = await _safe_execute_optional_schema(
         "arena_realtime_feature_bars.upsert",
         positions.db()
         .table("arena_realtime_feature_bars")
         .upsert(row, on_conflict="symbol,window_start,window_seconds"),
         object_name="arena_realtime_feature_bars",
     )
+    if result.ok:
+        return result
+    compatibility_row = {
+        key: value
+        for key, value in row.items()
+        if key
+        not in {
+            "aggressive_sell_ratio",
+            "trade_quote_volume",
+            "mid_return_1m",
+            "short_drawdown_5m",
+            "spread_widening_bps_per_min",
+            "depth_collapse_ratio",
+        }
+    }
+    return await _safe_execute_optional_schema(
+        "arena_realtime_feature_bars.upsert.compat",
+        positions.db()
+        .table("arena_realtime_feature_bars")
+        .upsert(compatibility_row, on_conflict="symbol,window_start,window_seconds"),
+        object_name="arena_realtime_feature_bars",
+    )
+
+
+async def record_realtime_risk_state(decision: RealtimeRiskDecision) -> CaptureWriteResult:
+    row = {
+        "symbol": decision.symbol,
+        "window_start": _ts(decision.window_start),
+        "window_end": _ts(decision.window_end),
+        "risk_state": decision.risk_state,
+        "risk_score": decision.risk_score,
+        "component_scores": decision.component_scores,
+        "trigger_reasons": decision.trigger_reasons,
+        "recommended_action": decision.recommended_action,
+        "quality_status": decision.quality_status,
+        "feature_snapshot": decision.feature_snapshot,
+        "baseline_snapshot": decision.baseline_snapshot,
+        "policy_snapshot": decision.as_dict()["policy"],
+        "risk_snapshot": decision.as_dict(),
+        "evaluated_at": _ts(decision.evaluated_at),
+    }
+    return await _safe_execute_optional_schema(
+        "arena_realtime_risk_states.upsert",
+        positions.db()
+        .table("arena_realtime_risk_states")
+        .upsert(row, on_conflict="symbol,window_start"),
+        object_name="arena_realtime_risk_states",
+    )
+
+
+async def record_realtime_risk_event(
+    *,
+    decision: RealtimeRiskDecision,
+    previous_state: str | None,
+    event_type: str,
+    run_id: str | None = None,
+    position_id: int | None = None,
+) -> CaptureWriteResult:
+    row = {
+        "run_id": run_id,
+        "symbol": decision.symbol,
+        "window_start": _ts(decision.window_start),
+        "position_id": position_id,
+        "event_type": event_type,
+        "previous_state": previous_state,
+        "risk_state": decision.risk_state,
+        "severity": _risk_event_severity(decision.risk_state),
+        "recommended_action": decision.recommended_action,
+        "risk_score": decision.risk_score,
+        "trigger_reasons": decision.trigger_reasons,
+        "risk_snapshot": decision.as_dict(),
+    }
+    return await _safe_execute_optional_schema(
+        "arena_realtime_risk_events.insert",
+        positions.db().table("arena_realtime_risk_events").insert(row),
+        object_name="arena_realtime_risk_events",
+    )
+
+
+async def fetch_latest_realtime_risk_state(
+    *,
+    symbol: str,
+    now: datetime,
+    max_age_seconds: int,
+) -> dict[str, Any] | None:
+    try:
+        res = (
+            await positions.db()
+            .table("arena_realtime_risk_states")
+            .select("*")
+            .eq("symbol", symbol)
+            .order("window_start", desc=True)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        if "arena_realtime_risk_states" in str(exc):
+            logger.info("Arena realtime risk state read skipped: %s", exc)
+            return None
+        logger.warning("Arena realtime risk state read failed: %s", exc)
+        return None
+    rows = res.data or []
+    if not rows:
+        return None
+    row = rows[0]
+    try:
+        window_end = row.get("window_end") or row.get("window_start")
+        age = (
+            execution_rules.parse_utc_datetime(now) - execution_rules.parse_utc_datetime(window_end)
+        ).total_seconds()
+    except Exception:
+        return None
+    if age > max_age_seconds:
+        return {**row, "fresh": False, "age_seconds": age}
+    return {**row, "fresh": True, "age_seconds": age}
+
+
+def _risk_event_severity(risk_state: str) -> str:
+    if risk_state in {"FORCE_EXIT_CANDIDATE", "EXIT_CANDIDATE"}:
+        return "high"
+    if risk_state == "BLOCK_ENTRY":
+        return "medium"
+    return "low"
 
 
 async def record_execution_gate(

@@ -10,7 +10,7 @@ def test_arena_parameter_snapshot_is_json_serializable() -> None:
 
     assert snapshot["params_version"] == parameters.PARAMS_VERSION
     assert snapshot["feature_set_version"] == parameters.FEATURE_SET_VERSION
-    assert snapshot["params_version"] == "arena-params-v11"
+    assert snapshot["params_version"] == "arena-params-v14"
     assert snapshot["feature_set_version"] == "arena-features-v5"
     assert snapshot["risk_model_version"] == "portfolio-risk-v1"
     assert snapshot["runtime"] == "ec2"
@@ -24,6 +24,9 @@ def test_arena_parameter_snapshot_is_json_serializable() -> None:
     assert snapshot["execution_product"]["spot_execution_only"] is True
     assert snapshot["execution_product"]["derivatives_data_usage"] == "research_features_only"
     assert snapshot["execution_gate"]["shadow_order_notional_usd"] == 1_000.0
+    assert snapshot["realtime_risk"]["risk_model_version"] == "realtime-risk-v1"
+    assert snapshot["realtime_risk"]["enabled"] is True
+    assert snapshot["realtime_risk"]["live_enabled"] is False
     assert snapshot["indicators"]["macd_fast_period"] == 12
     assert snapshot["risk_defaults"]["max_open_positions_total"] == 3
     assert snapshot["risk_defaults"]["daily_loss_limit_pct"] == 0.05
@@ -112,15 +115,15 @@ def test_arena_indicators_keep_default_contracts() -> None:
 
 def test_macd_momentum_uses_atr_threshold() -> None:
     # trending + momentum building (hist > hist_prev)
-    trending_up = {"rsi": 50.0, "bb_width": 5.0, "macd_hist_prev": 0.05}
+    trending_up = {"rsi": 50.0, "bb_width": 5.0, "adx": 25.0, "macd_hist_prev": 0.05}
     trending_dn = {"rsi": 50.0, "bb_width": 5.0, "macd_hist_prev": -0.05}
 
     # threshold=0.10: hist < 0.10*ATR → None regardless
     assert algorithms.macd_momentum({}, {"macd_hist": 0.01, "atr": 1.0, **trending_up}) is None
     assert algorithms.macd_momentum({}, {"macd_hist": 0.09, "atr": 1.0, **trending_up}) is None
-    # hist > 0.10*ATR + increasing + trending → long/short
+    # hist > 0.10*ATR + increasing + trending → spot long only
     assert algorithms.macd_momentum({}, {"macd_hist": 0.11, "atr": 1.0, **trending_up}) == "long"
-    assert algorithms.macd_momentum({}, {"macd_hist": -0.11, "atr": 1.0, **trending_dn}) == "short"
+    assert algorithms.macd_momentum({}, {"macd_hist": -0.11, "atr": 1.0, **trending_dn}) is None
     # MACD delta filter: hist must be increasing — if decreasing, None
     fading = {"rsi": 50.0, "bb_width": 5.0, "macd_hist_prev": 0.5}
     assert algorithms.macd_momentum({}, {"macd_hist": 0.3, "atr": 1.0, **fading}) is None

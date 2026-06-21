@@ -21,6 +21,7 @@ from . import (
     market_structure,
     parameters,
     positions,
+    realtime_risk,
     regime,
     risk,
     slack_notify,
@@ -344,6 +345,69 @@ def _book_execution_features(
     return features
 
 
+async def _latest_realtime_risk_features(
+    *,
+    symbol: str,
+    now: datetime,
+) -> dict:
+    row = await data_lake.fetch_latest_realtime_risk_state(
+        symbol=symbol,
+        now=now,
+        max_age_seconds=config.REALTIME_RISK_FRESHNESS_SECONDS,
+    )
+    if not row:
+        return {
+            "realtime_risk_state": None,
+            "realtime_risk_live_enabled": config.ENABLE_ARENA_REALTIME_RISK_LIVE,
+        }
+    return {
+        "realtime_risk_state": row.get("risk_state"),
+        "realtime_risk_score": row.get("risk_score"),
+        "realtime_risk_recommended_action": row.get("recommended_action"),
+        "realtime_risk_trigger_reasons": row.get("trigger_reasons") or [],
+        "realtime_risk_quality_status": row.get("quality_status"),
+        "realtime_risk_fresh": row.get("fresh", False),
+        "realtime_risk_age_seconds": row.get("age_seconds"),
+        "realtime_risk_live_enabled": config.ENABLE_ARENA_REALTIME_RISK_LIVE,
+        "realtime_risk_snapshot": row.get("risk_snapshot") or row,
+    }
+
+
+def _realtime_risk_blocks_entry(features: dict) -> bool:
+    if not config.ENABLE_ARENA_REALTIME_RISK_LIVE:
+        return False
+    if not features.get("realtime_risk_fresh"):
+        return False
+    return features.get("realtime_risk_state") in {
+        realtime_risk.STATE_BLOCK_ENTRY,
+        realtime_risk.STATE_EXIT_CANDIDATE,
+        realtime_risk.STATE_FORCE_EXIT_CANDIDATE,
+    }
+
+
+def _decision_from_snapshot(features: dict, now: datetime) -> realtime_risk.RealtimeRiskDecision:
+    snapshot = dict(features.get("realtime_risk_snapshot") or {})
+    window_start = execution_rules.parse_utc_datetime(snapshot.get("window_start") or now)
+    window_end = execution_rules.parse_utc_datetime(snapshot.get("window_end") or now)
+    return realtime_risk.RealtimeRiskDecision(
+        symbol=str(snapshot.get("symbol") or parameters.BINANCE_SYMBOL),
+        window_start=window_start,
+        window_end=window_end,
+        risk_state=str(features.get("realtime_risk_state") or realtime_risk.STATE_UNKNOWN),
+        risk_score=features.get("realtime_risk_score"),
+        component_scores=dict(snapshot.get("component_scores") or {}),
+        trigger_reasons=list(features.get("realtime_risk_trigger_reasons") or []),
+        recommended_action=str(
+            features.get("realtime_risk_recommended_action") or "shadow_block_new_spot_buy"
+        ),
+        quality_status=str(features.get("realtime_risk_quality_status") or "degraded"),
+        feature_snapshot=dict(snapshot.get("feature_snapshot") or {}),
+        baseline_snapshot=dict(snapshot.get("baseline_snapshot") or {}),
+        policy=realtime_risk.RealtimeRiskPolicy(),
+        evaluated_at=now,
+    )
+
+
 def _signal_reason(algo_id: str, signal: str | None, ind: dict, macro: dict) -> dict:
     return execution_rules.build_signal_reason(
         algo_id=algo_id,
@@ -587,6 +651,7 @@ async def _run_cycle() -> None:
         price=price,
         data_timestamp=data_timestamp,
     )
+    execution_features.update(await _latest_realtime_risk_features(symbol=profile.symbol, now=now))
 
     had_algo_error = False
     policy = _risk_policy()
@@ -688,6 +753,19 @@ async def _run_cycle() -> None:
                 action = "execution_gate_blocked"
                 skipped_reason = gate_decision.reject_reason
                 continue
+            if _realtime_risk_blocks_entry(execution_features):
+                action = "realtime_risk_blocked"
+                skipped_reason = str(execution_features.get("realtime_risk_state"))
+                capture_results.append(
+                    await data_lake.record_realtime_risk_event(
+                        decision=_decision_from_snapshot(execution_features, now),
+                        previous_state=None,
+                        event_type="live_entry_block",
+                        run_id=run_id,
+                        position_id=current_position_id,
+                    )
+                )
+                continue
 
             sl_price = execution_rules.calc_stop_loss_price(
                 signal,
@@ -780,6 +858,7 @@ async def _run_cycle() -> None:
                     "reverse",
                     "risk_blocked",
                     "execution_gate_blocked",
+                    "realtime_risk_blocked",
                 }:
                     rows = tca_shadow.build_shadow_tca_rows(
                         run_id=run_id,

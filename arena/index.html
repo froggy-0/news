@@ -5,6 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sovereign Arena — BTC Spot Paper Trading</title>
   <meta name="description" content="BTC 현물 long/flat 알고리즘 페이퍼트레이딩 아레나 — 실시간 퍼포먼스 대시보드">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" href="/logo.png">
+  <meta property="og:title" content="Sovereign Arena — BTC Spot Paper Trading">
+  <meta property="og:description" content="BTC 현물 long/flat 알고리즘 페이퍼트레이딩 아레나 — 실시간 퍼포먼스 대시보드">
+  <meta property="og:image" content="https://arena.sovereignwon.com/og-image.png">
+  <meta property="og:url" content="https://arena.sovereignwon.com">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://arena.sovereignwon.com/og-image.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow+Condensed:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -45,6 +54,7 @@
       backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
     }
     .hd-brand{display:flex;align-items:center;gap:12px}
+    .hd-logo{height:30px;width:30px;object-fit:contain;border-radius:6px;flex-shrink:0}
     .hd-title{
       font-family:'Barlow Condensed',sans-serif;
       font-size:18px;font-weight:800;letter-spacing:3px;
@@ -284,6 +294,7 @@
 
 <header class="hd" role="banner">
   <div class="hd-brand">
+    <img src="/logo.png" class="hd-logo" alt="SovereignWon">
     <span class="hd-title">SOVEREIGN ARENA</span>
     <div class="hd-sep" aria-hidden="true"></div>
     <span class="hd-sub">BTCUSDT · 4H · 현물 LONG/FLAT</span>
