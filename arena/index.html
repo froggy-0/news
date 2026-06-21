@@ -72,7 +72,7 @@
 
     /* ── Portfolio bar ────────────────────────────────────── */
     .port-bar{
-      display:grid;grid-template-columns:1fr repeat(3,auto);
+      display:grid;grid-template-columns:1fr repeat(2,auto);
       align-items:center;gap:24px;
       padding:12px 18px;
       background:var(--panel);border:1px solid var(--border);
@@ -311,11 +311,6 @@
       <div class="port-stat-sub" id="portTotalPct">—</div>
     </div>
     <div class="port-stat">
-      <div class="port-stat-lbl">실현 손익</div>
-      <div class="port-stat-val" id="portRealized">—</div>
-      <div class="port-stat-sub">청산분만</div>
-    </div>
-    <div class="port-stat">
       <div class="port-stat-lbl">진입 중</div>
       <div class="port-stat-val" id="portOpen" style="color:var(--muted2)">—</div>
       <div class="port-stat-sub" id="portOpenSub">포지션</div>
@@ -360,7 +355,6 @@
           <tr>
             <th scope="col">시각 (KST)</th>
             <th scope="col">알고리즘</th>
-            <th scope="col">방향</th>
             <th scope="col">진입가</th>
             <th scope="col">청산가</th>
             <th scope="col">수익률</th>
@@ -368,7 +362,7 @@
           </tr>
         </thead>
         <tbody id="tradeLogBody">
-          <tr><td colspan="7" style="color:var(--muted);font-size:11px;padding:20px 18px">거래 기록 불러오는 중…</td></tr>
+          <tr><td colspan="6" style="color:var(--muted);font-size:11px;padding:20px 18px">거래 기록 불러오는 중…</td></tr>
         </tbody>
       </table>
     </div>
@@ -536,8 +530,6 @@ function renderCards(stats) {
   document.getElementById('algoGrid').innerHTML = ALGO_IDS.map(algo => {
     const s   = stats[algo];
     const cfg = ALGOS[algo];
-    const dec = latestDecisions[algo];
-
     const isLong   = s.pos === 'LONG';
     const posBadge = `<span class="pos-badge ${isLong ? 'long' : 'flat'}">${s.pos}</span>`;
 
@@ -563,8 +555,6 @@ function renderCards(stats) {
 
     const uptimeTxt = s.uptimeH > 0 ? `${s.uptimeH.toFixed(0)}h` : '—';
     const wrTxt     = s.closedN > 0 ? `${s.winRate.toFixed(0)}% (${s.closedN}건)` : '—';
-    const hint      = s.pos === 'FLAT' ? signalHint(algo, dec) : null;
-
     return `<div class="ac" style="--ac:${cfg.color}" role="article" aria-label="${algo}">
       <div class="ac-head">
         <span class="ac-name">${algo.replace(/_/g, ' ')}</span>
@@ -577,9 +567,6 @@ function renderCards(stats) {
       <div class="ac-metrics">
         <div class="ac-metric"><span>총 진입 시간</span><span class="ac-metric-val">${uptimeTxt}</span></div>
         <div class="ac-metric"><span>승률</span><span class="ac-metric-val">${wrTxt}</span></div>
-        ${s.openEntry ? `<div class="ac-metric"><span>현재 진입가</span><span class="ac-metric-val">$${s.openEntry.toLocaleString()}</span></div>` : ''}
-        ${s.openWeight != null ? `<div class="ac-metric"><span>노출 (변동성)</span><span class="ac-metric-val">${s.openWeight.toFixed(2)}x</span></div>` : ''}
-        ${hint ? `<div class="ac-hint">${hint}</div>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -606,9 +593,7 @@ function renderPortfolio(stats) {
   document.getElementById('portTotal').innerHTML =
     `<span style="color:${pnlColor}">$${totalEquity.toFixed(0)}</span>`;
   document.getElementById('portTotalPct').innerHTML =
-    `<span style="color:${pnlColor}">${fmt(totalPct)}%</span>`;
-  document.getElementById('portRealized').innerHTML =
-    `<span style="color:${realColor}">${realPnl >= 0 ? '+$' : '-$'}${Math.abs(realPnl).toFixed(0)}</span>`;
+    `<span style="color:${pnlColor}">${fmt(totalPct)}%</span><span style="color:var(--muted)"> · 실현 <span style="color:${realColor}">${realPnl >= 0 ? '+$' : '-$'}${Math.abs(realPnl).toFixed(0)}</span></span>`;
   document.getElementById('portOpen').textContent  = openCount;
   document.getElementById('portOpenSub').textContent = `/ ${ALGO_IDS.length}개 진입 중`;
 }
@@ -657,7 +642,6 @@ function renderPositionStrip() {
         pnlStr    = ` · ${raw >= 0 ? '+' : '-'}$${Math.abs(w * raw * STARTING_CAPITAL).toFixed(0)}`;
       }
       const holdH = (now - new Date(p.open_time).getTime()) / 3_600_000;
-      const cur   = latestBtcPrice ? `$${Math.round(latestBtcPrice).toLocaleString()}` : '—';
       const wStr  = ` · 노출 ${w.toFixed(2)}x`;
       let slStr = '';
       if (p.stop_loss_price && p.open_price) {
@@ -672,7 +656,7 @@ function renderPositionStrip() {
           </div>
           <span class="pos-unrl" style="color:${unrlColor}">${unrlStr}</span>
         </div>
-        <div class="pos-meta">진입 $${Math.round(p.open_price).toLocaleString()} → ${cur}${pnlStr}${wStr}</div>
+        <div class="pos-meta">진입 $${Math.round(p.open_price).toLocaleString()}${pnlStr}${wStr}</div>
         <div class="pos-meta">보유 ${holdH.toFixed(1)}h · 진입 ${fmtKST(p.open_time)} KST${slStr}</div>
       </div>`;
     }).join('');
@@ -836,7 +820,7 @@ function renderLog(ps) {
 
   const body = document.getElementById('tradeLogBody');
   if (!sorted.length) {
-    body.innerHTML = `<tr><td colspan="7" style="color:var(--muted);font-size:11px;padding:20px 18px">거래 없음</td></tr>`;
+    body.innerHTML = `<tr><td colspan="6" style="color:var(--muted);font-size:11px;padding:20px 18px">거래 없음</td></tr>`;
     return;
   }
 
@@ -871,7 +855,6 @@ function renderLog(ps) {
     return `<tr class="${p.status === 'open' ? 'open-row' : ''}">
       <td style="color:var(--muted)">${ts}</td>
       <td><span class="algo-chip" style="color:${cfg.color};border-color:${cfg.color}40">${p.algo_id}</span></td>
-      <td><span class="buy-chip">▲ SPOT LONG</span></td>
       <td>$${p.open_price.toLocaleString()}</td>
       <td style="color:var(--muted2)">${exitTd}</td>
       <td>${retHtml}</td>
@@ -980,7 +963,7 @@ function renderConnectionError() {
       Supabase 연결 실패 — 데이터를 불러올 수 없습니다
     </div>`;
   document.getElementById('tradeLogBody').innerHTML =
-    `<tr><td colspan="7" style="color:var(--red);padding:20px 18px">연결 실패</td></tr>`;
+    `<tr><td colspan="6" style="color:var(--red);padding:20px 18px">연결 실패</td></tr>`;
 }
 
 function setupRealtime(client) {
