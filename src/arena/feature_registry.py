@@ -134,7 +134,7 @@ def feature_registry_rows() -> list[dict[str, Any]]:
             "lag_bars": 0,
             "is_model_input": True,
             "risk_impact": "high",
-            "description": "Fast EMA used by shadow trend_core_v1.",
+            "description": "Fast EMA used by regime_trend shadow sleeve.",
         },
         {
             "feature_name": "ema_slow",
@@ -147,7 +147,7 @@ def feature_registry_rows() -> list[dict[str, Any]]:
             "lag_bars": 0,
             "is_model_input": True,
             "risk_impact": "high",
-            "description": "Slow EMA used by shadow trend_core_v1.",
+            "description": "Slow EMA used by regime_trend shadow sleeve.",
         },
         {
             "feature_name": "return_24h",

@@ -13,7 +13,7 @@
 - `research_15m`는 raw/backtest 전용이다. readiness 전에는 scheduler에 연결하지 않는다.
 - `time_normalized_v1`이 기본 indicator profile이다. 4H RSI 14 bars의 56시간 의미를 1H 56 bars, 15m 224 bars로 환산한다.
 - `intraday_native_v1`은 비교용 후보이며 기본값이 아니다.
-- cost-aware filter는 `trend_core_v1` shadow 경로에만 적용한다.
+- cost-aware filter는 `regime_trend` shadow sleeve 경로에만 적용한다.
 
 ## 코드 위치
 

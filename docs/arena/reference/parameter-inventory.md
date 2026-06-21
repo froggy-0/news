@@ -16,8 +16,8 @@
 
 | Key | Default | Unit | Mutable | Risk | Used at | Notes |
 | --- | ---: | --- | --- | --- | --- | --- |
-| `arena.version.strategy` | `arena-spot-v1` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:13` | live paper 전략 버전 |
-| `arena.version.params` | `arena-params-v11` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:14` | params snapshot schema 기준 |
+| `arena.version.strategy` | `arena-spot-v3` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:13` | live paper 전략 버전 |
+| `arena.version.params` | `arena-params-v14` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:14` | params snapshot schema 기준 |
 | `arena.version.features` | `arena-features-v5` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:15` | feature registry 기준 |
 | `arena.runtime` | `ec2` | text | code_only | Medium | `/Users/giwon/code/news/src/arena/parameters.py:17` | Lambda와 EC2 성과 구분 |
 | `arena.market.symbol` | `BTCUSDT` | symbol | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:19` | 거래/수집 대상 |
@@ -27,6 +27,8 @@
 | `arena.frequency_shadow.enabled` | `false` | bool | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:33` | 1H frequency shadow scheduler on/off |
 | `arena.frequency_shadow.profiles` | `research_1h` | csv | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:89` | 활성화 시 자동 shadow profile 목록 |
 | `arena.realtime_collector.enabled` | `true` | bool | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:38` | 실시간 trade/book/depth feature 수집 on/off |
+| `arena.realtime_risk.enabled` | `true` | bool | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:41` | 1분 realtime risk state 저장 on/off |
+| `arena.realtime_risk.live_enabled` | `false` | bool | env_restart | Critical | `/Users/giwon/code/news/src/arena/config.py:45` | true면 최신 risk state가 신규 spot buy 차단에 사용됨 |
 | `arena.execution_gate.shadow_enabled` | `true` | bool | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:42` | paper 차단 없이 gate decision 저장 |
 | `arena.execution_gate.live_enabled` | `false` | bool | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:46` | true면 paper open 전 execution gate 차단 적용 |
 | `arena.execution.target_product` | `spot` | product | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:50` | live/paper 실행 상품. 초기 실거래 전제는 현물 |
@@ -91,6 +93,25 @@
 | `arena.shadow_tca.order_timeout_sec` | `30` | seconds | env_restart | Low | `/Users/giwon/code/news/src/arena/config.py:135` | 향후 child order lifecycle timeout 기준 |
 | `arena.shadow_tca.arrival_benchmark_sec` | `1` | seconds | env_restart | Medium | `/Users/giwon/code/news/src/arena/config.py:138` | parent order arrival benchmark 정의 |
 
+## Arena Realtime Risk Trigger
+
+| Key | Default | Unit | Mutable | Risk | Used at | Notes |
+| --- | ---: | --- | --- | --- | --- | --- |
+| `arena.realtime_risk.model_version` | `realtime-risk-v1` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:14` | 1분 risk state scoring contract |
+| `arena.realtime_risk.history_windows` | `60` | minutes | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:96` | rolling baseline window |
+| `arena.realtime_risk.freshness_seconds` | `180` | seconds | env_restart | Critical | `/Users/giwon/code/news/src/arena/config.py:103` | 4H cycle에서 최신 risk state 사용 가능 최대 age |
+| `arena.realtime_risk.weight.volatility_spike` | `0.18` | weight | code_only | High | `/Users/giwon/code/news/src/arena/realtime_risk.py:17` | 5분 변동성 spike |
+| `arena.realtime_risk.weight.spread_widening` | `0.18` | weight | code_only | High | `/Users/giwon/code/news/src/arena/realtime_risk.py:17` | spread widening |
+| `arena.realtime_risk.weight.depth_collapse` | `0.22` | weight | code_only | High | `/Users/giwon/code/news/src/arena/realtime_risk.py:17` | bid/ask 10bp depth collapse |
+| `arena.realtime_risk.weight.volume_shock` | `0.10` | weight | code_only | Medium | `/Users/giwon/code/news/src/arena/realtime_risk.py:17` | trade quote volume shock |
+| `arena.realtime_risk.weight.order_flow_imbalance` | `0.12` | weight | code_only | High | `/Users/giwon/code/news/src/arena/realtime_risk.py:17` | aggressive sell/orderbook imbalance |
+| `arena.realtime_risk.weight.expected_slippage` | `0.15` | weight | code_only | High | `/Users/giwon/code/news/src/arena/realtime_risk.py:17` | expected slippage stress |
+| `arena.realtime_risk.weight.futures_stress` | `0.05` | weight | code_only | Medium | `/Users/giwon/code/news/src/arena/realtime_risk.py:17` | 선물 funding/OI/basis 보조 stress. spot execution only |
+| `arena.realtime_risk.threshold.caution` | `0.35` | score | code_only | Medium | `/Users/giwon/code/news/src/arena/realtime_risk.py:17` | shadow reduce-size/post-only 후보 |
+| `arena.realtime_risk.threshold.block_entry` | `0.55` | score | code_only | Critical | `/Users/giwon/code/news/src/arena/realtime_risk.py:17` | live enable 시 신규 spot buy 차단 |
+| `arena.realtime_risk.threshold.exit_candidate` | `0.70` | score | code_only | Critical | `/Users/giwon/code/news/src/arena/realtime_risk.py:17` | 2 windows sustained, shadow stop tighten 후보 |
+| `arena.realtime_risk.threshold.force_exit_candidate` | `0.85` | score | code_only | Critical | `/Users/giwon/code/news/src/arena/realtime_risk.py:17` | 2 windows sustained, shadow force-exit 후보 |
+
 ## Arena Indicators
 
 | Key | Default | Unit | Mutable | Risk | Used at | Notes |
@@ -105,8 +126,8 @@
 | `arena.indicator.bb_stddev` | `2` | sigma | code_only | Low | `/Users/giwon/code/news/src/arena/parameters.py:56` | 현재는 기록 중심 |
 | `arena.indicator.atr_period` | `14` | candles | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:58` | 손절 거리 직접 영향 |
 | `arena.indicator.atr_fallback_pct` | `0.01` | pct | code_only | Medium | `/Users/giwon/code/news/src/arena/parameters.py:59` | OHLCV 부족 시 손절 거리 |
-| `arena.indicator.trend_ema_fast` | `12` | candles | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:73` | trend_core_v1 fast EMA |
-| `arena.indicator.trend_ema_slow` | `26` | candles | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:74` | trend_core_v1 slow EMA |
+| `arena.indicator.trend_ema_fast` | `12` | candles | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:73` | regime_trend shadow fast EMA |
+| `arena.indicator.trend_ema_slow` | `26` | candles | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:74` | regime_trend shadow slow EMA |
 | `arena.indicator.return_24h_bars` | `6` | 4H bars | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:75` | regime_gate_v1 24h return |
 | `arena.indicator.return_72h_bars` | `18` | 4H bars | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:76` | regime_gate_v1 72h return |
 
@@ -122,8 +143,8 @@
 | `arena.strategy.macd_atr_threshold_multiple` | `0.10` | ATR x | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:66` | MACD noise filter |
 | `arena.strategy.multi_factor_long_rsi_max` | `50` | RSI | code_only | Medium | `/Users/giwon/code/news/src/arena/parameters.py:70` | multi_factor long |
 | `arena.strategy.multi_factor_short_rsi_min` | `55` | RSI | code_only | Medium | `/Users/giwon/code/news/src/arena/parameters.py:71` | multi_factor raw short/risk-off |
-| `arena.strategy.trend_core_rsi_long_max` | `70` | RSI | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:78` | shadow trend_core_v1 long 과열 차단 |
-| `arena.strategy.trend_core_rsi_short_min` | `30` | RSI | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:79` | shadow trend_core_v1 short 과매도 차단 |
+| `arena.strategy.trend_core_rsi_long_max` | `70` | RSI | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:78` | regime_trend shadow long 과열 차단 |
+| `arena.strategy.trend_core_rsi_short_min` | `30` | RSI | code_only | Medium | `/Users/giwon/code/news/src/arena/parameters.py:79` | research 호환용. live/paper spot short에는 사용하지 않음 |
 | `arena.strategy.regime_stress_return_atr_multiple` | `3` | ATR pct x | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:81` | regime_gate_v1 stress 판정 |
 | `arena.strategy.allocator_trend_core_budget` | `0.60` | weight | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:87` | shadow trend sleeve risk budget |
 | `arena.strategy.allocator_legacy_rule_budget` | `0.40` | weight | code_only | Medium | `/Users/giwon/code/news/src/arena/parameters.py:88` | 기존 rule sleeve reserved budget |
@@ -138,7 +159,7 @@
 | `arena.hold.vix_rsi` | `8` | hours | code_only | Medium | `/Users/giwon/code/news/src/arena/parameters.py:94` | macro + RSI 혼합 |
 | `arena.hold.macd_momentum` | `8` | hours | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:95` | 4H 단일바 노이즈 제거 |
 | `arena.hold.multi_factor` | `8` | hours | code_only | Medium | `/Users/giwon/code/news/src/arena/parameters.py:96` | 복합 신호 최소 보유 |
-| `arena.hold.trend_core_v1` | `12` | hours | code_only | Medium | `/Users/giwon/code/news/src/arena/parameters.py:97` | shadow trend_core_v1 최소 보유 기준 |
+| `arena.hold.regime_trend` | `12` | hours | code_only | Medium | `/Users/giwon/code/news/src/arena/parameters.py:97` | 현물 trend sleeve 최소 보유 기준 |
 
 ## Position Ledger Snapshots
 
@@ -233,4 +254,4 @@
 2. news/provider/risk overlay 파라미터를 별도 policy registry로 분리할지 결정한다.
 3. `20260620_arena_realtime_execution_v1.sql`을 Supabase에 적용하고 readiness view를 확인한다.
 4. `arena_execution_gates` reject reason 분포를 최소 2주 이상 관찰한다.
-5. shadow 30일 이상, validation critical/high fail 0 전까지 `trend_core_v1`과 execution gate live 차단은 paper로 승격하지 않는다.
+5. shadow 30일 이상, validation critical/high fail 0 전까지 `regime_trend` shadow sleeve, execution gate live 차단, realtime risk live 차단은 paper로 승격하지 않는다.

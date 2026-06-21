@@ -167,18 +167,16 @@ def test_build_market_snapshot_and_signal_reason_are_json_safe() -> None:
 
     assert market["data_timestamp"] == "2026-06-19T00:00:00Z"
     assert market["close"] == 100.0
-    assert reason == {
-        "algo_id": "multi_factor",
-        "signal": "short",
-        "inputs": {
-            "regime_state": "BearPanic",
-            "fng": 20,
-            "vix_now": 35.0,
-            "vix_q40": 25.0,
-            "rsi": 56.0,
-            "macd_hist": -0.1,
-            "bb_pos": 0.7,
-            "atr": 1200.0,
-        },
-    }
+    assert reason["algo_id"] == "multi_factor"
+    assert reason["signal"] == "short"
+    assert reason["inputs"]["regime_state"] == "BearPanic"
+    assert reason["inputs"]["fng"] == 20
+    assert reason["inputs"]["vix_now"] == 35.0
+    assert reason["inputs"]["vix_q40"] == 25.0
+    assert reason["inputs"]["rsi"] == 56.0
+    assert reason["inputs"]["macd_hist"] == -0.1
+    assert reason["inputs"]["bb_pos"] == 0.7
+    assert reason["inputs"]["atr"] == 1200.0
+    assert "funding_zscore" in reason["inputs"]
+    assert "donchian_upper" in reason["inputs"]
     json.dumps({"market": market, "reason": reason})

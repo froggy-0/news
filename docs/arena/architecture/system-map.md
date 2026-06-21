@@ -11,6 +11,7 @@
 | spot policy | `src/arena/spot_policy.py` | raw long/short/flat 신호를 현물 long/flat 실행 action으로 변환 |
 | stream | `src/arena/stream.py` | Binance WebSocket 현재가 수신, stop-loss 감지 |
 | realtime market | `src/arena/realtime_market.py` | Binance trade/book/depth/kline stream을 1분 execution feature로 집계 |
+| realtime risk | `src/arena/realtime_risk.py` | 1분 microstructure feature를 spot entry risk state로 분류 |
 | positions | `src/arena/positions.py` | Supabase `paper_positions` CRUD |
 | algorithms | `src/arena/algorithms.py` | 5개 전략 신호 함수 |
 | indicators | `src/arena/indicators.py` | RSI, MACD hist, Bollinger position, ATR 계산 |
@@ -54,6 +55,8 @@ Execution observation path:
 Binance trade/bookTicker/depth20/kline_1m streams
   -> realtime_market.RealtimeFeatureAggregator
   -> arena_realtime_feature_bars
+  -> realtime_risk.evaluate_realtime_risk
+  -> arena_realtime_risk_states / arena_realtime_risk_events
   -> scheduler/execution_gate shadow decisions
   -> arena_execution_gates
 ```
@@ -80,6 +83,8 @@ arena_ohlcv_bars + arena_macro_snapshots
 | `arena_indicator_snapshots` | run | derived indicators |
 | `arena_decisions` | run/algo | signal/action/reason |
 | `arena_realtime_feature_bars` | symbol/window | spread/depth/imbalance/slippage/latency 1m feature |
+| `arena_realtime_risk_states` | symbol/window | 1분 realtime spot risk state |
+| `arena_realtime_risk_events` | transition/event | risk state transition과 future live block audit |
 | `arena_execution_gates` | run/algo | shadow trade/no-trade gate decision |
 | `arena_parent_orders` | parent intent | future order intent ledger |
 | `arena_child_orders` | submitted order | future exchange order ledger |
@@ -121,6 +126,7 @@ arena_ohlcv_bars + arena_macro_snapshots
 13. `supabase/migrations/20260620_arena_realtime_execution_v1.sql`
 14. `supabase/migrations/20260620_arena_tca_shadow_v1.sql`
 15. `supabase/migrations/20260620_arena_spot_semantics_v1.sql`
+16. `supabase/migrations/20260621_arena_realtime_risk_v1.sql`
 
 ## Current Known Warnings
 

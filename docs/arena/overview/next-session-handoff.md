@@ -14,11 +14,12 @@
 6. `docs/arena/research/backtest-framework-v1.md`
 7. `docs/arena/research/frequency-research-v1.md`
 8. `docs/arena/research/realtime-execution-gate-v1.md`
-9. `docs/arena/overview/decision-log.md`
+9. `docs/arena/research/realtime-risk-trigger-v1.md`
+10. `docs/arena/overview/decision-log.md`
 
 ## 현재 한 줄 상태
 
-Arena는 EC2 상시 프로세스에서 `BTCUSDT` 4H **현물 spot long/flat** paper trading을 돌도록 설계되어 있다. 데이터레이크, snapshot, backtest, validation, portfolio risk layer v1, walk-forward/report mart, market-structure shadow, frequency research v1, realtime execution gate v1, spot semantics v1 코드까지 구현됐다. 선물 데이터는 시장 구조 피처로 수집하지만 실거래/모의거래 실행은 현물 long/flat만 허용한다.
+Arena는 EC2 상시 프로세스에서 `BTCUSDT` 4H **현물 spot long/flat** paper trading을 돌도록 설계되어 있다. 데이터레이크, snapshot, backtest, validation, portfolio risk layer v1, walk-forward/report mart, market-structure shadow, frequency research v1, realtime execution gate v1, realtime risk trigger v1, spot semantics v1 코드까지 구현됐다. 선물 데이터는 시장 구조 피처로 수집하지만 실거래/모의거래 실행은 현물 long/flat만 허용한다.
 
 ## 최신 운영 확인값
 
@@ -32,7 +33,7 @@ Arena는 EC2 상시 프로세스에서 `BTCUSDT` 4H **현물 spot long/flat** pa
 | latest live run | `89c6ca1d-a62b-4c1e-97ae-c5b3d5a563cf` |
 | latest run status | `completed` |
 | latest capture | `capture_status=ok`, `capture_error_count=0`, `capture_warnings=[]` |
-| latest params | code 기준 `arena-params-v11` |
+| latest params | code 기준 `arena-params-v14` |
 | latest risk model | `portfolio-risk-v1` |
 | latest feature set | code 기준 `arena-features-v5` |
 | open positions | spot mart 기준 long만 허용. legacy synthetic short는 archive mart로 분리 |
@@ -47,7 +48,7 @@ Arena는 EC2 상시 프로세스에서 `BTCUSDT` 4H **현물 spot long/flat** pa
 
 2. 파라미터 인벤토리와 상수화
    - `src/arena/parameters.py` 중심.
-   - 현재 코드 기준은 `arena-spot-v1`, `arena-params-v11`, `arena-features-v5`, `portfolio-risk-v1`.
+   - 현재 코드 기준은 `arena-spot-v3`, `arena-params-v14`, `arena-features-v5`, `portfolio-risk-v1`.
 
 3. 재현성 snapshot
    - `paper_positions`에 strategy/params/indicator/macro/market/signal/data timestamp 계층 추가.
@@ -248,6 +249,7 @@ Realtime execution readiness:
 ```sql
 select * from arena_realtime_execution_v1_ready;
 select * from arena_execution_gate_shadow_ready;
+select * from arena_realtime_risk_v1_ready;
 ```
 
 최근 risk event:
@@ -270,6 +272,7 @@ limit 10;
 먼저 아래 migration을 Supabase SQL Editor에서 실행한다.
 
 - `/Users/giwon/code/news/supabase/migrations/20260620_arena_realtime_execution_v1.sql`
+- `/Users/giwon/code/news/supabase/migrations/20260621_arena_realtime_risk_v1.sql`
 
 확인:
 
@@ -279,6 +282,7 @@ select * from arena_shadow_vnext_ready;
 select * from arena_frequency_research_v1_ready;
 select * from arena_realtime_execution_v1_ready;
 select * from arena_execution_gate_shadow_ready;
+select * from arena_realtime_risk_v1_ready;
 ```
 
 ### 1. Realtime Execution Gate Shadow 확인
@@ -310,7 +314,32 @@ limit 20;
 
 주의: `ENABLE_ARENA_EXECUTION_GATE_LIVE=false` 기본값을 유지한다.
 
-### 2. Walk-forward 적용 상태 검증
+### 2. Realtime Risk Trigger Shadow 확인
+
+목표:
+
+- 1분 realtime risk state를 저장한다.
+- 4H 신호에는 최신 risk state snapshot만 붙인다.
+- live flag가 false인 동안 기존 `paper_positions` open/close는 바꾸지 않는다.
+
+확인:
+
+```sql
+select
+  symbol,
+  window_start,
+  risk_state,
+  risk_score,
+  recommended_action,
+  quality_status
+from arena_realtime_risk_states
+order by window_start desc
+limit 30;
+```
+
+주의: `ENABLE_ARENA_REALTIME_RISK_LIVE=false` 기본값을 유지한다.
+
+### 3. Walk-forward 적용 상태 검증
 
 CLI:
 
@@ -324,7 +353,7 @@ PYTHONPATH=src .venv/bin/python -m arena.walk_forward --profile research_1h --sa
 - `live_4h`: 3 splits 생성.
 - `research_1h`: DB에 1H raw 저장 전이라 `insufficient_data`.
 
-### 3. Backtest / Frequency Mart 적용 상태 검증
+### 4. Backtest / Frequency Mart 적용 상태 검증
 
 목표:
 

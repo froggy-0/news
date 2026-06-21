@@ -22,7 +22,7 @@
 
 | 항목 | 기본값 | 의미 |
 | --- | ---: | --- |
-| `ENABLE_ARENA_REALTIME_COLLECTOR` | `false` | SQL 적용 전 noisy write 방지 |
+| `ENABLE_ARENA_REALTIME_COLLECTOR` | `true` | 1분 realtime feature 수집 |
 | `ENABLE_ARENA_EXECUTION_GATE_SHADOW` | `true` | gate 판단은 shadow ledger에 저장 |
 | `ENABLE_ARENA_EXECUTION_GATE_LIVE` | `false` | 기존 paper open 차단하지 않음 |
 | `EXEC_GATE_ECR_MULTIPLE` | `3.0` | expected return이 비용의 3배 이상일 때만 통과 |
@@ -45,7 +45,7 @@ select * from arena_execution_gate_shadow_ready;
 2. 로컬 테스트를 통과시킨다.
 3. EC2에 코드 배포 후, 우선 기본값으로 재시작한다.
 4. `arena_execution_gates`에 4H decision gate snapshot이 쌓이는지 확인한다.
-5. realtime feature를 쌓을 준비가 되면 systemd env에 `ENABLE_ARENA_REALTIME_COLLECTOR=true`를 추가하고 재시작한다.
+5. `arena_realtime_feature_bars`가 1분 단위로 쌓이는지 확인한다.
 6. 최소 2주 이상 reject reason과 missed opportunity를 검토하기 전에는 `ENABLE_ARENA_EXECUTION_GATE_LIVE=true`로 승격하지 않는다.
 
 ## 확인 쿼리

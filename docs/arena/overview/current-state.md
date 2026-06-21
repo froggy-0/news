@@ -20,7 +20,7 @@ BTC Signal Arena는 EC2 상시 프로세스로 4H spot long/flat 페이퍼트레
 | 최신 서비스 확인 | 2026-06-20 13:22 UTC `arena.service = active`, `SubState=running`, `ExecMainStatus=0`, `NRestarts=0` |
 | 최신 live run | `35fc5768-8b4f-4ed6-8864-b3c9418475b1` |
 | 최신 live run 상태 | `completed`, `capture_status=ok`, `capture_error_count=0` |
-| 최신 live version | code 기준 `strategy_version=arena-spot-v1`, `params_version=arena-params-v11`, `feature_set_version=arena-features-v5`, `risk_model_version=portfolio-risk-v1` |
+| 최신 live version | code 기준 `strategy_version=arena-spot-v3`, `params_version=arena-params-v14`, `feature_set_version=arena-features-v5`, `risk_model_version=portfolio-risk-v1` |
 | 최신 validation | 기존 baseline 기준 `pass=8`, `warn=3`, `fail=0`, `na=1` |
 
 ## 지금까지 완료한 것
@@ -232,7 +232,7 @@ supabase/migrations/20260619_arena_portfolio_risk_layer.sql
 
 - Supabase check `arena_portfolio_risk_layer_ready`: all true.
 - EC2 재배포 완료.
-- 과거 확인 run `89c6ca1d-a62b-4c1e-97ae-c5b3d5a563cf`는 `params_version=arena-params-v2`, `risk_model_version=portfolio-risk-v1`이었다. 현재 코드 기준은 상단 표의 `arena-params-v11`이므로 다음 live run에서 v11 기록을 확인한다.
+- 과거 확인 run `89c6ca1d-a62b-4c1e-97ae-c5b3d5a563cf`는 `params_version=arena-params-v2`, `risk_model_version=portfolio-risk-v1`이었다. 현재 코드 기준은 상단 표의 `arena-params-v14`이므로 다음 live run에서 v14 기록을 확인한다.
 - 최신 run은 기존 open position 2개가 `hold`이고 나머지는 `flat_skip`이라 신규 risk gate event는 아직 없다.
 - 기존 open position은 `strategy_version=legacy`, `risk_snapshot={}` 상태다. 신규 open부터 `risk_snapshot`이 채워진다.
 
@@ -261,7 +261,7 @@ supabase/migrations/20260620_arena_market_structure_v1.sql
 
 - Binance derivatives funding/OI/basis/mark price raw capture. 이 데이터는 현재 현물 거래 실행이 아니라 market-structure research/shadow feature다.
 - 4H 판단 시점 market feature snapshot.
-- `regime_gate_v1`과 `trend_core_v1` shadow decision 저장.
+- `regime_gate_v1`과 `regime_trend` shadow sleeve decision 저장.
 - 기존 `paper_positions`는 변경하지 않음.
 
 ### 12. Frequency Research v1
@@ -286,7 +286,7 @@ supabase/migrations/20260620_arena_frequency_research_v1.sql
 - `BTCUSDT 1h 180d` 저장: 4,319 complete bars.
 - `BTCUSDT 15m 180d` 저장: 17,279 complete bars.
 - `research_1h` walk-forward: 3 splits 생성.
-- `live_4h` backtest: spot semantics 이전 smoke는 정상 완료. 신규 baseline은 `arena-spot-v1`, `arena-params-v11` 기준으로 다시 저장해야 한다.
+- `live_4h` backtest: 신규 baseline은 `arena-spot-v3`, `arena-params-v14` 기준으로 다시 저장해야 한다.
 - `live_4h` walk-forward: 3 splits 생성.
 
 주의: `ENABLE_ARENA_FREQUENCY_SHADOW=false`가 기본값이다. 활성화해도 `research_1h` shadow decision만 기록하고 `paper_positions`는 만들지 않는다.
@@ -339,6 +339,32 @@ supabase/migrations/20260620_arena_tca_shadow_v1.sql
 
 주의: `ENABLE_ARENA_EXECUTION_GATE_LIVE=false`는 유지한다. shadow TCA는 기존 paper open/close를 차단하지 않는다.
 
+### 15. Realtime Risk Trigger v1
+
+1분 realtime feature를 이용해 현물 신규 매수 위험 상태를 shadow로 기록한다. 기존 4H paper trading은 유지하고, 최신 risk state는 4H execution gate snapshot에 첨부한다.
+
+추가 코드:
+
+- `src/arena/realtime_risk.py`
+- `src/arena/realtime_market.py`의 5분 변동성, spread widening, depth collapse, aggressive sell ratio 계산
+- `src/arena/data_lake.py`의 `arena_realtime_risk_states`, `arena_realtime_risk_events` write/read
+- `src/arena/scheduler.py`의 최신 risk state snapshot 연결
+
+추가 SQL:
+
+```sql
+supabase/migrations/20260621_arena_realtime_risk_v1.sql
+```
+
+기본값:
+
+- `ENABLE_ARENA_REALTIME_RISK=true`
+- `ENABLE_ARENA_REALTIME_RISK_LIVE=false`
+- `REALTIME_RISK_HISTORY_WINDOWS=60`
+- `REALTIME_RISK_FRESHNESS_SECONDS=180`
+
+주의: live flag가 false이면 `BLOCK_ENTRY`, `EXIT_CANDIDATE`, `FORCE_EXIT_CANDIDATE`도 실제 open/close를 바꾸지 않고 shadow 원장에만 남긴다.
+
 ## 주요 결정
 
 | 결정 | 이유 |
@@ -366,6 +392,7 @@ supabase/migrations/20260620_arena_tca_shadow_v1.sql
 | Lambda 중복 경로 | 코드가 남아 있음 | 운영 비활성 유지, 추후 legacy archive/삭제 검토 |
 | Supabase SQL Editor fetch 오류 | Dashboard 문제였고 API 조회는 정상 | 복잡한 view는 필요한 컬럼만 조회 |
 | realtime/TCA SQL 적용 완료 | realtime feature/gate/order 원장과 shadow TCA mart 적용 확인 | `arena_tca_shadow_v1_ready` 모두 true |
+| realtime risk는 shadow-first | 1분 risk state를 저장하지만 live open/close를 바꾸지 않음 | `ENABLE_ARENA_REALTIME_RISK_LIVE=false` 유지 |
 | shadow TCA는 추정치 | 실제 fill이 아니라 depth snapshot 기반 visible sweep | live 승격 전 최소 14일 shadow TCA 관찰 |
 | shadow capture degraded | Binance fapi 또는 SQL 미적용 시 발생 가능 | 기존 paper trading 실패로 보지 않고 capture warning으로 해석 |
 | 중복 방향 노출 | portfolio risk gate 추가 | 신규 open 또는 risk block 발생 시 snapshot/event 확인 |
@@ -412,20 +439,26 @@ supabase/migrations/20260620_arena_tca_shadow_v1.sql
    - `arena_tca_shadow_v1_ready` 확인.
    - `arena_shadow_tca_daily_v1`의 `quality_ok_ratio`, `avg_cost_to_edge_ratio`를 최소 14일 관찰.
 
-6. **Longer data accumulation**
+6. **Step 5F: Realtime Risk Trigger 검증**
+   - `/Users/giwon/code/news/supabase/migrations/20260621_arena_realtime_risk_v1.sql` 실행.
+   - `arena_realtime_risk_v1_ready` 확인.
+   - `arena_realtime_risk_states`가 1분 단위로 쌓이는지 확인.
+   - 최소 7일 이상 shadow 기록 전에는 `ENABLE_ARENA_REALTIME_RISK_LIVE=true` 금지.
+
+7. **Longer data accumulation**
    - live forward test 누적.
    - macro snapshot 장기 이력 확보.
    - market-structure raw coverage 확보.
 
-7. **Rule parity gap tests**
+8. **Rule parity gap tests**
    - stop-loss trade가 발생하면 `stop_loss_fill_policy`가 pass/fail로 실제 검증되는지 확인.
    - funding 포함 backtest에서 `ret_pct = gross - cost + funding` 검증.
 
-8. **운영 정리**
+9. **운영 정리**
    - `deploy/deploy.sh`를 현재 EC2 경량 배포 구조에 맞게 고치거나 Git checkout 방식으로 원격 구조를 통일한다.
    - Lambda legacy 처리 방침 결정.
 
-9. **ML/RL Overlay는 나중**
+10. **ML/RL Overlay는 나중**
    - walk-forward split 최소 3개.
    - validation critical/high fail 0.
    - shadow 30일 이상.

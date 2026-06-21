@@ -25,6 +25,8 @@ def _trend_indicators(**overrides) -> dict:
         "ema_fast": 110.0,
         "ema_slow": 100.0,
         "ema_fast_slope": 1.0,
+        "adx": 25.0,
+        "donchian_upper": 99.0,
     }
     data.update(overrides)
     return data
@@ -154,13 +156,13 @@ def test_regime_gate_classifies_bull_bear_sideways_and_stress() -> None:
     )
 
 
-def test_trend_core_v1_is_shadow_only_and_symmetric() -> None:
+def test_trend_core_shadow_uses_spot_long_only_regime_trend() -> None:
     bull_macro = {"arena_regime_state": regime.REGIME_BULL_TREND}
     bear_macro = {"arena_regime_state": regime.REGIME_BEAR_TREND}
 
-    assert algorithms.trend_core_v1(bull_macro, _trend_indicators()) == "long"
+    assert algorithms.regime_trend(bull_macro, _trend_indicators()) == "long"
     assert (
-        algorithms.trend_core_v1(
+        algorithms.regime_trend(
             bear_macro,
             _trend_indicators(
                 macd_hist=-1.0,
@@ -169,9 +171,9 @@ def test_trend_core_v1_is_shadow_only_and_symmetric() -> None:
                 ema_fast_slope=-1.0,
             ),
         )
-        == "short"
+        is None
     )
-    assert "trend_core_v1" not in algorithms.ALGORITHMS
+    assert "regime_trend" in algorithms.ALGORITHMS
 
 
 def test_trend_core_shadow_cost_filter_blocks_low_edge_signal() -> None:
