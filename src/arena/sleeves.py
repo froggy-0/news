@@ -111,7 +111,7 @@ def trend_core_sleeve(
     regime_decision = regime.classify_regime(indicators, market_features, macro)
     enriched_macro = dict(macro)
     enriched_macro["arena_regime_state"] = regime_decision.regime_state
-    direction = algorithms.trend_core_v1(enriched_macro, indicators)
+    direction = algorithms.regime_trend(enriched_macro, indicators)
     cost_filter = _cost_aware_threshold(indicators, profile, cost_scenario)
     blocked_reason: str | None = None
     if direction and not cost_filter["passed"]:
@@ -122,13 +122,13 @@ def trend_core_sleeve(
     target_weight = _signed_weight(direction, parameters.ALLOCATOR_BUDGET_TREND_CORE)
     signal = SleeveSignal(
         sleeve_id="trend_core",
-        algo_id="trend_core_v1",
+        algo_id="regime_trend",
         direction=direction,
         confidence=confidence,
         raw_score=raw_score,
         target_weight=target_weight,
         reason={
-            "strategy": "trend_core_v1",
+            "strategy": "regime_trend",
             "regime": regime_decision.regime_state,
             "regime_reason": regime_decision.reason,
             "cost_filter": cost_filter,

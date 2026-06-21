@@ -63,6 +63,25 @@ def _last_valid(series: pd.Series) -> float | None:
     return float(s.iloc[-1]) if not s.empty else None
 
 
+def _last_rolling_zscore(
+    series: pd.Series,
+    window: int = 30,
+    min_periods: int = 15,
+) -> float | None:
+    """직전 window 기준 롤링 z-score의 마지막 값.
+
+    누수 방지: 호출 측에서 lag1(전일) 시리즈를 넘겨야 한다.
+    표준편차 0 또는 데이터 부족 시 None.
+    """
+    s = pd.to_numeric(series, errors="coerce")
+    if s.notna().sum() < min_periods:
+        return None
+    roll_mean = s.rolling(window, min_periods=min_periods).mean()
+    roll_std = s.rolling(window, min_periods=min_periods).std()
+    z = (s - roll_mean) / roll_std.replace(0.0, np.nan)
+    return _last_valid(z)
+
+
 def _read_precomputed_or_fallback(
     df: pd.DataFrame,
     precomputed_col: str,
@@ -105,6 +124,15 @@ def compute_regime_state(df: pd.DataFrame) -> RegimeState:
     fng = _last_valid(df.get("fng_value", pd.Series(dtype=float)))
     oi_div = _last_valid(df.get("oi_price_divergence_flag_7d", pd.Series(dtype=float)))
 
+    # 기관 ETF 순유입 z-score — 누수 방지를 위해 lag1(전일) 시리즈 사용.
+    # 양수 = 기관 매수 우위(risk-on), 큰 음수 = 기관 유출(risk-off).
+    etf_flow_col = (
+        "etf_net_inflow_usd_lag1"
+        if "etf_net_inflow_usd_lag1" in df.columns
+        else "etf_net_inflow_usd"
+    )
+    etf_flow_z = _last_rolling_zscore(df.get(etf_flow_col, pd.Series(dtype=float)))
+
     # 롤링 분위수: 사전 계산 컬럼 우선, 없으면 .tail() fallback
     vix_q_high = _read_precomputed_or_fallback(
         df, "vix_q80_90d", vix_series, _VIX_WINDOW, _VIX_MIN_PERIODS, _VIX_QUANTILE_HIGH
@@ -138,6 +166,7 @@ def compute_regime_state(df: pd.DataFrame) -> RegimeState:
         "fng": fng,
         "fng_q70": fng_q70,
         "oi_divergence_flag": oi_div,
+        "etf_flow_zscore": etf_flow_z,
     }
 
     # --- 분류 로직 ---

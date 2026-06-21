@@ -21,6 +21,7 @@ from . import (
     market_structure,
     parameters,
     positions,
+    regime,
     risk,
     slack_notify,
     sleeves,
@@ -118,6 +119,11 @@ async def _fetch_macro() -> MacroData:
             "fng": raw.get("fng"),
             "vix_now": raw.get("vix_now"),
             "vix_q40": raw.get("vix_q40"),
+            # 선물 데이터 — 현물 진입 과열 회피 필터용 (research_features_only)
+            "funding_zscore": raw.get("funding_zscore"),
+            "oi_divergence_flag": raw.get("oi_divergence_flag"),
+            # 기관 ETF 순유입 z-score — 펀더멘털 레짐 스위치 (대량 유출 시 롱 보류)
+            "etf_flow_zscore": raw.get("etf_flow_zscore"),
             "reference_date": ref_date or None,
             "stale_hours": round(stale_h, 2) if stale_h is not None else None,
         },
@@ -514,7 +520,10 @@ async def _run_cycle() -> None:
     )
     now = datetime.now(timezone.utc)
     data_timestamp = _data_timestamp(ohlcv, now)
-    macro = macro_data.signal
+    macro = dict(macro_data.signal)
+    # 로컬 4h 레짐을 주입해 알고리즘이 일관된 레짐 어휘(bull_trend 등)를 받도록 한다.
+    # (매크로 오버레이의 BullQuiet 라벨과 algorithms.py 상수 불일치 버그 수정)
+    macro["arena_regime_state"] = regime.classify_regime(ind, {}, macro).regime_state
     price = ohlcv.closes[-1]
     capture_results.extend(
         await data_lake.record_ohlcv_bars(
@@ -688,6 +697,13 @@ async def _run_cycle() -> None:
                 stop_loss_min_pct=config.STOP_LOSS_MIN_PCT,
                 stop_loss_max_pct=config.STOP_LOSS_MAX_PCT,
             )
+            # 변동성 타깃 포지션 사이징 — 고변동 축소 / 저변동 확대 (현물 0.25~1.0배).
+            position_weight = execution_rules.vol_target_weight(
+                ind.get("realized_vol_24h", 0.0),
+                target_vol=parameters.VOL_TARGET_PER_BAR,
+                weight_min=parameters.VOL_WEIGHT_MIN,
+                weight_max=parameters.VOL_WEIGHT_MAX,
+            )
             new_pos = await positions.open_position(
                 algo_id,
                 signal,
@@ -697,6 +713,7 @@ async def _run_cycle() -> None:
                 data_timestamp=data_timestamp,
                 strategy_version=parameters.STRATEGY_VERSION,
                 params_version=parameters.PARAMS_VERSION,
+                position_weight=position_weight,
                 slippage_bps=cost_scenario.slippage_bps,
                 spread_bps_round_trip=cost_scenario.spread_bps_round_trip,
                 params_snapshot=_params_snapshot(
@@ -891,7 +908,7 @@ async def _run_frequency_shadow_cycle(profile_id: str) -> None:
 
     now = datetime.now(timezone.utc)
     data_timestamp = _data_timestamp(ohlcv, now)
-    macro = macro_data.signal
+    macro = dict(macro_data.signal)
     price = ohlcv.closes[-1]
     ind = indicators.compute(
         ohlcv.highs,
@@ -900,6 +917,7 @@ async def _run_frequency_shadow_cycle(profile_id: str) -> None:
         interval=profile.interval,
         indicator_profile_id=indicator_profile_id,
     )
+    macro["arena_regime_state"] = regime.classify_regime(ind, {}, macro).regime_state
     capture_results.extend(
         await data_lake.record_ohlcv_bars(
             run_id=run_id,

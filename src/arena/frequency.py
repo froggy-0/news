@@ -188,7 +188,7 @@ FREQUENCY_PROFILES: dict[str, FrequencyProfile] = {
         embargo_hours=24,
         ecr_threshold=1.5,
         max_trades_per_day_per_algo=6.0,
-        min_hold_hours={**parameters.MIN_HOLD_HOURS, "trend_core_v1": 12.0},
+        min_hold_hours=parameters.MIN_HOLD_HOURS,
         min_hold_fallback_hours=parameters.MIN_HOLD_FALLBACK_HOURS,
     ),
     "research_15m": FrequencyProfile(
@@ -203,7 +203,7 @@ FREQUENCY_PROFILES: dict[str, FrequencyProfile] = {
         embargo_hours=12,
         ecr_threshold=1.7,
         max_trades_per_day_per_algo=12.0,
-        min_hold_hours={**parameters.MIN_HOLD_HOURS, "trend_core_v1": 12.0},
+        min_hold_hours=parameters.MIN_HOLD_HOURS,
         min_hold_fallback_hours=parameters.MIN_HOLD_FALLBACK_HOURS,
     ),
 }

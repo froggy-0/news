@@ -94,6 +94,25 @@ def stop_loss_triggered(
     return loss >= fallback_stop_loss_pct
 
 
+def vol_target_weight(
+    realized_vol: float,
+    *,
+    target_vol: float,
+    weight_min: float,
+    weight_max: float,
+) -> float:
+    """변동성 타깃 포지션 가중치 = clamp(target_vol / realized_vol, min, max).
+
+    realized_vol(4h 봉 로그수익률 표준편차)이 목표보다 크면 노출 축소,
+    작으면 확대. realized_vol 미수집(<=0) 시 보수적으로 weight_min 적용.
+    backtest·live 공용 순수 함수.
+    """
+    if realized_vol <= 0:
+        return weight_min
+    raw = target_vol / realized_vol
+    return max(weight_min, min(weight_max, raw))
+
+
 def fee_adjusted_return_pct(
     *,
     direction: str,
@@ -196,13 +215,22 @@ def build_signal_reason(
         "algo_id": algo_id,
         "signal": signal,
         "inputs": {
-            "regime_state": macro.get("regime_state"),
+            "regime_state": macro.get("arena_regime_state") or macro.get("regime_state"),
+            "overlay_regime_state": macro.get("regime_state"),
             "fng": macro.get("fng"),
             "vix_now": macro.get("vix_now"),
             "vix_q40": macro.get("vix_q40"),
+            "funding_zscore": macro.get("funding_zscore"),
+            "oi_divergence_flag": macro.get("oi_divergence_flag"),
+            "etf_flow_zscore": macro.get("etf_flow_zscore"),
             "rsi": indicators.get("rsi"),
             "macd_hist": indicators.get("macd_hist"),
             "bb_pos": indicators.get("bb_pos"),
+            "bb_width": indicators.get("bb_width"),
             "atr": indicators.get("atr"),
+            "adx": indicators.get("adx"),
+            "donchian_upper": indicators.get("donchian_upper"),
+            "donchian_lower": indicators.get("donchian_lower"),
+            "realized_vol_24h": indicators.get("realized_vol_24h"),
         },
     }

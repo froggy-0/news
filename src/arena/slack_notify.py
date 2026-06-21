@@ -23,19 +23,19 @@ VIRTUAL_CAPITAL = 1_000.0  # 알고당 가상 투자금 (USD)
 # ── 알고리즘 한/영 라벨 ──────────────────────────────────────────────────────────
 
 _ALGO_KO: dict[str, str] = {
-    "supertrend": "슈퍼트렌드",
+    "regime_trend": "레짐 트렌드",
     "fng_contrarian": "FNG 역발산",
-    "ema_cross": "EMA 삼중정렬",
+    "vix_rsi": "VIX RSI",
     "macd_momentum": "MACD 모멘텀",
-    "bb_squeeze": "BB 스퀴즈",
+    "multi_factor": "멀티팩터",
 }
 
 _ALGO_EN: dict[str, str] = {
-    "supertrend": "SUPERTREND",
+    "regime_trend": "REGIME TREND",
     "fng_contrarian": "FNG CONTRARIAN",
-    "ema_cross": "EMA CROSS",
+    "vix_rsi": "VIX RSI",
     "macd_momentum": "MACD MOMENTUM",
-    "bb_squeeze": "BB SQUEEZE",
+    "multi_factor": "MULTI FACTOR",
 }
 
 _MIN_HOLD: dict[str, float] = parameters.MIN_HOLD_HOURS
@@ -128,27 +128,19 @@ def _signal_narrative(
     dir_ko = "현물 매수" if direction == "long" else "현물 실행 제외 신호"
     rsi = ind.get("rsi", 50.0)
 
-    if algo_id == "supertrend":
-        st_dir_val = ind.get("supertrend_dir", 0)
-        st_dir = "상승 ↑" if st_dir_val > 0 else "하락 ↓"
-        upper = ind.get("supertrend_upper", 0.0)
-        lower = ind.get("supertrend_lower", 0.0)
-        price = ind.get("close", 0.0)
-        if direction == "long" and price > 0 and upper > 0:
-            upside = (upper - price) / price * 100
-            return (
-                f"슈퍼트렌드 방향이 *{st_dir}*으로 설정됨\n"
-                f"현재가 ${price:,.0f}이 하단 지지밴드 ${lower:,.0f} 위 → {dir_ko} 유지\n"
-                f"상단 저항밴드 ${upper:,.0f}까지 상승 여력 *+{upside:.1f}%*"
-            )
-        elif price > 0 and lower > 0:
-            downside = (price - lower) / price * 100
-            return (
-                f"슈퍼트렌드 방향이 *{st_dir}*으로 전환됨\n"
-                f"현재가 ${price:,.0f}이 상단 저항밴드 ${upper:,.0f} 아래 → {dir_ko}\n"
-                f"하단 지지밴드 ${lower:,.0f}까지 하락 여력 *-{downside:.1f}%*"
-            )
-        return f"슈퍼트렌드 방향 *{st_dir}* → {dir_ko} 진입"
+    if algo_id == "regime_trend":
+        regime_state = macro.get("arena_regime_state") or macro.get("regime_state", "unknown")
+        ema_fast = ind.get("ema_fast", 0.0)
+        ema_slow = ind.get("ema_slow", 0.0)
+        dc_upper = ind.get("donchian_upper", 0.0)
+        close = ind.get("close", 0.0)
+        adx = ind.get("adx", 0.0)
+        return (
+            f"레짐 *{_regime_label(regime_state)}* — 강세 추세 확인\n"
+            f"Donchian20 돌파: 종가 ${close:,.0f} > 상단 ${dc_upper:,.0f} (신고가)\n"
+            f"ADX {adx:.0f} (추세 강도 확인) + EMA 정배열 ${ema_fast:,.0f}>${ema_slow:,.0f}\n"
+            f"RSI {_rsi_label(rsi)} → {dir_ko} 진입"
+        )
 
     if algo_id == "fng_contrarian":
         fng = macro.get("fng")
@@ -165,42 +157,57 @@ def _signal_narrative(
             f'_"남들이 탐욕스러울 때 두려워하라" — 워런 버핏_'
         )
 
-    if algo_id == "ema_cross":
-        e21 = ind.get("ema_21", 0.0)
-        e55 = ind.get("ema_55", 0.0)
-        e200 = ind.get("ema_200", 0.0)
-        if direction == "long":
-            return (
-                f"단기·중기·장기 이동평균이 *완전 상승 정렬* 확인됨\n"
-                f"EMA 21 (${e21:,.0f}) `>` EMA 55 (${e55:,.0f}) `>` EMA 200 (${e200:,.0f})\n"
-                f"강한 상승 추세 확인 → {dir_ko} 진입"
-            )
+    if algo_id == "vix_rsi":
+        vix_now = macro.get("vix_now")
+        vix_q40 = macro.get("vix_q40")
+        vix_str = f"{vix_now:.1f}" if vix_now is not None else "—"
+        q40_str = f"{vix_q40:.1f}" if vix_q40 is not None else "—"
         return (
-            f"단기·중기·장기 이동평균이 *완전 하락 정렬* 확인됨\n"
-            f"EMA 21 (${e21:,.0f}) `<` EMA 55 (${e55:,.0f}) `<` EMA 200 (${e200:,.0f})\n"
-            f"강한 하락 추세 확인 → {dir_ko} 진입"
+            f"VIX *{vix_str}* < 40th percentile *{q40_str}* — 시장 공포 완화 확인\n"
+            f"RSI {_rsi_label(rsi)} — 과열 구간 진입 전\n"
+            f"변동성 안정 + 모멘텀 미과열 → {dir_ko} 진입"
         )
 
     if algo_id == "macd_momentum":
         h = ind.get("macd_hist", 0.0)
         h_prev = ind.get("macd_hist_prev", h)
         bw = ind.get("bb_width", 0.0)
+        adx = ind.get("adx", 0.0)
         trend = "모멘텀 *상승 중*" if h > h_prev else "모멘텀 *하락 중*"
         momentum_dir = "양수 (+)" if h >= 0 else "음수 (-)"
         return (
             f"MACD 히스토그램 {h:+.0f} ({momentum_dir}) — {trend}\n"
-            f"BB 밴드폭 {bw:.2f}% (추세 활성 구간 확인)\n"
-            f"RSI {_rsi_label(rsi)} — 과열 없이 {dir_ko} 진입"
+            f"BB 밴드폭 {bw:.2f}% + ADX {adx:.0f} (추세 활성 확인)\n"
+            f"RSI {_rsi_label(rsi)} — 과열·과밀 없이 {dir_ko} 진입"
         )
 
-    if algo_id == "bb_squeeze":
-        bb_w = ind.get("bb_width", 0.0)
-        bb_pos = ind.get("bb_pos", 0.5)
-        pos_desc = "상단" if bb_pos >= 0.6 else "하단"
+    if algo_id == "multi_factor":
+        regime_state = macro.get("arena_regime_state") or macro.get("regime_state", "unknown")
+        fng = macro.get("fng")
+        vix_now = macro.get("vix_now")
+        vix_q40 = macro.get("vix_q40")
+        fz = macro.get("funding_zscore")
+        f1 = regime_state in ("bull_trend", "BullQuiet", "BullHeated", "BullTrend")
+        f2 = fng is not None and fng < 60.0
+        f3 = (
+            vix_now is None
+            or (vix_q40 is not None and vix_now < vix_q40)
+            or (vix_q40 is None and vix_now < 20.0)
+        )
+        f4 = rsi < 50.0
+        f5 = fz is None or float(fz) < 1.5
+        score = sum([f1, f2, f3, f4, f5])
+        etf_z = macro.get("etf_flow_zscore")
+        fng_str = f"{fng:.0f}" if fng is not None else "—"
+        vix_str = f"{vix_now:.1f}" if vix_now is not None else "—"
+        fz_str = f"{float(fz):.1f}" if fz is not None else "—"
+        etf_str = f"기관 ETF z {float(etf_z):+.1f}" if etf_z is not None else "기관 ETF —"
         return (
-            f"BB 밴드폭 *{bb_w:.2f}%* — 변동성 *압축 (스퀴즈)* 감지\n"
-            f"가격이 밴드 *{pos_desc}* 위치 (pos={bb_pos:.2f}) + RSI {rsi:.1f} 확인\n"
-            f"수렴 후 돌파 신호 — {dir_ko} 진입"
+            f"복합 팩터 {score}/5 충족 → {dir_ko} 진입\n"
+            f"레짐 {regime_state} {'✅' if f1 else '❌'} · FNG {fng_str} {'✅' if f2 else '❌'} · "
+            f"VIX {vix_str} {'✅' if f3 else '❌'} · RSI {rsi:.1f} {'✅' if f4 else '❌'} · "
+            f"펀딩z {fz_str} {'✅' if f5 else '❌'}\n"
+            f"{etf_str} (대량 유출 시 veto)"
         )
 
     return f"RSI {_rsi_label(rsi)} → {dir_ko} 진입"

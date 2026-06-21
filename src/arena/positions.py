@@ -97,6 +97,7 @@ async def open_position(
     data_timestamp: datetime,
     strategy_version: str,
     params_version: str,
+    position_weight: float = 1.0,
     slippage_bps: float = 0.0,
     spread_bps_round_trip: float = 0.0,
     params_snapshot: dict[str, Any],
@@ -117,6 +118,7 @@ async def open_position(
         "data_timestamp": data_timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "open_price": open_price,
         "stop_loss_price": stop_loss_price,
+        "position_weight": position_weight,
         "fee_bps": config.FEE_BPS,
         "slippage_bps": slippage_bps,
         "spread_bps_round_trip": spread_bps_round_trip,
@@ -139,6 +141,7 @@ async def open_position(
         "spread_bps_round_trip",
         "product_type",
         "position_semantics",
+        "position_weight",
     )
     try:
         res = await _db().table("paper_positions").insert(payload).execute()

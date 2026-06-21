@@ -189,6 +189,91 @@ def ema_slope(closes: list[float], period: int) -> float:
     return values[-1] - values[-2]
 
 
+def donchian_channel(
+    highs: list[float],
+    lows: list[float],
+    period: int = parameters.DONCHIAN_PERIOD,
+) -> tuple[float, float, float]:
+    """Donchian 채널 — 직전 `period` 바(현재 바 제외)의 최고가/최저가.
+
+    Returns (upper, lower, mid).
+    추세추종 브레이크아웃: close > upper → 신고가 돌파(롱 진입 트리거).
+    현재(마지막) 바를 제외해야 "직전 N봉 고점 돌파" 정의가 성립한다.
+    데이터 부족 시 (0, 0, 0).
+    """
+    if len(highs) < period + 1 or len(lows) < period + 1:
+        return 0.0, 0.0, 0.0
+    window_high = highs[-period - 1 : -1]
+    window_low = lows[-period - 1 : -1]
+    upper = max(window_high)
+    lower = min(window_low)
+    return upper, lower, (upper + lower) / 2.0
+
+
+def adx(
+    highs: list[float],
+    lows: list[float],
+    closes: list[float],
+    period: int = parameters.ADX_PERIOD,
+) -> tuple[float, float, float]:
+    """Wilder ADX(14) — 추세 강도. 방향성 무관.
+
+    Returns (adx, plus_di, minus_di).
+    ADX > 25 ≈ 추세장, < 20 ≈ 횡보. +DI > -DI = 상승 우위.
+    데이터 부족 시 (0, 0, 0) — 중립(추세 약함)으로 해석.
+    """
+    n = len(closes)
+    if n < 2 * period + 1 or len(highs) < n or len(lows) < n:
+        return 0.0, 0.0, 0.0
+
+    trs: list[float] = []
+    plus_dms: list[float] = []
+    minus_dms: list[float] = []
+    for i in range(1, n):
+        up_move = highs[i] - highs[i - 1]
+        down_move = lows[i - 1] - lows[i]
+        plus_dms.append(up_move if (up_move > down_move and up_move > 0) else 0.0)
+        minus_dms.append(down_move if (down_move > up_move and down_move > 0) else 0.0)
+        trs.append(
+            max(
+                highs[i] - lows[i],
+                abs(highs[i] - closes[i - 1]),
+                abs(lows[i] - closes[i - 1]),
+            )
+        )
+
+    # Wilder 평활: 초기 period 합으로 시드 후 점화식 적용.
+    atr_w = sum(trs[:period])
+    plus_w = sum(plus_dms[:period])
+    minus_w = sum(minus_dms[:period])
+    dxs: list[float] = []
+    for i in range(period, len(trs)):
+        atr_w = atr_w - atr_w / period + trs[i]
+        plus_w = plus_w - plus_w / period + plus_dms[i]
+        minus_w = minus_w - minus_w / period + minus_dms[i]
+        if atr_w <= 0:
+            continue
+        pdi = 100.0 * plus_w / atr_w
+        mdi = 100.0 * minus_w / atr_w
+        denom = pdi + mdi
+        dxs.append(100.0 * abs(pdi - mdi) / denom if denom > 0 else 0.0)
+
+    if not dxs:
+        return 0.0, 0.0, 0.0
+
+    last_pdi = pdi if atr_w > 0 else 0.0
+    last_mdi = mdi if atr_w > 0 else 0.0
+
+    if len(dxs) < period:
+        adx_val = sum(dxs) / len(dxs)
+    else:
+        adx_val = sum(dxs[:period]) / period
+        for dx in dxs[period:]:
+            adx_val = (adx_val * (period - 1) + dx) / period
+
+    return adx_val, last_pdi, last_mdi
+
+
 def return_over_bars(closes: list[float], bars: int) -> float:
     if bars <= 0 or len(closes) <= bars:
         return 0.0
@@ -288,6 +373,12 @@ def compute(
         period=parameters.SUPERTREND_ATR_PERIOD,
         mult=parameters.SUPERTREND_MULT,
     )
+    dc_upper, dc_lower, dc_mid = donchian_channel(
+        highs,
+        lows,
+        period=parameters.DONCHIAN_PERIOD,
+    )
+    adx_val, plus_di, minus_di = adx(highs, lows, closes, period=parameters.ADX_PERIOD)
     return {
         "close": close,
         "rsi": rsi(
@@ -319,6 +410,12 @@ def compute(
         "supertrend_upper": st_upper,
         "supertrend_lower": st_lower,
         "supertrend_dir": float(st_dir),
+        "donchian_upper": dc_upper,
+        "donchian_lower": dc_lower,
+        "donchian_mid": dc_mid,
+        "adx": adx_val,
+        "plus_di": plus_di,
+        "minus_di": minus_di,
         "return_24h": return_over_bars(closes, settings.return_24h_bars),
         "return_72h": return_over_bars(closes, settings.return_72h_bars),
         "realized_vol_24h": realized_vol(closes, settings.realized_vol_24h_bars),

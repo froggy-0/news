@@ -10,8 +10,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-STRATEGY_VERSION = "arena-spot-v1"
-PARAMS_VERSION = "arena-params-v11"
+STRATEGY_VERSION = "arena-spot-v3"
+PARAMS_VERSION = "arena-params-v14"
 FEATURE_SET_VERSION = "arena-features-v5"
 RISK_MODEL_VERSION = "portfolio-risk-v1"
 RUNTIME = "ec2"
@@ -44,7 +44,7 @@ FEE_BPS = 5.0
 ATR_MULTIPLE = 2.5
 STOP_LOSS_MIN_PCT = 0.02
 STOP_LOSS_MAX_PCT = 0.08
-MACRO_STALE_HOURS = 36.0
+MACRO_STALE_HOURS = 48.0  # 일간 매크로(FNG/VIX/ETF) — 브리프 1일 지연 허용
 
 POSITION_UNIT = 1.0
 MAX_OPEN_POSITIONS_TOTAL = 3
@@ -70,6 +70,26 @@ BB_SQUEEZE_WIDTH_MAX_PCT = 3.5
 BB_SQUEEZE_BB_POS_LONG_MIN = 0.60
 BB_SQUEEZE_BB_POS_SHORT_MAX = 0.40
 BB_SQUEEZE_RSI_THRESHOLD = 50.0
+
+# Donchian 채널 브레이크아웃 (추세추종 코어 진입 트리거)
+DONCHIAN_PERIOD = 20  # 직전 20봉(4h 기준 ~3.3일) 고점 돌파 = 롱 트리거
+
+# ADX 추세강도 (whipsaw 차단 게이트)
+ADX_PERIOD = 14
+ADX_TREND_MIN = 20.0  # ADX < 20 = 추세 약함, 추세추종 진입 차단
+
+# 변동성 타깃 포지션 사이징 (보고서 최우선: 변동성 스케일링)
+# weight = clamp(TARGET_VOL_PER_BAR / realized_vol_24h, MIN, MAX)
+# realized_vol_24h = 4h 봉 로그수익률 표준편차(직전 6봉). 고변동 → 축소, 저변동 → 확대.
+VOL_TARGET_PER_BAR = 0.02  # 목표 4h 봉 변동성(2%)
+VOL_WEIGHT_MIN = 0.25  # 최소 노출 (현물: 자본의 25%)
+VOL_WEIGHT_MAX = 1.0  # 최대 노출 (현물: 레버리지 없음, 자본의 100%)
+
+# 펀딩/OI 과열 회피 (선물 데이터를 현물 진입 필터로 활용)
+FUNDING_HOT_ZSCORE = 1.5  # funding zscore 초과 시 롱 과열 — 진입 억제
+
+# 기관 ETF 순유입 (펀더멘털 레짐 = 포지션 허용 스위치)
+ETF_OUTFLOW_HEAVY_Z = -1.5  # ETF 순유입 z-score 미만 시 기관 대량 유출 — 롱 보류
 
 RSI_PERIOD = 14
 RSI_NEUTRAL = 50.0
@@ -126,12 +146,11 @@ SHADOW_ORDER_TIMEOUT_SEC = 30
 SHADOW_ARRIVAL_BENCHMARK_SEC = 1
 
 MIN_HOLD_HOURS: dict[str, float] = {
-    "supertrend": 12.0,
+    "regime_trend": 12.0,
     "fng_contrarian": 24.0,
-    "ema_cross": 12.0,
-    "macd_momentum": 8.0,  # 4H 단일바 노이즈 제거 (12h↑는 역효과 확인됨)
-    "bb_squeeze": 8.0,
-    "trend_core_v1": 12.0,
+    "vix_rsi": 12.0,
+    "macd_momentum": 8.0,
+    "multi_factor": 12.0,
 }
 MIN_HOLD_FALLBACK_HOURS = 4.0
 
@@ -191,28 +210,29 @@ def base_params_snapshot() -> dict[str, Any]:
             "atr_fallback_pct": ATR_FALLBACK_PCT,
         },
         "strategy_thresholds": {
-            "regime_long_state": REGIME_LONG_STATE,
-            "regime_short_state": REGIME_SHORT_STATE,
             "fng_long_below": FNG_LONG_BELOW,
-            "fng_short_above": FNG_SHORT_ABOVE,
-            "supertrend_atr_period": SUPERTREND_ATR_PERIOD,
-            "supertrend_mult": SUPERTREND_MULT,
-            "ema_21_period": EMA_21_PERIOD,
-            "ema_55_period": EMA_55_PERIOD,
-            "ema_200_period": EMA_200_PERIOD,
-            "bb_squeeze_width_max_pct": BB_SQUEEZE_WIDTH_MAX_PCT,
-            "bb_squeeze_bb_pos_long_min": BB_SQUEEZE_BB_POS_LONG_MIN,
-            "bb_squeeze_bb_pos_short_max": BB_SQUEEZE_BB_POS_SHORT_MAX,
-            "bb_squeeze_rsi_threshold": BB_SQUEEZE_RSI_THRESHOLD,
+            "vix_rsi_long_max": VIX_RSI_LONG_MAX,
             "macd_atr_threshold_multiple": MACD_ATR_THRESHOLD_MULTIPLE,
+            "macd_momentum_rsi_long_max": MACD_MOMENTUM_RSI_LONG_MAX,
+            "macd_momentum_bb_width_min": MACD_MOMENTUM_BB_WIDTH_MIN,
+            "multi_factor_long_rsi_max": MULTI_FACTOR_LONG_RSI_MAX,
             "trend_core_rsi_long_max": TREND_CORE_RSI_LONG_MAX,
-            "trend_core_rsi_short_min": TREND_CORE_RSI_SHORT_MIN,
             "trend_core_macd_atr_threshold_multiple": TREND_CORE_MACD_ATR_THRESHOLD_MULTIPLE,
+            "donchian_period": DONCHIAN_PERIOD,
+            "adx_period": ADX_PERIOD,
+            "adx_trend_min": ADX_TREND_MIN,
+            "funding_hot_zscore": FUNDING_HOT_ZSCORE,
+            "etf_outflow_heavy_z": ETF_OUTFLOW_HEAVY_Z,
             "regime_stress_return_atr_multiple": REGIME_STRESS_RETURN_ATR_MULTIPLE,
             "regime_stress_range_atr_multiple": REGIME_STRESS_RANGE_ATR_MULTIPLE,
             "regime_trend_bb_width_min": REGIME_TREND_BB_WIDTH_MIN,
             "regime_sideways_bb_width_max": REGIME_SIDEWAYS_BB_WIDTH_MAX,
             "regime_sideways_return_atr_multiple": REGIME_SIDEWAYS_RETURN_ATR_MULTIPLE,
+        },
+        "position_sizing": {
+            "vol_target_per_bar": VOL_TARGET_PER_BAR,
+            "vol_weight_min": VOL_WEIGHT_MIN,
+            "vol_weight_max": VOL_WEIGHT_MAX,
         },
         "risk_defaults": {
             "stop_loss_fallback_pct": STOP_LOSS_FALLBACK_PCT,

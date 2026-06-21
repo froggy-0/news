@@ -1,303 +1,282 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sovereign Arena — BTC Spot Paper Trading</title>
-  <meta name="description" content="BTC spot long/flat algorithmic paper trading arena — live performance dashboard">
+  <meta name="description" content="BTC 현물 long/flat 알고리즘 페이퍼트레이딩 아레나 — 실시간 퍼포먼스 대시보드">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&family=Exo+2:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow+Condensed:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    *{margin:0;padding:0;box-sizing:border-box}
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 
     :root{
-      --bg:#0F172A;
-      --surface:rgba(255,255,255,.04);
-      --surface-h:rgba(255,255,255,.07);
-      --border:rgba(255,255,255,.08);
-      --border-s:rgba(255,255,255,.14);
-      --text:#F1F5F9;
-      --muted:#64748B;
-      --muted2:#94A3B8;
-      --pos:#34D399;
-      --neg:#F87171;
-      --amber:#F59E0B;
+      --bg:#0B0E11;
+      --surface:#161A1E;
+      --panel:#1E2329;
+      --panel-h:#252B33;
+      --border:#2B3139;
+      --border-l:#3D4550;
+      --gold:#F0B90B;
+      --gold-a:rgba(240,185,11,.1);
+      --green:#0ECB81;
+      --green-a:rgba(14,203,129,.08);
+      --red:#F6465D;
+      --red-a:rgba(246,70,93,.08);
+      --text:#EAECEF;
+      --muted:#848E9C;
+      --muted2:#B7BDC6;
     }
 
     body{
-      font-family:'Exo 2','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
-      background:var(--bg);
-      color:var(--text);
-      min-height:100vh;
-      overflow-x:hidden;
+      font-family:'IBM Plex Mono','Apple SD Gothic Neo',monospace;
+      background:var(--bg);color:var(--text);
+      min-height:100vh;font-size:13px;line-height:1.5;
     }
 
-    body::before{
-      content:'';
-      position:fixed;inset:0;z-index:0;pointer-events:none;
-      background-image:
-        linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),
-        linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
-      background-size:44px 44px;
-    }
-
-    /* ── Header ─────────────────────────────── */
+    /* ── Header ───────────────────────────────────────────── */
     .hd{
-      position:sticky;top:0;z-index:50;
-      background:rgba(15,23,42,.88);
-      -webkit-backdrop-filter:blur(16px);
-      backdrop-filter:blur(16px);
-      border-bottom:1px solid var(--border);
-      padding:13px 24px;
+      position:sticky;top:0;z-index:100;
       display:flex;align-items:center;justify-content:space-between;
-    }
-
-    .hd-brand{display:flex;align-items:baseline;gap:12px}
-    .hd-title{
-      font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
-      font-size:14px;font-weight:700;letter-spacing:2.5px;color:var(--amber);
-    }
-    .hd-sub{font-size:11px;color:var(--muted);letter-spacing:.4px}
-
-    .hd-right{display:flex;align-items:center;gap:20px}
-    .btc-wrap{display:flex;align-items:baseline;gap:7px}
-    .btc-price{
-      font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
-      font-size:13px;font-weight:600;color:var(--text);
-    }
-    .btc-chg{font-size:11px;font-weight:500}
-    .pos-c{color:var(--pos)}.neg-c{color:var(--neg)}
-
-    .live-badge{
-      display:flex;align-items:center;gap:6px;
-      font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:9px;
-      letter-spacing:1.5px;color:var(--pos);
-    }
-    .live-dot{
-      width:6px;height:6px;border-radius:50%;background:var(--pos);
-      animation:pulse 2s ease-in-out infinite;
-    }
-
-    /* ── Main ───────────────────────────────── */
-    .wrap{
-      position:relative;z-index:1;
-      max-width:1440px;margin:0 auto;padding:24px;
-    }
-
-    /* ── Algo cards ─────────────────────────── */
-    .algo-grid{
-      display:grid;
-      grid-template-columns:repeat(5,minmax(0,1fr));
-      gap:10px;margin-bottom:18px;
-    }
-    @media(max-width:900px){.algo-grid{grid-template-columns:repeat(3,1fr)}}
-    @media(max-width:560px){.algo-grid{grid-template-columns:repeat(2,1fr)}.wrap{padding:12px}}
-
-    .ac{
-      background:var(--surface);
-      border:1px solid var(--border);
-      border-top:2px solid var(--ac);
-      padding:14px 16px;
-      transition:background 180ms,border-color 180ms;
-      cursor:default;
-    }
-    .ac:hover{background:var(--surface-h);border-color:var(--border-s)}
-
-    .ac-name{
-      font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
-      font-size:8px;letter-spacing:1.2px;
-      color:var(--ac);margin-bottom:7px;text-transform:uppercase;
-    }
-    .ac-ret{
-      font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
-      font-size:21px;font-weight:700;line-height:1;margin-bottom:9px;
-    }
-    .ac-bottom{display:flex;justify-content:space-between;align-items:flex-end}
-    .ac-stats{font-size:10px;color:var(--muted);line-height:1.7}
-    .ac-entry{font-size:9px;color:var(--ac)}
-
-    .pb{
-      font-size:9px;font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;letter-spacing:.5px;
-      padding:3px 7px;border:1px solid currentColor;
-    }
-    .pb-long{color:#60A5FA}.pb-flat{color:var(--muted)}
-
-    /* ── Panel ──────────────────────────────── */
-    .panel{
-      background:var(--surface);
-      border:1px solid var(--border);
-      padding:20px;margin-bottom:14px;
-    }
-    .ph{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
-    .ptitle{
-      font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
-      font-size:9px;letter-spacing:2px;
-      color:var(--muted2);text-transform:uppercase;
-    }
-    .pmeta{font-size:11px;color:var(--muted)}
-
-    /* ── Chart legend ───────────────────────── */
-    .legend{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:12px}
-    .li{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted2)}
-    .ll{width:18px;height:2px;flex-shrink:0;display:inline-block}
-
-    /* ── Trade log ──────────────────────────── */
-    .tlog-scroll{max-height:420px;overflow-y:auto}
-    .tlog-scroll::-webkit-scrollbar{width:3px}
-    .tlog-scroll::-webkit-scrollbar-track{background:transparent}
-    .tlog-scroll::-webkit-scrollbar-thumb{background:var(--border-s)}
-
-    .tbl{width:100%;border-collapse:collapse;font-size:12px}
-    .tbl th{
-      font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:8px;
-      letter-spacing:1.2px;color:var(--muted);text-transform:uppercase;font-weight:400;
-      padding:0 10px 10px 0;text-align:left;
+      padding:0 20px;height:52px;
+      background:rgba(11,14,17,.97);
       border-bottom:1px solid var(--border);
+      backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
     }
-    .tbl td{
-      padding:9px 10px 9px 0;
-      border-bottom:1px solid rgba(255,255,255,.04);
-      vertical-align:middle;
-      font-family:'Exo 2','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+    .hd-brand{display:flex;align-items:center;gap:12px}
+    .hd-title{
+      font-family:'Barlow Condensed',sans-serif;
+      font-size:18px;font-weight:800;letter-spacing:3px;
+      color:var(--gold);text-transform:uppercase;white-space:nowrap;
     }
-    .tbl tr:last-child td{border-bottom:none}
-    .tbl tr:hover td{background:rgba(255,255,255,.02)}
-
-    .dbadge{
-      font-size:9px;font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
-      letter-spacing:.5px;padding:2px 6px;border:1px solid;
+    .hd-sep{width:1px;height:20px;background:var(--border);flex-shrink:0}
+    .hd-sub{font-size:10px;color:var(--muted);letter-spacing:.5px;white-space:nowrap}
+    .hd-center{display:flex;align-items:baseline;gap:8px}
+    .btc-price{
+      font-size:16px;font-weight:600;letter-spacing:-.3px;
+      font-variant-numeric:tabular-nums;
     }
-    .dl{color:#60A5FA;border-color:rgba(96,165,250,.35)}
-    .ds{color:#F87171;border-color:rgba(248,113,113,.35)}
-
-    .abadge{
-      font-size:9px;font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
-      letter-spacing:.3px;padding:2px 5px;border:1px solid;
-      max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-      display:inline-block;
-    }
-
-    .rp{color:var(--pos);font-weight:600}
-    .rn{color:var(--neg);font-weight:600}
-    .ro{color:var(--muted);font-size:11px}
-    .sl-tag{
-      font-size:8px;color:var(--neg);
-      background:rgba(248,113,113,.12);
-      padding:1px 4px;margin-left:4px;letter-spacing:.5px;
+    .btc-chg{font-size:12px;font-weight:500}
+    .c-green{color:var(--green)}.c-red{color:var(--red)}.c-gold{color:var(--gold)}.c-muted{color:var(--muted)}
+    .hd-right{display:flex;align-items:center;gap:16px}
+    .kst-clock{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;letter-spacing:.2px;white-space:nowrap}
+    .live-badge{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:600;letter-spacing:1.5px;color:var(--green)}
+    .live-dot{
+      width:7px;height:7px;border-radius:50%;background:var(--green);
+      box-shadow:0 0 5px var(--green);animation:pulse 2s ease-in-out infinite;
     }
 
-    /* ── Footer ─────────────────────────────── */
-    .ft{
-      text-align:center;padding:20px 24px;
-      font-size:11px;color:var(--muted);
-      border-top:1px solid var(--border);
-    }
+    /* ── Layout ───────────────────────────────────────────── */
+    .wrap{max-width:1480px;margin:0 auto;padding:16px 20px 32px}
 
-    /* ── Skeleton ───────────────────────────── */
-    .sk{
-      background:linear-gradient(90deg,rgba(255,255,255,.04) 25%,rgba(255,255,255,.09) 50%,rgba(255,255,255,.04) 75%);
-      background-size:200% 100%;
-      animation:shimmer 1.5s infinite;
-      border-radius:2px;
-    }
-
-    /* ── Animations ─────────────────────────── */
-    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.2}}
-    @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
-    @keyframes fadeSlide{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:translateY(0)}}
-    .new-row{animation:fadeSlide .3s ease}
-
-    @media(prefers-reduced-motion:reduce){
-      *{animation-duration:.01ms!important;transition-duration:.01ms!important}
-    }
-
-    /* ── Portfolio strip ─────────────────────────────────── */
-    .port-strip{
-      display:grid;
-      grid-template-columns:1fr repeat(3,auto);
+    /* ── Portfolio bar ────────────────────────────────────── */
+    .port-bar{
+      display:grid;grid-template-columns:1fr repeat(3,auto);
       align-items:center;gap:24px;
-      background:var(--surface);
-      border:1px solid var(--border);
-      padding:14px 20px;
-      margin-bottom:14px;
+      padding:12px 18px;
+      background:var(--panel);border:1px solid var(--border);
+      margin-bottom:12px;
     }
     .port-label{
-      font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
-      font-size:9px;letter-spacing:2px;color:var(--muted2);
+      font-family:'Barlow Condensed',sans-serif;
+      font-size:11px;font-weight:500;letter-spacing:1.5px;
+      color:var(--muted);text-transform:uppercase;
     }
-    .port-block{text-align:right}
-    .port-title{font-size:10px;color:var(--muted);margin-bottom:3px}
-    .port-val{
-      font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
-      font-size:17px;font-weight:600;
-    }
-    .port-sub{font-size:11px;margin-top:2px}
+    .port-stat{text-align:right}
+    .port-stat-lbl{font-size:9px;color:var(--muted);letter-spacing:.8px;text-transform:uppercase;margin-bottom:3px}
+    .port-stat-val{font-size:18px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
+    .port-stat-sub{font-size:10px;color:var(--muted);margin-top:2px}
 
-    /* ── Algo card equity row ────────────────────────────── */
+    /* ── Algo grid ────────────────────────────────────────── */
+    .algo-grid{
+      display:grid;
+      grid-template-columns:repeat(5,1fr);
+      gap:8px;margin-bottom:12px;
+    }
+    .ac{
+      background:var(--panel);border:1px solid var(--border);
+      border-top:2px solid var(--ac);padding:12px 14px;
+      transition:background 150ms;cursor:default;
+    }
+    .ac:hover{background:var(--panel-h)}
+    .ac-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;gap:6px}
+    .ac-name{
+      font-family:'Barlow Condensed',sans-serif;
+      font-size:11px;font-weight:700;letter-spacing:1.5px;
+      color:var(--ac);text-transform:uppercase;line-height:1.3;
+    }
+    .pos-badge{
+      font-size:8px;font-weight:700;letter-spacing:1px;
+      padding:2px 7px;border:1px solid;white-space:nowrap;flex-shrink:0;
+    }
+    .pos-badge.long{color:var(--green);border-color:rgba(14,203,129,.4);background:var(--green-a)}
+    .pos-badge.flat{color:var(--muted);border-color:var(--border)}
     .ac-equity{
-      font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
-      font-size:13px;font-weight:600;
-      color:var(--muted2);margin-bottom:5px;
+      font-size:15px;font-weight:600;line-height:1;margin-bottom:3px;
+      font-variant-numeric:tabular-nums;
     }
-    .ac-hint{
+    .ac-ret{font-size:11px;margin-bottom:8px}
+    .ac-metrics{display:flex;flex-direction:column;gap:2px}
+    .ac-metric{
+      display:flex;justify-content:space-between;gap:4px;
       font-size:9px;color:var(--muted);
-      letter-spacing:.3px;margin-top:3px;
     }
+    .ac-metric-val{color:var(--muted2);text-align:right}
+    .ac-hint{font-size:8px;color:var(--muted);margin-top:3px;line-height:1.4;opacity:.8}
 
-    /* ── Algo tabs ──────────────────────────── */
-    .tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:2px}
+    /* ── Chart panel ──────────────────────────────────────── */
+    .chart-panel{
+      background:var(--panel);border:1px solid var(--border);
+      margin-bottom:12px;
+    }
+    .chart-head{
+      display:flex;justify-content:space-between;align-items:center;
+      padding:12px 18px 10px;border-bottom:1px solid var(--border);
+    }
+    .panel-title{
+      font-family:'Barlow Condensed',sans-serif;
+      font-size:11px;font-weight:700;letter-spacing:2px;
+      color:var(--muted2);text-transform:uppercase;
+    }
+    .trade-count-lbl{font-size:10px;color:var(--muted)}
+
+    .tabs{
+      display:flex;flex-wrap:nowrap;overflow-x:auto;gap:4px;
+      padding:10px 18px 0;scrollbar-width:none;
+    }
+    .tabs::-webkit-scrollbar{display:none}
     .tab{
-      font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
-      font-size:9px;letter-spacing:.8px;text-transform:uppercase;
-      padding:6px 12px;border:1px solid var(--border);
-      background:transparent;color:var(--muted);cursor:pointer;
-      transition:color 150ms,border-color 150ms,background 150ms;
+      font-family:'Barlow Condensed',sans-serif;
+      font-size:11px;font-weight:700;letter-spacing:1px;
+      text-transform:uppercase;padding:5px 13px;
+      background:transparent;border:1px solid var(--border);
+      color:var(--muted);cursor:pointer;white-space:nowrap;flex-shrink:0;
+      transition:color 120ms,border-color 120ms,background 120ms;
     }
-    .tab:hover{border-color:var(--border-s);color:var(--muted2)}
+    .tab:hover{color:var(--muted2);border-color:var(--border-l)}
     .tab.active{
-      border-color:var(--ac);color:var(--ac);
-      background:color-mix(in srgb,var(--ac) 12%,transparent);
+      color:var(--ac);border-color:var(--ac);
+      background:color-mix(in srgb,var(--ac) 10%,transparent);
     }
-    .mk-legend{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:8px;font-size:10px;color:var(--muted2)}
-    .mk-legend span{color:var(--muted)}
 
-    /* ── 현재 포지션 strip ───────────────────── */
-    .pos-strip{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 14px}
+    .chart-container{position:relative;height:420px;padding:10px 0 0}
+    #lwChartEl{height:100%;width:100%}
+
+    .chart-legend{
+      display:flex;gap:20px;flex-wrap:wrap;
+      padding:10px 18px 12px;font-size:10px;color:var(--muted);
+    }
+    .chart-legend span{color:var(--muted2)}
+
+    /* ── Position strip ───────────────────────────────────── */
+    .pos-strip{
+      padding:10px 18px;border-top:1px solid var(--border);
+      display:flex;flex-wrap:wrap;gap:10px;min-height:50px;align-items:center;
+    }
+    .pos-flat-msg{font-size:11px;color:var(--muted);padding:4px 0}
     .pos-card{
-      flex:1 1 240px;min-width:210px;
-      background:var(--surface);border:1px solid var(--border);
-      border-left:3px solid var(--dir);
-      padding:11px 14px;
+      flex:1 1 220px;min-width:200px;
+      border:1px solid var(--border);border-left:3px solid var(--pc);
+      background:var(--green-a);padding:10px 12px;
     }
-    .pos-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px}
-    .pos-left{display:flex;align-items:center;gap:8px;min-width:0}
-    .pos-dir{
-      display:inline-flex;align-items:center;gap:4px;flex-shrink:0;
-      font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
-      font-size:9px;letter-spacing:.5px;padding:3px 7px;
-      border:1px solid var(--dir);color:var(--dir);
+    .pos-card-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+    .pos-card-left{display:flex;align-items:center;gap:8px}
+    .pos-dir-badge{
+      font-size:9px;font-weight:700;letter-spacing:.5px;
+      color:var(--pc);padding:2px 6px;border:1px solid var(--pc40);
     }
-    .pos-algo{
-      font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
-      font-size:9.5px;letter-spacing:.3px;color:var(--muted2);
-      overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    .pos-algo-name{
+      font-family:'Barlow Condensed',sans-serif;
+      font-size:12px;font-weight:600;letter-spacing:.5px;color:var(--muted2);
     }
-    .pos-unrl{
-      font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
-      font-size:17px;font-weight:700;line-height:1;flex-shrink:0;
-    }
-    .pos-meta{font-size:11px;color:var(--muted2);line-height:1.7}
-    .pos-flat{color:var(--muted);font-size:12px;padding:12px 2px;letter-spacing:.3px}
+    .pos-unrl{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+    .pos-meta{font-size:10px;color:var(--muted2);line-height:1.7}
 
-    /* ── tab focus + 진입중 행 강조 ──────────── */
-    .tab:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
-    .tbl tr.open-row td{background:rgba(245,158,11,.05)}
-    .tbl tr.open-row td:first-child{box-shadow:inset 2px 0 0 var(--amber)}
-    .open-pill{
-      font-size:8px;font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
-      letter-spacing:.4px;color:var(--amber);background:rgba(245,158,11,.12);
-      padding:1px 5px;margin-left:5px;
+    /* ── Log panel ────────────────────────────────────────── */
+    .log-panel{background:var(--panel);border:1px solid var(--border)}
+    .log-head{
+      display:flex;justify-content:space-between;align-items:center;
+      padding:12px 18px;border-bottom:1px solid var(--border);
+    }
+    .tlog-scroll{max-height:380px;overflow-y:auto;overflow-x:auto}
+    .tlog-scroll::-webkit-scrollbar{width:3px;height:3px}
+    .tlog-scroll::-webkit-scrollbar-track{background:transparent}
+    .tlog-scroll::-webkit-scrollbar-thumb{background:var(--border-l)}
+
+    .tbl{width:100%;border-collapse:collapse;min-width:560px}
+    .tbl th{
+      font-size:9px;letter-spacing:1px;font-weight:400;color:var(--muted);
+      text-transform:uppercase;padding:10px 14px 10px 0;text-align:left;
+      border-bottom:1px solid var(--border);
+    }
+    .tbl th:first-child{padding-left:18px}
+    .tbl td{
+      padding:9px 14px 9px 0;
+      border-bottom:1px solid rgba(255,255,255,.03);
+      vertical-align:middle;font-size:12px;
+      font-variant-numeric:tabular-nums;
+    }
+    .tbl td:first-child{padding-left:18px}
+    .tbl tr:last-child td{border-bottom:none}
+    .tbl tr:hover td{background:rgba(255,255,255,.02)}
+    .tbl tr.open-row td{background:rgba(240,185,11,.04)}
+    .tbl tr.open-row td:first-child{box-shadow:inset 2px 0 0 var(--gold)}
+
+    .algo-chip{
+      font-size:9px;font-weight:600;letter-spacing:.4px;
+      padding:2px 6px;border:1px solid;white-space:nowrap;
+    }
+    .buy-chip{
+      font-size:9px;font-weight:700;letter-spacing:.5px;
+      color:var(--green);padding:2px 6px;
+      border:1px solid rgba(14,203,129,.35);
+    }
+    .ret-pos{color:var(--green);font-weight:600}
+    .ret-neg{color:var(--red);font-weight:600}
+    .ret-open{color:var(--muted)}
+    .open-tag{
+      font-size:8px;color:var(--gold);background:var(--gold-a);
+      padding:1px 5px;margin-left:5px;letter-spacing:.5px;
+    }
+    .sl-tag{
+      font-size:8px;color:var(--red);background:var(--red-a);
+      padding:1px 4px;margin-left:4px;
+    }
+
+    /* ── Footer ───────────────────────────────────────────── */
+    .ft{
+      text-align:center;padding:16px 20px;
+      font-size:10px;color:var(--muted);
+      border-top:1px solid var(--border);letter-spacing:.3px;
+    }
+
+    /* ── Skeleton ─────────────────────────────────────────── */
+    .sk{
+      background:linear-gradient(90deg,rgba(255,255,255,.04) 25%,rgba(255,255,255,.08) 50%,rgba(255,255,255,.04) 75%);
+      background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:1px;
+    }
+
+    /* ── Animations ───────────────────────────────────────── */
+    @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.25;transform:scale(.75)}}
+    @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+
+    /* ── Responsive ───────────────────────────────────────── */
+    @media(max-width:1080px){.algo-grid{grid-template-columns:repeat(3,1fr)}}
+    @media(max-width:640px){
+      .algo-grid{grid-template-columns:repeat(2,1fr)}
+      .chart-container{height:280px}
+      .port-bar{grid-template-columns:1fr 1fr;gap:12px}
+      .port-label{grid-column:1/-1;margin-bottom:4px}
+      .port-stat{text-align:left}
+    }
+    @media(max-width:480px){
+      .wrap{padding:10px 12px 24px}
+      .hd{padding:0 12px}
+      .hd-sub,.hd-sep{display:none}
+    }
+    @media(prefers-reduced-motion:reduce){
+      *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
     }
   </style>
 </head>
@@ -306,15 +285,17 @@
 <header class="hd" role="banner">
   <div class="hd-brand">
     <span class="hd-title">SOVEREIGN ARENA</span>
-    <span class="hd-sub">BTCUSDT · 4H · 현물 long/flat 모의투자</span>
+    <div class="hd-sep" aria-hidden="true"></div>
+    <span class="hd-sub">BTCUSDT · 4H · 현물 LONG/FLAT</span>
+  </div>
+  <div class="hd-center">
+    <span class="btc-price" id="btcPrice" aria-live="polite" aria-label="BTC 현재가">—</span>
+    <span class="btc-chg c-muted" id="btcChg">—</span>
   </div>
   <div class="hd-right">
-    <div class="btc-wrap">
-      <span class="btc-price" id="btcPrice" aria-live="polite">—</span>
-      <span class="btc-chg pos-c" id="btcChg">—</span>
-    </div>
-    <div class="live-badge" aria-label="Live realtime data">
-      <span class="live-dot" aria-hidden="true"></span>
+    <span class="kst-clock" id="kstClock" aria-live="polite"></span>
+    <div class="live-badge" aria-label="실시간 연결">
+      <span class="live-dot" id="liveDot" aria-hidden="true"></span>
       LIVE
     </div>
   </div>
@@ -322,85 +303,76 @@
 
 <main class="wrap">
 
-  <div class="port-strip" id="portfolioStrip" aria-label="Portfolio summary">
-    <div>
-      <div class="port-label">현물 포트폴리오 — 알고리즘당 $1,000 · 숏 진입 없음</div>
+  <div class="port-bar" aria-label="포트폴리오 요약">
+    <div class="port-label">현물 알고리즘당 $1,000 · 숏 진입 없음</div>
+    <div class="port-stat">
+      <div class="port-stat-lbl">총 자산</div>
+      <div class="port-stat-val" id="portTotal">—</div>
+      <div class="port-stat-sub" id="portTotalPct">—</div>
     </div>
-    <div class="port-block">
-      <div class="port-title">총 자산</div>
-      <div class="port-val" id="portTotal">—</div>
-      <div class="port-sub" id="portTotalPct" style="color:var(--muted)">—</div>
+    <div class="port-stat">
+      <div class="port-stat-lbl">실현 손익</div>
+      <div class="port-stat-val" id="portRealized">—</div>
+      <div class="port-stat-sub">청산분만</div>
     </div>
-    <div class="port-block">
-      <div class="port-title">실현 손익</div>
-      <div class="port-val" id="portRealized">—</div>
-      <div class="port-sub" id="portRealizedPct" style="color:var(--muted)">청산분만</div>
-    </div>
-    <div class="port-block">
-      <div class="port-title">활성 포지션</div>
-      <div class="port-val" id="portOpen" style="color:var(--muted2)">—</div>
-      <div class="port-sub" id="portOpenSub" style="color:var(--muted)">진입 중</div>
+    <div class="port-stat">
+      <div class="port-stat-lbl">진입 중</div>
+      <div class="port-stat-val" id="portOpen" style="color:var(--muted2)">—</div>
+      <div class="port-stat-sub" id="portOpenSub">포지션</div>
     </div>
   </div>
 
-  <section aria-label="Algorithm performance summary">
-    <div class="algo-grid" id="algoGrid">
-      <!-- skeleton placeholders -->
-      <div class="ac" style="--ac:#64748B"><div class="sk" style="height:8px;width:60%;margin-bottom:10px"></div><div class="sk" style="height:21px;width:80%;margin-bottom:10px"></div><div class="sk" style="height:10px;width:90%"></div></div>
-      <div class="ac" style="--ac:#64748B"><div class="sk" style="height:8px;width:60%;margin-bottom:10px"></div><div class="sk" style="height:21px;width:80%;margin-bottom:10px"></div><div class="sk" style="height:10px;width:90%"></div></div>
-      <div class="ac" style="--ac:#64748B"><div class="sk" style="height:8px;width:60%;margin-bottom:10px"></div><div class="sk" style="height:21px;width:80%;margin-bottom:10px"></div><div class="sk" style="height:10px;width:90%"></div></div>
-      <div class="ac" style="--ac:#64748B"><div class="sk" style="height:8px;width:60%;margin-bottom:10px"></div><div class="sk" style="height:21px;width:80%;margin-bottom:10px"></div><div class="sk" style="height:10px;width:90%"></div></div>
-      <div class="ac" style="--ac:#64748B"><div class="sk" style="height:8px;width:60%;margin-bottom:10px"></div><div class="sk" style="height:21px;width:80%;margin-bottom:10px"></div><div class="sk" style="height:10px;width:90%"></div></div>
+  <div class="algo-grid" id="algoGrid" aria-label="알고리즘 성과">
+    <div class="ac" style="--ac:#2B3139"><div class="ac-head"><div class="sk" style="height:11px;width:70%;margin-bottom:0"></div></div><div class="sk" style="height:15px;width:50%;margin-bottom:6px"></div><div class="sk" style="height:11px;width:35%;margin-bottom:10px"></div><div class="sk" style="height:9px;width:80%;margin-bottom:4px"></div><div class="sk" style="height:9px;width:60%"></div></div>
+    <div class="ac" style="--ac:#2B3139"><div class="ac-head"><div class="sk" style="height:11px;width:70%;margin-bottom:0"></div></div><div class="sk" style="height:15px;width:50%;margin-bottom:6px"></div><div class="sk" style="height:11px;width:35%;margin-bottom:10px"></div><div class="sk" style="height:9px;width:80%;margin-bottom:4px"></div><div class="sk" style="height:9px;width:60%"></div></div>
+    <div class="ac" style="--ac:#2B3139"><div class="ac-head"><div class="sk" style="height:11px;width:70%;margin-bottom:0"></div></div><div class="sk" style="height:15px;width:50%;margin-bottom:6px"></div><div class="sk" style="height:11px;width:35%;margin-bottom:10px"></div><div class="sk" style="height:9px;width:80%;margin-bottom:4px"></div><div class="sk" style="height:9px;width:60%"></div></div>
+    <div class="ac" style="--ac:#2B3139"><div class="ac-head"><div class="sk" style="height:11px;width:70%;margin-bottom:0"></div></div><div class="sk" style="height:15px;width:50%;margin-bottom:6px"></div><div class="sk" style="height:11px;width:35%;margin-bottom:10px"></div><div class="sk" style="height:9px;width:80%;margin-bottom:4px"></div><div class="sk" style="height:9px;width:60%"></div></div>
+    <div class="ac" style="--ac:#2B3139"><div class="ac-head"><div class="sk" style="height:11px;width:70%;margin-bottom:0"></div></div><div class="sk" style="height:15px;width:50%;margin-bottom:6px"></div><div class="sk" style="height:11px;width:35%;margin-bottom:10px"></div><div class="sk" style="height:9px;width:80%;margin-bottom:4px"></div><div class="sk" style="height:9px;width:60%"></div></div>
+  </div>
+
+  <div class="chart-panel">
+    <div class="chart-head">
+      <span class="panel-title">PRICE CHART</span>
+      <span class="trade-count-lbl" id="tradeCountLabel" aria-live="polite"></span>
     </div>
-  </section>
-
-  <section aria-label="가격 차트와 매매 기록">
-    <div class="panel">
-      <div class="ph">
-        <span class="ptitle">매매 차트 &amp; 기록</span>
-        <span class="pmeta" id="tradeCountLabel" aria-live="polite">불러오는 중…</span>
-      </div>
-
-      <div class="tabs" id="algoTabs" role="tablist" aria-label="알고리즘 선택"></div>
-
-      <div class="pos-strip" id="posStrip" aria-label="현재 포지션 상태" aria-live="polite"></div>
-
-      <div style="position:relative;height:320px;margin:4px 0 10px">
-        <canvas id="priceChart"
-          role="img"
-          aria-label="실제 BTC 가격 위에 선택한 알고리즘의 진입·청산 지점을 마커로 표시한 차트.">
-        </canvas>
-        <div id="priceChartPlaceholder" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center">
-          <span style="font-family:'Orbitron','Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:10px;letter-spacing:1.5px;color:#334155">가격 데이터 불러오는 중…</span>
-        </div>
-      </div>
-
-      <div class="mk-legend" aria-hidden="true">
-        <div>▲ <span>현물 매수</span></div>
-        <div>● <span>청산</span></div>
-        <div><span>색 = 알고리즘</span></div>
-      </div>
-
-      <div class="tlog-scroll" role="region" aria-label="Scrollable trade history">
-        <table class="tbl" role="table" aria-label="Trade history">
-          <thead>
-            <tr>
-              <th scope="col">시각 (KST)</th>
-              <th scope="col">알고리즘</th>
-              <th scope="col">방향</th>
-              <th scope="col">진입가</th>
-              <th scope="col">청산가</th>
-              <th scope="col">수익률</th>
-              <th scope="col">보유</th>
-            </tr>
-          </thead>
-          <tbody id="tradeLogBody">
-            <tr><td colspan="7" style="color:var(--muted);font-size:11px;padding:20px 0">거래 기록 불러오는 중…</td></tr>
-          </tbody>
-        </table>
-      </div>
+    <div class="tabs" id="algoTabs" role="tablist" aria-label="알고리즘 선택"></div>
+    <div class="chart-container">
+      <div id="lwChartEl" role="img" aria-label="BTC 4H 캔들차트 — 알고리즘 진입·청산 마커 포함"></div>
     </div>
-  </section>
+    <div class="chart-legend" aria-hidden="true">
+      <div>▲ <span>매수 진입 (알고 색상)</span></div>
+      <div>▼ <span>청산 (초록=수익 / 빨강=손실)</span></div>
+      <div>── <span>진입가선</span></div>
+      <div>⋯ <span>손절선</span></div>
+    </div>
+    <div class="pos-strip" id="posStrip" aria-label="진입 중 포지션" aria-live="polite">
+      <span class="pos-flat-msg">진입 중인 포지션 없음</span>
+    </div>
+  </div>
+
+  <div class="log-panel">
+    <div class="log-head">
+      <span class="panel-title">TRADE LOG</span>
+    </div>
+    <div class="tlog-scroll" role="region" aria-label="거래 기록">
+      <table class="tbl" role="table" aria-label="거래 목록">
+        <thead>
+          <tr>
+            <th scope="col">시각 (KST)</th>
+            <th scope="col">알고리즘</th>
+            <th scope="col">방향</th>
+            <th scope="col">진입가</th>
+            <th scope="col">청산가</th>
+            <th scope="col">수익률</th>
+            <th scope="col">보유</th>
+          </tr>
+        </thead>
+        <tbody id="tradeLogBody">
+          <tr><td colspan="7" style="color:var(--muted);font-size:11px;padding:20px 18px">거래 기록 불러오는 중…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 
 </main>
 
@@ -410,59 +382,93 @@
   <span id="lastUpdate"></span>
 </footer>
 
-<!-- ═══ Scripts ═══════════════════════════════════════════════ -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 'use strict';
 
-// ┌─────────────────────────────────────────────────────────┐
-// │  CONFIG  — replace before deploy                        │
-// │                                                         │
-// │  Supabase → Project Settings → API                      │
-// │  Required RLS: arena_spot_position_mart_v1 — public SELECT
-// │  Realtime trigger: paper_positions changes              │
-// └─────────────────────────────────────────────────────────┘
 const SUPABASE_URL      = 'https://etscgpquupksucbyrvhh.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_mTGwRZeCCzBQnUORrFqQUg_iMFCSQes';
 
-const IS_MOCK = SUPABASE_URL.startsWith('__');
-
-// ── Algo visual config ────────────────────────────────────
 const ALGOS = {
-  supertrend:     { color: '#60A5FA' },
+  regime_trend:   { color: '#60A5FA' },
   fng_contrarian: { color: '#F59E0B' },
-  ema_cross:      { color: '#A78BFA', dash: [5, 3] },
+  vix_rsi:        { color: '#A78BFA' },
   macd_momentum:  { color: '#34D399' },
-  bb_squeeze:     { color: '#FB923C' },
+  multi_factor:   { color: '#FB923C' },
 };
 const ALGO_IDS = Object.keys(ALGOS);
-const STARTING_CAPITAL = 1000; // virtual USD per algo
+const STARTING_CAPITAL = 1000;
 
-// ── Mock data (mirrors arena_spot_position_mart_v1 schema) ─
-const MOCK = [
-  { id:1,  algo_id:'supertrend',     direction:'long', status:'closed', open_time:'2026-06-01T04:05:00Z', close_time:'2026-06-03T12:05:00Z', open_price:98200,  close_price:99800,  ret_pct:0.0161, hit:true,  hold_hours:56, is_stop_loss:false, strategy_version:'arena-spot-v1', product_type:'spot', position_semantics:'spot_long_flat' },
-  { id:2,  algo_id:'supertrend',     direction:'long', status:'open',   open_time:'2026-06-17T20:05:00Z', close_time:null,                   open_price:103800, close_price:null,   ret_pct:null,   hit:null,  hold_hours:null, is_stop_loss:false, strategy_version:'arena-spot-v1', product_type:'spot', position_semantics:'spot_long_flat' },
-  { id:3,  algo_id:'fng_contrarian', direction:'long', status:'closed', open_time:'2026-06-05T12:05:00Z', close_time:'2026-06-09T00:05:00Z', open_price:100200, close_price:102100, ret_pct:0.0180, hit:true,  hold_hours:84, is_stop_loss:false, strategy_version:'arena-spot-v1', product_type:'spot', position_semantics:'spot_long_flat' },
-  { id:4,  algo_id:'ema_cross',      direction:'long', status:'closed', open_time:'2026-06-15T04:05:00Z', close_time:'2026-06-17T04:05:00Z', open_price:103900, close_price:103200, ret_pct:-0.0077, hit:false, hold_hours:48, is_stop_loss:false, strategy_version:'arena-spot-v1', product_type:'spot', position_semantics:'spot_long_flat' },
-  { id:5,  algo_id:'macd_momentum',  direction:'long', status:'closed', open_time:'2026-06-10T20:05:00Z', close_time:'2026-06-13T04:05:00Z', open_price:102500, close_price:104100, ret_pct:0.0146, hit:true,  hold_hours:56, is_stop_loss:false, strategy_version:'arena-spot-v1', product_type:'spot', position_semantics:'spot_long_flat' },
-  { id:6,  algo_id:'bb_squeeze',     direction:'long', status:'closed', open_time:'2026-06-13T12:05:00Z', close_time:'2026-06-15T00:05:00Z', open_price:103500, close_price:103800, ret_pct:0.0019, hit:true,  hold_hours:36, is_stop_loss:false, strategy_version:'arena-spot-v1', product_type:'spot', position_semantics:'spot_long_flat' },
-];
+const TAB_LABELS = {
+  all: '전체',
+  regime_trend: 'REGIME',
+  fng_contrarian: 'FNG',
+  vix_rsi: 'VIX',
+  macd_momentum: 'MACD',
+  multi_factor: 'MULTI',
+};
 
-// ── State ─────────────────────────────────────────────────
+const ALGO_NEEDS = {
+  regime_trend:   '강세레짐 + Donchian20 돌파 + ADX>20 + EMA 정배열',
+  fng_contrarian: 'FNG < 30 공포 역발산 (하락장 제외)',
+  vix_rsi:        'VIX < 40th pct + RSI < 50 (하락장 제외)',
+  macd_momentum:  'MACD 증가 + ADX>20 + BB 확장 (과열 제외)',
+  multi_factor:   '레짐·FNG·VIX·RSI·펀딩 5개 중 4개 (기관 유출 veto)',
+};
+
 let positions = [];
-let latestDecisions = {}; // algo_id → latest arena_decisions row
+let latestDecisions = {};
+let latestBtcPrice = null;
+let ohlcv = [];
+let lwChart = null;
+let candleSeries = null;
+let priceLinesOpen = [];
+let activeTab = 'all';
 
-// ── Data processing ───────────────────────────────────────
-let latestBtcPrice = null; // updated by fetchBtcPrice()
-let ohlcv = [];            // Binance 4h klines: [{x: openTimeMs, y: close}]
-let priceChart = null;
-let activeTab = 'all';     // 'all' | algo_id
 const TAB_DEFS = [
-  { id: 'all', label: '전체', color: '#F59E0B' },
-  ...ALGO_IDS.map(a => ({ id: a, label: a, color: ALGOS[a].color })),
+  { id: 'all', label: '전체', color: '#F0B90B' },
+  ...ALGO_IDS.map(a => ({ id: a, label: TAB_LABELS[a] || a, color: ALGOS[a].color })),
 ];
 
+/* ── Helpers ───────────────────────────────────────────────── */
+function fmtKST(isoOrMs) {
+  const d = typeof isoOrMs === 'number' ? new Date(isoOrMs) : new Date(isoOrMs);
+  return d.toLocaleString('ko-KR', {
+    month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false, timeZone: 'Asia/Seoul',
+  });
+}
+function fmtKSTFull(ms) {
+  return new Date(ms).toLocaleString('ko-KR', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false, timeZone: 'Asia/Seoul',
+  });
+}
+
+function snapToBar(epochSec) {
+  if (!ohlcv.length) return epochSec;
+  let closest = ohlcv[0].time, minDist = Math.abs(ohlcv[0].time - epochSec);
+  for (const bar of ohlcv) {
+    const d = Math.abs(bar.time - epochSec);
+    if (d < minDist) { minDist = d; closest = bar.time; }
+  }
+  return closest;
+}
+
+function calcUptimeHours(ps, algoId) {
+  let h = 0;
+  for (const p of ps) {
+    if (p.algo_id !== algoId) continue;
+    if (p.status === 'closed') h += p.hold_hours || 0;
+    else if (p.status === 'open') h += (Date.now() - new Date(p.open_time).getTime()) / 3_600_000;
+  }
+  return h;
+}
+
+/* ── Algo stats ─────────────────────────────────────────────── */
 function algoStats(ps) {
   const out = {};
   for (const algo of ALGO_IDS) {
@@ -472,302 +478,147 @@ function algoStats(ps) {
     const open = all.find(p => p.status === 'open');
     const wins = done.filter(p => p.hit).length;
 
-    // compounded equity from closed trades
+    // 변동성 타깃 가중치 반영: equity = Π(1 + weight × ret_pct)
     let equity = STARTING_CAPITAL;
-    for (const p of done) equity *= (1 + (p.ret_pct || 0));
-
-    // unrealized P&L for open position
-    let unrealizedPct = null;
-    let equityTotal = equity;
-    if (open && latestBtcPrice && open.open_price) {
-      const raw = (latestBtcPrice - open.open_price) / open.open_price;
-      unrealizedPct = raw * 100;
-      equityTotal = equity * (1 + raw);
+    for (const p of done) {
+      const w = p.position_weight != null ? p.position_weight : 1;
+      equity *= (1 + w * (p.ret_pct || 0));
     }
 
-    const totalRet = done.reduce((s, p) => s + p.ret_pct, 0) * 100;
+    let unrealizedPct = null, equityTotal = equity, openWeight = null;
+    if (open && latestBtcPrice && open.open_price) {
+      const w = open.position_weight != null ? open.position_weight : 1;
+      openWeight = w;
+      const raw = (latestBtcPrice - open.open_price) / open.open_price;
+      unrealizedPct = raw * 100;          // 원시 가격 변동(직관적 표시)
+      equityTotal = equity * (1 + w * raw); // 가중 자산
+    }
+
+    // 수익률 = 가중 자산 기준 (표시 자산과 일치)
+    const totalRet = (equity / STARTING_CAPITAL - 1) * 100;
+    const uptimeH  = calcUptimeHours(ps, algo);
 
     out[algo] = {
       totalRet:      parseFloat(totalRet.toFixed(2)),
       winRate:       done.length ? parseFloat((wins / done.length * 100).toFixed(1)) : null,
       closedN:       done.length,
-      totalN:        all.length,
       pos:           open ? open.direction.toUpperCase() : 'FLAT',
       openEntry:     open ? open.open_price : null,
+      openWeight:    openWeight,
       unrealizedPct: unrealizedPct != null ? parseFloat(unrealizedPct.toFixed(2)) : null,
       hasAnyTrade:   all.length > 0,
       equity:        parseFloat(equity.toFixed(2)),
       equityTotal:   parseFloat(equityTotal.toFixed(2)),
       pnl:           parseFloat((equityTotal - STARTING_CAPITAL).toFixed(2)),
+      uptimeH:       parseFloat(uptimeH.toFixed(1)),
     };
   }
   return out;
 }
 
-const ALGO_NEEDS = {
-  supertrend:     'ATR(10,3) band direction',
-  fng_contrarian: 'FNG < 30 or FNG > 70',
-  ema_cross:      '21 EMA / 55 EMA / 200 EMA alignment',
-  macd_momentum:  'MACD hist + RSI + BB filter',
-  bb_squeeze:     'BB width < 3.5% + position + RSI',
-};
-
 function signalHint(algo, dec) {
   if (dec) {
     const inp = (dec.reason && dec.reason.inputs) || {};
-    const act = dec.action || '';
-    if (act === 'hold') return null;
+    if (dec.action === 'hold') return null;
     switch (algo) {
-      case 'supertrend':
-        if (inp.supertrend_dir != null) return `ST dir: ${inp.supertrend_dir > 0 ? 'up' : 'down'}`;
-        break;
-      case 'ema_cross':
-        if (inp.ema_21 != null) return `21/${inp.ema_21.toFixed(0)} 55/${inp.ema_55 != null ? inp.ema_55.toFixed(0) : '—'}`;
-        break;
-      case 'bb_squeeze':
-        if (inp.bb_width != null) return `BB width ${inp.bb_width.toFixed(1)}%`;
-        break;
-      case 'fng_contrarian':
-        if (inp.fng != null) return `FNG ${inp.fng}`;
-        break;
-      case 'macd_momentum':
-        if (inp.macd_hist != null) return `MACD ${inp.macd_hist.toFixed(0)}`;
-        break;
+      case 'regime_trend':    if (inp.regime_state != null) return `레짐 ${inp.regime_state}${inp.adx != null ? ` · ADX ${inp.adx.toFixed(0)}` : ''}`; break;
+      case 'fng_contrarian':  if (inp.fng != null) return `FNG ${inp.fng}`; break;
+      case 'vix_rsi':         if (inp.vix_now != null) return `VIX ${inp.vix_now.toFixed(1)}`; break;
+      case 'macd_momentum':   if (inp.macd_hist != null) return `MACD ${inp.macd_hist.toFixed(0)}${inp.adx != null ? ` · ADX ${inp.adx.toFixed(0)}` : ''}`; break;
+      case 'multi_factor':    if (inp.fng != null) return `FNG ${inp.fng} · VIX ${inp.vix_now != null ? inp.vix_now.toFixed(1) : '—'}${inp.etf_flow_zscore != null ? ` · ETF z${inp.etf_flow_zscore >= 0 ? '+' : ''}${inp.etf_flow_zscore.toFixed(1)}` : ''}`; break;
     }
   }
   return ALGO_NEEDS[algo] || null;
 }
 
-// ── Render: algo cards ────────────────────────────────────
+/* ── Render: algo cards ─────────────────────────────────────── */
 function renderCards(stats) {
   document.getElementById('algoGrid').innerHTML = ALGO_IDS.map(algo => {
-    const s = stats[algo];
+    const s   = stats[algo];
     const cfg = ALGOS[algo];
-    const posCls = s.pos === 'LONG' ? 'pb-long' : 'pb-flat';
     const dec = latestDecisions[algo];
 
-    // Equity display (always show $)
-    const eqColor = s.pnl >= 0 ? '#34D399' : '#F87171';
-    const eqSign  = s.pnl >= 0 ? '+' : '';
-    const eqHtml = `<div class="ac-equity" style="color:${s.hasAnyTrade ? eqColor : 'var(--muted)'}" aria-label="Virtual equity">
-      ${s.hasAnyTrade ? `$${s.equityTotal.toFixed(0)}` : '$1,000'}
-      <span style="font-size:10px;opacity:.6;margin-left:4px">${s.hasAnyTrade ? `(${eqSign}${s.pnl.toFixed(2)})` : ''}</span>
-    </div>`;
+    const isLong   = s.pos === 'LONG';
+    const posBadge = `<span class="pos-badge ${isLong ? 'long' : 'flat'}">${s.pos}</span>`;
 
-    // Return % line
-    let retHtml;
+    const eqColor = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    const eqSign  = s.pnl >= 0 ? '+' : '-';
+    const eqVal   = s.hasAnyTrade ? `$${s.equityTotal.toFixed(0)}` : '$1,000';
+    const eqSub   = s.hasAnyTrade
+      ? ` <span style="font-size:10px;opacity:.65;color:${eqColor}">(${eqSign}$${Math.abs(s.pnl).toFixed(2)})</span>`
+      : '';
+
+    let retTxt, retColor;
     if (!s.hasAnyTrade) {
-      retHtml = `<div class="ac-ret" style="color:var(--muted);font-size:14px">신호 대기</div>`;
+      retTxt = '신호 대기'; retColor = 'var(--muted)';
     } else if (s.closedN === 0 && s.unrealizedPct != null) {
-      const uc = s.unrealizedPct >= 0 ? '#34D399' : '#F87171';
-      const us = s.unrealizedPct >= 0 ? '+' : '';
-      retHtml = `<div class="ac-ret" style="color:${uc};opacity:.7">${us}${s.unrealizedPct.toFixed(2)}%<span style="font-size:9px;margin-left:4px;opacity:.6">미실현</span></div>`;
+      const sign = s.unrealizedPct >= 0 ? '+' : '';
+      retTxt = `${sign}${s.unrealizedPct.toFixed(2)}% <span style="font-size:9px;opacity:.6">미실현</span>`;
+      retColor = s.unrealizedPct >= 0 ? 'var(--green)' : 'var(--red)';
     } else {
-      const rc = s.totalRet >= 0 ? '#34D399' : '#F87171';
       const sign = s.totalRet >= 0 ? '+' : '';
-      retHtml = `<div class="ac-ret" style="color:${rc}">${sign}${s.totalRet.toFixed(2)}%</div>`;
+      retTxt = `${sign}${s.totalRet.toFixed(2)}%`;
+      retColor = s.totalRet >= 0 ? 'var(--green)' : 'var(--red)';
     }
 
-    // Stats line
-    let statsLine;
-    if (!s.hasAnyTrade) {
-      statsLine = `<div style="color:var(--muted);font-size:10px">거래 없음</div>`;
-    } else if (s.closedN === 0) {
-      statsLine = `<div>1건 진입 · 청산 대기</div>`;
-    } else {
-      statsLine = `<div>${s.closedN}건 청산 · 승률 ${s.winRate.toFixed(0)}%</div>`;
-    }
-
-    // Signal hint (why flat)
-    const hint = s.pos === 'FLAT' ? signalHint(algo, dec) : null;
-    const hintHtml = hint ? `<div class="ac-hint">${hint}</div>` : '';
+    const uptimeTxt = s.uptimeH > 0 ? `${s.uptimeH.toFixed(0)}h` : '—';
+    const wrTxt     = s.closedN > 0 ? `${s.winRate.toFixed(0)}% (${s.closedN}건)` : '—';
+    const hint      = s.pos === 'FLAT' ? signalHint(algo, dec) : null;
 
     return `<div class="ac" style="--ac:${cfg.color}" role="article" aria-label="${algo}">
-      <div class="ac-name">${algo}</div>
-      ${eqHtml}
-      ${retHtml}
-      <div class="ac-bottom">
-        <div class="ac-stats">
-          ${statsLine}
-          ${s.openEntry ? `<div class="ac-entry">@ $${s.openEntry.toLocaleString()}</div>` : ''}
-          ${hintHtml}
-        </div>
-        <span class="pb ${posCls}" aria-label="Position: ${s.pos}">${s.pos}</span>
+      <div class="ac-head">
+        <span class="ac-name">${algo.replace(/_/g, ' ')}</span>
+        ${posBadge}
+      </div>
+      <div class="ac-equity" style="color:${s.hasAnyTrade ? eqColor : 'var(--muted2)'}">
+        ${eqVal}${eqSub}
+      </div>
+      <div class="ac-ret" style="color:${retColor}">${retTxt}</div>
+      <div class="ac-metrics">
+        <div class="ac-metric"><span>총 진입 시간</span><span class="ac-metric-val">${uptimeTxt}</span></div>
+        <div class="ac-metric"><span>승률</span><span class="ac-metric-val">${wrTxt}</span></div>
+        ${s.openEntry ? `<div class="ac-metric"><span>현재 진입가</span><span class="ac-metric-val">$${s.openEntry.toLocaleString()}</span></div>` : ''}
+        ${s.openWeight != null ? `<div class="ac-metric"><span>노출 (변동성)</span><span class="ac-metric-val">${s.openWeight.toFixed(2)}x</span></div>` : ''}
+        ${hint ? `<div class="ac-hint">${hint}</div>` : ''}
       </div>
     </div>`;
   }).join('');
 }
 
-// ── Render: 현재 포지션 status strip ──────────────────────
-function dirArrowSvg(dir) {
-  return dir === 'long'
-    ? '<svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><path d="M5 1 L9 8 L1 8 Z"/></svg>'
-    : '<svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><path d="M5 9 L1 2 L9 2 Z"/></svg>';
-}
-
-function renderPositionStrip() {
-  const el = document.getElementById('posStrip');
-  if (!el) return;
-  const opens = positions.filter(p =>
-    p.status === 'open' && (activeTab === 'all' || p.algo_id === activeTab));
-  if (!opens.length) {
-    el.innerHTML = `<div class="pos-flat">${activeTab === 'all' ? '현재 진입 중인 포지션이 없습니다' : '현재 미진입 (FLAT)'}</div>`;
-    return;
-  }
-  const now = Date.now();
-  el.innerHTML = opens
-    .sort((a, b) => new Date(a.open_time) - new Date(b.open_time))
-    .map(p => {
-      const dirColor = '#60A5FA';
-      const dirKo = '현물 매수';
-      let unrlStr = '—', unrlColor = 'var(--muted)', pnlStr = '';
-      if (latestBtcPrice && p.open_price) {
-        const raw = (latestBtcPrice - p.open_price) / p.open_price;
-        const u = raw * 100;
-        unrlColor = u >= 0 ? 'var(--pos)' : 'var(--neg)';
-        unrlStr = `${u >= 0 ? '+' : ''}${u.toFixed(2)}%`;
-        pnlStr = `  ·  ${u >= 0 ? '+' : '-'}$${Math.abs(u / 100 * STARTING_CAPITAL).toFixed(0)}`;
-      }
-      const holdH = (now - new Date(p.open_time).getTime()) / 3600000;
-      const cur = latestBtcPrice ? `$${Math.round(latestBtcPrice).toLocaleString()}` : '—';
-      let slStr = '';
-      if (p.stop_loss_price && p.open_price) {
-        const slPct = Math.abs(p.open_price - p.stop_loss_price) / p.open_price * 100;
-        slStr = `  ·  손절 $${Math.round(p.stop_loss_price).toLocaleString()} (-${slPct.toFixed(1)}%)`;
-      }
-      const algoLabel = activeTab === 'all' ? `<span class="pos-algo">${p.algo_id}</span>` : '';
-      return `<div class="pos-card" style="--dir:${dirColor}">
-        <div class="pos-top">
-          <span class="pos-left"><span class="pos-dir">${dirArrowSvg(p.direction)} ${dirKo}</span>${algoLabel}</span>
-          <span class="pos-unrl" style="color:${unrlColor}">${unrlStr}</span>
-        </div>
-        <div class="pos-meta">진입 $${Math.round(p.open_price).toLocaleString()} → 현재 ${cur}${pnlStr}</div>
-        <div class="pos-meta">보유 ${holdH.toFixed(1)}h${slStr}</div>
-      </div>`;
-    }).join('');
-}
-
-// ── Render: trade log ─────────────────────────────────────
-function renderLog(ps) {
-  const view = activeTab === 'all' ? ps : ps.filter(p => p.algo_id === activeTab);
-  const sorted = [...view].sort((a, b) => new Date(b.open_time) - new Date(a.open_time));
-  const openN = view.filter(p => p.status === 'open').length;
-  const prefix = activeTab === 'all' ? '총' : `${activeTab} ·`;
-  document.getElementById('tradeCountLabel').textContent =
-    `${prefix} ${view.length}건 · 진입 ${openN}건`;
-
-  const body = document.getElementById('tradeLogBody');
-  if (!sorted.length) {
-    body.innerHTML = `<tr><td colspan="7" style="color:var(--muted);font-size:11px;padding:20px 0">해당 알고리즘 거래 없음</td></tr>`;
-    return;
-  }
-  body.innerHTML = sorted.map(p => {
-    const cfg = ALGOS[p.algo_id] || { color: '#94A3B8' };
-    const dt = new Date(p.open_time);
-    const ts = dt.toLocaleString('ko-KR', {
-      month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Seoul'
-    });
-    const dirCls = 'dl';
-
-    let retHtml;
-    if (p.status === 'open') {
-      if (latestBtcPrice && p.open_price) {
-        const raw = (latestBtcPrice - p.open_price) / p.open_price;
-        const u = raw * 100;
-        retHtml = `<span class="${u >= 0 ? 'rp' : 'rn'}">${u >= 0 ? '+' : ''}${u.toFixed(2)}%<span class="open-pill">진입중</span></span>`;
-      } else {
-        retHtml = '<span class="ro">진입 중</span>';
-      }
-    } else if (p.ret_pct != null) {
-      const pct = (p.ret_pct * 100).toFixed(2);
-      const sign = p.ret_pct >= 0 ? '+' : '';
-      const sl = p.is_stop_loss ? '<span class="sl-tag">SL</span>' : '';
-      retHtml = `<span class="${p.ret_pct >= 0 ? 'rp' : 'rn'}">${sign}${pct}%${sl}</span>`;
-    } else {
-      retHtml = '<span class="ro">—</span>';
-    }
-
-    const exit = p.close_price
-      ? `$${p.close_price.toLocaleString()}`
-      : `<span style="color:var(--muted)">—</span>`;
-    const hold = p.hold_hours != null
-      ? `${Math.round(p.hold_hours)}h`
-      : `<span style="color:var(--muted)">—</span>`;
-
-    return `<tr class="${p.status === 'open' ? 'open-row' : ''}">
-      <td style="color:var(--muted);font-size:11px">${ts}</td>
-      <td><span class="abadge" style="color:${cfg.color};border-color:${cfg.color}40">${p.algo_id}</span></td>
-      <td><span class="dbadge ${dirCls}">SPOT BUY</span></td>
-      <td style="font-size:12px">$${p.open_price.toLocaleString()}</td>
-      <td style="font-size:12px;color:var(--muted2)">${exit}</td>
-      <td>${retHtml}</td>
-      <td style="color:var(--muted);font-size:11px">${hold}</td>
-    </tr>`;
-  }).join('');
-}
-
-// ── Render: portfolio strip ───────────────────────────────
+/* ── Render: portfolio bar ──────────────────────────────────── */
 function renderPortfolio(stats) {
   const totalStart = ALGO_IDS.length * STARTING_CAPITAL;
   let totalEquity = 0, realizedEquity = 0, openCount = 0;
   for (const algo of ALGO_IDS) {
     const s = stats[algo];
-    totalEquity   += s.equityTotal;
+    totalEquity    += s.equityTotal;
     realizedEquity += s.equity;
     if (s.pos !== 'FLAT') openCount++;
   }
-  const totalPnl    = totalEquity - totalStart;
-  const totalPct    = (totalPnl / totalStart) * 100;
-  const realPnl     = realizedEquity - totalStart;
-  const realPct     = (realPnl / totalStart) * 100;
-  const pnlColor    = totalPnl >= 0 ? '#34D399' : '#F87171';
-  const realColor   = realPnl  >= 0 ? '#34D399' : '#F87171';
+  const totalPnl = totalEquity - totalStart;
+  const totalPct = (totalPnl / totalStart) * 100;
+  const realPnl  = realizedEquity - totalStart;
+
+  const pnlColor  = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+  const realColor = realPnl  >= 0 ? 'var(--green)' : 'var(--red)';
   const fmt = v => (v >= 0 ? '+' : '') + v.toFixed(2);
 
   document.getElementById('portTotal').innerHTML =
     `<span style="color:${pnlColor}">$${totalEquity.toFixed(0)}</span>`;
   document.getElementById('portTotalPct').innerHTML =
-    `<span style="color:${pnlColor}">${fmt(totalPct)}% · $${totalStart.toLocaleString()} 대비</span>`;
-
-  // 실현 손익 = 청산분만의 손익(델타). 자산 총액이 아니라 +/- 금액으로 표시.
+    `<span style="color:${pnlColor}">${fmt(totalPct)}%</span>`;
   document.getElementById('portRealized').innerHTML =
     `<span style="color:${realColor}">${realPnl >= 0 ? '+$' : '-$'}${Math.abs(realPnl).toFixed(0)}</span>`;
-  document.getElementById('portRealizedPct').innerHTML =
-    `<span style="color:${realColor}">${fmt(realPct)}% · 청산분만</span>`;
-
-  document.getElementById('portOpen').textContent = openCount;
-  document.getElementById('portOpenSub').textContent =
-    openCount === 1 ? '1개 진입 중' : `${openCount}개 진입 중`;
+  document.getElementById('portOpen').textContent  = openCount;
+  document.getElementById('portOpenSub').textContent = `/ ${ALGO_IDS.length}개 진입 중`;
 }
 
-// ── Price chart (real BTC price + trade markers) ──────────
-function fmtTickMs(ms) {
-  const dt = new Date(ms);
-  return `${dt.getMonth() + 1}/${dt.getDate()}`;
-}
-function fmtFullTs(ms) {
-  return new Date(ms).toLocaleString('ko-KR', {
-    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-    hour12: false, timeZone: 'Asia/Seoul',
-  });
-}
-
-async function fetchKlines() {
-  try {
-    const r = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=4h&limit=300');
-    if (!r.ok) return;
-    const d = await r.json();
-    ohlcv = d.map(k => ({ x: k[0], y: parseFloat(k[4]) }));
-    renderPriceChart();
-  } catch (_) {}
-}
-
+/* ── Render: tabs ───────────────────────────────────────────── */
 function renderTabs() {
   const el = document.getElementById('algoTabs');
   if (!el) return;
   el.innerHTML = TAB_DEFS.map(t =>
-    `<button class="tab ${activeTab === t.id ? 'active' : ''}" style="--ac:${t.color}" data-tab="${t.id}" role="tab" aria-selected="${activeTab === t.id}">${t.label}</button>`
+    `<button class="tab${activeTab === t.id ? ' active' : ''}" style="--ac:${t.color}" data-tab="${t.id}" role="tab" aria-selected="${activeTab === t.id}">${t.label}</button>`
   ).join('');
   el.querySelectorAll('.tab').forEach(b => {
     b.addEventListener('click', () => {
@@ -781,126 +632,255 @@ function renderTabs() {
   });
 }
 
-function renderPriceChart() {
-  const ctx = document.getElementById('priceChart');
-  const ph = document.getElementById('priceChartPlaceholder');
-  if (!ctx) return;
-  if (!ohlcv.length) {
-    ctx.style.display = 'none';
-    if (ph) ph.style.display = 'flex';
+/* ── Render: position strip ─────────────────────────────────── */
+function renderPositionStrip() {
+  const el = document.getElementById('posStrip');
+  if (!el) return;
+  const opens = positions.filter(p =>
+    p.status === 'open' && (activeTab === 'all' || p.algo_id === activeTab));
+  if (!opens.length) {
+    el.innerHTML = `<span class="pos-flat-msg">${activeTab === 'all' ? '현재 진입 중인 포지션 없음' : '현재 FLAT'}</span>`;
     return;
   }
-  ctx.style.display = '';
-  if (ph) ph.style.display = 'none';
+  const now = Date.now();
+  el.innerHTML = opens
+    .sort((a, b) => new Date(a.open_time) - new Date(b.open_time))
+    .map(p => {
+      const color = (ALGOS[p.algo_id] || {}).color || '#34D399';
+      const w = p.position_weight != null ? p.position_weight : 1;
+      let unrlStr = '—', unrlColor = 'var(--muted)', pnlStr = '';
+      if (latestBtcPrice && p.open_price) {
+        const raw = (latestBtcPrice - p.open_price) / p.open_price;
+        const u = raw * 100;
+        unrlColor = u >= 0 ? 'var(--green)' : 'var(--red)';
+        unrlStr   = `${u >= 0 ? '+' : ''}${u.toFixed(2)}%`;
+        pnlStr    = ` · ${raw >= 0 ? '+' : '-'}$${Math.abs(w * raw * STARTING_CAPITAL).toFixed(0)}`;
+      }
+      const holdH = (now - new Date(p.open_time).getTime()) / 3_600_000;
+      const cur   = latestBtcPrice ? `$${Math.round(latestBtcPrice).toLocaleString()}` : '—';
+      const wStr  = ` · 노출 ${w.toFixed(2)}x`;
+      let slStr = '';
+      if (p.stop_loss_price && p.open_price) {
+        const slPct = Math.abs(p.open_price - p.stop_loss_price) / p.open_price * 100;
+        slStr = ` · 손절 $${Math.round(p.stop_loss_price).toLocaleString()} (−${slPct.toFixed(1)}%)`;
+      }
+      return `<div class="pos-card" style="--pc:${color};--pc40:${color}40;border-left-color:${color}">
+        <div class="pos-card-top">
+          <div class="pos-card-left">
+            <span class="pos-dir-badge">▲ SPOT LONG</span>
+            ${activeTab === 'all' ? `<span class="pos-algo-name">${p.algo_id}</span>` : ''}
+          </div>
+          <span class="pos-unrl" style="color:${unrlColor}">${unrlStr}</span>
+        </div>
+        <div class="pos-meta">진입 $${Math.round(p.open_price).toLocaleString()} → ${cur}${pnlStr}${wStr}</div>
+        <div class="pos-meta">보유 ${holdH.toFixed(1)}h · 진입 ${fmtKST(p.open_time)} KST${slStr}</div>
+      </div>`;
+    }).join('');
+}
 
-  const t0 = ohlcv[0].x;
+/* ── Lightweight-charts init ────────────────────────────────── */
+function initChart() {
+  const container = document.getElementById('lwChartEl');
+  if (!container || typeof LightweightCharts === 'undefined') return;
+  if (lwChart) { lwChart.remove(); lwChart = null; candleSeries = null; priceLinesOpen = []; }
+
+  lwChart = LightweightCharts.createChart(container, {
+    width:  container.clientWidth,
+    height: container.clientHeight || 420,
+    layout: {
+      background: { type: 'solid', color: '#0B0E11' },
+      textColor:  '#848E9C',
+      fontFamily: "'IBM Plex Mono', monospace",
+      fontSize:   10,
+    },
+    grid: {
+      vertLines: { color: '#1A1F27' },
+      horzLines: { color: '#1A1F27' },
+    },
+    crosshair: {
+      mode: LightweightCharts.CrosshairMode.Normal,
+      vertLine: { color: '#3D4550', labelBackgroundColor: '#252B33' },
+      horzLine: { color: '#3D4550', labelBackgroundColor: '#252B33' },
+    },
+    rightPriceScale: { borderColor: '#2B3139' },
+    timeScale: {
+      borderColor:     '#2B3139',
+      timeVisible:     true,
+      secondsVisible:  false,
+      tickMarkFormatter: (time) => {
+        const d = new Date(time * 1000);
+        return d.toLocaleString('ko-KR', {
+          month: '2-digit', day: '2-digit',
+          hour: '2-digit', hour12: false, timeZone: 'Asia/Seoul',
+        });
+      },
+    },
+    localization: {
+      timeFormatter: (time) => fmtKSTFull(time * 1000) + ' KST',
+      priceFormatter: (price) => '$' + price.toLocaleString('en-US', { maximumFractionDigits: 0 }),
+    },
+  });
+
+  candleSeries = lwChart.addCandlestickSeries({
+    upColor:      '#0ECB81',
+    downColor:    '#F6465D',
+    borderVisible: false,
+    wickUpColor:   '#0ECB81',
+    wickDownColor: '#F6465D',
+  });
+
+  const ro = new ResizeObserver(entries => {
+    if (!lwChart || !entries[0]) return;
+    const { width, height } = entries[0].contentRect;
+    lwChart.applyOptions({ width, height });
+  });
+  ro.observe(container);
+}
+
+/* ── Render: price chart ────────────────────────────────────── */
+function clearPriceLines() {
+  for (const pl of priceLinesOpen) {
+    try { if (candleSeries) candleSeries.removePriceLine(pl); } catch(_) {}
+  }
+  priceLinesOpen = [];
+}
+
+const ALGO_ABBR = {
+  regime_trend: 'REG', fng_contrarian: 'FNG',
+  vix_rsi: 'VIX', macd_momentum: 'MAC', multi_factor: 'MLT',
+};
+
+function renderPriceChart() {
+  if (!lwChart || !candleSeries) return;
+  if (!ohlcv.length) return;
+
+  candleSeries.setData(ohlcv);
+  clearPriceLines();
+
   const trades = positions.filter(p =>
     p.direction === 'long' && (activeTab === 'all' || p.algo_id === activeTab));
-  const longE = [], exits = [];
+
+  const markers = [];
   for (const p of trades) {
-    const ot = new Date(p.open_time).getTime();
-    if (ot >= t0 && p.open_price) {
-      const pt = { x: ot, y: p.open_price, _algo: p.algo_id, _dir: p.direction, _ret: p.ret_pct, _kind: '진입' };
-      longE.push(pt);
+    const color = (ALGOS[p.algo_id] || {}).color || '#848E9C';
+    const abbr  = ALGO_ABBR[p.algo_id] || '?';
+
+    if (p.open_price) {
+      const ot = snapToBar(Math.floor(new Date(p.open_time).getTime() / 1000));
+      markers.push({
+        time: ot, position: 'belowBar', color,
+        shape: 'arrowUp', text: abbr, size: 1.2,
+      });
     }
-    if (p.status === 'closed' && p.close_time && p.close_price) {
-      const ct = new Date(p.close_time).getTime();
-      if (ct >= t0) exits.push({ x: ct, y: p.close_price, _algo: p.algo_id, _dir: p.direction, _ret: p.ret_pct, _kind: '청산' });
+    if (p.status === 'closed' && p.close_time) {
+      const ct  = snapToBar(Math.floor(new Date(p.close_time).getTime() / 1000));
+      const win = p.ret_pct != null && p.ret_pct >= 0;
+      markers.push({
+        time: ct, position: 'aboveBar',
+        color: win ? '#0ECB81' : '#F6465D',
+        shape: 'circle', size: 0.8,
+      });
     }
   }
-  const colOf = arr => arr.map(e => (ALGOS[e._algo] || {}).color || '#94A3B8');
 
-  // 거래 구간으로 x/y축 적응적 줌 (마커를 또렷이). 거래 없으면 최근 14일.
-  const lastX = ohlcv[ohlcv.length - 1].x;
-  const markers = [...longE, ...exits];
-  let xMin, xMax;
-  if (markers.length) {
-    const xs = markers.map(m => m.x);
-    const lo = Math.min(...xs), hi = Math.max(...xs);
-    const pad = Math.max((hi - lo) * 0.12, 12 * 3600 * 1000);
-    xMin = lo - pad;
-    xMax = Math.max(hi, lastX) + pad;
-  } else {
-    xMax = lastX;
-    xMin = lastX - 14 * 24 * 3600 * 1000;
-  }
-  const visY = ohlcv.filter(b => b.x >= xMin && b.x <= xMax).map(b => b.y)
-    .concat(markers.map(m => m.y))
-    .concat(trades.filter(p => p.status === 'open' && p.stop_loss_price).map(p => p.stop_loss_price));
-  let yMin, yMax;
-  if (visY.length) {
-    const lo = Math.min(...visY), hi = Math.max(...visY);
-    const pad = (hi - lo) * 0.1 || hi * 0.01;
-    yMin = lo - pad;
-    yMax = hi + pad;
-  }
+  markers.sort((a, b) => a.time - b.time);
+  candleSeries.setMarkers(markers);
 
-  const datasets = [
-    { label: 'BTC', data: ohlcv, showLine: true, pointRadius: 0, borderColor: 'rgba(148,163,184,.45)', borderWidth: 1, tension: .25, order: 5 },
-    { label: '현물 매수', data: longE, pointStyle: 'triangle', rotation: 0, radius: 8, backgroundColor: colOf(longE), borderColor: '#0F172A', borderWidth: 1.5, order: 1 },
-    { label: '청산', data: exits, pointStyle: 'circle', radius: 5, backgroundColor: '#0F172A', borderColor: colOf(exits), borderWidth: 2, order: 2 },
-  ];
-
-  // 단일 알고 탭 + 진입 중이면 진입가·손절선 오버레이
   if (activeTab !== 'all') {
     const op = trades.find(p => p.status === 'open');
     if (op && op.open_price) {
-      const c = (ALGOS[activeTab] || {}).color || '#94A3B8';
-      datasets.push({ label: '진입가', data: [{ x: xMin, y: op.open_price }, { x: xMax, y: op.open_price }], showLine: true, pointRadius: 0, borderColor: c, borderWidth: 1, borderDash: [5, 4], order: 4 });
+      const color = (ALGOS[activeTab] || {}).color || '#848E9C';
+      priceLinesOpen.push(candleSeries.createPriceLine({
+        price: op.open_price, color, lineWidth: 1, lineStyle: 1,
+        axisLabelVisible: true, title: '진입가',
+      }));
       if (op.stop_loss_price) {
-        datasets.push({ label: '손절선', data: [{ x: xMin, y: op.stop_loss_price }, { x: xMax, y: op.stop_loss_price }], showLine: true, pointRadius: 0, borderColor: 'rgba(248,113,113,.55)', borderWidth: 1, borderDash: [2, 3], order: 4 });
+        priceLinesOpen.push(candleSeries.createPriceLine({
+          price: op.stop_loss_price, color: '#F6465D',
+          lineWidth: 1, lineStyle: 3, axisLabelVisible: true, title: '손절',
+        }));
       }
     }
   }
 
-  if (priceChart) priceChart.destroy();
-  priceChart = new Chart(ctx, {
-    type: 'scatter',
-    data: { datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'nearest', intersect: true },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: 'rgba(15,23,42,.95)',
-          borderColor: 'rgba(255,255,255,.12)', borderWidth: 1,
-          titleColor: '#94A3B8', bodyColor: '#F1F5F9',
-          titleFont: { family: 'Exo 2', size: 11 }, bodyFont: { family: 'Exo 2', size: 11 },
-          callbacks: {
-            title: items => (items.length ? fmtFullTs(items[0].raw.x) : ''),
-            label: c => {
-              const r = c.raw;
-              if (r._kind) {
-                const ret = r._ret != null ? ` (${r._ret * 100 >= 0 ? '+' : ''}${(r._ret * 100).toFixed(2)}%)` : '';
-                return ` ${r._algo} · 현물 ${r._kind} $${r.y.toLocaleString()}${ret}`;
-              }
-              return ` BTC $${r.y.toLocaleString()}`;
-            },
-          },
-        },
-      },
-      scales: {
-        x: {
-          type: 'linear',
-          min: xMin, max: xMax,
-          grid: { color: 'rgba(255,255,255,.04)' },
-          border: { display: false },
-          ticks: { color: '#475569', font: { family: 'Exo 2', size: 10 }, maxTicksLimit: 8, maxRotation: 0, callback: v => fmtTickMs(v) },
-        },
-        y: {
-          min: yMin, max: yMax,
-          grid: { color: 'rgba(255,255,255,.04)' },
-          border: { display: false },
-          ticks: { color: '#475569', font: { family: 'Exo 2', size: 10 }, callback: v => '$' + (v / 1000).toFixed(1) + 'k' },
-        },
-      },
-    },
-  });
+  if (markers.length) {
+    const times = markers.map(m => m.time);
+    const minT  = Math.min(...times);
+    const maxT  = Math.max(...times);
+    const lastT = ohlcv[ohlcv.length - 1].time;
+    const pad   = Math.max((maxT - minT) * 0.1, 24 * 3600);
+    try {
+      lwChart.timeScale().setVisibleRange({ from: minT - pad, to: Math.max(maxT, lastT) + pad });
+    } catch(_) {}
+  } else {
+    const lastT = ohlcv[ohlcv.length - 1].time;
+    try {
+      lwChart.timeScale().setVisibleRange({ from: lastT - 14 * 24 * 3600, to: lastT + 3600 });
+    } catch(_) {}
+  }
+
+  const openN  = trades.filter(p => p.status === 'open').length;
+  const prefix = activeTab === 'all' ? '전체' : activeTab;
+  document.getElementById('tradeCountLabel').textContent =
+    `${prefix} ${trades.length}건 · 진입 ${openN}건`;
 }
 
-// ── Full render pipeline ──────────────────────────────────
+/* ── Render: trade log ──────────────────────────────────────── */
+function renderLog(ps) {
+  const view   = activeTab === 'all' ? ps : ps.filter(p => p.algo_id === activeTab);
+  const sorted = [...view].sort((a, b) => new Date(b.open_time) - new Date(a.open_time));
+  const openN  = view.filter(p => p.status === 'open').length;
+  const prefix = activeTab === 'all' ? '전체' : activeTab;
+  document.getElementById('tradeCountLabel').textContent =
+    `${prefix} ${view.length}건 · 진입 ${openN}건`;
+
+  const body = document.getElementById('tradeLogBody');
+  if (!sorted.length) {
+    body.innerHTML = `<tr><td colspan="7" style="color:var(--muted);font-size:11px;padding:20px 18px">거래 없음</td></tr>`;
+    return;
+  }
+
+  body.innerHTML = sorted.map(p => {
+    const cfg = ALGOS[p.algo_id] || { color: '#848E9C' };
+    const ts  = fmtKST(p.open_time);
+
+    let retHtml;
+    if (p.status === 'open') {
+      if (latestBtcPrice && p.open_price) {
+        const u = (latestBtcPrice - p.open_price) / p.open_price * 100;
+        retHtml = `<span class="${u >= 0 ? 'ret-pos' : 'ret-neg'}">${u >= 0 ? '+' : ''}${u.toFixed(2)}%<span class="open-tag">진입중</span></span>`;
+      } else {
+        retHtml = '<span class="ret-open">진입 중</span>';
+      }
+    } else if (p.ret_pct != null) {
+      const pct  = (p.ret_pct * 100).toFixed(2);
+      const sign = p.ret_pct >= 0 ? '+' : '';
+      const sl   = p.is_stop_loss ? '<span class="sl-tag">SL</span>' : '';
+      retHtml = `<span class="${p.ret_pct >= 0 ? 'ret-pos' : 'ret-neg'}">${sign}${pct}%${sl}</span>`;
+    } else {
+      retHtml = '<span class="ret-open">—</span>';
+    }
+
+    const exitTd = p.close_price
+      ? `$${p.close_price.toLocaleString()}`
+      : `<span style="color:var(--muted)">—</span>`;
+    const holdTd = p.hold_hours != null
+      ? `${Math.round(p.hold_hours)}h`
+      : `<span style="color:var(--muted)">—</span>`;
+
+    return `<tr class="${p.status === 'open' ? 'open-row' : ''}">
+      <td style="color:var(--muted)">${ts}</td>
+      <td><span class="algo-chip" style="color:${cfg.color};border-color:${cfg.color}40">${p.algo_id}</span></td>
+      <td><span class="buy-chip">▲ SPOT LONG</span></td>
+      <td>$${p.open_price.toLocaleString()}</td>
+      <td style="color:var(--muted2)">${exitTd}</td>
+      <td>${retHtml}</td>
+      <td style="color:var(--muted)">${holdTd}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ── Full render pipeline ───────────────────────────────────── */
 function renderAll(ps) {
   positions = ps;
   const stats = algoStats(ps);
@@ -910,21 +890,22 @@ function renderAll(ps) {
   renderPositionStrip();
   renderPriceChart();
   renderLog(ps);
+
   const verEl = document.getElementById('stratVer');
   if (verEl) {
     const v = ps.find(p => p.strategy_version)?.strategy_version;
     if (v) verEl.textContent = v;
   }
   const el = document.getElementById('lastUpdate');
-  if (el) el.textContent = `${new Date().toLocaleTimeString('ko-KR')} 업데이트`;
+  if (el) el.textContent = new Date().toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul' }) + ' KST 업데이트';
 }
 
-// ── BTC price ticker ──────────────────────────────────────
+/* ── BTC price ticker ───────────────────────────────────────── */
 async function fetchBtcPrice() {
   try {
     const r = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT');
     if (!r.ok) return;
-    const d = await r.json();
+    const d   = await r.json();
     const price = parseFloat(d.lastPrice);
     latestBtcPrice = price;
     const chg = parseFloat(d.priceChangePercent);
@@ -932,16 +913,34 @@ async function fetchBtcPrice() {
       '$' + price.toLocaleString('en-US', { maximumFractionDigits: 0 });
     const cel = document.getElementById('btcChg');
     cel.textContent = `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%`;
-    cel.className = 'btc-chg ' + (chg >= 0 ? 'pos-c' : 'neg-c');
-    // refresh cards + 포지션 스트립 so unrealized P&L updates with new price
+    cel.className   = 'btc-chg ' + (chg >= 0 ? 'c-green' : 'c-red');
     if (positions.length) {
-      renderCards(algoStats(positions));
+      const stats = algoStats(positions);
+      renderPortfolio(stats);
+      renderCards(stats);
       renderPositionStrip();
     }
-  } catch (_) {}
+  } catch(_) {}
 }
 
-// ── Supabase fetch ────────────────────────────────────────
+/* ── Binance OHLC klines ────────────────────────────────────── */
+async function fetchKlines() {
+  try {
+    const r = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=4h&limit=300');
+    if (!r.ok) return;
+    const d = await r.json();
+    ohlcv = d.map(k => ({
+      time:  Math.floor(k[0] / 1000),
+      open:  parseFloat(k[1]),
+      high:  parseFloat(k[2]),
+      low:   parseFloat(k[3]),
+      close: parseFloat(k[4]),
+    }));
+    renderPriceChart();
+  } catch(_) {}
+}
+
+/* ── Supabase ───────────────────────────────────────────────── */
 async function fetchDecisions(client) {
   try {
     const { data } = await client
@@ -951,68 +950,75 @@ async function fetchDecisions(client) {
       .limit(25);
     if (!data) return {};
     const out = {};
-    for (const d of data) {
-      if (!out[d.algo_id]) out[d.algo_id] = d;
-    }
+    for (const d of data) if (!out[d.algo_id]) out[d.algo_id] = d;
     return out;
-  } catch (_) { return {}; }
+  } catch(_) { return {}; }
 }
 
 async function fetchPositions(client) {
   const { data, error } = await client
-      .from('arena_spot_position_mart_v1')
+    .from('arena_spot_position_mart_v1')
     .select(`
       id, algo_id, direction, status,
       open_time, close_time,
-      open_price, close_price, stop_loss_price,
+      open_price, close_price, stop_loss_price, position_weight,
       ret_pct, hit, hold_hours,
       is_stop_loss, strategy_version, product_type, position_semantics
     `)
     .order('open_time', { ascending: false })
     .limit(500);
-
-  if (error) {
-    console.error('[Arena] fetch error:', error.message);
-    return null;
-  }
+  if (error) { console.error('[Arena] fetch error:', error.message); return null; }
   return (data || []).filter(p =>
     p.direction === 'long' &&
     p.product_type === 'spot' &&
     p.position_semantics === 'spot_long_flat');
 }
 
+function renderConnectionError() {
+  document.getElementById('algoGrid').innerHTML =
+    `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--red);font-size:13px">
+      Supabase 연결 실패 — 데이터를 불러올 수 없습니다
+    </div>`;
+  document.getElementById('tradeLogBody').innerHTML =
+    `<tr><td colspan="7" style="color:var(--red);padding:20px 18px">연결 실패</td></tr>`;
+}
+
 function setupRealtime(client) {
   client
     .channel('paper_positions_live')
-    .on('postgres_changes', {
-      event: '*',
-      schema: 'public',
-      table: 'paper_positions',
-    }, async () => {
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'paper_positions' }, async () => {
       const fresh = await fetchPositions(client);
       if (fresh) renderAll(fresh);
     })
     .subscribe(status => {
-      const dot = document.querySelector('.live-dot');
-      if (dot) {
-        dot.style.background = status === 'SUBSCRIBED' ? '#34D399' : '#F59E0B';
-      }
+      const dot = document.getElementById('liveDot');
+      if (!dot) return;
+      const ok = status === 'SUBSCRIBED';
+      dot.style.background  = ok ? '#0ECB81' : '#F0B90B';
+      dot.style.boxShadow   = ok ? '0 0 5px #0ECB81' : '0 0 5px #F0B90B';
     });
 }
 
-// ── Init ──────────────────────────────────────────────────
+/* ── KST clock ──────────────────────────────────────────────── */
+function updateClock() {
+  const el = document.getElementById('kstClock');
+  if (el) el.textContent = new Date().toLocaleTimeString('ko-KR', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false, timeZone: 'Asia/Seoul',
+  }) + ' KST';
+}
+
+/* ── Init ───────────────────────────────────────────────────── */
 async function init() {
+  initChart();
+  updateClock();
+  setInterval(updateClock, 1000);
+
   fetchBtcPrice();
   setInterval(fetchBtcPrice, 60_000);
   fetchKlines();
   setInterval(fetchKlines, 300_000);
   renderTabs();
-
-  if (IS_MOCK) {
-    console.warn('[Arena] Mock mode — set SUPABASE_URL & SUPABASE_ANON_KEY to connect live data.');
-    renderAll(MOCK);
-    return;
-  }
 
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const [data, decisions] = await Promise.all([
@@ -1024,8 +1030,7 @@ async function init() {
     renderAll(data);
     setupRealtime(client);
   } else {
-    console.warn('[Arena] Falling back to mock data.');
-    renderAll(MOCK);
+    renderConnectionError();
   }
 }
 
