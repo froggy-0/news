@@ -1,6 +1,6 @@
 # Arena Access Runbook
 
-작성일: 2026-06-19
+작성일: 2026-06-21
 
 이 문서는 현재 운영 중인 Arena EC2와 Supabase 상태를 확인하는 최소 절차다. 시크릿 값은 출력하지 않는다.
 
@@ -135,6 +135,7 @@ select
   raw_signal,
   executable_signal,
   action,
+  skipped_reason,
   product_policy_snapshot,
   current_position_id,
   resulting_position_id,
@@ -237,7 +238,7 @@ async def main():
     if latest_run_id:
         decisions = (
             await db.table("arena_decisions")
-            .select("algo_id,signal,action,created_at,current_position_id,resulting_position_id,risk_decision,risk_snapshot")
+            .select("algo_id,signal,raw_signal,executable_signal,action,skipped_reason,reason,created_at,current_position_id,resulting_position_id,risk_decision,risk_snapshot")
             .eq("run_id", latest_run_id)
             .order("algo_id")
             .execute()
@@ -281,6 +282,7 @@ PY'
 | capture | `capture_status = ok`, `capture_error_count = 0` |
 | ohlcv | 최신 run에 `arena_run_ohlcv_bars`가 연결됨 |
 | decisions | 최신 run에 알고리즘 5개 decision 저장 |
+| diagnostics | latest decisions에 `skipped_reason`과 `reason.diagnostics` 저장 |
 | positions | open/closed 상태와 stop_loss_price가 `paper_positions`에 저장 |
 | risk layer | 최신 run이 `risk_model_version=portfolio-risk-v1` |
 | risk events | 신규 open/risk block 발생 이후 `risk_snapshot` 또는 `arena_risk_events` 확인 |
@@ -292,4 +294,20 @@ PY'
 - service restart는 즉시 cycle을 만들 수 있다.
 - 기존 open position 중 `strategy_version = legacy`인 것은 snapshot hardening 이전에 열린 포지션이다.
 - 기존 open position은 `risk_snapshot = {}`일 수 있다. portfolio risk snapshot은 신규 open/risk block부터 채워진다.
+- 최신 diagnostics의 `above_ma200_or_missing`, `bullish_regime` 등은 즉시 임계값 완화 신호가 아니라 분석 출발점이다.
 - 백테스트 표본이 충분해지기 전까지 파라미터 튜닝 결과를 전략 성능으로 해석하지 않는다.
+최신 diagnostics만 빠르게 확인:
+
+```sql
+select
+  algo_id,
+  action,
+  raw_signal,
+  executable_signal,
+  skipped_reason,
+  reason->'diagnostics' as diagnostics,
+  created_at
+from arena_decisions
+order by created_at desc
+limit 25;
+```

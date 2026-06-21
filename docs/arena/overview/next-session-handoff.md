@@ -1,6 +1,6 @@
 # Arena Next Session Handoff
 
-작성일: 2026-06-19
+작성일: 2026-06-21
 
 이 문서는 새 세션에서 BTC Signal Arena 현황을 빠르게 복원하기 위한 시작점이다. 먼저 이 문서를 읽고, 필요한 세부 문서로 내려간다.
 
@@ -15,7 +15,8 @@
 7. `docs/arena/research/frequency-research-v1.md`
 8. `docs/arena/research/realtime-execution-gate-v1.md`
 9. `docs/arena/research/realtime-risk-trigger-v1.md`
-10. `docs/arena/overview/decision-log.md`
+10. `docs/arena/research/roster-diagnostics-and-parity-v1.md`
+11. `docs/arena/overview/decision-log.md`
 
 ## 현재 한 줄 상태
 
@@ -30,12 +31,15 @@ Arena는 EC2 상시 프로세스에서 `BTCUSDT` 4H **현물 spot long/flat** pa
 | remote dir | `/home/ubuntu/news` |
 | deployment shape | Git checkout 아님. `src/arena` rsync 배포 |
 | latest checked service | `active`, `SubState=running`, `ExecMainStatus=0` |
-| latest live run | `89c6ca1d-a62b-4c1e-97ae-c5b3d5a563cf` |
+| latest live run | `06a8ae1f-83c4-4b21-96be-34967df9c0df` |
 | latest run status | `completed` |
 | latest capture | `capture_status=ok`, `capture_error_count=0`, `capture_warnings=[]` |
-| latest params | code 기준 `arena-params-v14` |
+| latest strategy | `arena-spot-v4` |
+| latest params | `arena-params-v18` |
+| latest feature set | `arena-features-v8` |
 | latest risk model | `portfolio-risk-v1` |
-| latest feature set | code 기준 `arena-features-v5` |
+| latest diagnostics | latest decisions 5개 `stored_reason_diagnostics` 확인 |
+| latest dashboard | `arena/index.html` latest decision diagnostics 패널 반영 |
 | open positions | spot mart 기준 long만 허용. legacy synthetic short는 archive mart로 분리 |
 | open position caveat | spot 전환 이후 신규 `paper_positions.direction='short'`는 생성되면 안 됨 |
 | trading product | 현물 spot only |
@@ -48,7 +52,7 @@ Arena는 EC2 상시 프로세스에서 `BTCUSDT` 4H **현물 spot long/flat** pa
 
 2. 파라미터 인벤토리와 상수화
    - `src/arena/parameters.py` 중심.
-   - 현재 코드 기준은 `arena-spot-v3`, `arena-params-v14`, `arena-features-v5`, `portfolio-risk-v1`.
+   - 현재 코드 기준은 `arena-spot-v4`, `arena-params-v18`, `arena-features-v8`, `portfolio-risk-v1`.
 
 3. 재현성 snapshot
    - `paper_positions`에 strategy/params/indicator/macro/market/signal/data timestamp 계층 추가.
@@ -113,6 +117,12 @@ Arena는 EC2 상시 프로세스에서 `BTCUSDT` 4H **현물 spot long/flat** pa
    - `arena_decisions.raw_signal`, `executable_signal`, `product_policy_snapshot`
    - raw short는 long 청산 또는 no-trade로 기록
 
+13. Roster Diagnostics / Parity v1
+   - `src/arena/algorithms.py` diagnostics 추가.
+   - `src/arena/roster_diagnostics.py` CLI 추가.
+   - `src/arena/backtest.py`에 regime variant와 live gate replay 옵션 추가.
+   - P0 close path 테스트와 Slack close payload test 완료.
+
 ## 다음 세션 시작 시 확인 명령
 
 서비스 상태:
@@ -143,7 +153,9 @@ PYTHONPATH=src .venv/bin/python -m pytest tests/test_arena_*.py -q
 cd /Users/giwon/code/news
 PYTHONPATH=src .venv/bin/python -m arena.backtest --limit 100
 PYTHONPATH=src .venv/bin/python -m arena.backtest --profile live_4h --limit 300
+PYTHONPATH=src .venv/bin/python -m arena.backtest --profile live_4h --limit 300 --replay-execution-gate-blocks --replay-realtime-risk-blocks
 PYTHONPATH=src .venv/bin/python -m arena.walk_forward --profile live_4h
+PYTHONPATH=src .venv/bin/python -m arena.roster_diagnostics --source live --limit 50
 ```
 
 ## Supabase에서 먼저 볼 쿼리
@@ -250,6 +262,22 @@ Realtime execution readiness:
 select * from arena_realtime_execution_v1_ready;
 select * from arena_execution_gate_shadow_ready;
 select * from arena_realtime_risk_v1_ready;
+```
+
+로스터 진단:
+
+```sql
+select
+  algo_id,
+  action,
+  raw_signal,
+  executable_signal,
+  skipped_reason,
+  reason->'diagnostics' as diagnostics,
+  created_at
+from arena_decisions
+order by created_at desc
+limit 25;
 ```
 
 최근 risk event:

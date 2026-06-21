@@ -1,6 +1,6 @@
 # BTC Signal Arena 배포 Runbook 초안
 
-> 작성일: 2026-06-19
+> 작성일: 2026-06-21
 > 원칙: 시크릿 값은 출력하지 않고, zsh 로그인 환경에 있는 값을 파일/서비스에 주입한다.
 
 ## 0. 운영 방식 선택
@@ -60,7 +60,7 @@ umask 077
   printf 'STOP_LOSS_PCT=0.05\n'
   printf 'STOP_LOSS_MIN_PCT=0.02\n'
   printf 'STOP_LOSS_MAX_PCT=0.08\n'
-  printf 'MACRO_STALE_HOURS=36.0\n'
+  printf 'MACRO_STALE_HOURS=48.0\n'
   printf 'POSITION_UNIT=1.0\n'
   printf 'MAX_OPEN_POSITIONS_TOTAL=3\n'
   printf 'MAX_LONG_POSITIONS=2\n'
@@ -70,6 +70,11 @@ umask 077
   printf 'DAILY_LOSS_LIMIT_PCT=0.05\n'
   printf 'ALGO_MAX_DRAWDOWN_KILL_PCT=0.10\n'
   printf 'COOLDOWN_AFTER_KILL_HOURS=24.0\n'
+  printf 'ENABLE_ARENA_REALTIME_COLLECTOR=true\n'
+  printf 'ENABLE_ARENA_EXECUTION_GATE_SHADOW=true\n'
+  printf 'ENABLE_ARENA_EXECUTION_GATE_LIVE=false\n'
+  printf 'ENABLE_ARENA_REALTIME_RISK=true\n'
+  printf 'ENABLE_ARENA_REALTIME_RISK_LIVE=false\n'
 } > .env
 ```
 
@@ -86,7 +91,7 @@ umask 077
   printf 'ATR_MULTIPLE=2.5\n'
   printf 'STOP_LOSS_MIN_PCT=0.02\n'
   printf 'STOP_LOSS_MAX_PCT=0.08\n'
-  printf 'MACRO_STALE_HOURS=36.0\n'
+  printf 'MACRO_STALE_HOURS=48.0\n'
   printf 'POSITION_UNIT=1.0\n'
   printf 'MAX_OPEN_POSITIONS_TOTAL=3\n'
   printf 'MAX_LONG_POSITIONS=2\n'
@@ -200,7 +205,43 @@ ssh -i ~/.ssh/arena_ed25519 ubuntu@${ARENA_IP} \
 ```bash
 ssh "ubuntu@${ARENA_IP}" 'systemctl status arena --no-pager'
 ssh "ubuntu@${ARENA_IP}" 'journalctl -u arena -n 100 --no-pager'
+ssh -i ~/.ssh/arena_ed25519 ubuntu@${ARENA_IP} \
+  'cd /home/ubuntu/news && PYTHONPATH=src .venv/bin/python -m arena.roster_diagnostics --source live --limit 5'
 ```
+
+최신 배포 확인 기준:
+
+- `systemctl is-active arena.service` = `active`
+- `ExecMainStatus=0`
+- latest `arena_runs.status=completed`
+- latest `capture_status=ok`, `capture_error_count=0`
+- latest decisions에 `reason.diagnostics`가 존재
+
+## 5A. Arena Dashboard 배포
+
+`arena.sovereignwon.com`은 `arena/index.html` 단일 CSR 대시보드다.
+
+```bash
+cd /Users/giwon/code/news
+node - <<'NODE'
+const fs = require('fs');
+const html = fs.readFileSync('arena/index.html', 'utf8');
+const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
+  .map(m => m[1])
+  .filter(s => s.includes('const SUPABASE_URL'));
+if (scripts.length !== 1) throw new Error(`expected 1 app script, got ${scripts.length}`);
+new Function(scripts[0]);
+console.log('arena inline js ok');
+NODE
+npx wrangler pages deploy arena/ --project-name arena --commit-dirty=true
+```
+
+대시보드 최신 반영 확인:
+
+- 상단: `BTCUSDT · 4H · 현물 LONG/FLAT`
+- 중간: `LATEST DECISION DIAGNOSTICS`
+- 카드: skip/veto hint 표시
+- 하단: `현물 long/flat 모의투자 전용 — 선물 주문 없음`
 
 ## 6. Lambda fallback 배포 (선택)
 

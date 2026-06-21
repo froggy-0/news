@@ -135,6 +135,34 @@
     .ac-metric-val{color:var(--muted2);text-align:right}
     .ac-hint{font-size:8px;color:var(--muted);margin-top:3px;line-height:1.4;opacity:.8}
 
+    /* ── Decision diagnostics ─────────────────────────────── */
+    .diag-panel{
+      background:var(--panel);border:1px solid var(--border);
+      margin-bottom:12px;
+    }
+    .diag-head{
+      display:flex;justify-content:space-between;align-items:center;
+      padding:12px 18px;border-bottom:1px solid var(--border);gap:12px;
+    }
+    .diag-note{font-size:10px;color:var(--muted);text-align:right}
+    .diag-grid{
+      display:grid;grid-template-columns:repeat(5,1fr);
+      gap:0;border-top:0;
+    }
+    .diag-item{
+      min-width:0;padding:12px 14px;border-right:1px solid var(--border);
+      border-top:2px solid var(--dc);
+    }
+    .diag-item:last-child{border-right:none}
+    .diag-name{
+      font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;
+      letter-spacing:1.4px;color:var(--dc);text-transform:uppercase;margin-bottom:7px;
+    }
+    .diag-action{font-size:11px;font-weight:700;margin-bottom:5px}
+    .diag-meta{font-size:9px;color:var(--muted);line-height:1.6;word-break:break-word}
+    .diag-veto{font-size:9px;color:var(--muted2);line-height:1.5;margin-top:5px;word-break:break-word}
+    .diag-empty{padding:18px;color:var(--muted);font-size:11px}
+
     /* ── Chart panel ──────────────────────────────────────── */
     .chart-panel{
       background:var(--panel);border:1px solid var(--border);
@@ -273,8 +301,11 @@
 
     /* ── Responsive ───────────────────────────────────────── */
     @media(max-width:1080px){.algo-grid{grid-template-columns:repeat(3,1fr)}}
+    @media(max-width:1080px){.diag-grid{grid-template-columns:repeat(3,1fr)}.diag-item{border-bottom:1px solid var(--border)}}
     @media(max-width:640px){
       .algo-grid{grid-template-columns:repeat(2,1fr)}
+      .diag-grid{grid-template-columns:1fr}
+      .diag-item{border-right:none}
       .chart-container{height:280px}
       .port-bar{grid-template-columns:1fr 1fr;gap:12px}
       .port-label{grid-column:1/-1;margin-bottom:4px}
@@ -335,6 +366,16 @@
     <div class="ac" style="--ac:#2B3139"><div class="ac-head"><div class="sk" style="height:11px;width:70%;margin-bottom:0"></div></div><div class="sk" style="height:15px;width:50%;margin-bottom:6px"></div><div class="sk" style="height:11px;width:35%;margin-bottom:10px"></div><div class="sk" style="height:9px;width:80%;margin-bottom:4px"></div><div class="sk" style="height:9px;width:60%"></div></div>
     <div class="ac" style="--ac:#2B3139"><div class="ac-head"><div class="sk" style="height:11px;width:70%;margin-bottom:0"></div></div><div class="sk" style="height:15px;width:50%;margin-bottom:6px"></div><div class="sk" style="height:11px;width:35%;margin-bottom:10px"></div><div class="sk" style="height:9px;width:80%;margin-bottom:4px"></div><div class="sk" style="height:9px;width:60%"></div></div>
   </div>
+
+  <section class="diag-panel" aria-label="최근 알고리즘 의사결정 진단">
+    <div class="diag-head">
+      <span class="panel-title">LATEST DECISION DIAGNOSTICS</span>
+      <span class="diag-note" id="diagUpdated">최근 4H 판단의 raw signal, 실행 정책, veto 사유</span>
+    </div>
+    <div class="diag-grid" id="decisionDiag">
+      <div class="diag-empty">decision 진단 불러오는 중…</div>
+    </div>
+  </section>
 
   <div class="chart-panel">
     <div class="chart-head">
@@ -476,6 +517,15 @@ function calcUptimeHours(ps, algoId) {
   return h;
 }
 
+function esc(v) {
+  return String(v ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
 /* ── Algo stats ─────────────────────────────────────────────── */
 function algoStats(ps) {
   const out = {};
@@ -546,6 +596,7 @@ function renderCards(stats) {
   document.getElementById('algoGrid').innerHTML = ALGO_IDS.map(algo => {
     const s   = stats[algo];
     const cfg = ALGOS[algo];
+    const dec = latestDecisions[algo];
     const isLong   = s.pos === 'LONG';
     const posBadge = `<span class="pos-badge ${isLong ? 'long' : 'flat'}">${s.pos}</span>`;
 
@@ -571,6 +622,9 @@ function renderCards(stats) {
 
     const uptimeTxt = s.uptimeH > 0 ? `${s.uptimeH.toFixed(0)}h` : '—';
     const wrTxt     = s.closedN > 0 ? `${s.winRate.toFixed(0)}% (${s.closedN}건)` : '—';
+    const hint = signalHint(algo, dec);
+    const skip = dec && dec.skipped_reason ? dec.skipped_reason.replace(/^veto:/, '') : null;
+    const hintText = skip ? `대기: ${skip}` : hint;
     return `<div class="ac" style="--ac:${cfg.color}" role="article" aria-label="${algo}">
       <div class="ac-head">
         <span class="ac-name">${algo.replace(/_/g, ' ')}</span>
@@ -584,8 +638,62 @@ function renderCards(stats) {
         <div class="ac-metric"><span>총 진입 시간</span><span class="ac-metric-val">${uptimeTxt}</span></div>
         <div class="ac-metric"><span>승률</span><span class="ac-metric-val">${wrTxt}</span></div>
       </div>
+      ${hintText ? `<div class="ac-hint">${esc(hintText)}</div>` : ''}
     </div>`;
   }).join('');
+}
+
+function decisionVetoSummary(dec) {
+  const diag = dec && dec.reason && dec.reason.diagnostics;
+  if (!diag) return dec && dec.skipped_reason ? dec.skipped_reason : '진단 없음';
+  const failed = Array.isArray(diag.failed_conditions) ? diag.failed_conditions : [];
+  const vetoes = Array.isArray(diag.vetoes) ? diag.vetoes : [];
+  const values = [...new Set([...vetoes, ...failed])].slice(0, 4);
+  if (!values.length) return 'veto 없음';
+  return values.join(' · ');
+}
+
+function renderDecisionDiagnostics() {
+  const el = document.getElementById('decisionDiag');
+  if (!el) return;
+  const hasAny = Object.keys(latestDecisions || {}).length > 0;
+  if (!hasAny) {
+    el.innerHTML = '<div class="diag-empty">아직 표시할 decision 진단이 없습니다</div>';
+    return;
+  }
+
+  el.innerHTML = ALGO_IDS.map(algo => {
+    const cfg = ALGOS[algo] || { color: '#848E9C' };
+    const dec = latestDecisions[algo];
+    if (!dec) {
+      return `<div class="diag-item" style="--dc:${cfg.color}">
+        <div class="diag-name">${esc(algo.replace(/_/g, ' '))}</div>
+        <div class="diag-action c-muted">NO DATA</div>
+        <div class="diag-meta">최근 decision 없음</div>
+      </div>`;
+    }
+    const raw = dec.raw_signal ?? dec.signal ?? 'flat';
+    const executable = dec.executable_signal ?? 'flat';
+    const action = dec.action || 'unknown';
+    const color = action === 'hold' || executable === 'long'
+      ? 'var(--green)'
+      : action.includes('skip') || action.includes('block')
+        ? 'var(--gold)'
+        : 'var(--muted2)';
+    const veto = decisionVetoSummary(dec);
+    const created = dec.created_at ? fmtKST(dec.created_at) + ' KST' : '—';
+    return `<div class="diag-item" style="--dc:${cfg.color}">
+      <div class="diag-name">${esc(algo.replace(/_/g, ' '))}</div>
+      <div class="diag-action" style="color:${color}">${esc(action)}</div>
+      <div class="diag-meta">raw ${esc(raw)} → exec ${esc(executable)}</div>
+      <div class="diag-meta">skip ${esc(dec.skipped_reason || '—')}</div>
+      <div class="diag-veto">${esc(veto)}</div>
+      <div class="diag-meta">${esc(created)}</div>
+    </div>`;
+  }).join('');
+
+  const note = document.getElementById('diagUpdated');
+  if (note) note.textContent = '최근 decision/veto 진단 · 60초 폴링';
 }
 
 /* ── Render: portfolio bar ──────────────────────────────────── */
@@ -885,6 +993,7 @@ function renderAll(ps) {
   const stats = algoStats(ps);
   renderPortfolio(stats);
   renderCards(stats);
+  renderDecisionDiagnostics();
   renderTabs();
   renderPositionStrip();
   renderPriceChart();
@@ -944,7 +1053,7 @@ async function fetchDecisions(client) {
   try {
     const { data } = await client
       .from('arena_decisions')
-      .select('algo_id, action, reason, created_at')
+      .select('algo_id, signal, raw_signal, executable_signal, action, skipped_reason, reason, created_at')
       .order('created_at', { ascending: false })
       .limit(25);
     if (!data) return {};
@@ -1031,6 +1140,15 @@ async function init() {
   } else {
     renderConnectionError();
   }
+
+  setInterval(async () => {
+    latestDecisions = await fetchDecisions(client);
+    if (positions.length) {
+      const stats = algoStats(positions);
+      renderCards(stats);
+    }
+    renderDecisionDiagnostics();
+  }, 60_000);
 }
 
 document.addEventListener('DOMContentLoaded', init);

@@ -1,6 +1,6 @@
 # Arena System Map
 
-작성일: 2026-06-19
+작성일: 2026-06-21
 
 ## Runtime
 
@@ -14,6 +14,7 @@
 | realtime risk | `src/arena/realtime_risk.py` | 1분 microstructure feature를 spot entry risk state로 분류 |
 | positions | `src/arena/positions.py` | Supabase `paper_positions` CRUD |
 | algorithms | `src/arena/algorithms.py` | 5개 전략 신호 함수 |
+| roster diagnostics | `src/arena/roster_diagnostics.py` | live/backtest decision veto 집계 CLI |
 | indicators | `src/arena/indicators.py` | RSI, MACD hist, Bollinger position, ATR 계산 |
 | parameters | `src/arena/parameters.py` | 거래/지표/스케줄 기본 파라미터 |
 | config | `src/arena/config.py` | env 기반 runtime config. secret 값은 문서화하지 않음 |
@@ -35,6 +36,7 @@ Binance 4H OHLCV + R2 latest.json
   -> spot_policy (raw short = close/no-trade, no short open)
   -> execution_rules
   -> execution_gate shadow ledger
+  -> algorithms.explain_signal diagnostics
   -> positions.open/close_position
   -> paper_positions
   -> arena_runs / ohlcv / macro / indicators / decisions
@@ -121,12 +123,14 @@ arena_ohlcv_bars + arena_macro_snapshots
 8. `supabase/migrations/20260619_arena_backtest_framework.sql`
 9. `supabase/migrations/20260619_arena_backtest_validation.sql`
 10. `supabase/migrations/20260619_arena_portfolio_risk_layer.sql`
-11. `supabase/migrations/20260620_arena_market_structure_v1.sql`
-12. `supabase/migrations/20260620_arena_frequency_research_v1.sql`
-13. `supabase/migrations/20260620_arena_realtime_execution_v1.sql`
-14. `supabase/migrations/20260620_arena_tca_shadow_v1.sql`
-15. `supabase/migrations/20260620_arena_spot_semantics_v1.sql`
-16. `supabase/migrations/20260621_arena_realtime_risk_v1.sql`
+11. `supabase/migrations/20260619_arena_walk_forward_enhancements.sql`
+12. `supabase/migrations/20260620_arena_market_structure_v1.sql`
+13. `supabase/migrations/20260620_arena_market_structure_constraints_fix.sql`
+14. `supabase/migrations/20260620_arena_frequency_research_v1.sql`
+15. `supabase/migrations/20260620_arena_realtime_execution_v1.sql`
+16. `supabase/migrations/20260620_arena_tca_shadow_v1.sql`
+17. `supabase/migrations/20260620_arena_spot_semantics_v1.sql`
+18. `supabase/migrations/20260621_arena_realtime_risk_v1.sql`
 
 ## Current Known Warnings
 
@@ -135,3 +139,5 @@ arena_ohlcv_bars + arena_macro_snapshots
 - `research_sample_size` warns because 116 bars / 8 trades is too small for tuning.
 - `stop_loss_fill_policy` is `na` until a backtest run contains stop-loss trades.
 - Spot semantics SQL 적용 전이면 legacy synthetic short가 아직 open으로 보일 수 있다. 적용 후 신규 live/paper short open은 금지된다.
+- 최신 live diagnostics는 저장되지만, veto 완화는 backtest/replay 검증 없이 바로 live에 반영하지 않는다.
+- `relaxed_2of3_v1` regime variant는 research-only이며 현재 1차 A/B 결과 live 승격 금지다.

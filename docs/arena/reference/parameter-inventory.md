@@ -1,6 +1,6 @@
 # Parameter Inventory
 
-작성일: 2026-06-20
+작성일: 2026-06-21
 
 목표는 거래 결과를 재현할 수 있도록 코드/env/DB/docs에 흩어진 파라미터를 한 곳에서 추적하는 것이다. 운영 판단 경로는 EC2 `src/arena`를 단일 truth로 두고, Lambda arena 로직은 신규 운영 경로로 확장하지 않는다.
 
@@ -16,9 +16,9 @@
 
 | Key | Default | Unit | Mutable | Risk | Used at | Notes |
 | --- | ---: | --- | --- | --- | --- | --- |
-| `arena.version.strategy` | `arena-spot-v3` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:13` | live paper 전략 버전 |
-| `arena.version.params` | `arena-params-v14` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:14` | params snapshot schema 기준 |
-| `arena.version.features` | `arena-features-v5` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:15` | feature registry 기준 |
+| `arena.version.strategy` | `arena-spot-v4` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:13` | live paper 전략 버전 |
+| `arena.version.params` | `arena-params-v18` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:14` | params snapshot schema 기준 |
+| `arena.version.features` | `arena-features-v8` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:15` | feature registry 기준 |
 | `arena.runtime` | `ec2` | text | code_only | Medium | `/Users/giwon/code/news/src/arena/parameters.py:17` | Lambda와 EC2 성과 구분 |
 | `arena.market.symbol` | `BTCUSDT` | symbol | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:19` | 거래/수집 대상 |
 | `arena.market.kline_interval` | `4h` | candle | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:20` | 지표와 스케줄의 시간축 |
@@ -45,7 +45,7 @@
 | `arena.risk.atr_multiple` | `2.5` | ATR x | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:41` | 손절 거리 핵심 |
 | `arena.risk.stop_loss_min_pct` | `0.02` | pct | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:42` | 과소 손절 방지 |
 | `arena.risk.stop_loss_max_pct` | `0.08` | pct | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:45` | 과대 손실 방지 |
-| `arena.macro.stale_hours` | `36` | hours | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:50` | 오래된 macro 신호 차단 |
+| `arena.macro.stale_hours` | `48` | hours | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:82` | 오래된 일간 macro/FNG/VIX/ETF 신호 차단 |
 | `arena.risk.position_unit` | `1.0` | unit | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:54` | 알고리즘별 포지션 노출 단위 |
 | `arena.risk.max_open_positions_total` | `3` | positions | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:55` | 전체 동시 포지션 수 제한 |
 | `arena.risk.max_long_positions` | `2` | positions | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:58` | 같은 방향 long 중복 제한 |
@@ -97,7 +97,7 @@
 
 | Key | Default | Unit | Mutable | Risk | Used at | Notes |
 | --- | ---: | --- | --- | --- | --- | --- |
-| `arena.realtime_risk.model_version` | `realtime-risk-v1` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:14` | 1분 risk state scoring contract |
+| `arena.realtime_risk.model_version` | `realtime-risk-v1` | version | code_only | High | `/Users/giwon/code/news/src/arena/parameters.py:17` | 1분 risk state scoring contract |
 | `arena.realtime_risk.history_windows` | `60` | minutes | env_restart | High | `/Users/giwon/code/news/src/arena/config.py:96` | rolling baseline window |
 | `arena.realtime_risk.freshness_seconds` | `180` | seconds | env_restart | Critical | `/Users/giwon/code/news/src/arena/config.py:103` | 4H cycle에서 최신 risk state 사용 가능 최대 age |
 | `arena.realtime_risk.weight.volatility_spike` | `0.18` | weight | code_only | High | `/Users/giwon/code/news/src/arena/realtime_risk.py:17` | 5분 변동성 spike |
@@ -179,6 +179,17 @@
 | `close_reason` | text | db_versioned | Medium | `/Users/giwon/code/news/supabase/migrations/20260620_arena_spot_semantics_v1.sql:15` | spot risk-off, migration, flat close 구분 |
 | `runtime` | text | db_versioned | Medium | `/Users/giwon/code/news/supabase/migrations/20260619_arena_position_snapshots.sql:13` | EC2/Lambda 구분 |
 
+## Arena Diagnostics / Replay Controls
+
+| Key | Default | Unit | Mutable | Risk | Used at | Notes |
+| --- | ---: | --- | --- | --- | --- | --- |
+| `arena.diagnostics.reason_snapshot` | enabled | jsonb | code_only | High | `/Users/giwon/code/news/src/arena/scheduler.py:434` | `arena_decisions.reason.diagnostics`에 pass/fail/veto 저장 |
+| `arena.diagnostics.primary_skip_reason` | enabled | text | code_only | High | `/Users/giwon/code/news/src/arena/scheduler.py:726` | flat skip 시 `veto:*` 대표 사유 저장 |
+| `arena.regime.variant.default` | `strict_v1` | label | code_only | High | `/Users/giwon/code/news/src/arena/backtest.py:67` | live/backtest 기본 regime classifier |
+| `arena.regime.variant.relaxed` | `relaxed_2of3_v1` | label | research_only | High | `/Users/giwon/code/news/src/arena/regime.py:16` | research A/B 전용. 현재 live 승격 금지 |
+| `arena.backtest.replay_execution_gate_blocks` | `false` | bool | cli | High | `/Users/giwon/code/news/src/arena/backtest.py:96` | true면 execution gate block을 replay 신규 open 차단으로 반영 |
+| `arena.backtest.replay_realtime_risk_blocks` | `false` | bool | cli | High | `/Users/giwon/code/news/src/arena/backtest.py:97` | true면 fresh realtime risk block을 replay 신규 open 차단으로 반영 |
+
 ## Shadow / Market Structure Ledger
 
 | Table or Column | Type | Mutable | Risk | Used at | Notes |
@@ -247,11 +258,13 @@
 8. market-structure/shadow vNext 코드와 migration 작성.
 9. frequency profile registry, 1H/15m OHLCV 수집 일반화, frequency backtest mart migration 작성.
 10. realtime execution feature collector와 shadow execution gate 작성.
+11. realtime risk trigger v1 작성 및 적용.
+12. roster diagnostics, close path validation, regime A/B, live gate replay 옵션 작성.
 
 남은 작업:
 
 1. Lambda EventBridge rule `arena-trader-4h`가 켜져 있으면 비활성화 상태를 주기적으로 확인한다.
 2. news/provider/risk overlay 파라미터를 별도 policy registry로 분리할지 결정한다.
-3. `20260620_arena_realtime_execution_v1.sql`을 Supabase에 적용하고 readiness view를 확인한다.
-4. `arena_execution_gates` reject reason 분포를 최소 2주 이상 관찰한다.
+3. `arena_execution_gates`, `arena_realtime_risk_states`, `arena_tca_shadow_*` 품질을 최소 2주 이상 관찰한다.
+4. `arena.roster_diagnostics`로 veto 분포를 누적 분석한다.
 5. shadow 30일 이상, validation critical/high fail 0 전까지 `regime_trend` shadow sleeve, execution gate live 차단, realtime risk live 차단은 paper로 승격하지 않는다.

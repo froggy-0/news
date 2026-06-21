@@ -1,6 +1,6 @@
 # Arena Backtest Framework v1
 
-작성일: 2026-06-19
+작성일: 2026-06-21
 
 ## 목적
 
@@ -32,6 +32,8 @@
 | stale macro | `macro_stale_hours` 초과 시 macro 입력 비활성화 |
 | portfolio exposure | spot 기본값에서는 max open/long exposure를 기준으로 신규 진입 차단. short/net short는 research replay 호환용 |
 | risk kill switch | 일간 손실 제한, 알고리즘별 MDD kill switch를 replay |
+| regime variant | 기본 `strict_v1`. `relaxed_2of3_v1`은 research-only A/B |
+| live gate replay | 기본 off. 옵션을 켜면 execution gate/realtime risk block을 신규 open 차단으로 반영 |
 | 파라미터 | `params_snapshot`, `rules_snapshot`, `strategy_version` 저장 |
 
 ## 신규 DB 객체
@@ -56,6 +58,25 @@
 ```bash
 cd /Users/giwon/code/news
 PYTHONPATH=src .venv/bin/python -m arena.backtest --limit 300
+```
+
+Gate replay 비교:
+
+```bash
+cd /Users/giwon/code/news
+PYTHONPATH=src .venv/bin/python -m arena.backtest \
+  --profile live_4h \
+  --limit 300 \
+  --replay-execution-gate-blocks \
+  --replay-realtime-risk-blocks
+```
+
+Regime A/B:
+
+```bash
+cd /Users/giwon/code/news
+PYTHONPATH=src .venv/bin/python -m arena.backtest --profile live_4h --limit 300 --regime-variant strict_v1
+PYTHONPATH=src .venv/bin/python -m arena.backtest --profile live_4h --limit 300 --regime-variant relaxed_2of3_v1
 ```
 
 5. 결과 저장:
@@ -88,11 +109,13 @@ LIMIT 5;
 - `arena_backtest_validation_ready`: 적용 완료.
 - baseline validation 저장 완료.
 - `arena_portfolio_risk_layer_ready`: 적용 완료.
-- `arena_market_structure_v1_ready`: SQL 적용 후 확인 필요.
-- `arena_frequency_research_v1_ready`: SQL 적용 후 확인 필요.
+- `arena_market_structure_v1_ready`: 적용 완료.
+- `arena_frequency_research_v1_ready`: 적용 완료.
 - spot backtest에서는 funding이 항상 `0`이다. funding 포함 net return은 `--product usdm_perp_paper` research replay에서만 해석한다.
 - `--profile`, `--indicator-profile`, `--cost-scenario` 옵션으로 4H/1H/15m replay를 분리한다.
 - metrics에는 trades/day, turnover/day, cost drag, funding drag, gross/net return, end-of-data 제외 성과를 포함한다.
+- `--regime-variant relaxed_2of3_v1`은 unknown을 줄이는 실험용이다. 2026-06-21 1차 A/B에서는 strict 대비 성과가 악화되어 live 승격 금지다.
+- `--replay-execution-gate-blocks`, `--replay-realtime-risk-blocks`는 baseline과 별도 비교해야 한다. 기본 baseline에는 live gate block을 섞지 않는다.
 
 최신 baseline:
 
@@ -116,6 +139,7 @@ LIMIT 5;
 - risk event count와 risk-blocked signal count를 report mart에 포함.
 - stop-loss trade가 발생한 run에서 `stop_loss_fill_policy` 실제 pass/fail 확인.
 - spot run에서는 `gross_ret_pct`, `trading_cost_pct`, `net_ret_pct`를 본다. funding 포함 research run에서는 `funding_ret_pct`까지 같이 본다.
+- `arena.roster_diagnostics --source backtest --profile live_4h --limit 300`로 backtest decision veto 분포를 함께 본다.
 
 ## Step 2B 검증 루브릭
 

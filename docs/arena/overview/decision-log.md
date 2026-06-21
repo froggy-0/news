@@ -1,6 +1,6 @@
 # Arena Decision Log
 
-작성일: 2026-06-19
+작성일: 2026-06-21
 
 이 문서는 코드/DB 변경보다 더 오래 남아야 하는 의사결정과 그 이유를 기록한다.
 
@@ -88,3 +88,34 @@
 - 영향: `paper_positions.direction='short'` 신규 open은 `positions.open_position()`에서 guard한다.
 - 영향: derivatives/perp funding/OI/basis/mark price와 long/short replay는 research/shadow/backtest 전용으로 유지한다.
 - 리스크: 과거 synthetic short 원장은 성과 해석을 오염시킬 수 있으므로 `legacy_perp_sim`으로 분리한다.
+
+## D012. 알고리즘 skip/veto diagnostics를 decision 원장에 저장한다
+
+- 결정: `arena_decisions.reason.diagnostics`와 `skipped_reason`에 알고리즘별 탈락 조건을 저장한다.
+- 이유: trade가 없거나 적은 알고리즘은 성과가 아니라 "왜 거래하지 않았는가"를 먼저 봐야 한다.
+- 영향: `regime_trend`, `vix_rsi`, `macd_momentum`, `multi_factor`, `fng_contrarian` 모두 조건별 pass/fail/veto를 집계할 수 있다.
+- 영향: `arena.roster_diagnostics` CLI와 대시보드 diagnostics 패널이 같은 원장을 읽는다.
+- 리스크: diagnostics는 설명/감사용 정보다. 임계값 완화는 backtest/replay 후에만 한다.
+
+## D013. P0 close path는 강제 테스트 포지션으로 검증한다
+
+- 결정: 자연 청산을 기다리지 않고 테스트 spot long 포지션 1건을 열고 닫아 `close_position` 경로를 검증했다.
+- 이유: closed trade가 없는 상태에서는 수수료, 슬리피지, spread, `ret_pct`, `hit`, `hold_hours` 기록을 신뢰하기 어렵다.
+- 영향: 테스트 row는 검증 후 삭제했다.
+- 영향: Slack close 알림은 실제 채널 발송 대신 `_post()`를 모킹해 payload 조립 경로를 테스트한다.
+- 리스크: 실제 Slack API 장애/권한 문제는 별도 운영 알림 테스트가 필요하다.
+
+## D014. relaxed regime은 research-only로 둔다
+
+- 결정: `relaxed_2of3_v1` regime classifier는 live default가 아니라 research variant로만 둔다.
+- 이유: unknown을 줄이는 것은 좋지만, 1차 A/B에서 low-quality trades가 늘어 strict 대비 성과가 악화됐다.
+- 영향: live/paper 기본값은 `strict_v1`이다.
+- 영향: backtest CLI에서 `--regime-variant relaxed_2of3_v1`로만 실험한다.
+- 리스크: 표본이 짧으므로 최종 폐기는 아니다. 다만 승격은 금지한다.
+
+## D015. live gate replay는 기본 off인 backtest 옵션으로 둔다
+
+- 결정: execution gate/realtime risk block replay를 `--replay-execution-gate-blocks`, `--replay-realtime-risk-blocks` 옵션으로 추가한다.
+- 이유: baseline 성과와 live gate 적용 성과를 분리해서 비교해야 한다.
+- 영향: 옵션을 켜면 gate block이 신규 open을 막고 `arena_backtest_risk_events`에 `live_gate_replay` event를 남긴다.
+- 리스크: realtime feature coverage가 부족한 과거 구간에서는 gate replay가 보수적으로 해석될 수 있다.
