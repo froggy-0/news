@@ -191,13 +191,35 @@ def _futures_stress_score(market_features: dict[str, Any]) -> float | None:
     funding_24h = abs(_float(market_features.get("funding_rate_24h")) or 0.0)
     oi_change = abs(_float(market_features.get("open_interest_change_24h")) or 0.0)
     basis = abs(_float(market_features.get("mark_spot_basis")) or 0.0)
-    if latest_funding == 0.0 and funding_24h == 0.0 and oi_change == 0.0 and basis == 0.0:
+
+    # 군중 포지셔닝/플로우 (선물 sentiment overlay) — 현물 롱 관점 stress.
+    # top trader 포지션 L/S가 과도하게 롱 쏠림이면 되돌림 위험 → stress.
+    top_pos_ls = _float(market_features.get("top_position_ls_ratio"))
+    crowded_long = 0.0
+    if top_pos_ls is not None and top_pos_ls > 1.5:
+        crowded_long = _clamp((top_pos_ls - 1.5) / 1.5)  # 1.5→0, 3.0→1.0
+    # 선물 taker 매도 우위(buySellRatio<1)면 매도압력 → stress.
+    taker_bs = _float(market_features.get("taker_buy_sell_ratio"))
+    taker_sell = 0.0
+    if taker_bs is not None and taker_bs < 1.0:
+        taker_sell = _clamp((1.0 - taker_bs) / 0.5)  # 1.0→0, 0.5→1.0
+
+    if (
+        latest_funding == 0.0
+        and funding_24h == 0.0
+        and oi_change == 0.0
+        and basis == 0.0
+        and crowded_long == 0.0
+        and taker_sell == 0.0
+    ):
         return None
     return max(
         _clamp(latest_funding / 0.001),
         _clamp(funding_24h / 0.003),
         _clamp(oi_change / 0.10),
         _clamp(basis / 0.01),
+        crowded_long,
+        taker_sell,
     )
 
 

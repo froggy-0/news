@@ -21,9 +21,30 @@ OPEN_INTEREST_HIST_PATH = "/futures/data/openInterestHist"
 BASIS_PATH = "/futures/data/basis"
 MARK_PRICE_KLINES_PATH = "/fapi/v1/markPriceKlines"
 PREMIUM_INDEX_KLINES_PATH = "/fapi/v1/premiumIndexKlines"
+# 군중 포지셔닝/플로우 (선물 sentiment overlay) — 모두 /futures/data, period 기반
+GLOBAL_LS_ACCOUNT_PATH = "/futures/data/globalLongShortAccountRatio"
+TOP_LS_ACCOUNT_PATH = "/futures/data/topLongShortAccountRatio"
+TOP_LS_POSITION_PATH = "/futures/data/topLongShortPositionRatio"
+TAKER_LS_RATIO_PATH = "/futures/data/takerlongshortRatio"
 
 MARK_PRICE_TYPE = "mark_price"
 PREMIUM_INDEX_TYPE = "premium_index"
+
+# 4h 스케줄러가 산출한 최신 선물 features를 같은 프로세스의 realtime 수집기와
+# 공유하기 위한 모듈 캐시 (server.py에서 scheduler/realtime_market이 동일 이벤트루프).
+_LATEST_MARKET_FEATURES: dict[str, Any] = {}
+
+
+def set_latest_market_features(features: dict[str, Any] | None) -> None:
+    """4h 스케줄러가 매 사이클 호출 — 최신 선물 features 캐시 갱신."""
+    global _LATEST_MARKET_FEATURES
+    if features:
+        _LATEST_MARKET_FEATURES = dict(features)
+
+
+def get_latest_market_features() -> dict[str, Any]:
+    """realtime 수집기가 futures_stress 계산에 사용 — 미수집 시 빈 dict."""
+    return dict(_LATEST_MARKET_FEATURES)
 
 
 @dataclass(frozen=True)
@@ -189,6 +210,30 @@ async def _fetch_json(
         return label, [], f"{label}: {exc}"
 
 
+def parse_ratio_row(
+    row: dict[str, Any],
+    *,
+    value_key: str,
+    out_key: str,
+    fetched_at: datetime,
+) -> dict[str, Any] | None:
+    """globalLongShortAccountRatio / top*Ratio / takerlongshortRatio 행 파싱.
+
+    응답 행 예: {"symbol","longShortRatio","longAccount","shortAccount","timestamp"}
+                {"buySellRatio","buyVol","sellVol","timestamp"}
+    """
+    timestamp = row.get("timestamp")
+    value = _safe_float(row.get(value_key))
+    if timestamp is None or value is None:
+        return None
+    return {
+        "timestamp": _ts(_ts_from_ms(timestamp)),
+        out_key: value,
+        "raw_payload": row,
+        "fetched_at": _ts(fetched_at),
+    }
+
+
 async def fetch_market_structure_snapshot(
     *,
     symbol: str = parameters.BINANCE_SYMBOL,
@@ -245,6 +290,30 @@ async def fetch_market_structure_snapshot(
                 PREMIUM_INDEX_KLINES_PATH,
                 params={"symbol": symbol, "interval": interval, "limit": min(max(limit, 1), 1000)},
                 label=PREMIUM_INDEX_TYPE,
+            ),
+            _fetch_json(
+                client,
+                GLOBAL_LS_ACCOUNT_PATH,
+                params={"symbol": symbol, "period": interval, "limit": min(max(limit, 1), 500)},
+                label="global_account_ls",
+            ),
+            _fetch_json(
+                client,
+                TOP_LS_ACCOUNT_PATH,
+                params={"symbol": symbol, "period": interval, "limit": min(max(limit, 1), 500)},
+                label="top_account_ls",
+            ),
+            _fetch_json(
+                client,
+                TOP_LS_POSITION_PATH,
+                params={"symbol": symbol, "period": interval, "limit": min(max(limit, 1), 500)},
+                label="top_position_ls",
+            ),
+            _fetch_json(
+                client,
+                TAKER_LS_RATIO_PATH,
+                params={"symbol": symbol, "period": interval, "limit": min(max(limit, 1), 500)},
+                label="taker_ls",
             ),
         )
 
@@ -310,6 +379,24 @@ async def fetch_market_structure_snapshot(
         if parsed is not None
     ]
 
+    def _ratio_rows(label: str, value_key: str, out_key: str) -> list[dict[str, Any]]:
+        return [
+            parsed
+            for row in payloads.get(label, [])
+            if isinstance(row, dict)
+            for parsed in [
+                parse_ratio_row(row, value_key=value_key, out_key=out_key, fetched_at=fetched_at)
+            ]
+            if parsed is not None
+        ]
+
+    global_account_ls_rows = _ratio_rows(
+        "global_account_ls", "longShortRatio", "global_account_ls_ratio"
+    )
+    top_account_ls_rows = _ratio_rows("top_account_ls", "longShortRatio", "top_account_ls_ratio")
+    top_position_ls_rows = _ratio_rows("top_position_ls", "longShortRatio", "top_position_ls_ratio")
+    taker_ls_rows = _ratio_rows("taker_ls", "buySellRatio", "taker_buy_sell_ratio")
+
     features = build_market_features(
         data_timestamp=data_ts,
         spot_close=spot_close,
@@ -318,6 +405,10 @@ async def fetch_market_structure_snapshot(
         basis=basis_rows,
         mark_price_bars=mark_rows,
         premium_index_bars=premium_rows,
+        global_account_ls=global_account_ls_rows,
+        top_account_ls=top_account_ls_rows,
+        top_position_ls=top_position_ls_rows,
+        taker_ls=taker_ls_rows,
         errors=errors,
     )
     return MarketStructureSnapshot(
@@ -379,6 +470,10 @@ def build_market_features(
     basis: list[dict[str, Any]],
     mark_price_bars: list[dict[str, Any]],
     premium_index_bars: list[dict[str, Any]],
+    global_account_ls: list[dict[str, Any]] | None = None,
+    top_account_ls: list[dict[str, Any]] | None = None,
+    top_position_ls: list[dict[str, Any]] | None = None,
+    taker_ls: list[dict[str, Any]] | None = None,
     errors: list[str] | None = None,
 ) -> dict[str, Any]:
     data_ts = execution_rules.parse_utc_datetime(data_timestamp)
@@ -408,6 +503,15 @@ def build_market_features(
         else None
     )
 
+    def _latest_ratio(rows: list[dict[str, Any]] | None, key: str) -> float | None:
+        sel = _latest_at_or_before(rows or [], "timestamp", data_ts)
+        return _safe_float(sel.get(key)) if sel else None
+
+    global_account_ls_ratio = _latest_ratio(global_account_ls, "global_account_ls_ratio")
+    top_account_ls_ratio = _latest_ratio(top_account_ls, "top_account_ls_ratio")
+    top_position_ls_ratio = _latest_ratio(top_position_ls, "top_position_ls_ratio")
+    taker_buy_sell_ratio = _latest_ratio(taker_ls, "taker_buy_sell_ratio")
+
     return {
         "quality_status": "ok" if not errors else "degraded",
         "quality_errors": errors or [],
@@ -424,12 +528,21 @@ def build_market_features(
         "mark_price": mark_close,
         "premium_index": _safe_float(latest_premium.get("close")) if latest_premium else None,
         "mark_spot_basis": mark_spot_basis,
+        # 군중 포지셔닝/플로우 (선물 sentiment overlay)
+        "global_account_ls_ratio": global_account_ls_ratio,
+        "top_account_ls_ratio": top_account_ls_ratio,
+        "top_position_ls_ratio": top_position_ls_ratio,
+        "taker_buy_sell_ratio": taker_buy_sell_ratio,
         "source_counts": {
             "funding_rates": len(funding_rates),
             "open_interest": len(open_interest),
             "basis": len(basis),
             "mark_price_bars": len(mark_price_bars),
             "premium_index_bars": len(premium_index_bars),
+            "global_account_ls": len(global_account_ls or []),
+            "top_account_ls": len(top_account_ls or []),
+            "top_position_ls": len(top_position_ls or []),
+            "taker_ls": len(taker_ls or []),
         },
     }
 
