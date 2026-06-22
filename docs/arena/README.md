@@ -1,4 +1,4 @@
-# BTC Signal Arena Docs
+# SOVEREIGNWON Arena Docs
 
 작성일: 2026-06-21
 
@@ -55,6 +55,6 @@
 ## 문서 정리 원칙
 
 - Arena 관련 문서는 `docs/arena` 아래에 둔다.
-- 과거 Morning Brief, sentiment-join, frontend, provider 문서는 기존 디렉터리에 유지한다.
+- 과거 Sovereign Briefing, sentiment-join, frontend, provider 문서는 기존 디렉터리에 유지한다.
 - 발표 자료나 과거 연구 산출물은 Arena 운영 문서와 섞지 않는다.
 - `.DS_Store`, 일회성 로컬 로그, secret 값이 담길 수 있는 문서는 저장하지 않는다.
