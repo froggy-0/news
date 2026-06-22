@@ -10,7 +10,7 @@ def test_arena_parameter_snapshot_is_json_serializable() -> None:
 
     assert snapshot["params_version"] == parameters.PARAMS_VERSION
     assert snapshot["feature_set_version"] == parameters.FEATURE_SET_VERSION
-    assert snapshot["params_version"] == "arena-params-v18"
+    assert snapshot["params_version"] == "arena-params-v20"
     assert snapshot["feature_set_version"] == "arena-features-v8"
     assert snapshot["risk_model_version"] == "portfolio-risk-v1"
     assert snapshot["runtime"] == "ec2"
@@ -113,16 +113,17 @@ def test_arena_indicators_keep_default_contracts() -> None:
     assert 0.0 <= computed["bb_pos"] <= 1.0
 
 
-def test_macd_momentum_uses_atr_threshold() -> None:
+def test_macd_momentum_signal_conditions() -> None:
     # trending + momentum building (hist > hist_prev)
     trending_up = {"rsi": 50.0, "bb_width": 5.0, "adx": 25.0, "macd_hist_prev": 0.05}
     trending_dn = {"rsi": 50.0, "bb_width": 5.0, "macd_hist_prev": -0.05}
 
-    # threshold=0.10: hist < 0.10*ATR → None regardless
+    # hist > 0 but decreasing (< h_prev=0.05) → None
     assert algorithms.macd_momentum({}, {"macd_hist": 0.01, "atr": 1.0, **trending_up}) is None
-    assert algorithms.macd_momentum({}, {"macd_hist": 0.09, "atr": 1.0, **trending_up}) is None
-    # hist > 0.10*ATR + increasing + trending → spot long only
+    # hist > 0 + increasing → long (ATR threshold removed since arena-params-v19)
+    assert algorithms.macd_momentum({}, {"macd_hist": 0.09, "atr": 1.0, **trending_up}) == "long"
     assert algorithms.macd_momentum({}, {"macd_hist": 0.11, "atr": 1.0, **trending_up}) == "long"
+    # negative hist → None
     assert algorithms.macd_momentum({}, {"macd_hist": -0.11, "atr": 1.0, **trending_dn}) is None
     # MACD delta filter: hist must be increasing — if decreasing, None
     fading = {"rsi": 50.0, "bb_width": 5.0, "macd_hist_prev": 0.5}
