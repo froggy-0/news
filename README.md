@@ -114,7 +114,7 @@ PYTHONPATH=src python scripts/verify_arena_data_lake.py
 | `docs/briefing/README.md` | 브리핑, Sentiment Join, 이메일, public JSON 흐름 |
 | `docs/arena/README.md` | BTC Signal Arena 운영/연구/제품 문서 |
 | `docs/frontend/README.md` | 공개 프론트엔드와 schema 계약 |
-| `docs/infrastructure/README.md` | GitHub Actions, Lambda, Terraform, Supabase, Cloudflare 운영 경로 |
+| `docs/infrastructure/README.md` | GitHub Actions, Lambda, deploy, Supabase, Cloudflare 운영 경로 |
 | `docs/reference/codebase-map.md` | 실제 코드 경로 기준 상세 맵 |
 | `docs/reference/markdown-inventory.md` | 저장소 Markdown 문서 인벤토리 |
 | `docs/reference/docs-rubric.md` | 문서 정합성 점검 루브릭 |

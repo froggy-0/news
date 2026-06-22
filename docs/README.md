@@ -12,7 +12,7 @@
 | 브리핑 | [briefing/README.md](briefing/README.md) | 브리핑, Sentiment Join, 이메일, public JSON 흐름 확인 |
 | Arena | [arena/README.md](arena/README.md) | BTC Signal Arena 운영/연구/제품 맥락 확인 |
 | Frontend | [frontend/README.md](frontend/README.md) | 공개 사이트, Pages Functions, schema 계약 확인 |
-| Infrastructure | [infrastructure/README.md](infrastructure/README.md) | GitHub Actions, Lambda, Terraform, Supabase 운영 경로 확인 |
+| Infrastructure | [infrastructure/README.md](infrastructure/README.md) | GitHub Actions, Lambda, deploy, Supabase 운영 경로 확인 |
 | 문서 인벤토리 | [reference/markdown-inventory.md](reference/markdown-inventory.md) | Markdown 파일이 어디에 있고 어떤 성격인지 확인 |
 | 문서 루브릭 | [reference/docs-rubric.md](reference/docs-rubric.md) | 문서 변경 후 자체 검증 |
 
@@ -23,7 +23,7 @@
 | `briefing/` | Sovereign Briefing, Sentiment Join, 이메일, public JSON, 데이터 소스 운영 |
 | `arena/` | BTC Signal Arena의 운영, 아키텍처, 연구, 제품 문서 |
 | `frontend/` | 공개 Next.js/Cloudflare Pages 사이트와 JSON 계약 |
-| `infrastructure/` | 배포, 워크플로우, Lambda, Terraform, Supabase, R2 운영 경로 |
+| `infrastructure/` | 배포, 워크플로우, Lambda, Supabase, R2 운영 경로 |
 | `reference/` | 코드베이스 맵, Markdown 인벤토리, 문서 정합성 루브릭 |
 | `analysis/` | 특정 실행 결과, 장애/품질 분석, 사후 리뷰 |
 | `reports/` | 제출용/공유용 완성 보고서와 코드 기반 보고서 초안 |
