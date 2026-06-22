@@ -120,6 +120,18 @@ def _below_ema_trend(ind: dict) -> bool:
     return close < ema_200
 
 
+def _below_ema_trend_strict(ind: dict, macro: dict) -> bool:
+    """EMA200 게이트 — bull_trend 확인 시 레짐 분류기가 이미 구조적 추세 확인했으므로 비적용.
+
+    4H EMA200 = 33일 EMA (Faber 200일 MA와 다름). bull_trend 레짐에서는 로컬 4H
+    분류기가 동일 데이터로 이미 추세를 확인한 것 → EMA200 추가 게이트는 중복 필터.
+    bull_trend 이외(sideways/unknown/stress): EMA200 게이트 유지 (구조적 방어선).
+    """
+    if macro.get("arena_regime_state") == regime.REGIME_BULL_TREND:
+        return False
+    return _below_ema_trend(ind)
+
+
 def _below_ema_loose(ind: dict) -> bool:
     """4H EMA55(55×4H ≈ 9일) 하회 여부 — 복합팩터 소프트 게이트.
 
@@ -241,7 +253,7 @@ def regime_trend(macro: dict, ind: dict) -> str | None:
         and rsi < parameters.TREND_CORE_RSI_LONG_MAX
         and not _funding_hot(macro)
         and not _etf_outflow_heavy(macro)
-        and not _below_ema_trend(ind)
+        and not _below_ema_trend_strict(ind, macro)
         and _taker_confirms(macro)
         and not _lsr_crowded(macro)
         and not _oi_diverged(macro)
@@ -320,7 +332,7 @@ def macd_momentum(macro: dict, ind: dict) -> str | None:
         _is_risk_off(_regime_state(macro))
         or _funding_hot(macro)
         or _etf_outflow_heavy(macro)
-        or _below_ema_trend(ind)
+        or _below_ema_trend_strict(ind, macro)
         or _lsr_crowded(macro)
         or _oi_diverged(macro)
     ):
@@ -369,7 +381,7 @@ def multi_factor(macro: dict, ind: dict) -> str | None:
     f2 = fng is not None and fng < 60.0
     f3 = (
         vix_now is None
-        or (vix_q40 is not None and vix_now < vix_q40)
+        or (vix_q40 is not None and vix_now < vix_q40 * parameters.VIX_CALM_TOLERANCE_BAND)
         or (vix_q40 is None and vix_now < 20.0)
     )
     f4 = rsi < parameters.MULTI_FACTOR_LONG_RSI_MAX
@@ -676,7 +688,9 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
         )
         _record_condition(diag, "funding_not_hot", not _funding_hot(macro), veto=True)
         _record_condition(diag, "etf_outflow_not_heavy", not _etf_outflow_heavy(macro), veto=True)
-        _record_condition(diag, "above_ema200_4h", not _below_ema_trend(ind), veto=True)
+        _record_condition(
+            diag, "above_ema200_4h", not _below_ema_trend_strict(ind, macro), veto=True
+        )
         _record_condition(diag, "taker_confirms", _taker_confirms(macro), veto=True)
         _record_condition(diag, "lsr_not_crowded", not _lsr_crowded(macro), veto=True)
         _record_condition(diag, "oi_not_diverged", not _oi_diverged(macro), veto=True)
@@ -741,7 +755,9 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
         _record_condition(diag, "not_risk_off", not _is_risk_off(state), veto=True)
         _record_condition(diag, "funding_not_hot", not _funding_hot(macro), veto=True)
         _record_condition(diag, "etf_outflow_not_heavy", not _etf_outflow_heavy(macro), veto=True)
-        _record_condition(diag, "above_ema200_4h", not _below_ema_trend(ind), veto=True)
+        _record_condition(
+            diag, "above_ema200_4h", not _below_ema_trend_strict(ind, macro), veto=True
+        )
         _record_condition(diag, "lsr_not_crowded", not _lsr_crowded(macro), veto=True)
         _record_condition(diag, "oi_not_diverged", not _oi_diverged(macro), veto=True)
         _record_condition(diag, "macd_hist_positive", h > 0, veto=True)
@@ -785,7 +801,7 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
             "fng_below_60": fng is not None and fng < 60.0,
             "vix_calm_or_missing": (
                 vix_now is None
-                or (vix_q40 is not None and vix_now < vix_q40)
+                or (vix_q40 is not None and vix_now < vix_q40 * parameters.VIX_CALM_TOLERANCE_BAND)
                 or (vix_q40 is None and vix_now < 20.0)
             ),
             "rsi_below_long_max": rsi < parameters.MULTI_FACTOR_LONG_RSI_MAX,
