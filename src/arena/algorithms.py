@@ -90,11 +90,11 @@ def _etf_outflow_heavy(macro: dict) -> bool:
 
 
 def _below_ma200(macro: dict) -> bool:
-    """200일 이동평균 하회(구조적 약세) 여부 — 추세추종/모멘텀 롱 게이트.
+    """일간 200일 MA 하회 여부 — 현재 어떤 알고에서도 호출되지 않음(4H 로컬 MA로 교체).
 
-    근거: Faber(2007), Moskowitz·Ooi·Pedersen(2012, Time Series Momentum) — 장기
-    추세 필터 아래에서 롱을 보류하면 하락장 노출·whipsaw가 줄어 위험조정수익 개선.
-    btc_above_ma200(0/1)은 일간 parquet에서 옴. 미수집(None) 시 게이트 미적용(False).
+    이전: Faber(2007), TSMOM 근거의 일간 parquet 기반 게이트.
+    교체 이유: 일간 200일 MA는 반응이 너무 느려 4H 시스템과 맞지 않고
+    macro 갱신 지연(~20h)에 종속됨. → _below_ema_trend / _below_ema_loose 로 대체.
     """
     if not parameters.MA200_REGIME_GATE_ENABLED:
         return False
@@ -105,6 +105,32 @@ def _below_ma200(macro: dict) -> bool:
         return float(above) < 1.0
     except (TypeError, ValueError):
         return False
+
+
+def _below_ema_trend(ind: dict) -> bool:
+    """4H EMA200(200×4H ≈ 33일) 하회 여부 — 추세추종/모멘텀 롱 게이트.
+
+    일간 btc_above_ma200 대신 로컬 4H 지표를 사용해 macro 지연 없이 실시간 판단.
+    ema_200 미산출(0.0) 시 False(게이트 미적용).
+    """
+    close = ind.get("close", 0.0)
+    ema_200 = ind.get("ema_200", 0.0)
+    if ema_200 <= 0:
+        return False
+    return close < ema_200
+
+
+def _below_ema_loose(ind: dict) -> bool:
+    """4H EMA55(55×4H ≈ 9일) 하회 여부 — 복합팩터 소프트 게이트.
+
+    multi_factor는 레짐 조건이 이미 내부 팩터에 포함돼 있어 단기 MA면 충분.
+    ema_55 미산출(0.0) 시 False(게이트 미적용).
+    """
+    close = ind.get("close", 0.0)
+    ema_55 = ind.get("ema_55", 0.0)
+    if ema_55 <= 0:
+        return False
+    return close < ema_55
 
 
 def _lsr_crowded(macro: dict) -> bool:
@@ -188,7 +214,7 @@ def regime_trend(macro: dict, ind: dict) -> str | None:
       ④ EMA 정배열 + 단기 EMA 상승
       ⑤ RSI 과열 미도달
       ⑥ 펀딩 과열 아님
-      ⑦ 200일 MA 상회 (구조적 강세 게이트 — 일간)
+      ⑦ 4H EMA200(≈33일) 상회 — 로컬 중기 추세 게이트
       ⑧ 테이커 매수 우위로 돌파 확인 (주문흐름 동의 — 일간)
       ⑨ 롱숏비 군중 과밀 아님 (일간)
       ⑩ OI-가격 7일 방향 불일치 아님 (추세 확인 — 일간)
@@ -215,7 +241,7 @@ def regime_trend(macro: dict, ind: dict) -> str | None:
         and rsi < parameters.TREND_CORE_RSI_LONG_MAX
         and not _funding_hot(macro)
         and not _etf_outflow_heavy(macro)
-        and not _below_ma200(macro)
+        and not _below_ema_trend(ind)
         and _taker_confirms(macro)
         and not _lsr_crowded(macro)
         and not _oi_diverged(macro)
@@ -250,7 +276,8 @@ def vix_rsi(macro: dict, ind: dict) -> str | None:
     """VIX 수준 + RSI 필터 — 시장 공포 완화 + 과열 미도달 시 매수.
 
     VIX가 40th percentile 이하(calm) AND RSI < 50 → 롱.
-    vix_q40 미수집 시 vix_now < 20 fallback. risk-off 레짐 또는 200일 MA 하회 시 보류.
+    vix_q40 미수집 시 vix_now < 20 fallback. risk-off 레짐 시 보류.
+    MA 게이트 없음 — 이 알고는 VIX/RSI 외생 신호 기반이라 장기 추세 필터 부적합.
     """
     vix_now = macro.get("vix_now")
     vix_q40 = macro.get("vix_q40")
@@ -260,10 +287,12 @@ def vix_rsi(macro: dict, ind: dict) -> str | None:
         return None
     if _is_risk_off(_regime_state(macro)):
         return None
-    if _below_ma200(macro):
-        return None
 
-    vix_calm = (vix_now < vix_q40) if vix_q40 else (vix_now < 20.0)
+    # q40 기준 +5% 이내(VIX_CALM_TOLERANCE_BAND)는 실질 calm으로 인정.
+    # 90일 롤링 추정치 오차를 감안한 허용 밴드 (18.44 vs 17.85 = 3.3% 차이는 노이즈).
+    vix_calm = (
+        (vix_now < vix_q40 * parameters.VIX_CALM_TOLERANCE_BAND) if vix_q40 else (vix_now < 20.0)
+    )
 
     if vix_calm and rsi < parameters.VIX_RSI_LONG_MAX:
         return "long"
@@ -271,14 +300,16 @@ def vix_rsi(macro: dict, ind: dict) -> str | None:
 
 
 def macd_momentum(macro: dict, ind: dict) -> str | None:
-    """MACD 히스토그램 모멘텀 — 증가 중인 강한 모멘텀만 매수.
+    """MACD 히스토그램 모멘텀 — 신호선 위에서 증가 중인 모멘텀 매수.
 
-    ATR 임계값 초과 + 히스토그램 증가 + RSI 과열 미도달 + BB 확장 + ADX 추세.
-    펀딩 과열·risk-off 레짐·200일 MA 하회·롱숏 과밀·OI 방향불일치에서는 보류. 숏 없음.
+    h > 0(시그널선 상회) + h > h_prev(모멘텀 강화 중) + RSI 과열 미도달 + BB 확장 + ADX 추세.
+    이전 ATR 임계값(h > ATR×0.10)은 제거: 히스토그램이 양수면 이미 MACD>시그널(강세).
+    ATR 임계는 이미 강한 모멘텀만 걸러 초기 형성 구간(0~ATR×0.10)을 전부 차단했음.
+
+    펀딩 과열·risk-off 레짐·4H EMA200 하회·롱숏 과밀·OI 방향불일치에서는 보류. 숏 없음.
     """
     h = ind["macd_hist"]
     h_prev = ind.get("macd_hist_prev", h)
-    threshold = ind.get("atr", 0.0) * parameters.MACD_ATR_THRESHOLD_MULTIPLE
     rsi = ind.get("rsi", 50.0)
     bb_w = ind.get("bb_width", 100.0)
     adx = ind.get("adx", 0.0)
@@ -289,16 +320,16 @@ def macd_momentum(macro: dict, ind: dict) -> str | None:
         _is_risk_off(_regime_state(macro))
         or _funding_hot(macro)
         or _etf_outflow_heavy(macro)
-        or _below_ma200(macro)
+        or _below_ema_trend(ind)
         or _lsr_crowded(macro)
         or _oi_diverged(macro)
     ):
         return None
     if (
-        h > threshold
+        h > 0
         and h > h_prev
         and rsi < parameters.MACD_MOMENTUM_RSI_LONG_MAX
-        and adx >= parameters.ADX_TREND_MIN
+        and adx >= parameters.MACD_MOMENTUM_ADX_MIN
     ):
         return "long"
     return None
@@ -312,9 +343,12 @@ def multi_factor(macro: dict, ind: dict) -> str | None:
     f3: VIX calm (vix_now < vix_q40) — 미수집 시 우호적 처리
     f4: RSI < 50 (과열 전)
     f5: 펀딩 과열 아님 (롱 과밀 회피)
-    단, risk-off 레짐·기관 ETF 대량 유출·200일 MA 하회·롱숏 과밀·시장폭 붕괴·
-    온체인 유동성 수축이면 즉시 보류(veto).
-    (일간 구조/유동성 게이트는 veto로 두고, 5팩터 4-of-5 코어 로직은 그대로 유지)
+    단, risk-off 레짐·기관 ETF 대량 유출·롱숏 과밀·시장폭 붕괴·온체인 유동성 수축이면
+    즉시 보류(veto).
+
+    EMA55 veto 제거(arena-params-v19): 이 알고는 매크로/감정 5팩터 투표가 핵심이라
+    9일 EMA가 veto로 작동하면 팩터 모두 우호적일 때도 차단되는 구조적 문제 발생.
+    레짐 방향성(f1)이 이미 bearish 환경을 내부 팩터로 반영한다.
     """
     state = _regime_state(macro)
     fng = macro.get("fng")
@@ -325,7 +359,6 @@ def multi_factor(macro: dict, ind: dict) -> str | None:
     if (
         _is_risk_off(state)
         or _etf_outflow_heavy(macro)
-        or _below_ma200(macro)
         or _lsr_crowded(macro)
         or _breadth_collapsed(macro)
         or _stablecoin_contracting(macro)
@@ -347,12 +380,212 @@ def multi_factor(macro: dict, ind: dict) -> str | None:
     return None
 
 
+# ── omnibus (6번째 알고) 내부 헬퍼 ──────────────────────────────────────────
+
+_OMNIBUS_UP_TREND = "UP_TREND"
+_OMNIBUS_RANGE = "RANGE"
+_OMNIBUS_DOWN_TREND = "DOWN_TREND"
+_OMNIBUS_RISK_OFF = "RISK_OFF"
+_OMNIBUS_TRANSITION = "TRANSITION"
+
+_OMNIBUS_STRUCTURAL_DOWN = "STRUCTURAL_DOWN"
+_OMNIBUS_PANIC_DROP = "PANIC_DROP"
+_OMNIBUS_OVERSOLD_REBOUND = "OVERSOLD_REBOUND"
+
+_OMNIBUS_RANGE_NEAR_LOW = "NEAR_LOW"
+_OMNIBUS_RANGE_NEAR_HIGH = "NEAR_HIGH"
+_OMNIBUS_RANGE_MIDDLE = "MIDDLE"
+
+
+def _omnibus_regime(macro: dict, ind: dict) -> str:
+    """UP_TREND / RANGE / DOWN_TREND / RISK_OFF / TRANSITION 5-state 분류.
+
+    1순위: 로컬 4H arena_regime_state (strict_v1 레짐, 가장 신뢰할 수 있을 때 사용).
+    2순위: arena_regime_state='unknown'(레짐 불명)이면 4H 지표 2of3 relaxed로 직접 계산.
+           매크로 파이프라인(1일 1회 갱신)에 의존하지 않는 완전 자율 레짐 분류.
+
+    중요: bear_trend는 _RISK_OFF_REGIMES에 포함되어 있지만 omnibus에서는
+    DOWN_TREND로 처리한다 (OVERSOLD_REBOUND 허용이 omnibus의 존재 이유).
+    RISK_OFF로 막는 것은 stress + BearPanic만.
+    """
+    local = macro.get("arena_regime_state", regime.REGIME_UNKNOWN)
+
+    # stress는 즉시 RISK_OFF (급락 진행 중 — 아무 전략도 없음)
+    if local == regime.REGIME_STRESS:
+        return _OMNIBUS_RISK_OFF
+    # 명확한 로컬 레짐이 있으면 직접 매핑
+    if local == regime.REGIME_BULL_TREND:
+        return _OMNIBUS_UP_TREND
+    if local == regime.REGIME_BEAR_TREND:
+        return _OMNIBUS_DOWN_TREND
+    if local == regime.REGIME_SIDEWAYS:
+        return _OMNIBUS_RANGE
+
+    # 로컬 레짐 unknown → BearPanic 매크로 체크 후 4H 지표 2of3 직접 계산
+    overlay = macro.get("regime_state")
+    if overlay == "BearPanic":
+        return _OMNIBUS_RISK_OFF
+
+    # 2of3 투표: return_24h, return_72h, EMA 정렬
+    return_24h = ind.get("return_24h", 0.0)
+    return_72h = ind.get("return_72h", 0.0)
+    ema_fast = ind.get("ema_fast", 0.0)
+    ema_slow = ind.get("ema_slow", 1.0)
+    bull_votes = sum([return_24h > 0, return_72h > 0, ema_fast > ema_slow])
+    bear_votes = sum([return_24h < 0, return_72h < 0, ema_fast < ema_slow])
+
+    if bull_votes >= 2 and bull_votes > bear_votes:
+        return _OMNIBUS_UP_TREND
+    if bear_votes >= 2 and bear_votes > bull_votes:
+        return _OMNIBUS_DOWN_TREND
+
+    # sideways 체크 (bb_width 좁음 + 소폭 등락)
+    bb_width = ind.get("bb_width", 0.0)
+    atr_pct = max(ind.get("atr_pct", 0.0), 0.0)
+    if (
+        bb_width <= parameters.REGIME_SIDEWAYS_BB_WIDTH_MAX
+        and atr_pct > 0
+        and abs(return_24h) <= parameters.REGIME_SIDEWAYS_RETURN_ATR_MULTIPLE * atr_pct
+    ):
+        return _OMNIBUS_RANGE
+
+    return _OMNIBUS_TRANSITION
+
+
+def _downtrend_sub_state(ind: dict) -> tuple[str, dict]:
+    """DOWN_TREND 세분화: STRUCTURAL_DOWN / PANIC_DROP / OVERSOLD_REBOUND.
+
+    PANIC_DROP: return_24h 절댓값이 ATR의 stress 배수 초과 (급락 진행 중).
+    OVERSOLD_REBOUND: 4개 지표 중 3개 이상 충족 (투표 방식 — 4-AND 제거).
+      - rsi < OMNIBUS_RSI_REBOUND_MAX (35)
+      - bb_pos < OMNIBUS_BB_POS_REBOUND_ENTRY (0.25)
+      - macd_hist > macd_hist_prev (MACD 히스토그램 개선 중)
+      - return_24h < OMNIBUS_REBOUND_MIN_RETURN_24H (-1.5%)
+    STRUCTURAL_DOWN: 위 조건 미충족 (추세적 하락 継続).
+
+    반환: (sub_state, votes_dict) — 진단용 투표 내역 포함.
+    """
+    rsi = ind.get("rsi", 50.0)
+    bb_pos = ind.get("bb_pos", 0.5)
+    macd_hist = ind.get("macd_hist", 0.0)
+    macd_hist_prev = ind.get("macd_hist_prev", macd_hist)
+    atr_pct = ind.get("atr_pct", 0.0)
+    return_24h = ind.get("return_24h", 0.0)
+
+    if atr_pct > 0 and abs(return_24h) > parameters.REGIME_STRESS_RETURN_ATR_MULTIPLE * atr_pct:
+        return _OMNIBUS_PANIC_DROP, {}
+
+    votes = {
+        "rsi_oversold": rsi < parameters.OMNIBUS_RSI_REBOUND_MAX,
+        "at_lower_bb": bb_pos < parameters.OMNIBUS_BB_POS_REBOUND_ENTRY,
+        "macd_improving": macd_hist > macd_hist_prev,
+        "had_drop": return_24h < parameters.OMNIBUS_REBOUND_MIN_RETURN_24H,
+    }
+    if sum(votes.values()) >= parameters.OMNIBUS_REBOUND_MIN_VOTES:
+        return _OMNIBUS_OVERSOLD_REBOUND, votes
+
+    return _OMNIBUS_STRUCTURAL_DOWN, votes
+
+
+def _range_sub_state(ind: dict) -> str:
+    """RANGE 내 위치: NEAR_LOW / NEAR_HIGH / MIDDLE (BB 포지션 기준)."""
+    bb_pos = ind.get("bb_pos", 0.5)
+    threshold = parameters.OMNIBUS_BB_POS_RANGE_ENTRY
+    if bb_pos < threshold:
+        return _OMNIBUS_RANGE_NEAR_LOW
+    if bb_pos > (1.0 - threshold):
+        return _OMNIBUS_RANGE_NEAR_HIGH
+    return _OMNIBUS_RANGE_MIDDLE
+
+
+def omnibus(macro: dict, ind: dict) -> str | None:
+    """전천후 단일 라우터 — UP_TREND·RANGE·DOWN_TREND 레짐별 롱 전략 선택.
+
+    레짐별 행동:
+      UP_TREND   → 눌림목 롱 (EMA정배열 + RSI 32~55 + bb_pos<0.65 — 고점 추격 방지)
+      RANGE      → 박스권 하단 평균회귀 롱 (bb_pos<0.30 + RSI<45 + ADX<25)
+      DOWN_TREND → OVERSOLD_REBOUND만 허용 (4지표 중 3개 이상 투표 충족)
+      RISK_OFF / TRANSITION → 진입 없음
+
+    포지션 사이즈는 omnibus_position_multiplier()가 제공:
+      UP_TREND=1.0, RANGE=0.4, OVERSOLD_REBOUND=0.25
+    """
+    omni_regime = _omnibus_regime(macro, ind)
+
+    if omni_regime in (_OMNIBUS_RISK_OFF, _OMNIBUS_TRANSITION):
+        return None
+
+    ema_fast = ind.get("ema_fast", 0.0)
+    ema_slow = ind.get("ema_slow", 0.0)
+    rsi = ind.get("rsi", 50.0)
+    bb_pos = ind.get("bb_pos", 0.5)
+
+    if omni_regime == _OMNIBUS_UP_TREND:
+        ema_aligned = ema_fast > ema_slow
+        rsi_pullback = parameters.OMNIBUS_RSI_TREND_MIN < rsi < parameters.OMNIBUS_RSI_TREND_MAX
+        bb_not_extended = bb_pos < parameters.OMNIBUS_BB_POS_TREND_MAX
+        if (
+            ema_aligned
+            and rsi_pullback
+            and bb_not_extended
+            and not _below_ema_trend(ind)
+            and not _funding_hot(macro)
+            and not _etf_outflow_heavy(macro)
+            and not _lsr_crowded(macro)
+        ):
+            return "long"
+        return None
+
+    if omni_regime == _OMNIBUS_RANGE:
+        adx = ind.get("adx", 0.0)
+        if (
+            _range_sub_state(ind) == _OMNIBUS_RANGE_NEAR_LOW
+            and rsi < parameters.OMNIBUS_RSI_RANGE_MAX
+            and adx < parameters.OMNIBUS_ADX_RANGE_MAX
+            and not _funding_hot(macro)
+        ):
+            return "long"
+        return None
+
+    if omni_regime == _OMNIBUS_DOWN_TREND:
+        sub_state, _ = _downtrend_sub_state(ind)
+        if (
+            sub_state == _OMNIBUS_OVERSOLD_REBOUND
+            and not _funding_hot(macro)
+            and not _etf_outflow_heavy(macro)
+        ):
+            return "long"
+        return None
+
+    return None
+
+
+def omnibus_position_multiplier(macro: dict, ind: dict) -> float:
+    """omnibus 레짐별 포지션 사이즈 배수 (vol_target_weight에 추가 곱함).
+
+    UP_TREND:          1.0 (기본, 변동성 타깃만 적용)
+    RANGE:             0.40 (박스권 평균회귀 — 제한적)
+    OVERSOLD_REBOUND:  0.25 (반등 소액 — 최대 제한)
+    """
+    omni_regime = _omnibus_regime(macro, ind)
+    if omni_regime == _OMNIBUS_UP_TREND:
+        return parameters.OMNIBUS_TREND_SIZE_MULT
+    if omni_regime == _OMNIBUS_RANGE:
+        return parameters.OMNIBUS_RANGE_SIZE_MULT
+    if omni_regime == _OMNIBUS_DOWN_TREND:
+        sub_state, _ = _downtrend_sub_state(ind)
+        if sub_state == _OMNIBUS_OVERSOLD_REBOUND:
+            return parameters.OMNIBUS_REBOUND_SIZE_MULT
+    return 1.0
+
+
 ALGORITHMS: dict[str, Callable[[dict, dict], str | None]] = {
     "regime_trend": regime_trend,
     "fng_contrarian": fng_contrarian,
     "vix_rsi": vix_rsi,
     "macd_momentum": macd_momentum,
     "multi_factor": multi_factor,
+    "omnibus": omnibus,
 }
 
 
@@ -443,7 +676,7 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
         )
         _record_condition(diag, "funding_not_hot", not _funding_hot(macro), veto=True)
         _record_condition(diag, "etf_outflow_not_heavy", not _etf_outflow_heavy(macro), veto=True)
-        _record_condition(diag, "above_ma200_or_missing", not _below_ma200(macro), veto=True)
+        _record_condition(diag, "above_ema200_4h", not _below_ema_trend(ind), veto=True)
         _record_condition(diag, "taker_confirms", _taker_confirms(macro), veto=True)
         _record_condition(diag, "lsr_not_crowded", not _lsr_crowded(macro), veto=True)
         _record_condition(diag, "oi_not_diverged", not _oi_diverged(macro), veto=True)
@@ -471,11 +704,15 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
         rsi = ind.get("rsi", 50.0)
         vix_calm = False
         if vix_now is not None:
-            vix_calm = (vix_now < vix_q40) if vix_q40 else (vix_now < 20.0)
+            vix_calm = (
+                (vix_now < vix_q40 * parameters.VIX_CALM_TOLERANCE_BAND)
+                if vix_q40
+                else (vix_now < 20.0)
+            )
         diag["thresholds"]["rsi_long_max"] = parameters.VIX_RSI_LONG_MAX
+        diag["thresholds"]["vix_calm_tolerance"] = parameters.VIX_CALM_TOLERANCE_BAND
         _record_condition(diag, "vix_present", vix_now is not None, veto=True)
         _record_condition(diag, "not_risk_off", not _is_risk_off(state), veto=True)
-        _record_condition(diag, "above_ma200_or_missing", not _below_ma200(macro), veto=True)
         _record_condition(diag, "vix_calm", vix_calm, veto=True)
         _record_condition(diag, "rsi_below_long_max", rsi < parameters.VIX_RSI_LONG_MAX, veto=True)
         return _finish_diag(diag)
@@ -483,18 +720,18 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
     if algo_id == "macd_momentum":
         h = ind.get("macd_hist", 0.0)
         h_prev = ind.get("macd_hist_prev", h)
-        threshold = ind.get("atr", 0.0) * parameters.MACD_ATR_THRESHOLD_MULTIPLE
         rsi = ind.get("rsi", 50.0)
         bb_w = ind.get("bb_width", 100.0)
         adx = ind.get("adx", 0.0)
         diag["thresholds"].update(
             {
-                "macd_atr_threshold": threshold,
                 "bb_width_min": parameters.MACD_MOMENTUM_BB_WIDTH_MIN,
                 "rsi_long_max": parameters.MACD_MOMENTUM_RSI_LONG_MAX,
-                "adx_trend_min": parameters.ADX_TREND_MIN,
+                "adx_min": parameters.MACD_MOMENTUM_ADX_MIN,
             }
         )
+        diag["factors"]["macd_hist"] = h
+        diag["factors"]["macd_hist_prev"] = h_prev
         _record_condition(
             diag,
             "bb_width_sufficient",
@@ -504,10 +741,10 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
         _record_condition(diag, "not_risk_off", not _is_risk_off(state), veto=True)
         _record_condition(diag, "funding_not_hot", not _funding_hot(macro), veto=True)
         _record_condition(diag, "etf_outflow_not_heavy", not _etf_outflow_heavy(macro), veto=True)
-        _record_condition(diag, "above_ma200_or_missing", not _below_ma200(macro), veto=True)
+        _record_condition(diag, "above_ema200_4h", not _below_ema_trend(ind), veto=True)
         _record_condition(diag, "lsr_not_crowded", not _lsr_crowded(macro), veto=True)
         _record_condition(diag, "oi_not_diverged", not _oi_diverged(macro), veto=True)
-        _record_condition(diag, "macd_above_atr_threshold", h > threshold, veto=True)
+        _record_condition(diag, "macd_hist_positive", h > 0, veto=True)
         _record_condition(diag, "macd_hist_increasing", h > h_prev, veto=True)
         _record_condition(
             diag,
@@ -515,7 +752,9 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
             rsi < parameters.MACD_MOMENTUM_RSI_LONG_MAX,
             veto=True,
         )
-        _record_condition(diag, "adx_trending", adx >= parameters.ADX_TREND_MIN, veto=True)
+        _record_condition(
+            diag, "adx_sufficient", adx >= parameters.MACD_MOMENTUM_ADX_MIN, veto=True
+        )
         return _finish_diag(diag)
 
     if algo_id == "multi_factor":
@@ -532,7 +771,6 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
         )
         _record_condition(diag, "not_risk_off", not _is_risk_off(state), veto=True)
         _record_condition(diag, "etf_outflow_not_heavy", not _etf_outflow_heavy(macro), veto=True)
-        _record_condition(diag, "above_ma200_or_missing", not _below_ma200(macro), veto=True)
         _record_condition(diag, "lsr_not_crowded", not _lsr_crowded(macro), veto=True)
         _record_condition(diag, "breadth_not_collapsed", not _breadth_collapsed(macro), veto=True)
         _record_condition(
@@ -560,6 +798,78 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
             sum(1 for value in factors.values() if value) >= 4,
             veto=True,
         )
+        return _finish_diag(diag)
+
+    if algo_id == "omnibus":
+        omni_regime = _omnibus_regime(macro, ind)
+        if omni_regime == _OMNIBUS_DOWN_TREND:
+            sub_state, rebound_votes = _downtrend_sub_state(ind)
+        else:
+            sub_state, rebound_votes = "N/A", {}
+        range_pos = _range_sub_state(ind) if omni_regime == _OMNIBUS_RANGE else "N/A"
+        ema_fast = ind.get("ema_fast", 0.0)
+        ema_slow = ind.get("ema_slow", 0.0)
+        rsi = ind.get("rsi", 50.0)
+        bb_pos = ind.get("bb_pos", 0.5)
+        adx = ind.get("adx", 0.0)
+        diag["thresholds"].update(
+            {
+                "rsi_trend_min": parameters.OMNIBUS_RSI_TREND_MIN,
+                "rsi_trend_max": parameters.OMNIBUS_RSI_TREND_MAX,
+                "bb_pos_trend_max": parameters.OMNIBUS_BB_POS_TREND_MAX,
+                "rsi_range_max": parameters.OMNIBUS_RSI_RANGE_MAX,
+                "rsi_rebound_max": parameters.OMNIBUS_RSI_REBOUND_MAX,
+                "bb_pos_range_entry": parameters.OMNIBUS_BB_POS_RANGE_ENTRY,
+                "adx_range_max": parameters.OMNIBUS_ADX_RANGE_MAX,
+                "rebound_min_votes": parameters.OMNIBUS_REBOUND_MIN_VOTES,
+            }
+        )
+        diag["factors"]["omni_regime"] = omni_regime
+        diag["factors"]["downtrend_sub_state"] = sub_state
+        diag["factors"]["range_sub_state"] = range_pos
+        if rebound_votes:
+            diag["factors"]["rebound_votes"] = rebound_votes
+            diag["factors"]["rebound_vote_count"] = sum(rebound_votes.values())
+        _record_condition(diag, "regime_not_risk_off", omni_regime != _OMNIBUS_RISK_OFF, veto=True)
+        _record_condition(
+            diag, "regime_not_transition", omni_regime != _OMNIBUS_TRANSITION, veto=True
+        )
+        if omni_regime == _OMNIBUS_UP_TREND:
+            rsi_pullback = parameters.OMNIBUS_RSI_TREND_MIN < rsi < parameters.OMNIBUS_RSI_TREND_MAX
+            _record_condition(diag, "ema_aligned", ema_fast > ema_slow, veto=True)
+            _record_condition(diag, "rsi_pullback_range", rsi_pullback, veto=True)
+            _record_condition(
+                diag, "bb_not_extended", bb_pos < parameters.OMNIBUS_BB_POS_TREND_MAX, veto=True
+            )
+            _record_condition(diag, "above_ema200_4h", not _below_ema_trend(ind), veto=True)
+            _record_condition(diag, "funding_not_hot", not _funding_hot(macro), veto=True)
+            _record_condition(
+                diag, "etf_outflow_not_heavy", not _etf_outflow_heavy(macro), veto=True
+            )
+            _record_condition(diag, "lsr_not_crowded", not _lsr_crowded(macro), veto=True)
+        elif omni_regime == _OMNIBUS_RANGE:
+            _record_condition(
+                diag, "range_near_low", range_pos == _OMNIBUS_RANGE_NEAR_LOW, veto=True
+            )
+            _record_condition(
+                diag, "rsi_below_range_max", rsi < parameters.OMNIBUS_RSI_RANGE_MAX, veto=True
+            )
+            _record_condition(
+                diag, "adx_low_range", adx < parameters.OMNIBUS_ADX_RANGE_MAX, veto=True
+            )
+            _record_condition(diag, "funding_not_hot", not _funding_hot(macro), veto=True)
+        elif omni_regime == _OMNIBUS_DOWN_TREND:
+            vote_count = sum(rebound_votes.values()) if rebound_votes else 0
+            _record_condition(
+                diag,
+                f"oversold_rebound_{vote_count}of{len(rebound_votes) or 4}votes",
+                sub_state == _OMNIBUS_OVERSOLD_REBOUND,
+                veto=True,
+            )
+            _record_condition(diag, "funding_not_hot", not _funding_hot(macro), veto=True)
+            _record_condition(
+                diag, "etf_outflow_not_heavy", not _etf_outflow_heavy(macro), veto=True
+            )
         return _finish_diag(diag)
 
     diag["failed_conditions"].append("unknown_algo")

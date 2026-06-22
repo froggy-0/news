@@ -442,6 +442,7 @@ const ALGOS = {
   vix_rsi:        { color: '#A78BFA' },
   macd_momentum:  { color: '#34D399' },
   multi_factor:   { color: '#FB923C' },
+  omnibus:        { color: '#F472B6' },
 };
 const ALGO_IDS = Object.keys(ALGOS);
 const STARTING_CAPITAL = 1000;
@@ -456,6 +457,7 @@ const TAB_LABELS = {
   vix_rsi: 'VIX',
   macd_momentum: 'MACD',
   multi_factor: 'MULTI',
+  omnibus: 'OMNI',
 };
 
 const ALGO_NEEDS = {
@@ -464,6 +466,7 @@ const ALGO_NEEDS = {
   vix_rsi:        'VIX < 40th pct + RSI < 50 (하락장 제외)',
   macd_momentum:  'MACD 증가 + ADX>20 + BB 확장 (과열 제외)',
   multi_factor:   '레짐·FNG·VIX·RSI·펀딩 5개 중 4개 (기관 유출 veto)',
+  omnibus:        '전천후 라우터: UP_TREND·RANGE·DOWN_TREND 레짐별 롱 전략',
 };
 
 let positions = [];
@@ -586,6 +589,22 @@ function signalHint(algo, dec) {
       case 'vix_rsi':         if (inp.vix_now != null) return `VIX ${inp.vix_now.toFixed(1)}`; break;
       case 'macd_momentum':   if (inp.macd_hist != null) return `MACD ${inp.macd_hist.toFixed(0)}${inp.adx != null ? ` · ADX ${inp.adx.toFixed(0)}` : ''}`; break;
       case 'multi_factor':    if (inp.fng != null) return `FNG ${inp.fng} · VIX ${inp.vix_now != null ? inp.vix_now.toFixed(1) : '—'}${inp.etf_flow_zscore != null ? ` · ETF z${inp.etf_flow_zscore >= 0 ? '+' : ''}${inp.etf_flow_zscore.toFixed(1)}` : ''}`; break;
+      case 'omnibus': {
+        const diag = dec.reason && dec.reason.diagnostics;
+        if (diag && diag.factors) {
+          const omniR = diag.factors.omni_regime || '—';
+          const subDown = diag.factors.downtrend_sub_state;
+          const subRange = diag.factors.range_sub_state;
+          const sub = (subDown && subDown !== 'N/A') ? ` · ${subDown}` :
+                      (subRange && subRange !== 'N/A') ? ` · ${subRange}` : '';
+          const votes = diag.factors.rebound_vote_count != null
+            ? ` (${diag.factors.rebound_vote_count}/4)` : '';
+          const rsiTxt = inp.rsi != null ? ` · RSI ${inp.rsi.toFixed(0)}` : '';
+          const bbTxt  = inp.bb_pos != null ? ` · bb ${inp.bb_pos.toFixed(2)}` : '';
+          return `${omniR}${sub}${votes}${rsiTxt}${bbTxt}`;
+        }
+        break;
+      }
     }
   }
   return ALGO_NEEDS[algo] || null;
@@ -856,6 +875,7 @@ function clearPriceLines() {
 const ALGO_ABBR = {
   regime_trend: 'REG', fng_contrarian: 'FNG',
   vix_rsi: 'VIX', macd_momentum: 'MAC', multi_factor: 'MLT',
+  omnibus: 'OMN',
 };
 
 function renderPriceChart() {

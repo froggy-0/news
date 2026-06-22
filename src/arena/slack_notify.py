@@ -29,6 +29,7 @@ _ALGO_KO: dict[str, str] = {
     "vix_rsi": "VIX RSI",
     "macd_momentum": "MACD 모멘텀",
     "multi_factor": "멀티팩터",
+    "omnibus": "옴니버스",
 }
 
 _ALGO_EN: dict[str, str] = {
@@ -37,6 +38,7 @@ _ALGO_EN: dict[str, str] = {
     "vix_rsi": "VIX RSI",
     "macd_momentum": "MACD MOMENTUM",
     "multi_factor": "MULTI FACTOR",
+    "omnibus": "OMNIBUS",
 }
 
 _MIN_HOLD: dict[str, float] = parameters.MIN_HOLD_HOURS
@@ -214,6 +216,36 @@ def _signal_narrative(
             f"펀딩z {fz_str} {'✅' if f5 else '❌'}\n"
             f"{etf_str} (대량 유출 시 veto)"
         )
+
+    if algo_id == "omnibus":
+        arena_regime = macro.get("arena_regime_state", "unknown")
+        bb_pos = ind.get("bb_pos", 0.5)
+        adx = ind.get("adx", 0.0)
+        return_24h = ind.get("return_24h", 0.0)
+        macd_hist = ind.get("macd_hist", 0.0)
+        macd_hist_prev = ind.get("macd_hist_prev", macd_hist)
+
+        if arena_regime == "bull_trend":
+            return (
+                f"옴니버스 *UP_TREND* — 추세 내 눌림목 포착\n"
+                f"RSI {_rsi_label(rsi)} (32~55 눌림목 구간) · BB 위치 {bb_pos:.2f}\n"
+                f"EMA 정배열 확인 + 고점 추격 아님(bb<0.65) → {dir_ko} 진입"
+            )
+        if arena_regime == "sideways":
+            return (
+                f"옴니버스 *RANGE* — 박스권 하단 평균회귀 롱\n"
+                f"BB 위치 {bb_pos:.2f} (하단 30% 이하) · RSI {_rsi_label(rsi)}\n"
+                f"ADX {adx:.0f} (비추세 확인, <25) → {dir_ko} 진입 (사이즈 40%)"
+            )
+        if arena_regime == "bear_trend":
+            drop_str = f"{return_24h * 100:+.1f}%"
+            macd_str = "개선 중 ✅" if macd_hist > macd_hist_prev else "악화 중"
+            return (
+                f"옴니버스 *OVERSOLD REBOUND* — 하락장 극단 과매도 반등\n"
+                f"RSI {_rsi_label(rsi)} · BB 위치 {bb_pos:.2f} (하단 25% 이하)\n"
+                f"24h 낙폭 {drop_str} · MACD {macd_str} → 소량 {dir_ko} (사이즈 25%)"
+            )
+        return f"옴니버스 국면 라우팅 — RSI {_rsi_label(rsi)} → {dir_ko} 진입"
 
     return f"RSI {_rsi_label(rsi)} → {dir_ko} 진입"
 
@@ -517,6 +549,67 @@ async def notify_error(
     ]
 
     fallback = f"{severity_emoji} {component}: {status_line} — {error_str[:100]}"
+    await _post(client, fallback, blocks)
+
+
+async def notify_backtest_report(summary: dict[str, Any]) -> None:
+    """주간 백테스트 결과 요약을 Slack Block Kit으로 전송.
+
+    summary는 backtest_report.build_summary()가 반환하는 dict.
+    """
+    client = _get_client()
+    if client is None:
+        return
+
+    table = summary.get("table", "")
+    data_start = summary.get("data_start", "—")
+    data_end = summary.get("data_end", "—")
+    data_days = summary.get("data_days", 0)
+    bar_count = summary.get("bar_count", 0)
+    total_trades = summary.get("total_trades", 0)
+    params_ver = summary.get("params_version", parameters.PARAMS_VERSION)
+    strat_ver = summary.get("strategy_version", parameters.STRATEGY_VERSION)
+
+    # 알고별 수익률 중 최고/최저
+    by_algo = summary.get("by_algo", {})
+    top_algo = top_ret = bot_algo = bot_ret = None
+    for aid, m in by_algo.items():
+        ret = m.get("total_return_pct")
+        if ret is None:
+            continue
+        if top_ret is None or ret > top_ret:
+            top_ret, top_algo = ret, aid
+        if bot_ret is None or ret < bot_ret:
+            bot_ret, bot_algo = ret, aid
+
+    top_line = ""
+    if top_algo and bot_algo:
+        top_ko = _ALGO_KO.get(top_algo, top_algo)
+        bot_ko = _ALGO_KO.get(bot_algo, bot_algo)
+        top_str = f"{top_ret * 100:+.1f}%" if top_ret is not None else "—"
+        bot_str = f"{bot_ret * 100:+.1f}%" if bot_ret is not None else "—"
+        top_line = f"최고: *{top_ko}* {top_str}  ·  최저: *{bot_ko}* {bot_str}"
+
+    blocks: list[dict[str, Any]] = [
+        _header(f"📊 주간 백테스트 리포트  ·  최근 {bar_count}봉 (~{data_days}일)"),
+        _section_text(
+            f"*기간*: {data_start} → {data_end}  ·  BTCUSDT 4H\n"
+            f"*총 매매*: {total_trades}건   {top_line}"
+        ),
+        _divider(),
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"```\n{table}\n```",
+            },
+        },
+        _divider(),
+        _button_link("🔗 대시보드 보기 →", DASHBOARD_URL),
+        _context(params_ver, strat_ver, _now_utc_str()),
+    ]
+
+    fallback = f"📊 주간 백테스트 리포트 · {total_trades}건 · {data_start}~{data_end}"
     await _post(client, fallback, blocks)
 
 

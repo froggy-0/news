@@ -11,7 +11,7 @@ from copy import deepcopy
 from typing import Any
 
 STRATEGY_VERSION = "arena-spot-v4"
-PARAMS_VERSION = "arena-params-v18"
+PARAMS_VERSION = "arena-params-v19"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v1"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
@@ -143,6 +143,29 @@ BREADTH_HEALTHY_MIN = 0.30
 #   근거: 공급 증가=대기 매수력, 수축=자본 이탈(SSR 연구). etf 유출과 동일 임계.
 STABLECOIN_CONTRACTION_Z = -1.5
 
+# ── omnibus (6번째 알고) 임계값 ────────────────────────────────────────────
+# UP_TREND 눌림목 롱: regime_trend(돌파 추종)와 보완적 — 추세 내 건강한 되돌림 구간만 진입
+# RSI 32~55: 과매도 극단 아님(추세 신뢰) + 아직 과열 아님(눌림목 확인)
+# Ref: "Buy the Dip in Bull Market" (Dichtl et al. 2016), Wilder RSI pullback logic
+OMNIBUS_RSI_TREND_MIN = 32.0  # 이 값 미만이면 추세 의심 → 진입 보류
+OMNIBUS_RSI_TREND_MAX = 55.0  # 65→55: 눌림목 구간으로 좁힘 (과열 아닌 중간 되돌림)
+OMNIBUS_BB_POS_TREND_MAX = 0.65  # BB 중상단 이상에서 매수 금지 (고점 추격 방지)
+# RANGE 평균회귀: BB 하단 + RSI + ADX (Bollinger 2002 mean-reversion logic)
+OMNIBUS_BB_POS_RANGE_ENTRY = 0.30  # 0.25→0.30: 발동 빈도 개선 (밴드 하단 30% 이하)
+OMNIBUS_RSI_RANGE_MAX = 45.0
+OMNIBUS_ADX_RANGE_MAX = 25.0  # 20→25: ADX<25도 비추세로 간주 (0~25 = weak trend)
+# DOWN_TREND OVERSOLD_REBOUND: 4-AND → 4개 중 3개 투표 방식
+# 근거: RSI<30 폭락 구간에서 MACD 반전은 통상 1~3봉 지연 → 동시 발생 불가 (4-AND 실패)
+# Ref: Jegadeesh (1990) short-term mean reversion, Lehmann (1990) oversold bounce
+OMNIBUS_RSI_REBOUND_MAX = 35.0  # 30→35: 완화 (극단 35 이하도 충분히 과매도)
+OMNIBUS_BB_POS_REBOUND_ENTRY = 0.25  # 0.20→0.25: 완화 (하단 25% = 충분히 낮음)
+OMNIBUS_REBOUND_MIN_RETURN_24H = -0.015  # -0.02→-0.015: 1.5% 낙폭으로 완화
+OMNIBUS_REBOUND_MIN_VOTES = 3  # 4개 조건 중 최소 3개 충족 시 OVERSOLD_REBOUND 인정
+# 포지션 사이즈 배수 (vol_target_weight에 추가 곱함)
+OMNIBUS_TREND_SIZE_MULT = 1.0
+OMNIBUS_RANGE_SIZE_MULT = 0.40
+OMNIBUS_REBOUND_SIZE_MULT = 0.25
+
 RSI_PERIOD = 14
 RSI_NEUTRAL = 50.0
 RSI_RECENT_MULTIPLE = 3
@@ -161,10 +184,18 @@ REGIME_SHORT_STATE = "BearPanic"
 FNG_LONG_BELOW = 30.0
 FNG_SHORT_ABOVE = 70.0
 VIX_RSI_LONG_MAX = 50.0
+# VIX q40 임계값 허용 밴드: VIX가 q40보다 이 배수 이내로 높으면 "실질 calm"으로 인정.
+# 근거: q40는 90일 롤링 추정치로 일일 오차 2~3%가 존재. 18.44 vs 17.85 = 3.3% — 통계적 노이즈.
+# Ref: VIX percentile band interpretation (CBOE 2023 VIX whitepaper)
+VIX_CALM_TOLERANCE_BAND = 1.05  # q40 기준 +5% 이내는 calm으로 처리
 MACD_ATR_THRESHOLD_MULTIPLE = 0.10
 MACD_MOMENTUM_RSI_LONG_MAX = 65.0  # 과매수 구간 롱 진입 차단
 MACD_MOMENTUM_RSI_SHORT_MIN = 35.0  # 과매도 구간 숏 진입 차단
 MACD_MOMENTUM_BB_WIDTH_MIN = 3.5  # BB 폭 최소값 (% of SMA): 미달 시 횡보장으로 판단, 진입 차단
+# macd_momentum 전용 ADX 임계 — 공유 ADX_TREND_MIN(20)보다 약간 완화.
+# 이유: macd_momentum은 모멘텀 '초기 형성'을 포착 목적이라 강한 추세(ADX≥20)보다
+#       약한 추세(ADX≥18)에서도 모멘텀 신호가 유효하다.
+MACD_MOMENTUM_ADX_MIN = 18.0
 MULTI_FACTOR_LONG_RSI_MAX = 50.0
 MULTI_FACTOR_SHORT_RSI_MIN = 55.0
 
@@ -216,6 +247,7 @@ MIN_HOLD_HOURS: dict[str, float] = {
     "vix_rsi": 12.0,
     "macd_momentum": 8.0,
     "multi_factor": 12.0,
+    "omnibus": 8.0,
 }
 MIN_HOLD_FALLBACK_HOURS = 4.0
 

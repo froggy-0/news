@@ -12,6 +12,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from . import (
     allocator,
+    backtest_report,
     config,
     data_lake,
     execution_gate,
@@ -30,7 +31,12 @@ from . import (
     state,
     tca_shadow,
 )
-from .algorithms import ALGORITHMS, explain_signal, primary_flat_skip_reason
+from .algorithms import (
+    ALGORITHMS,
+    explain_signal,
+    omnibus_position_multiplier,
+    primary_flat_skip_reason,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -832,6 +838,9 @@ async def _run_cycle() -> None:
                 weight_min=parameters.VOL_WEIGHT_MIN,
                 weight_max=parameters.VOL_WEIGHT_MAX,
             )
+            # omnibus: 레짐별 추가 배수 적용 (UP_TREND=1.0, RANGE=0.4, REBOUND=0.25)
+            if algo_id == "omnibus":
+                position_weight *= omnibus_position_multiplier(macro, ind)
             new_pos = await positions.open_position(
                 algo_id,
                 signal,
@@ -1142,6 +1151,20 @@ async def _run_cycle_safe() -> None:
             pass
 
 
+async def _run_weekly_backtest_safe() -> None:
+    """주간 백테스트 리포트 — 매주 월요일 09:10 KST(00:10 UTC) 실행.
+
+    최근 300봉(~50일) 시뮬레이션 결과를 Slack에 요약 전송.
+    live 알고리즘과 동일한 비용·스톱·레짐 로직으로 재현하므로
+    파라미터 변경 전후 효과를 주간 단위로 확인 가능.
+    """
+    logger.info("주간 백테스트 리포트 시작")
+    try:
+        await backtest_report.run_and_notify()
+    except Exception as exc:
+        logger.error("주간 백테스트 리포트 오류: %s", exc, exc_info=True)
+
+
 async def run() -> None:
     """APScheduler 시작 + 즉시 1회 실행. server.py에서 asyncio.gather()로 호출."""
     scheduler = AsyncIOScheduler(timezone="UTC")
@@ -1161,6 +1184,14 @@ async def run() -> None:
                 args=[profile_id],
                 **cron,
             )
+    # 주간 백테스트 리포트: 매주 월요일 00:10 UTC = 09:10 KST
+    scheduler.add_job(
+        _run_weekly_backtest_safe,
+        "cron",
+        day_of_week="mon",
+        hour=0,
+        minute=10,
+    )
     scheduler.start()
     logger.info("Scheduler started (cron every 4H at :%02d)", parameters.SCHEDULER_CRON_MINUTE)
 
