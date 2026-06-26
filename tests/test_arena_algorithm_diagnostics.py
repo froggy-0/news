@@ -12,6 +12,15 @@ def test_fng_contrarian_stabilization_blocks_worsening_momentum() -> None:
     assert algorithms.fng_contrarian(macro, {}) == "long"
 
 
+def test_below_ma200_structural_gate_reads_macro_flag() -> None:
+    # btc_above_ma200=0(하회) → 역추세/모멘텀 롱 보류 트리거.
+    assert algorithms._below_ma200({"btc_above_ma200": 0.0}) is True
+    # 상회 → 통과.
+    assert algorithms._below_ma200({"btc_above_ma200": 1.0}) is False
+    # 미수집(None) → graceful 통과(게이트 미적용).
+    assert algorithms._below_ma200({}) is False
+
+
 def test_vix_rsi_diagnostics_explain_flat_vetoes() -> None:
     macro = {"arena_regime_state": "bull_trend", "vix_now": 25.0, "vix_q40": 20.0}
     ind = {"rsi": 55.0}

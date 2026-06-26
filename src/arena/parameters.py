@@ -11,7 +11,7 @@ from copy import deepcopy
 from typing import Any
 
 STRATEGY_VERSION = "arena-spot-v4"
-PARAMS_VERSION = "arena-params-v23"
+PARAMS_VERSION = "arena-params-v24"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v2"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"

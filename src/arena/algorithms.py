@@ -90,11 +90,14 @@ def _etf_outflow_heavy(macro: dict) -> bool:
 
 
 def _below_ma200(macro: dict) -> bool:
-    """일간 200일 MA 하회 여부 — 현재 어떤 알고에서도 호출되지 않음(4H 로컬 MA로 교체).
+    """일간 200일 MA 하회 여부 — 구조적 하락추세 게이트 (Faber 2007, TSMOM).
 
-    이전: Faber(2007), TSMOM 근거의 일간 parquet 기반 게이트.
-    교체 이유: 일간 200일 MA는 반응이 너무 느려 4H 시스템과 맞지 않고
-    macro 갱신 지연(~20h)에 종속됨. → _below_ema_trend / _below_ema_loose 로 대체.
+    v24(2026-06-26)부터 omnibus UP_TREND·macd_momentum에서 사용. 4H 로컬 EMA 게이트
+    (`_below_ema_trend`)와 별개로, 일간 구조적 추세를 거스르는 강세/모멘텀 롱을 보류한다.
+    진단(macro 백필 6개월): 두 알고의 손실이 MA200 하회 구간의 역추세 롱에 집중
+    (omnibus UP_TREND 14건 -3.23%, macd 13건 중 8건이 하회 손실). 게이트 후 omnibus
+    -3.66→-2.05%·macd -3.53→-1.06%(독립 캡, 타 알고 무영향). 미수집(None) 시 graceful
+    통과. 플래그 MA200_REGIME_GATE_ENABLED.
     """
     if not parameters.MA200_REGIME_GATE_ENABLED:
         return False
@@ -356,6 +359,7 @@ def macd_momentum(macro: dict, ind: dict) -> str | None:
         or _funding_hot(macro)
         or _etf_outflow_heavy(macro)
         or _below_ema_trend_strict(ind, macro)
+        or _below_ma200(macro)  # v24: 구조적 하락추세(일간 MA200 하회) 시 모멘텀 롱 보류
         or _lsr_crowded(macro)
         or _oi_diverged(macro)
     ):
@@ -564,6 +568,7 @@ def omnibus(macro: dict, ind: dict) -> str | None:
             and rsi_pullback
             and bb_not_extended
             and not _below_ema_trend(ind)
+            and not _below_ma200(macro)  # v24: 구조적 하락추세(MA200 하회) 시 역추세 추종 보류
             and not _funding_hot(macro)
             and not _etf_outflow_heavy(macro)
             and not _lsr_crowded(macro)
