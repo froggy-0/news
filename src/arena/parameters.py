@@ -11,9 +11,9 @@ from copy import deepcopy
 from typing import Any
 
 STRATEGY_VERSION = "arena-spot-v4"
-PARAMS_VERSION = "arena-params-v22"
+PARAMS_VERSION = "arena-params-v23"
 FEATURE_SET_VERSION = "arena-features-v8"
-RISK_MODEL_VERSION = "portfolio-risk-v1"
+RISK_MODEL_VERSION = "portfolio-risk-v2"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
 RUNTIME = "ec2"
 
@@ -60,11 +60,19 @@ TRAIL_PERSIST_STEP_BPS = 5.0
 MACRO_STALE_HOURS = 48.0  # 일간 매크로(FNG/VIX/ETF) — 브리프 1일 지연 허용
 
 POSITION_UNIT = 1.0
-MAX_OPEN_POSITIONS_TOTAL = 3
-MAX_LONG_POSITIONS = 2
-MAX_SHORT_POSITIONS = 2
-MAX_NET_LONG_EXPOSURE = 2.0
-MAX_NET_SHORT_EXPOSURE = 2.0
+# 알고별 독립 자본 경쟁 구조 — 공통(cross-algo) 동시보유 캡을 알고 수(6)로 설정해
+#   각 알고가 자기 신호를 항상 독립 실행하게 한다. (portfolio-risk-v2, 2026-06-26)
+#   이전 3/2 캡은 6개 롱온리 알고가 롱 슬롯 2개를 경쟁 → 각 알고 트랙레코드가 "다른
+#   알고의 슬롯 점유 타이밍"에 좌우되어 서로 오염됐음(투명 독립 트랙레코드 제품 핵심과
+#   충돌). 백테스트 검증: 캡 해제 시 fng 필터 토글이 타 알고에 무영향(커플링 제거),
+#   vix_rsi 진짜 성과 -1.26→+0.48%(캡이 좋은 거래를 차단하던 것) 등 왜곡 해소.
+#   per-trade 사이징(combined_position_weight≤0.7)이 알고별 노출을 이미 통제하므로
+#   count 캡 해제로 인한 개별 계정 리스크 증가는 없음(독립 $1,000 계정 6개).
+MAX_OPEN_POSITIONS_TOTAL = 6
+MAX_LONG_POSITIONS = 6
+MAX_SHORT_POSITIONS = 6
+MAX_NET_LONG_EXPOSURE = 6.0
+MAX_NET_SHORT_EXPOSURE = 6.0
 DAILY_LOSS_LIMIT_PCT = 0.05
 ALGO_MAX_DRAWDOWN_KILL_PCT = 0.10
 COOLDOWN_AFTER_KILL_HOURS = 24.0
@@ -149,6 +157,10 @@ FNG_CONTRARIAN_MIN_DRAWDOWN = -0.10
 #   (2)가격 손절 제거 + 시간 손절(평균회귀는 초기 봉에 수익 집중)로 대체한다.
 #   익절·risk-off 청산은 기존 로직 재사용(FNG 중립 복귀 → flat, risk-off → 청산).
 FNG_CONTRARIAN_SCALE_IN_ENABLED = True
+# 진입 안정화(v23, 2026-06-26): MACD 히스토그램이 직전 봉 대비 하락 중(모멘텀 악화)이면
+#   진입 보류 — freefall 한복판 칼받기 회피. macro 백필 6개월 백테스트에서 fng 종가자산
+#   1.002→1.011·MaxDD -4.9→-2.9%·2월(최악월) -2.47→-1.40%(전 지표 개선, 월별 무회귀).
+FNG_CONTRARIAN_STABILIZATION_ENABLED = True
 # 진입 게이트는 FNG<30(일별). 분할매수(물타기)는 **가격 기준 실시간** — 최초 진입가
 #   대비 하락률에서 추가 체결한다. FNG는 일별이라 장중 불변 → 장중 변하는 가격으로
 #   물타기해야 실시간 대응이 의미를 가진다(고전적 물타기). live는 stream.py 1m 틱,

@@ -134,7 +134,7 @@ def test_backtest_run_row_is_json_ready_and_versioned() -> None:
     assert row["indicator_profile_id"] == "time_normalized_v1"
     assert row["cost_model_version"] == "arena-cost-v2"
     assert row["cost_scenario_id"] == "base"
-    assert row["rules_snapshot"]["portfolio_risk"]["max_open_positions_total"] == 3
+    assert row["rules_snapshot"]["portfolio_risk"]["max_open_positions_total"] == 6
     assert row["rules_snapshot"]["regime_variant"] == "strict_v1"
     assert row["params_snapshot"]["regime_research"]["regime_variant"] == "strict_v1"
     assert row["rules_snapshot"]["live_gate_replay"]["replay_execution_gate_blocks"] is False

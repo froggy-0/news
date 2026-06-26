@@ -216,6 +216,26 @@ def _drawdown_sufficient(macro: dict) -> bool:
         return True
 
 
+def _momentum_not_worsening(ind: dict) -> bool:
+    """하락 모멘텀이 더 악화되지 않을 때만 True — freefall 한복판 진입(칼받기) 회피.
+
+    MACD 히스토그램이 직전 봉 대비 상승(>=)이면 하락 가속이 멈춘 것으로 본다(평균회귀
+    진입 타이밍 필터: 매도 소진 대기). 미수집(None) 시 True(graceful). v23 백테스트
+    (macro 백필 6개월): fng 종가자산 1.002→1.011·MaxDD -4.9→-2.9%·2월 -2.47→-1.40%.
+    재현: scripts/analysis 실험. 플래그 FNG_CONTRARIAN_STABILIZATION_ENABLED.
+    """
+    if not parameters.FNG_CONTRARIAN_STABILIZATION_ENABLED:
+        return True
+    mh = ind.get("macd_hist")
+    mhp = ind.get("macd_hist_prev")
+    if mh is None or mhp is None:
+        return True
+    try:
+        return float(mh) >= float(mhp)
+    except (TypeError, ValueError):
+        return True
+
+
 def regime_trend(macro: dict, ind: dict) -> str | None:
     """추세추종 코어 — Donchian 돌파 + 레짐/ADX/EMA 필터 (Zarattini 2025 근거).
 
@@ -280,6 +300,9 @@ def fng_contrarian(macro: dict, ind: dict) -> str | None:
     if not _drawdown_sufficient(macro):
         return None
     if fng < parameters.FNG_LONG_BELOW:
+        # 안정화 게이트(v23): 하락 모멘텀이 더 악화되는 중이면 진입 보류(칼받기 회피).
+        if not _momentum_not_worsening(ind):
+            return None
         return "long"
     return None
 

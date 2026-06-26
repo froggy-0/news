@@ -79,5 +79,5 @@ def test_allowed_risk_decision_is_json_snapshot_ready() -> None:
     payload = decision.as_dict()
 
     assert payload["allowed"] is True
-    assert payload["policy"]["risk_model_version"] == "portfolio-risk-v1"
+    assert payload["policy"]["risk_model_version"] == "portfolio-risk-v2"
     assert payload["proposed_exposure"]["long_positions"] == 1

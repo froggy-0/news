@@ -1,6 +1,17 @@
 from arena import algorithms, execution_rules
 
 
+def test_fng_contrarian_stabilization_blocks_worsening_momentum() -> None:
+    # 게이트 통과 macro: 공포(fng<30)·risk-off 아님·충분한 낙폭.
+    macro = {"arena_regime_state": "bull_trend", "fng": 20.0, "btc_drawdown_90d": -0.15}
+    # 하락 모멘텀 악화(hist < prev) → 칼받기 회피로 진입 보류.
+    assert algorithms.fng_contrarian(macro, {"macd_hist": -2.0, "macd_hist_prev": -1.0}) is None
+    # 모멘텀 안정/개선(hist >= prev) → 진입 허용.
+    assert algorithms.fng_contrarian(macro, {"macd_hist": -1.0, "macd_hist_prev": -2.0}) == "long"
+    # macd 미수집 → graceful(게이트 미적용) → 진입 허용.
+    assert algorithms.fng_contrarian(macro, {}) == "long"
+
+
 def test_vix_rsi_diagnostics_explain_flat_vetoes() -> None:
     macro = {"arena_regime_state": "bull_trend", "vix_now": 25.0, "vix_q40": 20.0}
     ind = {"rsi": 55.0}
