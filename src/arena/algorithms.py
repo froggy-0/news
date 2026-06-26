@@ -90,11 +90,14 @@ def _etf_outflow_heavy(macro: dict) -> bool:
 
 
 def _below_ma200(macro: dict) -> bool:
-    """일간 200일 MA 하회 여부 — 현재 어떤 알고에서도 호출되지 않음(4H 로컬 MA로 교체).
+    """일간 200일 MA 하회 여부 — 구조적 하락추세 게이트 (Faber 2007, TSMOM).
 
-    이전: Faber(2007), TSMOM 근거의 일간 parquet 기반 게이트.
-    교체 이유: 일간 200일 MA는 반응이 너무 느려 4H 시스템과 맞지 않고
-    macro 갱신 지연(~20h)에 종속됨. → _below_ema_trend / _below_ema_loose 로 대체.
+    v24(2026-06-26)부터 omnibus UP_TREND·macd_momentum에서 사용. 4H 로컬 EMA 게이트
+    (`_below_ema_trend`)와 별개로, 일간 구조적 추세를 거스르는 강세/모멘텀 롱을 보류한다.
+    진단(macro 백필 6개월): 두 알고의 손실이 MA200 하회 구간의 역추세 롱에 집중
+    (omnibus UP_TREND 14건 -3.23%, macd 13건 중 8건이 하회 손실). 게이트 후 omnibus
+    -3.66→-2.05%·macd -3.53→-1.06%(독립 캡, 타 알고 무영향). 미수집(None) 시 graceful
+    통과. 플래그 MA200_REGIME_GATE_ENABLED.
     """
     if not parameters.MA200_REGIME_GATE_ENABLED:
         return False
@@ -216,6 +219,26 @@ def _drawdown_sufficient(macro: dict) -> bool:
         return True
 
 
+def _momentum_not_worsening(ind: dict) -> bool:
+    """하락 모멘텀이 더 악화되지 않을 때만 True — freefall 한복판 진입(칼받기) 회피.
+
+    MACD 히스토그램이 직전 봉 대비 상승(>=)이면 하락 가속이 멈춘 것으로 본다(평균회귀
+    진입 타이밍 필터: 매도 소진 대기). 미수집(None) 시 True(graceful). v23 백테스트
+    (macro 백필 6개월): fng 종가자산 1.002→1.011·MaxDD -4.9→-2.9%·2월 -2.47→-1.40%.
+    재현: scripts/analysis 실험. 플래그 FNG_CONTRARIAN_STABILIZATION_ENABLED.
+    """
+    if not parameters.FNG_CONTRARIAN_STABILIZATION_ENABLED:
+        return True
+    mh = ind.get("macd_hist")
+    mhp = ind.get("macd_hist_prev")
+    if mh is None or mhp is None:
+        return True
+    try:
+        return float(mh) >= float(mhp)
+    except (TypeError, ValueError):
+        return True
+
+
 def regime_trend(macro: dict, ind: dict) -> str | None:
     """추세추종 코어 — Donchian 돌파 + 레짐/ADX/EMA 필터 (Zarattini 2025 근거).
 
@@ -280,6 +303,9 @@ def fng_contrarian(macro: dict, ind: dict) -> str | None:
     if not _drawdown_sufficient(macro):
         return None
     if fng < parameters.FNG_LONG_BELOW:
+        # 안정화 게이트(v23): 하락 모멘텀이 더 악화되는 중이면 진입 보류(칼받기 회피).
+        if not _momentum_not_worsening(ind):
+            return None
         return "long"
     return None
 
@@ -333,6 +359,7 @@ def macd_momentum(macro: dict, ind: dict) -> str | None:
         or _funding_hot(macro)
         or _etf_outflow_heavy(macro)
         or _below_ema_trend_strict(ind, macro)
+        or _below_ma200(macro)  # v24: 구조적 하락추세(일간 MA200 하회) 시 모멘텀 롱 보류
         or _lsr_crowded(macro)
         or _oi_diverged(macro)
     ):
@@ -541,6 +568,7 @@ def omnibus(macro: dict, ind: dict) -> str | None:
             and rsi_pullback
             and bb_not_extended
             and not _below_ema_trend(ind)
+            and not _below_ma200(macro)  # v24: 구조적 하락추세(MA200 하회) 시 역추세 추종 보류
             and not _funding_hot(macro)
             and not _etf_outflow_heavy(macro)
             and not _lsr_crowded(macro)
@@ -573,7 +601,7 @@ def omnibus(macro: dict, ind: dict) -> str | None:
 
 
 def omnibus_position_multiplier(macro: dict, ind: dict) -> float:
-    """omnibus 레짐별 포지션 사이즈 배수 (vol_target_weight에 추가 곱함).
+    """omnibus 레짐별 포지션 사이즈 배수 (combined_position_weight에 추가 곱함).
 
     UP_TREND:          1.0 (기본, 변동성 타깃만 적용)
     RANGE:             0.40 (박스권 평균회귀 — 제한적)

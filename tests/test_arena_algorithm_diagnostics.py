@@ -1,6 +1,26 @@
 from arena import algorithms, execution_rules
 
 
+def test_fng_contrarian_stabilization_blocks_worsening_momentum() -> None:
+    # 게이트 통과 macro: 공포(fng<30)·risk-off 아님·충분한 낙폭.
+    macro = {"arena_regime_state": "bull_trend", "fng": 20.0, "btc_drawdown_90d": -0.15}
+    # 하락 모멘텀 악화(hist < prev) → 칼받기 회피로 진입 보류.
+    assert algorithms.fng_contrarian(macro, {"macd_hist": -2.0, "macd_hist_prev": -1.0}) is None
+    # 모멘텀 안정/개선(hist >= prev) → 진입 허용.
+    assert algorithms.fng_contrarian(macro, {"macd_hist": -1.0, "macd_hist_prev": -2.0}) == "long"
+    # macd 미수집 → graceful(게이트 미적용) → 진입 허용.
+    assert algorithms.fng_contrarian(macro, {}) == "long"
+
+
+def test_below_ma200_structural_gate_reads_macro_flag() -> None:
+    # btc_above_ma200=0(하회) → 역추세/모멘텀 롱 보류 트리거.
+    assert algorithms._below_ma200({"btc_above_ma200": 0.0}) is True
+    # 상회 → 통과.
+    assert algorithms._below_ma200({"btc_above_ma200": 1.0}) is False
+    # 미수집(None) → graceful 통과(게이트 미적용).
+    assert algorithms._below_ma200({}) is False
+
+
 def test_vix_rsi_diagnostics_explain_flat_vetoes() -> None:
     macro = {"arena_regime_state": "bull_trend", "vix_now": 25.0, "vix_q40": 20.0}
     ind = {"rsi": 55.0}
