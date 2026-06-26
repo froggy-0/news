@@ -113,6 +113,8 @@ class SimPosition:
     indicator_snapshot: dict[str, Any]
     macro_snapshot: dict[str, Any]
     risk_snapshot: dict[str, Any]
+    fng_ref_price: float = 0.0
+    fng_filled_count: int = 0
 
     def as_live_position(self) -> dict[str, Any]:
         return {
@@ -342,13 +344,24 @@ def _open_position(
         stop_loss_min_pct=settings.stop_loss_min_pct,
         stop_loss_max_pct=settings.stop_loss_max_pct,
     )
-    # 변동성 타깃 사이징 — live(scheduler)와 동일 가중치를 백테스트 equity에도 반영.
-    position_weight = execution_rules.vol_target_weight(
-        float(frame.indicators.get("realized_vol_24h") or 0.0),
-        target_vol=parameters.VOL_TARGET_PER_BAR,
-        weight_min=parameters.VOL_WEIGHT_MIN,
-        weight_max=parameters.VOL_WEIGHT_MAX,
-    )
+    # 포지션 사이징 — live(scheduler)와 동일 가중치를 백테스트 equity에도 반영.
+    fng_ref_price = 0.0
+    fng_filled_count = 0
+    if algo_id == "fng_contrarian" and parameters.FNG_CONTRARIAN_SCALE_IN_ENABLED:
+        # 역발산: 1차 트랜치만 진입. 추가 트랜치는 가격 하락 시 물타기(_maybe_scale_in_fng_sim).
+        position_weight = parameters.FNG_CONTRARIAN_PRICE_TRANCHES[0][1]
+        fng_ref_price = frame.bar.close  # 물타기 기준가 = 최초 진입가
+        fng_filled_count = 1
+    else:
+        position_weight = execution_rules.combined_position_weight(
+            float(frame.indicators.get("realized_vol_24h") or 0.0),
+            frame.bar.close,
+            stop_loss_price,
+            target_vol=parameters.VOL_TARGET_PER_BAR,
+            risk_budget_pct=parameters.RISK_PER_TRADE_PCT,
+            weight_min=parameters.VOL_WEIGHT_MIN,
+            weight_max=parameters.VOL_WEIGHT_MAX,
+        )
     return SimPosition(
         algo_id=algo_id,
         direction=direction,
@@ -362,6 +375,42 @@ def _open_position(
         indicator_snapshot=dict(frame.indicators),
         macro_snapshot=dict(macro),
         risk_snapshot=risk_snapshot,
+        fng_ref_price=fng_ref_price,
+        fng_filled_count=fng_filled_count,
+    )
+
+
+def _maybe_scale_in_fng_sim(position: SimPosition, eval_price: float) -> SimPosition:
+    """역발산 가격 기준 물타기(backtest) — live positions.maybe_scale_in_fng_price 패리티.
+
+    봉 저가(eval_price)가 다음 트랜치 한계가(ref×(1+drop)) 이하로 내려가면 그 한계가에
+    추가 체결. 누적 비중 VOL_WEIGHT_MAX 상한. live(1m 틱)와 동일 한계가 체결로 패리티.
+    추가분 없으면 원본 포지션 그대로 반환.
+    """
+    ref_price = position.fng_ref_price or position.open_price
+    pending = execution_rules.pending_price_tranches(
+        eval_price,
+        ref_price,
+        position.fng_filled_count,
+        parameters.FNG_CONTRARIAN_PRICE_TRANCHES,
+    )
+    if not pending:
+        return position
+    new_open, new_weight, applied = execution_rules.fill_price_tranches(
+        position.open_price,
+        position.position_weight,
+        ref_price,
+        pending,
+        parameters.FNG_CONTRARIAN_PRICE_TRANCHES,
+        parameters.VOL_WEIGHT_MAX,
+    )
+    if applied <= 0:
+        return position
+    return replace(
+        position,
+        open_price=new_open,
+        position_weight=new_weight,
+        fng_filled_count=position.fng_filled_count + applied,
     )
 
 
@@ -589,7 +638,35 @@ def run_replay(
         frame_realized: dict[str, float] = {algo_id: 0.0 for algo_id in algo_ids}
         for algo_id, fn in strategy_fns.items():
             position = positions_by_algo[algo_id]
-            stop_fill = _stop_fill_price(position, frame.bar) if position else None
+            # 역발산 계열은 가격 손절 제외 — 시간 손절로 대체(아래 time_stop 블록).
+            price_stop_on = algo_id not in parameters.PRICE_STOP_DISABLED_ALGOS
+            stop_fill = (
+                _stop_fill_price(position, frame.bar) if (position and price_stop_on) else None
+            )
+            # 시간 손절: 최대 보유시간 초과 시 청산(가격 손절 제거 알고 보완).
+            ts_hours = parameters.TIME_STOP_HOURS_BY_ALGO.get(algo_id)
+            if (
+                position
+                and stop_fill is None
+                and ts_hours
+                and execution_rules.time_stop_triggered(
+                    position.open_time, frame.bar.close_time, ts_hours
+                )
+            ):
+                trade = _close_position(
+                    position,
+                    close_time=frame.bar.close_time,
+                    close_data_timestamp=frame.data_timestamp,
+                    close_price=frame.bar.close,
+                    exit_reason="time_stop",
+                    settings=settings,
+                    funding_events=funding_events,
+                )
+                trades.append(trade)
+                record_realized(algo_id, trade.ret_pct, trade.close_time, trade.position_weight)
+                frame_realized[algo_id] += trade.position_weight * trade.ret_pct
+                positions_by_algo[algo_id] = None
+                position = None
             if position and stop_fill is not None:
                 trade = _close_position(
                     position,
@@ -649,6 +726,16 @@ def run_replay(
                         positions_by_algo[algo_id] = None
                     continue
                 if not product_decision.should_open:
+                    # 역발산 물타기: 보유(hold) 중 가격 하락 시 추가 트랜치 체결(봉 저가 평가).
+                    if (
+                        position is not None
+                        and product_decision.action == "hold"
+                        and algo_id == "fng_contrarian"
+                        and parameters.FNG_CONTRARIAN_SCALE_IN_ENABLED
+                    ):
+                        positions_by_algo[algo_id] = _maybe_scale_in_fng_sim(
+                            position, frame.bar.low
+                        )
                     continue
                 signal = product_decision.executable_signal
             else:
@@ -836,11 +923,29 @@ def _row_ts(value: Any) -> datetime:
 def _macro_signal_from_snapshot(row: dict[str, Any], decision_time: datetime) -> dict[str, Any]:
     risk_overlay = row.get("risk_overlay") or {}
     raw = risk_overlay.get("regimeRaw") or {}
+    # 라이브 scheduler._fetch_macro와 동일한 regimeRaw 매핑 — 백테스트가 동일 게이트
+    # (MA200·낙폭·LSR·taker·breadth·stablecoin·funding·OI·ETF)를 평가하도록 한다.
+    # 이전엔 fng/vix만 추출해 모든 macro 게이트가 None→스킵되어 라이브와 다른 전략을 검증했음.
     macro = {
         "regime_state": risk_overlay.get("regimeState", ""),
         "fng": raw.get("fng"),
         "vix_now": raw.get("vix_now"),
         "vix_q40": raw.get("vix_q40"),
+        # 선물/파생 — 현물 진입 과열 회피 필터
+        "funding_zscore": raw.get("funding_zscore"),
+        "oi_divergence_flag": raw.get("oi_divergence_flag"),
+        "etf_flow_zscore": raw.get("etf_flow_zscore"),
+        # 구조적 강세 게이트 + 군중 과밀 + 주문흐름 확인 + 낙폭 컨텍스트
+        "btc_above_ma200": raw.get("btc_above_ma200"),
+        "long_short_ratio_zscore": raw.get("long_short_ratio_zscore"),
+        "taker_imbalance_zscore": raw.get("taker_imbalance_zscore"),
+        "btc_drawdown_90d": raw.get("btc_drawdown_90d"),
+        # 시장 폭 + 온체인 유동성 (복합 투표 알고 건전성 필터)
+        "breadth_up_ratio": raw.get("breadth_up_ratio"),
+        "stablecoin_supply_zscore": raw.get("stablecoin_supply_zscore"),
+        # 변동성 환경 라벨 (사이징/신뢰도 컨텍스트)
+        "vol_level": risk_overlay.get("volLevel"),
+        "vol_trend": risk_overlay.get("volTrend"),
         "fetched_at": row.get("fetched_at"),
         "reference_date": row.get("reference_date"),
         "stale_hours": row.get("stale_hours"),
@@ -885,6 +990,7 @@ async def load_frames_from_supabase(
     indicator_profile_id: str = frequency.DEFAULT_INDICATOR_PROFILE_ID,
     from_date: datetime | None = None,
     to_date: datetime | None = None,
+    macro_rows: list[dict[str, Any]] | None = None,
 ) -> list[ReplayFrame]:
     """Load replay frames from Supabase.
 
@@ -931,13 +1037,17 @@ async def load_frames_from_supabase(
             "fetched_at",
             _ts(from_date - timedelta(hours=_interval_hours(interval) * (warmup_bars + 5))),
         )
-    macros_res = (
-        await db.table("arena_macro_snapshots")
-        .select("fetched_at,reference_date,stale_hours,risk_overlay")
-        .order("fetched_at")
-        .execute()
-    )
-    macro_rows = macros_res.data
+    # macro_rows 주입 시 DB 조회를 건너뛴다 — 히스토리 백필(sentiment_join parquet에서
+    # 재구성한 일간 regimeRaw)로 백테스트를 돌릴 때 사용. 각 행은 fetched_at·risk_overlay
+    # 키를 가져야 하며 fetched_at 오름차순 정렬 전제.
+    if macro_rows is None:
+        macros_res = (
+            await db.table("arena_macro_snapshots")
+            .select("fetched_at,reference_date,stale_hours,risk_overlay")
+            .order("fetched_at")
+            .execute()
+        )
+        macro_rows = macros_res.data
 
     highs: list[float] = []
     lows: list[float] = []

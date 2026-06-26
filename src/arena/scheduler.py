@@ -441,6 +441,14 @@ def _signal_reason(algo_id: str, signal: str | None, ind: dict, macro: dict) -> 
     return reason
 
 
+def _fng_open_reason() -> dict:
+    """fng_contrarian 최초 진입 시 signal_reason에 심을 물타기 진행 상태.
+
+    기준가(fng_ref_price)는 호출측에서 진입가로 채우고, 여기선 1단계 체결을 표기.
+    """
+    return {"fng_filled_count": 1}
+
+
 async def _run_shadow_vnext(
     *,
     run_id: str,
@@ -723,6 +731,32 @@ async def _run_cycle() -> None:
         current = state.open_positions.get(algo_id)
         current_position_id = current["id"] if current else None
         try:
+            # 시간 손절(가격 손절 제거 알고 보완): 최대 보유시간 초과 시 청산.
+            ts_hours = parameters.TIME_STOP_HOURS_BY_ALGO.get(algo_id)
+            if (
+                current is not None
+                and ts_hours
+                and execution_rules.time_stop_triggered(current["open_time"], now, ts_hours)
+            ):
+                ret_pct = await positions.close_position(
+                    current["id"], now, price, close_reason="time_stop"
+                )
+                hold_h = execution_rules.hold_hours(current["open_time"], now)
+                state.open_positions[algo_id] = None
+                portfolio_risk_state = await _risk_state(now)
+                await slack_notify.notify_close(
+                    algo_id=algo_id,
+                    direction=current["direction"],
+                    open_price=current["open_price"],
+                    close_price=price,
+                    ret_pct=ret_pct,
+                    hold_hours=hold_h,
+                    position_id=current["id"],
+                    is_stop_loss=False,
+                    close_reason="time_stop",
+                )
+                continue
+
             raw_signal = fn(macro, ind)
             product_decision = spot_policy.decide(raw_signal, current)
             signal = product_decision.executable_signal
@@ -770,6 +804,17 @@ async def _run_cycle() -> None:
                 continue
 
             if not product_decision.should_open:
+                # 역발산 물타기 4h 백업: 실시간 체결은 stream(1m 틱)이 담당하나, 스트림
+                # 재접속 공백 등을 보완해 4h 봉종가에서도 미체결 트랜치를 점검(idempotent).
+                if (
+                    current is not None
+                    and action == "hold"
+                    and parameters.FNG_CONTRARIAN_SCALE_IN_ENABLED
+                    and algo_id == "fng_contrarian"
+                ):
+                    updated = await positions.maybe_scale_in_fng_price(current, price)
+                    if updated:
+                        state.open_positions[algo_id] = updated
                 continue
 
             risk_decision = risk.evaluate_open(
@@ -831,16 +876,31 @@ async def _run_cycle() -> None:
                 stop_loss_min_pct=config.STOP_LOSS_MIN_PCT,
                 stop_loss_max_pct=config.STOP_LOSS_MAX_PCT,
             )
-            # 변동성 타깃 포지션 사이징 — 고변동 축소 / 저변동 확대 (현물 0.25~1.0배).
-            position_weight = execution_rules.vol_target_weight(
-                ind.get("realized_vol_24h", 0.0),
-                target_vol=parameters.VOL_TARGET_PER_BAR,
-                weight_min=parameters.VOL_WEIGHT_MIN,
-                weight_max=parameters.VOL_WEIGHT_MAX,
+            # 포지션 사이징 — 변동성타깃 ∧ 거래당 자본위험 중 더 보수적인 비중(현물 0.25~0.7배).
+            is_fng_scale = (
+                algo_id == "fng_contrarian" and parameters.FNG_CONTRARIAN_SCALE_IN_ENABLED
             )
-            # omnibus: 레짐별 추가 배수 적용 (UP_TREND=1.0, RANGE=0.4, REBOUND=0.25)
-            if algo_id == "omnibus":
-                position_weight *= omnibus_position_multiplier(macro, ind)
+            if is_fng_scale:
+                # 역발산: 1차 트랜치만 진입. 물타기는 가격 하락 시 실시간(stream)으로 추가.
+                position_weight = parameters.FNG_CONTRARIAN_PRICE_TRANCHES[0][1]
+            else:
+                position_weight = execution_rules.combined_position_weight(
+                    ind.get("realized_vol_24h", 0.0),
+                    price,
+                    sl_price,
+                    target_vol=parameters.VOL_TARGET_PER_BAR,
+                    risk_budget_pct=parameters.RISK_PER_TRADE_PCT,
+                    weight_min=parameters.VOL_WEIGHT_MIN,
+                    weight_max=parameters.VOL_WEIGHT_MAX,
+                )
+                # omnibus: 레짐별 추가 배수 적용 (UP_TREND=1.0, RANGE=0.4, REBOUND=0.25)
+                if algo_id == "omnibus":
+                    position_weight *= omnibus_position_multiplier(macro, ind)
+            open_signal_reason = _signal_reason(algo_id, signal, ind, macro)
+            if is_fng_scale:
+                # 물타기 기준가 = 최초 진입가, 1단계 체결 표기.
+                open_signal_reason.update(_fng_open_reason())
+                open_signal_reason["fng_ref_price"] = price
             new_pos = await positions.open_position(
                 algo_id,
                 signal,
@@ -870,7 +930,7 @@ async def _run_cycle() -> None:
                     bid=bid,
                     ask=ask,
                 ),
-                signal_reason=_signal_reason(algo_id, signal, ind, macro),
+                signal_reason=open_signal_reason,
                 risk_snapshot=risk_decision.as_dict(),
             )
             state.open_positions[algo_id] = new_pos

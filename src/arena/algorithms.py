@@ -573,7 +573,7 @@ def omnibus(macro: dict, ind: dict) -> str | None:
 
 
 def omnibus_position_multiplier(macro: dict, ind: dict) -> float:
-    """omnibus 레짐별 포지션 사이즈 배수 (vol_target_weight에 추가 곱함).
+    """omnibus 레짐별 포지션 사이즈 배수 (combined_position_weight에 추가 곱함).
 
     UP_TREND:          1.0 (기본, 변동성 타깃만 적용)
     RANGE:             0.40 (박스권 평균회귀 — 제한적)

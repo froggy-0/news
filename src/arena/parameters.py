@@ -11,7 +11,7 @@ from copy import deepcopy
 from typing import Any
 
 STRATEGY_VERSION = "arena-spot-v4"
-PARAMS_VERSION = "arena-params-v20"
+PARAMS_VERSION = "arena-params-v22"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v1"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
@@ -96,7 +96,16 @@ ADX_TREND_MIN = 20.0  # ADX < 20 = 추세 약함, 추세추종 진입 차단
 # realized_vol_24h = 4h 봉 로그수익률 표준편차(직전 6봉). 고변동 → 축소, 저변동 → 확대.
 VOL_TARGET_PER_BAR = 0.02  # 목표 4h 봉 변동성(2%)
 VOL_WEIGHT_MIN = 0.25  # 최소 노출 (현물: 자본의 25%)
-VOL_WEIGHT_MAX = 1.0  # 최대 노출 (현물: 레버리지 없음, 자본의 100%)
+# 상한 0.7: 현물 long-only는 gross ~70%를 풀 사이징 기준으로 권장
+#   (arxiv 2602.11708, Feb 2026 — 6H BTC 추세추종 적응형 포트폴리오 구성).
+#   단일 알고가 자기 자본 100%를 단일 4H 롱에 올인하는 것을 방지.
+VOL_WEIGHT_MAX = 0.7  # 최대 노출 (현물: 레버리지 없음, 자본의 70%)
+
+# 거래당 자본위험 예산 (고정분율 위험 사이징).
+#   weight = clamp(RISK_PER_TRADE_PCT / stop_distance_pct, MIN, MAX).
+#   손절 도달 시 손실을 자본의 ~1.5%로 균질화 → 단일 올인 진입의 꼬리손실 제거.
+#   변동성타깃과 min() 결합: 더 보수적인 레버가 바인딩(execution_rules.combined_position_weight).
+RISK_PER_TRADE_PCT = 0.015
 
 # 펀딩/OI 과열 회피 (선물 데이터를 현물 진입 필터로 활용)
 FUNDING_HOT_ZSCORE = 1.5  # funding zscore 초과 시 롱 과열 — 진입 억제
@@ -133,6 +142,37 @@ TAKER_CONFIRM_ZSCORE = -0.5
 #   btc_drawdown_90d <= -0.10 (10% 이상 낙폭) 조건. 미수집 시 게이트 미적용.
 FNG_CONTRARIAN_MIN_DRAWDOWN = -0.10
 
+# ── fng_contrarian 역발산(평균회귀) 전용 설계 ──────────────────────────────
+# 근거: 가격 손절은 평균회귀 전략을 악화시킨다(AR(1) 프로세스 연구 Kaminski·Lo;
+#   Alvarez Quant 백테스트: 손절 추가 시 지표 악화). 떨어져서 사는 전략인데 가격
+#   손절은 바로 그 딥에 되팔기 때문. 대신 (1)공포 심화 시 점증 분할매수(scaling-in),
+#   (2)가격 손절 제거 + 시간 손절(평균회귀는 초기 봉에 수익 집중)로 대체한다.
+#   익절·risk-off 청산은 기존 로직 재사용(FNG 중립 복귀 → flat, risk-off → 청산).
+FNG_CONTRARIAN_SCALE_IN_ENABLED = True
+# 진입 게이트는 FNG<30(일별). 분할매수(물타기)는 **가격 기준 실시간** — 최초 진입가
+#   대비 하락률에서 추가 체결한다. FNG는 일별이라 장중 불변 → 장중 변하는 가격으로
+#   물타기해야 실시간 대응이 의미를 가진다(고전적 물타기). live는 stream.py 1m 틱,
+#   backtest는 봉 저가로 평가(패리티). (진입가 하락률, 추가 비중) — 점증 누적 ≤ 0.70.
+FNG_CONTRARIAN_PRICE_TRANCHES: tuple[tuple[float, float], ...] = (
+    (0.00, 0.15),  # 최초 진입(4h)
+    (-0.03, 0.25),  # 진입가 -3% → 실시간 추가
+    (-0.06, 0.30),  # 진입가 -6% → 실시간 추가
+)
+# 시간 손절: 18 x 4h봉 = 72h 내 회귀 없으면 청산. 평균회귀 시간 손절.
+#   v22(2026-06-26): 48→72h. 실데이터 백테스트(macro 백필, 6개월)에서 진단 결과
+#   조기 청산(FNG 중립 복귀 flat)이 회복 전 손실 확정의 주원인이었음 — flat 청산 36%
+#   승률/-4.14% vs 만기보유(time_stop) 86% 승률/+2.31%. 보유기간을 늘리니 같은 물타기
+#   트레이드가 회복(평균회귀는 회복 시간 필요, Kaminski·Lo). min_hold 24→48h와 함께
+#   fng 종가자산 0.981→1.002(유일 순플러스)·승률 50→57%·MaxDD -6.3→-4.9%. ts72~120/
+#   mh48~72 plateau 중앙값 채택(과적합 회피). 재현: scripts/analysis/fng_optimize.py.
+FNG_CONTRARIAN_TIME_STOP_HOURS = 72.0
+# 가격(ATR·트레일) 손절을 적용하지 않는 알고 — 역발산 계열은 가격 손절이 독.
+PRICE_STOP_DISABLED_ALGOS: tuple[str, ...] = ("fng_contrarian",)
+# 시간 손절을 적용하는 알고 → 최대 보유시간(h). 위 가격 손절 제거를 보완.
+TIME_STOP_HOURS_BY_ALGO: dict[str, float] = {
+    "fng_contrarian": FNG_CONTRARIAN_TIME_STOP_HOURS,
+}
+
 # 시장 폭(breadth) 건전성: Binance top10 알트 중 7일 수익률 양(+) 비율.
 #   이 값 미만이면 BTC 단독/협소 랠리 → 복합 투표 알고 진입 보류.
 #   미수집(None) 시 게이트 미적용. 0~1 유계라 절대 임계값 사용.
@@ -161,7 +201,7 @@ OMNIBUS_RSI_REBOUND_MAX = 35.0  # 30→35: 완화 (극단 35 이하도 충분히
 OMNIBUS_BB_POS_REBOUND_ENTRY = 0.25  # 0.20→0.25: 완화 (하단 25% = 충분히 낮음)
 OMNIBUS_REBOUND_MIN_RETURN_24H = -0.015  # -0.02→-0.015: 1.5% 낙폭으로 완화
 OMNIBUS_REBOUND_MIN_VOTES = 3  # 4개 조건 중 최소 3개 충족 시 OVERSOLD_REBOUND 인정
-# 포지션 사이즈 배수 (vol_target_weight에 추가 곱함)
+# 포지션 사이즈 배수 (combined_position_weight에 추가 곱함)
 OMNIBUS_TREND_SIZE_MULT = 1.0
 OMNIBUS_RANGE_SIZE_MULT = 0.40
 OMNIBUS_REBOUND_SIZE_MULT = 0.25
@@ -243,7 +283,7 @@ REALTIME_RISK_SUSTAINED_WINDOWS = 2
 
 MIN_HOLD_HOURS: dict[str, float] = {
     "regime_trend": 12.0,
-    "fng_contrarian": 24.0,
+    "fng_contrarian": 48.0,  # v22: 24→48h. 조기 FNG-중립 flat 청산이 평균회귀 회복 전
     "vix_rsi": 12.0,
     "macd_momentum": 8.0,
     "multi_factor": 12.0,
@@ -336,6 +376,7 @@ def base_params_snapshot() -> dict[str, Any]:
             "vol_target_per_bar": VOL_TARGET_PER_BAR,
             "vol_weight_min": VOL_WEIGHT_MIN,
             "vol_weight_max": VOL_WEIGHT_MAX,
+            "risk_per_trade_pct": RISK_PER_TRADE_PCT,
         },
         "risk_defaults": {
             "stop_loss_fallback_pct": STOP_LOSS_FALLBACK_PCT,

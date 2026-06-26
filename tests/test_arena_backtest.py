@@ -170,6 +170,62 @@ def test_spot_backtest_maps_short_to_exit_or_no_trade() -> None:
     assert result.trades[0].exit_reason == "short_signal_spot_risk_off"
 
 
+def _spot_settings(**kw) -> "backtest.BacktestSettings":
+    return backtest.BacktestSettings(
+        close_open_at_end=False,
+        product_type="spot",
+        position_semantics="spot_long_flat",
+        **kw,
+    )
+
+
+def test_fng_contrarian_scales_in_and_skips_price_stop() -> None:
+    # 가격 기준 물타기(트랜치 0%/-3%/-6%)·가격손절 제외 인프라를 결정적으로 검증.
+    def fng_long(macro, indicators):
+        return "long" if macro.get("fng", 100) < 30 else None
+
+    result = backtest.run_replay(
+        [
+            _frame(0, close=100.0, macro={"fng": 25}),  # 진입: 1차 트랜치 w=0.15 @100, ref=100
+            _frame(
+                1, close=98.0, low=96.5, macro={"fng": 15}
+            ),  # 저가 -3.5% → -3% 체결 @97 → w=0.40
+            _frame(2, close=95.0, low=93.0, macro={"fng": 5}),  # 저가 -7% → -6% 체결 @94 → w=0.70
+            # 30% 폭락이지만 가격 손절 제외 → 청산 안 됨, 트랜치 소진 → 추가 없음.
+            _frame(3, close=70.0, low=65.0, macro={"fng": 5}),
+            # 보유(min_hold 48h 전엔 flat 불가). fng<30 지속 → long hold.
+            *[_frame(i, close=72.0, macro={"fng": 20}) for i in range(4, 12)],
+            _frame(12, close=95.0, macro={"fng": 60}),  # 48h 경과(min_hold) + 공포 해소 → flat 청산
+        ],
+        strategy_fns={"fng_contrarian": fng_long},
+        settings=_spot_settings(),
+    )
+
+    # 폭락 구간에도 가격 손절 트레이드가 없어야 함 — 단 1건(flat 청산)만.
+    assert len(result.trades) == 1
+    trade = result.trades[0]
+    assert trade.exit_reason == "flat_signal"
+    # 누적 비중 0.15+0.25+0.30 = 0.70 (상한), 한계가 가중평균 진입가.
+    assert trade.position_weight == pytest.approx(0.70)
+    # avg = (100*0.15 + 97*0.25 + 94*0.30)/0.70 = (15+24.25+28.2)/0.7 = 96.3571
+    assert trade.open_price == pytest.approx(96.3571, abs=1e-3)
+
+
+def test_fng_contrarian_time_stop_closes_after_max_hold() -> None:
+    def always_fear(macro, indicators):
+        return "long"  # 공포 지속 — 익절 신호 없음
+
+    frames = [_frame(i, close=100.0, macro={"fng": 20}) for i in range(20)]
+    result = backtest.run_replay(
+        frames,
+        strategy_fns={"fng_contrarian": always_fear},
+        settings=_spot_settings(),
+    )
+
+    # 72h(18봉) 경과 시 시간 손절 청산.
+    assert any(t.exit_reason == "time_stop" for t in result.trades)
+
+
 def test_backtest_can_replay_live_execution_gate_blocks() -> None:
     def always_long(macro, indicators):
         return "long"

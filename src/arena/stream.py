@@ -66,6 +66,14 @@ async def _check_stop_loss(price: float) -> None:
     for algo_id, pos in list(state.open_positions.items()):
         if pos is None:
             continue
+        # 역발산(평균회귀) 계열: 가격/트레일 손절 제외 — 대신 1m 틱마다 가격 기준 물타기를
+        # 실시간 평가(공포 딥에 한계가 체결). 시간 손절은 4h 루프가 담당.
+        if algo_id in parameters.PRICE_STOP_DISABLED_ALGOS:
+            if parameters.FNG_CONTRARIAN_SCALE_IN_ENABLED and algo_id == "fng_contrarian":
+                updated = await positions.maybe_scale_in_fng_price(pos, price)
+                if updated:
+                    state.open_positions[algo_id] = updated  # 인메모리 반영(4h 루프 공유)
+            continue
         await _ratchet_trailing_stop(algo_id, pos, price)
         if _is_stop_triggered(pos, price):
             sl = pos.get("stop_loss_price", "fallback")
