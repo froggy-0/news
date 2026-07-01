@@ -294,6 +294,10 @@ def fng_contrarian(macro: dict, ind: dict) -> str | None:
     품질 게이트(일간): 극단 공포만으로는 즉시 바닥이 아닌 경우가 많으므로
     90일 고점 대비 충분한 낙폭(<= -10%)이 동반될 때만 진입 — 역발산 진입 품질 향상.
     역추세 전략이므로 200일 MA 게이트는 적용하지 않는다.
+
+    시장 환경 veto(multi_factor와 동일 기준):
+    - breadth 붕괴(top10 상승비율 < 0.30): 전방위 하락장에서 역발산은 칼받기
+    - stablecoin 수축(z < -1.5): 온체인 유동성 이탈 시 평균회귀 에너지 없음
     """
     fng = macro.get("fng")
     if fng is None:
@@ -301,6 +305,10 @@ def fng_contrarian(macro: dict, ind: dict) -> str | None:
     if _is_risk_off(_regime_state(macro)):
         return None
     if not _drawdown_sufficient(macro):
+        return None
+    if _breadth_collapsed(macro):
+        return None
+    if _stablecoin_contracting(macro):
         return None
     if fng < parameters.FNG_LONG_BELOW:
         # 안정화 게이트(v23): 하락 모멘텀이 더 악화되는 중이면 진입 보류(칼받기 회피).
@@ -315,7 +323,12 @@ def vix_rsi(macro: dict, ind: dict) -> str | None:
 
     VIX가 40th percentile 이하(calm) AND RSI < 50 → 롱.
     vix_q40 미수집 시 vix_now < 20 fallback. risk-off 레짐 시 보류.
-    MA 게이트 없음 — 이 알고는 VIX/RSI 외생 신호 기반이라 장기 추세 필터 부적합.
+
+    시장 환경 veto:
+    - breadth 붕괴(top10 상승비율 < 0.30): 하락장에서 VIX가 낮아도 RSI<50은 구조적 패턴
+      → VIX/RSI 외생 신호가 노이즈가 되는 환경을 걸러낸다.
+    - stablecoin 수축(z < -1.5): 온체인 유동성 이탈 시 매수 에너지 부재.
+    MA200 게이트는 미적용 — VIX/RSI는 추세 방향성과 무관한 외생 신호.
     """
     vix_now = macro.get("vix_now")
     vix_q40 = macro.get("vix_q40")
@@ -324,6 +337,10 @@ def vix_rsi(macro: dict, ind: dict) -> str | None:
     if vix_now is None:
         return None
     if _is_risk_off(_regime_state(macro)):
+        return None
+    if _breadth_collapsed(macro):
+        return None
+    if _stablecoin_contracting(macro):
         return None
 
     # q40 기준 +5% 이내(VIX_CALM_TOLERANCE_BAND)는 실질 calm으로 인정.
@@ -732,6 +749,10 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
         _record_condition(
             diag, "drawdown_sufficient_or_missing", _drawdown_sufficient(macro), veto=True
         )
+        _record_condition(diag, "breadth_not_collapsed", not _breadth_collapsed(macro), veto=True)
+        _record_condition(
+            diag, "stablecoin_not_contracting", not _stablecoin_contracting(macro), veto=True
+        )
         _record_condition(
             diag,
             "fng_extreme_fear",
@@ -755,6 +776,10 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
         diag["thresholds"]["vix_calm_tolerance"] = parameters.VIX_CALM_TOLERANCE_BAND
         _record_condition(diag, "vix_present", vix_now is not None, veto=True)
         _record_condition(diag, "not_risk_off", not _is_risk_off(state), veto=True)
+        _record_condition(diag, "breadth_not_collapsed", not _breadth_collapsed(macro), veto=True)
+        _record_condition(
+            diag, "stablecoin_not_contracting", not _stablecoin_contracting(macro), veto=True
+        )
         _record_condition(diag, "vix_calm", vix_calm, veto=True)
         _record_condition(diag, "rsi_below_long_max", rsi < parameters.VIX_RSI_LONG_MAX, veto=True)
         return _finish_diag(diag)
