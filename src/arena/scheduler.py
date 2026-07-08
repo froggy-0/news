@@ -772,7 +772,7 @@ async def _run_cycle() -> None:
                     if product_decision.close_reason == "flat_signal" and exit_hold_override(
                         algo_id, macro, ind
                     ):
-                        action = "exit_hysteresis_hold"
+                        action = "hold"
                         skipped_reason = "exit_hold_override"
                         continue
                     if (
