@@ -170,6 +170,148 @@ def vol_target_weight(
     return max(weight_min, min(weight_max, raw))
 
 
+def risk_targeted_weight(
+    open_price: float,
+    stop_loss_price: float,
+    *,
+    risk_budget_pct: float,
+    weight_min: float,
+    weight_max: float,
+) -> float:
+    """손절거리 기준 거래당 자본위험 고정 사이징 = clamp(risk_budget / stop_dist, min, max).
+
+    손절 도달 시 손실 ≈ weight × stop_distance_pct ≈ risk_budget_pct 로 고정된다.
+    좁은 손절 → 큰 비중 허용, 넓은 손절 → 비중 축소. open/stop 미상정 시 보수적으로
+    weight_min. 근거: 고정분율 위험(fixed-fractional risk) — 거래당 손실 균질화로
+    단일 올인 진입의 꼬리손실을 제거. backtest·live 공용 순수 함수.
+    """
+    if open_price <= 0 or stop_loss_price <= 0:
+        return weight_min
+    stop_distance_pct = abs(open_price - stop_loss_price) / open_price
+    if stop_distance_pct <= 0:
+        return weight_max
+    raw = risk_budget_pct / stop_distance_pct
+    return max(weight_min, min(weight_max, raw))
+
+
+def combined_position_weight(
+    realized_vol: float,
+    open_price: float,
+    stop_loss_price: float,
+    *,
+    target_vol: float,
+    risk_budget_pct: float,
+    weight_min: float,
+    weight_max: float,
+) -> float:
+    """변동성타깃과 리스크타깃 중 더 보수적인(작은) 비중을 채택.
+
+    - 저변동 국면: 변동성타깃이 상한에 붙어 올인을 요구하지만 리스크타깃이 손절거리
+      기준으로 비중을 제한 → 단일 진입 자본위험 통제.
+    - 고변동 국면: 변동성타깃이 먼저 축소되어 기존 보호를 유지.
+    가장 보수적인 레버가 항상 바인딩된다. backtest·live 공용 순수 함수.
+    """
+    vt = vol_target_weight(
+        realized_vol,
+        target_vol=target_vol,
+        weight_min=weight_min,
+        weight_max=weight_max,
+    )
+    rb = risk_targeted_weight(
+        open_price,
+        stop_loss_price,
+        risk_budget_pct=risk_budget_pct,
+        weight_min=weight_min,
+        weight_max=weight_max,
+    )
+    return min(vt, rb)
+
+
+def time_stop_triggered(
+    open_time: datetime | str,
+    now: datetime,
+    max_hold_hours: float,
+) -> bool:
+    """보유시간이 max_hold_hours 이상이면 True. 평균회귀 시간 손절(가격 손절 대체).
+
+    평균회귀는 수익이 초기 봉에 집중되므로, 일정 시간 내 회귀(익절)가 없으면 청산해
+    자본 점유를 풀고 다음 기회로 회전한다. backtest·live 공용 순수 함수.
+    """
+    if max_hold_hours <= 0:
+        return False
+    return hold_hours(open_time, now) >= max_hold_hours
+
+
+def pending_price_tranches(
+    current_price: float,
+    ref_price: float,
+    filled_count: int,
+    tranches: tuple[tuple[float, float], ...],
+) -> list[tuple[int, float]]:
+    """현재가가 진입 기준가 대비 충분히 하락해 새로 체결 가능한 물타기 트랜치 목록.
+
+    각 트랜치 (진입가 하락률 drop≤0, 추가 비중). 이미 filled_count개 체결됐다고 보고
+    그 다음 인덱스부터 순차적으로 `current_price <= ref_price*(1+drop)`를 만족하는
+    동안 반환(가격이 갭다운하면 여러 단계 동시 체결). 반환 (트랜치 인덱스, 추가 비중).
+    backtest(봉 저가)·live(1m 틱) 공용 순수 함수.
+    """
+    if ref_price <= 0:
+        return []
+    out: list[tuple[int, float]] = []
+    for i in range(max(filled_count, 0), len(tranches)):
+        drop, add_weight = tranches[i]
+        if current_price <= ref_price * (1.0 + drop):
+            out.append((i, add_weight))
+        else:
+            break  # 순차적 — 더 깊은 단계는 아직 미도달
+    return out
+
+
+def averaged_entry_price(
+    old_price: float,
+    old_weight: float,
+    add_price: float,
+    add_weight: float,
+) -> float:
+    """비중 가중 평균 진입가 = (old·w_old + add·w_add) / (w_old + w_add). 물타기 회계."""
+    total = old_weight + add_weight
+    if total <= 0:
+        return old_price
+    return (old_price * old_weight + add_price * add_weight) / total
+
+
+def fill_price_tranches(
+    old_avg: float,
+    old_weight: float,
+    ref_price: float,
+    pending: list[tuple[int, float]],
+    tranches: tuple[tuple[float, float], ...],
+    weight_cap: float,
+) -> tuple[float, float, int]:
+    """물타기 트랜치들을 각자의 한계가(ref×(1+drop))에 체결한 결과 회계.
+
+    페이퍼 한계주문 모델: 트랜치 i는 진입가 대비 drop_i 지점에 걸어둔 매수로 보고
+    ref_price*(1+drop_i)에 체결. 누적 비중은 weight_cap 상한. live(1m 틱)·
+    backtest(봉 저가) 모두 동일 한계가에 체결해 패리티 유지. 반환 (새 평균진입가,
+    새 누적비중, 실제 체결 트랜치 수).
+    """
+    avg = old_avg
+    weight = old_weight
+    applied = 0
+    for idx, add_weight in pending:
+        room = weight_cap - weight
+        if room <= 1e-9:
+            break
+        aw = min(add_weight, room)
+        if aw <= 0:
+            break
+        fill_price = ref_price * (1.0 + tranches[idx][0])
+        avg = averaged_entry_price(avg, weight, fill_price, aw)
+        weight += aw
+        applied += 1
+    return avg, weight, applied
+
+
 def fee_adjusted_return_pct(
     *,
     direction: str,

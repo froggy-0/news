@@ -173,6 +173,92 @@ async def open_position(
     return row
 
 
+async def scale_in_position(
+    position_id: int,
+    *,
+    new_open_price: float,
+    new_position_weight: float,
+    reason_updates: dict[str, Any],
+) -> dict:
+    """물타기(분할매수) in-place 갱신 — 비중 가중 평균 진입가 + 누적 비중.
+
+    역발산 알고가 가격 하락 시 추가 트랜치를 체결할 때 호출. 단일 행 모델 유지:
+    open_price는 가중평균, position_weight는 누적, signal_reason에 진행 상태 병합
+    (체결 단계 수·기준가 — 재체결 방지). status='open' 조건부 update로 race 가드.
+    """
+    update_payload = {
+        "open_price": new_open_price,
+        "position_weight": new_position_weight,
+    }
+    res = (
+        await _db()
+        .table("paper_positions")
+        .update(update_payload)
+        .eq("id", position_id)
+        .eq("status", "open")
+        .execute()
+    )
+    if not res.data:
+        logger.info("scale_in_position no-op(이미 closed): id=%s", position_id)
+        return {}
+    row = res.data[0]
+    # 진행 상태를 signal_reason에 병합 — jsonb 부분 갱신은 read-merge-write.
+    reason = dict(row.get("signal_reason") or {})
+    reason.update(reason_updates)
+    try:
+        await (
+            _db()
+            .table("paper_positions")
+            .update({"signal_reason": reason})
+            .eq("id", position_id)
+            .execute()
+        )
+        row["signal_reason"] = reason
+    except Exception as exc:  # signal_reason 갱신 실패는 치명적이지 않음(비중·가격은 반영됨)
+        logger.warning("scale_in signal_reason update failed: %s", exc)
+    logger.info(
+        "Scaled-in: %s  avg_open=%.2f  weight=%.3f  filled=%s",
+        row.get("algo_id"),
+        new_open_price,
+        new_position_weight,
+        reason.get("fng_filled_count"),
+    )
+    return row
+
+
+async def maybe_scale_in_fng_price(current: dict, price: float) -> dict | None:
+    """역발산 가격 기준 물타기 — 현재가가 다음 트랜치 한계가 이하면 추가 체결.
+
+    live(stream 1m 틱·scheduler 4h)·backtest 공용 진입점. signal_reason의
+    fng_ref_price(최초 진입가)·fng_filled_count(체결 단계 수)를 읽어 미체결 트랜치를
+    평가, 한계가에 체결하고 가중평균가·누적비중·단계수를 갱신. 추가분 없으면 None.
+    """
+    reason = current.get("signal_reason") or {}
+    ref_price = float(reason.get("fng_ref_price") or current.get("open_price") or 0.0)
+    filled = int(reason.get("fng_filled_count") or 1)
+    tranches = parameters.FNG_CONTRARIAN_PRICE_TRANCHES
+    pending = execution_rules.pending_price_tranches(price, ref_price, filled, tranches)
+    if not pending:
+        return None
+    old_weight = float(current.get("position_weight") or 0.0)
+    new_open, new_weight, applied = execution_rules.fill_price_tranches(
+        float(current["open_price"]),
+        old_weight,
+        ref_price,
+        pending,
+        tranches,
+        parameters.VOL_WEIGHT_MAX,
+    )
+    if applied <= 0:
+        return None
+    return await scale_in_position(
+        current["id"],
+        new_open_price=new_open,
+        new_position_weight=new_weight,
+        reason_updates={"fng_filled_count": filled + applied, "fng_ref_price": ref_price},
+    )
+
+
 async def update_stop_loss(position_id: int, new_stop_loss_price: float) -> None:
     """래칫된 트레일링 손절가를 DB에 persist. 매 틱이 아닌 임계 이동 시에만 호출."""
     await (

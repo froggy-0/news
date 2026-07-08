@@ -90,11 +90,14 @@ def _etf_outflow_heavy(macro: dict) -> bool:
 
 
 def _below_ma200(macro: dict) -> bool:
-    """일간 200일 MA 하회 여부 — 현재 어떤 알고에서도 호출되지 않음(4H 로컬 MA로 교체).
+    """일간 200일 MA 하회 여부 — 구조적 하락추세 게이트 (Faber 2007, TSMOM).
 
-    이전: Faber(2007), TSMOM 근거의 일간 parquet 기반 게이트.
-    교체 이유: 일간 200일 MA는 반응이 너무 느려 4H 시스템과 맞지 않고
-    macro 갱신 지연(~20h)에 종속됨. → _below_ema_trend / _below_ema_loose 로 대체.
+    v24(2026-06-26)부터 omnibus UP_TREND·macd_momentum에서 사용. 4H 로컬 EMA 게이트
+    (`_below_ema_trend`)와 별개로, 일간 구조적 추세를 거스르는 강세/모멘텀 롱을 보류한다.
+    진단(macro 백필 6개월): 두 알고의 손실이 MA200 하회 구간의 역추세 롱에 집중
+    (omnibus UP_TREND 14건 -3.23%, macd 13건 중 8건이 하회 손실). 게이트 후 omnibus
+    -3.66→-2.05%·macd -3.53→-1.06%(독립 캡, 타 알고 무영향). 미수집(None) 시 graceful
+    통과. 플래그 MA200_REGIME_GATE_ENABLED.
     """
     if not parameters.MA200_REGIME_GATE_ENABLED:
         return False
@@ -216,6 +219,26 @@ def _drawdown_sufficient(macro: dict) -> bool:
         return True
 
 
+def _momentum_not_worsening(ind: dict, *, enabled: bool = True) -> bool:
+    """하락 모멘텀이 더 악화되지 않을 때만 True — freefall 한복판 진입(칼받기) 회피.
+
+    MACD 히스토그램이 직전 봉 대비 상승(>=)이면 하락 가속이 멈춘 것으로 본다(평균회귀
+    진입 타이밍 필터: 매도 소진 대기). 미수집(None) 시 True(graceful). v23 백테스트
+    (macro 백필 6개월): fng 종가자산 1.002→1.011·MaxDD -4.9→-2.9%·2월 -2.47→-1.40%.
+    재현: scripts/analysis 실험. 플래그 FNG_CONTRARIAN_STABILIZATION_ENABLED.
+    """
+    if not enabled:
+        return True
+    mh = ind.get("macd_hist")
+    mhp = ind.get("macd_hist_prev")
+    if mh is None or mhp is None:
+        return True
+    try:
+        return float(mh) >= float(mhp)
+    except (TypeError, ValueError):
+        return True
+
+
 def regime_trend(macro: dict, ind: dict) -> str | None:
     """추세추종 코어 — Donchian 돌파 + 레짐/ADX/EMA 필터 (Zarattini 2025 근거).
 
@@ -271,6 +294,10 @@ def fng_contrarian(macro: dict, ind: dict) -> str | None:
     품질 게이트(일간): 극단 공포만으로는 즉시 바닥이 아닌 경우가 많으므로
     90일 고점 대비 충분한 낙폭(<= -10%)이 동반될 때만 진입 — 역발산 진입 품질 향상.
     역추세 전략이므로 200일 MA 게이트는 적용하지 않는다.
+
+    시장 환경 veto(multi_factor와 동일 기준):
+    - breadth 붕괴(top10 상승비율 < 0.30): 전방위 하락장에서 역발산은 칼받기
+    - stablecoin 수축(z < -1.5): 온체인 유동성 이탈 시 평균회귀 에너지 없음
     """
     fng = macro.get("fng")
     if fng is None:
@@ -279,7 +306,16 @@ def fng_contrarian(macro: dict, ind: dict) -> str | None:
         return None
     if not _drawdown_sufficient(macro):
         return None
+    if _breadth_collapsed(macro):
+        return None
+    if _stablecoin_contracting(macro):
+        return None
     if fng < parameters.FNG_LONG_BELOW:
+        # 안정화 게이트(v23): 하락 모멘텀이 더 악화되는 중이면 진입 보류(칼받기 회피).
+        if not _momentum_not_worsening(
+            ind, enabled=parameters.FNG_CONTRARIAN_STABILIZATION_ENABLED
+        ):
+            return None
         return "long"
     return None
 
@@ -289,7 +325,17 @@ def vix_rsi(macro: dict, ind: dict) -> str | None:
 
     VIX가 40th percentile 이하(calm) AND RSI < 50 → 롱.
     vix_q40 미수집 시 vix_now < 20 fallback. risk-off 레짐 시 보류.
-    MA 게이트 없음 — 이 알고는 VIX/RSI 외생 신호 기반이라 장기 추세 필터 부적합.
+
+    시장 환경 veto:
+    - breadth 붕괴(top10 상승비율 < 0.30): 하락장에서 VIX가 낮아도 RSI<50은 구조적 패턴
+      → VIX/RSI 외생 신호가 노이즈가 되는 환경을 걸러낸다.
+    - stablecoin 수축(z < -1.5): 온체인 유동성 이탈 시 매수 에너지 부재.
+    MA200 게이트는 미적용 — VIX/RSI는 추세 방향성과 무관한 외생 신호.
+
+    진입 안정화(v26): RSI<50 딥매수는 하락 가속 한복판에서 칼받기가 되기 쉬움
+    (라이브 -5.43%·백테스트 11개월 -10.71%, 손실이 MACD 히스토그램 악화 중 진입에
+    집중). fng v23에서 검증된 _momentum_not_worsening을 동일하게 적용 — 매도 소진
+    (히스토그램 반등) 확인 후 진입.
     """
     vix_now = macro.get("vix_now")
     vix_q40 = macro.get("vix_q40")
@@ -298,6 +344,12 @@ def vix_rsi(macro: dict, ind: dict) -> str | None:
     if vix_now is None:
         return None
     if _is_risk_off(_regime_state(macro)):
+        return None
+    if _breadth_collapsed(macro):
+        return None
+    if _stablecoin_contracting(macro):
+        return None
+    if not _momentum_not_worsening(ind, enabled=parameters.VIX_RSI_STABILIZATION_ENABLED):
         return None
 
     # q40 기준 +5% 이내(VIX_CALM_TOLERANCE_BAND)는 실질 calm으로 인정.
@@ -333,6 +385,7 @@ def macd_momentum(macro: dict, ind: dict) -> str | None:
         or _funding_hot(macro)
         or _etf_outflow_heavy(macro)
         or _below_ema_trend_strict(ind, macro)
+        or _below_ma200(macro)  # v24: 구조적 하락추세(일간 MA200 하회) 시 모멘텀 롱 보류
         or _lsr_crowded(macro)
         or _oi_diverged(macro)
     ):
@@ -362,14 +415,8 @@ def multi_factor(macro: dict, ind: dict) -> str | None:
     9일 EMA가 veto로 작동하면 팩터 모두 우호적일 때도 차단되는 구조적 문제 발생.
     레짐 방향성(f1)이 이미 bearish 환경을 내부 팩터로 반영한다.
     """
-    state = _regime_state(macro)
-    fng = macro.get("fng")
-    vix_now = macro.get("vix_now")
-    vix_q40 = macro.get("vix_q40")
-    rsi = ind.get("rsi", 50.0)
-
     if (
-        _is_risk_off(state)
+        _is_risk_off(_regime_state(macro))
         or _etf_outflow_heavy(macro)
         or _lsr_crowded(macro)
         or _breadth_collapsed(macro)
@@ -377,19 +424,29 @@ def multi_factor(macro: dict, ind: dict) -> str | None:
     ):
         return None
 
-    f1 = _is_bullish(state)
-    f2 = fng is not None and fng < 60.0
-    f3 = (
-        vix_now is None
-        or (vix_q40 is not None and vix_now < vix_q40 * parameters.VIX_CALM_TOLERANCE_BAND)
-        or (vix_q40 is None and vix_now < 20.0)
-    )
-    f4 = rsi < parameters.MULTI_FACTOR_LONG_RSI_MAX
-    f5 = not _funding_hot(macro)
-
-    if sum([f1, f2, f3, f4, f5]) >= 4:
+    if sum(_multi_factor_factors(macro, ind).values()) >= 4:
         return "long"
     return None
+
+
+def _multi_factor_factors(macro: dict, ind: dict) -> dict[str, bool]:
+    """multi_factor 5팩터 평가 — 진입(≥4)·청산 히스테리시스·진단 공용."""
+    state = _regime_state(macro)
+    fng = macro.get("fng")
+    vix_now = macro.get("vix_now")
+    vix_q40 = macro.get("vix_q40")
+    rsi = ind.get("rsi", 50.0)
+    return {
+        "bullish_regime": _is_bullish(state),
+        "fng_below_60": fng is not None and fng < 60.0,
+        "vix_calm_or_missing": (
+            vix_now is None
+            or (vix_q40 is not None and vix_now < vix_q40 * parameters.VIX_CALM_TOLERANCE_BAND)
+            or (vix_q40 is None and vix_now < 20.0)
+        ),
+        "rsi_below_long_max": rsi < parameters.MULTI_FACTOR_LONG_RSI_MAX,
+        "funding_not_hot": not _funding_hot(macro),
+    }
 
 
 # ── omnibus (6번째 알고) 내부 헬퍼 ──────────────────────────────────────────
@@ -541,6 +598,7 @@ def omnibus(macro: dict, ind: dict) -> str | None:
             and rsi_pullback
             and bb_not_extended
             and not _below_ema_trend(ind)
+            and not _below_ma200(macro)  # v24: 구조적 하락추세(MA200 하회) 시 역추세 추종 보류
             and not _funding_hot(macro)
             and not _etf_outflow_heavy(macro)
             and not _lsr_crowded(macro)
@@ -573,7 +631,7 @@ def omnibus(macro: dict, ind: dict) -> str | None:
 
 
 def omnibus_position_multiplier(macro: dict, ind: dict) -> float:
-    """omnibus 레짐별 포지션 사이즈 배수 (vol_target_weight에 추가 곱함).
+    """omnibus 레짐별 포지션 사이즈 배수 (combined_position_weight에 추가 곱함).
 
     UP_TREND:          1.0 (기본, 변동성 타깃만 적용)
     RANGE:             0.40 (박스권 평균회귀 — 제한적)
@@ -589,6 +647,36 @@ def omnibus_position_multiplier(macro: dict, ind: dict) -> float:
         if sub_state == _OMNIBUS_OVERSOLD_REBOUND:
             return parameters.OMNIBUS_REBOUND_SIZE_MULT
     return 1.0
+
+
+def exit_hold_override(algo_id: str, macro: dict, ind: dict) -> bool:
+    """raw flat 신호에도 청산을 보류(hold)할지 — 진입≠청산 임계 히스테리시스.
+
+    vix_rsi: 진입 임계(RSI<50·VIX<q40×1.05)가 곧 청산 임계라 진입 직후 경계 진동
+    (whipsaw)으로 진입가 부근 손실 청산이 반복됨(라이브 id16 -2.52% 등). 청산은
+    RSI≥VIX_RSI_EXIT_RSI_MAX(모멘텀 소진 영역) 또는 VIX≥q40×VIX_EXIT_TOLERANCE_BAND
+    (환경 실질 악화)일 때만 실행. risk-off·breadth·stablecoin veto는 히스테리시스에
+    양보하지 않고 즉시 청산. 보유 중 하방은 래칫 트레일링 스톱이 계속 방어.
+    scheduler(live)·backtest 공용 — 시그널 함수가 stateless라 청산측 분기는 여기서 처리.
+    """
+    if algo_id == "vix_rsi" and parameters.VIX_RSI_EXIT_HYSTERESIS_ENABLED:
+        if _is_risk_off(_regime_state(macro)):
+            return False
+        if _breadth_collapsed(macro) or _stablecoin_contracting(macro):
+            return False
+        vix_now = macro.get("vix_now")
+        vix_q40 = macro.get("vix_q40")
+        rsi = ind.get("rsi", 50.0)
+        if vix_now is None:
+            return False
+        vix_ok = (
+            (vix_now < vix_q40 * parameters.VIX_EXIT_TOLERANCE_BAND)
+            if vix_q40
+            else (vix_now < 22.0)
+        )
+        return vix_ok and rsi < parameters.VIX_RSI_EXIT_RSI_MAX
+
+    return False
 
 
 ALGORITHMS: dict[str, Callable[[dict, dict], str | None]] = {
@@ -704,10 +792,20 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
         _record_condition(
             diag, "drawdown_sufficient_or_missing", _drawdown_sufficient(macro), veto=True
         )
+        _record_condition(diag, "breadth_not_collapsed", not _breadth_collapsed(macro), veto=True)
+        _record_condition(
+            diag, "stablecoin_not_contracting", not _stablecoin_contracting(macro), veto=True
+        )
         _record_condition(
             diag,
             "fng_extreme_fear",
             fng is not None and fng < parameters.FNG_LONG_BELOW,
+            veto=True,
+        )
+        _record_condition(
+            diag,
+            "momentum_not_worsening",
+            _momentum_not_worsening(ind, enabled=parameters.FNG_CONTRARIAN_STABILIZATION_ENABLED),
             veto=True,
         )
         return _finish_diag(diag)
@@ -727,6 +825,16 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
         diag["thresholds"]["vix_calm_tolerance"] = parameters.VIX_CALM_TOLERANCE_BAND
         _record_condition(diag, "vix_present", vix_now is not None, veto=True)
         _record_condition(diag, "not_risk_off", not _is_risk_off(state), veto=True)
+        _record_condition(diag, "breadth_not_collapsed", not _breadth_collapsed(macro), veto=True)
+        _record_condition(
+            diag, "stablecoin_not_contracting", not _stablecoin_contracting(macro), veto=True
+        )
+        _record_condition(
+            diag,
+            "momentum_not_worsening",
+            _momentum_not_worsening(ind, enabled=parameters.VIX_RSI_STABILIZATION_ENABLED),
+            veto=True,
+        )
         _record_condition(diag, "vix_calm", vix_calm, veto=True)
         _record_condition(diag, "rsi_below_long_max", rsi < parameters.VIX_RSI_LONG_MAX, veto=True)
         return _finish_diag(diag)
@@ -774,10 +882,6 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
         return _finish_diag(diag)
 
     if algo_id == "multi_factor":
-        fng = macro.get("fng")
-        vix_now = macro.get("vix_now")
-        vix_q40 = macro.get("vix_q40")
-        rsi = ind.get("rsi", 50.0)
         diag["thresholds"].update(
             {
                 "factor_score_min": 4,
@@ -796,17 +900,7 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
             veto=True,
         )
 
-        factors = {
-            "bullish_regime": _is_bullish(state),
-            "fng_below_60": fng is not None and fng < 60.0,
-            "vix_calm_or_missing": (
-                vix_now is None
-                or (vix_q40 is not None and vix_now < vix_q40 * parameters.VIX_CALM_TOLERANCE_BAND)
-                or (vix_q40 is None and vix_now < 20.0)
-            ),
-            "rsi_below_long_max": rsi < parameters.MULTI_FACTOR_LONG_RSI_MAX,
-            "funding_not_hot": not _funding_hot(macro),
-        }
+        factors = _multi_factor_factors(macro, ind)
         diag["factors"] = factors
         _record_condition(
             diag,
