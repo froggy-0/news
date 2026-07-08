@@ -12,6 +12,38 @@ def test_fng_contrarian_stabilization_blocks_worsening_momentum() -> None:
     assert algorithms.fng_contrarian(macro, {}) == "long"
 
 
+def test_vix_rsi_stabilization_blocks_worsening_momentum() -> None:
+    # 게이트 통과 macro: VIX calm·risk-off 아님.
+    macro = {"arena_regime_state": "bull_trend", "vix_now": 15.0, "vix_q40": 18.0}
+    # 하락 모멘텀 악화(hist < prev) → 칼받기 회피로 진입 보류 (v26).
+    ind_worse = {"rsi": 45.0, "macd_hist": -2.0, "macd_hist_prev": -1.0}
+    assert algorithms.vix_rsi(macro, ind_worse) is None
+    diagnostic = algorithms.explain_signal("vix_rsi", macro, ind_worse)
+    assert "momentum_not_worsening" in diagnostic["vetoes"]
+    # 모멘텀 안정/개선 → 진입 허용.
+    assert algorithms.vix_rsi(macro, {"rsi": 45.0, "macd_hist": -1.0, "macd_hist_prev": -2.0}) == (
+        "long"
+    )
+    # macd 미수집 → graceful(게이트 미적용) → 진입 허용.
+    assert algorithms.vix_rsi(macro, {"rsi": 45.0}) == "long"
+
+
+def test_vix_rsi_exit_hold_override_hysteresis() -> None:
+    macro = {"arena_regime_state": "bull_trend", "vix_now": 18.5, "vix_q40": 18.0}
+    # 진입 조건(RSI<50·VIX<q40×1.05)은 깨졌지만 청산 임계(RSI<60·VIX<q40×1.15) 이내 → hold.
+    assert algorithms.exit_hold_override("vix_rsi", macro, {"rsi": 55.0}) is True
+    # RSI≥60 → 모멘텀 소진, 청산 실행.
+    assert algorithms.exit_hold_override("vix_rsi", macro, {"rsi": 61.0}) is False
+    # VIX가 청산 밴드(q40×1.15) 초과 → 환경 악화, 청산 실행.
+    macro_vix_spike = dict(macro, vix_now=21.0)
+    assert algorithms.exit_hold_override("vix_rsi", macro_vix_spike, {"rsi": 55.0}) is False
+    # risk-off 레짐 → 히스테리시스 미적용(즉시 청산).
+    macro_risk_off = dict(macro, arena_regime_state="bear_trend")
+    assert algorithms.exit_hold_override("vix_rsi", macro_risk_off, {"rsi": 55.0}) is False
+    # 다른 알고에는 미적용.
+    assert algorithms.exit_hold_override("multi_factor", macro, {"rsi": 55.0}) is False
+
+
 def test_below_ma200_structural_gate_reads_macro_flag() -> None:
     # btc_above_ma200=0(하회) → 역추세/모멘텀 롱 보류 트리거.
     assert algorithms._below_ma200({"btc_above_ma200": 0.0}) is True

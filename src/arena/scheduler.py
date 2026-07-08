@@ -33,6 +33,7 @@ from . import (
 )
 from .algorithms import (
     ALGORITHMS,
+    exit_hold_override,
     explain_signal,
     omnibus_position_multiplier,
     primary_flat_skip_reason,
@@ -767,6 +768,13 @@ async def _run_cycle() -> None:
 
             if product_decision.should_close:
                 if current is not None:
+                    # 청산 히스테리시스: flat 청산만 보류 대상(risk-off·legacy short은 즉시).
+                    if product_decision.close_reason == "flat_signal" and exit_hold_override(
+                        algo_id, macro, ind
+                    ):
+                        action = "exit_hysteresis_hold"
+                        skipped_reason = "exit_hold_override"
+                        continue
                     if (
                         not execution_rules.min_hold_ok(
                             current,

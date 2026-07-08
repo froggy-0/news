@@ -699,6 +699,13 @@ def run_replay(
                     position.as_live_position() if position else None,
                 )
                 if product_decision.should_close:
+                    # 청산 히스테리시스: flat 청산만 보류 대상(legacy short 청산 등은 즉시).
+                    if (
+                        position
+                        and product_decision.close_reason == "flat_signal"
+                        and algorithms.exit_hold_override(algo_id, macro, frame.indicators)
+                    ):
+                        continue
                     if position and (
                         raw_signal == "short"
                         or execution_rules.min_hold_ok(
@@ -742,6 +749,8 @@ def run_replay(
                 signal = raw_signal
 
             if signal is None:
+                if position and algorithms.exit_hold_override(algo_id, macro, frame.indicators):
+                    continue
                 if position and execution_rules.min_hold_ok(
                     position.as_live_position(),
                     frame.bar.close_time,
