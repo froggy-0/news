@@ -115,6 +115,7 @@ class SimPosition:
     risk_snapshot: dict[str, Any]
     fng_ref_price: float = 0.0
     fng_filled_count: int = 0
+    omni_target_price: float | None = None  # WI-7: omnibus 평균회귀 익절 목표가(진입 시 고정)
 
     def as_live_position(self) -> dict[str, Any]:
         return {
@@ -362,6 +363,12 @@ def _open_position(
             weight_min=parameters.VOL_WEIGHT_MIN,
             weight_max=parameters.VOL_WEIGHT_MAX,
         )
+    # WI-7: omnibus 평균회귀 익절 목표가(진입 시점 고정). live scheduler와 동일 순수함수.
+    omni_target_price = None
+    if algo_id == "omnibus":
+        omni_target_price = algorithms.omnibus_target_price(
+            macro, frame.indicators, frame.bar.close
+        )
     return SimPosition(
         algo_id=algo_id,
         direction=direction,
@@ -377,6 +384,7 @@ def _open_position(
         risk_snapshot=risk_snapshot,
         fng_ref_price=fng_ref_price,
         fng_filled_count=fng_filled_count,
+        omni_target_price=omni_target_price,
     )
 
 
@@ -674,6 +682,33 @@ def run_replay(
                     close_data_timestamp=frame.data_timestamp,
                     close_price=stop_fill,
                     exit_reason=_stop_exit_reason(position),
+                    settings=settings,
+                    funding_events=funding_events,
+                )
+                trades.append(trade)
+                record_realized(algo_id, trade.ret_pct, trade.close_time, trade.position_weight)
+                frame_realized[algo_id] += trade.position_weight * trade.ret_pct
+                positions_by_algo[algo_id] = None
+                position = None
+            # WI-7: omnibus 목표가 익절(인트라바). long: 봉 high가 목표가 도달 시 한계가 체결.
+            #   live(1m 틱)와 동일 순수함수. 익절이므로 min_hold 무관(손절과 비대칭).
+            if (
+                position is not None
+                and parameters.OMNIBUS_TARGET_EXIT_ENABLED
+                and algo_id == "omnibus"
+                and position.omni_target_price is not None
+                and execution_rules.target_exit_triggered(
+                    direction=position.direction,
+                    current_price=frame.bar.high,
+                    target_price=position.omni_target_price,
+                )
+            ):
+                trade = _close_position(
+                    position,
+                    close_time=frame.bar.close_time,
+                    close_data_timestamp=frame.data_timestamp,
+                    close_price=position.omni_target_price,
+                    exit_reason="target_exit",
                     settings=settings,
                     funding_events=funding_events,
                 )
@@ -1061,6 +1096,7 @@ async def load_frames_from_supabase(
     highs: list[float] = []
     lows: list[float] = []
     closes: list[float] = []
+    volumes: list[float] = []  # WI-4: 돌파 확인용 봉 거래량 누적
     frames: list[ReplayFrame] = []
     macro_index = 0
     for row in bar_rows:
@@ -1076,6 +1112,7 @@ async def load_frames_from_supabase(
         highs.append(bar.high)
         lows.append(bar.low)
         closes.append(bar.close)
+        volumes.append(bar.volume)
         if len(closes) < warmup_bars:
             continue
         macro, macro_index = _latest_macro_for_time(macro_rows, bar.close_time, macro_index)
@@ -1085,6 +1122,7 @@ async def load_frames_from_supabase(
                 highs,
                 lows,
                 closes,
+                volumes=volumes,
                 interval=interval,
                 indicator_profile_id=indicator_profile_id,
             ),

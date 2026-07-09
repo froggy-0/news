@@ -114,6 +114,34 @@ def ema_value(closes: list[float], period: int) -> float:
     return values[-1] if values else 0.0
 
 
+def bb_mid(
+    closes: list[float],
+    period: int = parameters.BOLLINGER_PERIOD,
+) -> float:
+    """볼린저 밴드 중앙선(SMA). 평균회귀 목표가(WI-7 omnibus)용. 부족 시 0.0."""
+    if len(closes) < period:
+        return 0.0
+    return sum(closes[-period:]) / period
+
+
+def relative_volume(
+    volumes: list[float],
+    period: int = parameters.VOLUME_SMA_PERIOD,
+) -> float | None:
+    """직전(마지막) 봉 볼륨 / 직전 period봉 SMA. 돌파 진위 확인(WI-4)용.
+
+    >1.0 = 평균 이상 거래량 동반(진성 돌파 방증), <1.0 = 저조(가짜 돌파 의심).
+    데이터 부족·SMA 0 시 None → 알고리즘이 graceful 통과(차단하지 않음).
+    """
+    if len(volumes) < period + 1:
+        return None
+    window = volumes[-period - 1 : -1]  # 현재 봉 제외한 직전 period봉
+    sma = sum(window) / period
+    if sma <= 0:
+        return None
+    return volumes[-1] / sma
+
+
 def supertrend(
     highs: list[float],
     lows: list[float],
@@ -343,6 +371,7 @@ def compute(
     lows: list[float],
     closes: list[float],
     *,
+    volumes: list[float] | None = None,
     interval: str = parameters.BINANCE_KLINE_INTERVAL,
     indicator_profile_id: str = frequency.DEFAULT_INDICATOR_PROFILE_ID,
 ) -> dict[str, float]:
@@ -379,13 +408,21 @@ def compute(
         period=parameters.DONCHIAN_PERIOD,
     )
     adx_val, plus_di, minus_di = adx(highs, lows, closes, period=parameters.ADX_PERIOD)
-    return {
+    result = {
         "close": close,
         "rsi": rsi(
             closes,
             period=settings.rsi_period,
             recent_multiple=settings.rsi_recent_multiple,
         ),
+        # WI-5: 직전 봉 RSI — vix_rsi 크로스(과매도선 상향 돌파) 이벤트 판정용.
+        "rsi_prev": rsi(
+            closes[:-1],
+            period=settings.rsi_period,
+            recent_multiple=settings.rsi_recent_multiple,
+        )
+        if len(closes) > 1
+        else parameters.RSI_NEUTRAL,
         "macd_hist": hist,
         "macd_hist_prev": hist_prev,
         "bb_pos": bb_position(
@@ -398,6 +435,8 @@ def compute(
             period=settings.bollinger_period,
             stddev=settings.bollinger_stddev,
         ),
+        # WI-7: BB 중앙선(SMA) — omnibus RANGE 평균회귀 목표가.
+        "bb_mid": bb_mid(closes, period=settings.bollinger_period),
         "atr": atr_value,
         "atr_pct": atr_value / close if close > 0 else 0.0,
         "ema_fast": ema_fast,
@@ -426,3 +465,6 @@ def compute(
             settings.return_24h_bars,
         ),
     }
+    # WI-4: 상대 볼륨(돌파 확인). volumes 미전달 시 None → 알고리즘 graceful 통과.
+    result["rel_volume"] = relative_volume(volumes) if volumes else None
+    return result

@@ -150,6 +150,37 @@ async def _safe_execute_optional_schema(
         return CaptureWriteResult(label=label, ok=False, error=str(exc))
 
 
+async def record_liquidation_bar(
+    *,
+    bar_start: datetime,
+    symbol: str,
+    long_liq_usd: float,
+    short_liq_usd: float,
+    long_liq_count: int,
+    short_liq_count: int,
+) -> CaptureWriteResult:
+    """WI-9: 4h 강제청산(forceOrder) 집계 버킷 저장(upsert). 테이블 부재 시 graceful skip.
+
+    long_liq_usd = SELL forceOrder 명목합(롱 강제청산), short_liq_usd = BUY(숏 강제청산).
+    수집 전용 — 트레이딩 경로와 분리. 축적 후(v2) fng·omnibus 역발산 확인 피처로 활용.
+    """
+    payload = {
+        "bar_start": _ts(bar_start),
+        "symbol": symbol,
+        "long_liq_usd": long_liq_usd,
+        "short_liq_usd": short_liq_usd,
+        "long_liq_count": long_liq_count,
+        "short_liq_count": short_liq_count,
+    }
+    return await _safe_execute_optional_schema(
+        "arena_liquidation_bars",
+        positions.db()
+        .table("arena_liquidation_bars")
+        .upsert(payload, on_conflict="bar_start,symbol"),
+        object_name="arena_liquidation_bars",
+    )
+
+
 async def _safe_execute_retryable_constraint(
     label: str,
     builder: Any,

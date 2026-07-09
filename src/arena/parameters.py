@@ -13,7 +13,11 @@ from typing import Any
 STRATEGY_VERSION = "arena-spot-v4"
 # v25(2026-07-01): fng·vix_rsi breadth/stablecoin veto — 커밋 2475efb가 버전 스트링을
 #   v24로 남겨 라이브 DB가 v25 동작을 v24로 기록했음(재현성 버그). v26에서 정정.
-PARAMS_VERSION = "arena-params-v26"
+# v27(2026-07-09): 알고별 특화 개선 WI-1~10 배선(전부 플래그 off로 배포).
+# v28(2026-07-09): macro 백필 백테스트 검증 통과분 활성화 — WI-1(multi_factor 레짐필수,
+#   -2.63→+3.77) + WI-7(omnibus 목표가익절 atr1.0, -6.24→-4.57·승률+4%p). WI-2/4/5/6은
+#   백테스트가 개선 미지지(악화 또는 노이즈) → off 유지. 검증: scripts/analysis/wi_tuning.py.
+PARAMS_VERSION = "arena-params-v28"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v2"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
@@ -219,6 +223,59 @@ OMNIBUS_REBOUND_MIN_VOTES = 3  # 4개 조건 중 최소 3개 충족 시 OVERSOLD
 OMNIBUS_TREND_SIZE_MULT = 1.0
 OMNIBUS_RANGE_SIZE_MULT = 0.40
 OMNIBUS_REBOUND_SIZE_MULT = 0.25
+
+# ── WI-1~10 알고별 특화 개선 플래그 (arena-params-v27, 2026-07-09) ───────────
+# 전부 기본 off/현행유지 — macro 백필 백테스트 통과 후 개별 on. 미충족 데이터는
+# None→graceful. 설계: docs/arena/research/next-steps-design-v1-20260709.md
+#
+# WI-1: multi_factor 레짐 필수화 — "조용한 하락장에서 방향성 팩터 없이 4표 충족→진입"
+#   구조 결함 제거. 레짐(f1)을 필수로, 나머지 4팩터 중 MIN_VOTES_EX_REGIME 득표 요구.
+#   ✅ v28 활성화: 백테스트 variant C(횡보허용) -2.63→+3.77(Δ+6.40), 거래 84→89(유지).
+MULTI_FACTOR_REGIME_REQUIRED = True
+MULTI_FACTOR_MIN_VOTES_EX_REGIME = 3
+# WI-1 중간안(C): 레짐 필수화 시 강세뿐 아니라 sideways(횡보)도 허용, bear류만 배제.
+MULTI_FACTOR_ALLOW_SIDEWAYS = True
+#
+# WI-2: fng_contrarian 청산 히스테리시스 — 진입(FNG<30)과 동일 임계로 청산(FNG≥30)하던
+#   반쪽 구조 분리. 반등 초입 조기 flat 청산이 물타기 평단 이점을 버리는 문제(라이브
+#   flat 청산 4건 평균 -0.52%). risk-off·breadth·stablecoin veto는 즉시 청산(양보 없음),
+#   time_stop(72h)이 보유 상한 보장. vix_rsi v26과 동일 메커니즘.
+FNG_EXIT_HYSTERESIS_ENABLED = False
+FNG_EXIT_NEUTRAL_MIN = 45.0  # 그리드 {40,45,50,55}에서 결정
+#
+# WI-4: kline volume 돌파 확인 — 이미 수신 중인 volume을 지표화(rel_volume)해 regime_trend
+#   Donchian 돌파의 진위 필터로 사용. 돌파봉 볼륨 ≥ 20봉 평균 ×MIN_REL. rel_volume None시 통과.
+VOLUME_CONFIRM_ENABLED = False
+VOLUME_CONFIRM_MIN_REL = 1.5
+VOLUME_SMA_PERIOD = 20
+#
+# WI-5: vix_rsi 구조 판정 — Step1: 일간 MA200 게이트 추가. Step2: 트리거를 "RSI<50 상태"에서
+#   "RSI 과매도선 상향 크로스 이벤트"로 재정의(반전 확인 매수).
+VIX_RSI_MA200_GATE_ENABLED = False
+VIX_RSI_TRIGGER_MODE = "state"  # "state"(현행) | "cross"
+VIX_RSI_CROSS_OVERSOLD = 35.0
+#
+# WI-6: macd_momentum 트리거 재정의 — "h>0 상태+증가"(늦은 진입, regime_trend와 중복)에서
+#   "h가 0선 상향 크로스한 봉"(모멘텀 전환 초기)으로. 보유는 exit_hold_override가 h>0 동안
+#   flat 청산 보류(v26 vix_rsi 히스테리시스와 동일 구조).
+MACD_MOMENTUM_TRIGGER_MODE = "state"  # "state"(현행) | "zero_cross"
+MACD_MOMENTUM_ZERO_CROSS_DROP_BB_GATE = False  # 크로스 모드에서 BB폭 게이트 제거 여부(그리드)
+MACD_MOMENTUM_EXIT_HYSTERESIS_ENABLED = False
+#
+# WI-7: omnibus RANGE/REBOUND 목표가 청산 — 평균회귀에 이론 정합적 익절(BB 중앙선) 부여.
+#   진입 시점 목표가 고정(signal_reason.omni_target_price). live는 1m 틱 감시, backtest는
+#   봉 high 도달 시 한계가 체결. UP_TREND은 목표가 미적용(트레일링이 담당). 익절이므로
+#   min_hold보다 우선(손절과 비대칭).
+# ✅ v28 활성화: 백테스트 atr1.0 -6.24→-4.57(Δ+1.67)·승률 57→61%·거래 98→106(회전↑).
+OMNIBUS_TARGET_EXIT_ENABLED = True
+OMNIBUS_REBOUND_TARGET_ATR_MULT = 1.0  # REBOUND: 진입가 + ATR×mult (그리드 {1.0,1.5,2.0}→1.0 채택)
+#
+# WI-10: regime_trend 테이커 확인을 일간 lag1 z에서 로컬 4h 값으로 — 하루 지연 제거.
+#   macro["taker_ratio_4h"](buySellRatio, 1.0=중립)가 있으면 우선 사용. 없으면 일간 z 폴백.
+#   ⚠️ live는 market_structure 모듈 캐시(직전 4h 사이클 features) 사용 — backtest는 미주입→
+#   기존 일간 z 폴백(검증된 경로). 4h 캐시는 daily lag1보다 훨씬 신선.
+TAKER_CONFIRM_4H_ENABLED = False
+TAKER_CONFIRM_RATIO_4H_MIN = 0.95
 
 RSI_PERIOD = 14
 RSI_NEUTRAL = 50.0

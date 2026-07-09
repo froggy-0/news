@@ -74,6 +74,26 @@ async def _check_stop_loss(price: float) -> None:
                 if updated:
                     state.open_positions[algo_id] = updated  # 인메모리 반영(4h 루프 공유)
             continue
+        # WI-7: omnibus 평균회귀(RANGE/REBOUND) 익절 목표가 도달 시 청산(1m 틱 감시).
+        #   목표가는 진입 시점 signal_reason.omni_target_price에 고정. 익절이므로 min_hold
+        #   보다 우선(손절과 비대칭). UP_TREND은 목표가 없음(None) → 트레일링이 담당.
+        if parameters.OMNIBUS_TARGET_EXIT_ENABLED and algo_id == "omnibus":
+            _reason = pos.get("signal_reason") or {}
+            _target = _reason.get("omni_target_price")
+            if execution_rules.target_exit_triggered(
+                direction=pos["direction"], current_price=price, target_price=_target
+            ):
+                logger.info(
+                    "Target-exit(omnibus): long now=%.2f  target=%.2f  open=%.2f",
+                    price,
+                    float(_target),
+                    pos["open_price"],
+                )
+                now = datetime.now(timezone.utc)
+                await positions.close_position(pos["id"], now, price, close_reason="target_exit")
+                state.open_positions[algo_id] = None
+                _last_persisted_stop.pop(algo_id, None)
+                continue
         await _ratchet_trailing_stop(algo_id, pos, price)
         if _is_stop_triggered(pos, price):
             sl = pos.get("stop_loss_price", "fallback")

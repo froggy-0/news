@@ -166,13 +166,40 @@ def _lsr_crowded(macro: dict) -> bool:
 def _taker_confirms(macro: dict) -> bool:
     """체결 공격성(테이커 매수 우위)이 돌파에 동의하는지 — 돌파 확인용.
 
-    z > 임계 = 공격적 매수 우위. 미수집(None) 시 True(확인 통과 — 차단하지 않음).
+    WI-10(2026-07-09): TAKER_CONFIRM_4H_ENABLED 시 로컬 4h taker_ratio_4h(buySellRatio,
+    1.0=중립)를 우선 사용 — 일간 lag1 z의 하루 지연 제거. 4h 값 미수집 시 일간 z로 폴백.
+    z > 임계(또는 ratio ≥ 임계) = 공격적 매수 우위. 둘 다 미수집(None) 시 True(통과).
     """
+    if parameters.TAKER_CONFIRM_4H_ENABLED:
+        ratio = macro.get("taker_ratio_4h")
+        if ratio is not None:
+            try:
+                return float(ratio) >= parameters.TAKER_CONFIRM_RATIO_4H_MIN
+            except (TypeError, ValueError):
+                return True
     z = macro.get("taker_imbalance_zscore")
     if z is None:
         return True
     try:
         return float(z) > parameters.TAKER_CONFIRM_ZSCORE
+    except (TypeError, ValueError):
+        return True
+
+
+def _volume_confirms(ind: dict) -> bool:
+    """돌파봉 거래량이 진성 돌파를 뒷받침하는지 — WI-4 regime_trend 돌파 확인.
+
+    rel_volume ≥ MIN_REL(20봉 평균 대비 배수) = 진성 돌파. 미수집(None)·플래그 off 시
+    True(통과 — 차단하지 않음). 근거: 저조한 볼륨 돌파는 실패율이 높다(Donchian 가짜돌파
+    필터의 정석 — TrendSpider/LuxAlgo). backtest·live 공용(둘 다 rel_volume 주입).
+    """
+    if not parameters.VOLUME_CONFIRM_ENABLED:
+        return True
+    rv = ind.get("rel_volume")
+    if rv is None:
+        return True
+    try:
+        return float(rv) >= parameters.VOLUME_CONFIRM_MIN_REL
     except (TypeError, ValueError):
         return True
 
@@ -278,6 +305,7 @@ def regime_trend(macro: dict, ind: dict) -> str | None:
         and not _etf_outflow_heavy(macro)
         and not _below_ema_trend_strict(ind, macro)
         and _taker_confirms(macro)
+        and _volume_confirms(ind)  # WI-4: 돌파봉 거래량 확인(진성 돌파)
         and not _lsr_crowded(macro)
         and not _oi_diverged(macro)
     ):
@@ -336,6 +364,12 @@ def vix_rsi(macro: dict, ind: dict) -> str | None:
     (라이브 -5.43%·백테스트 11개월 -10.71%, 손실이 MACD 히스토그램 악화 중 진입에
     집중). fng v23에서 검증된 _momentum_not_worsening을 동일하게 적용 — 매도 소진
     (히스토그램 반등) 확인 후 진입.
+
+    WI-5(v27, 2026-07-09): 엣지 부재(수정 후에도 백테스트 -0.57%) 대응 2단계.
+    - Step1 MA200 게이트(VIX_RSI_MA200_GATE_ENABLED): 손실이 하락 구간에 집중 →
+      일간 MA200 하회 시 보류. "외생 신호라 방향성 무관" 이론이 데이터와 충돌 → 데이터 우선.
+    - Step2 크로스 트리거(VIX_RSI_TRIGGER_MODE="cross"): "RSI<50 상태"(하락 중 매수)를
+      "RSI가 과매도선 상향 크로스"(반전 확인 매수) 이벤트로 재정의. 보유는 v26 히스테리시스.
     """
     vix_now = macro.get("vix_now")
     vix_q40 = macro.get("vix_q40")
@@ -349,6 +383,8 @@ def vix_rsi(macro: dict, ind: dict) -> str | None:
         return None
     if _stablecoin_contracting(macro):
         return None
+    if parameters.VIX_RSI_MA200_GATE_ENABLED and _below_ma200(macro):
+        return None
     if not _momentum_not_worsening(ind, enabled=parameters.VIX_RSI_STABILIZATION_ENABLED):
         return None
 
@@ -357,8 +393,17 @@ def vix_rsi(macro: dict, ind: dict) -> str | None:
     vix_calm = (
         (vix_now < vix_q40 * parameters.VIX_CALM_TOLERANCE_BAND) if vix_q40 else (vix_now < 20.0)
     )
+    if not vix_calm:
+        return None
 
-    if vix_calm and rsi < parameters.VIX_RSI_LONG_MAX:
+    if parameters.VIX_RSI_TRIGGER_MODE == "cross":
+        # 과매도선을 하향(직전 봉) 후 상향(현재 봉) 돌파한 봉만 진입 — 반전 확인.
+        rsi_prev = ind.get("rsi_prev", rsi)
+        if rsi_prev < parameters.VIX_RSI_CROSS_OVERSOLD <= rsi:
+            return "long"
+        return None
+
+    if rsi < parameters.VIX_RSI_LONG_MAX:
         return "long"
     return None
 
@@ -371,6 +416,12 @@ def macd_momentum(macro: dict, ind: dict) -> str | None:
     ATR 임계는 이미 강한 모멘텀만 걸러 초기 형성 구간(0~ATR×0.10)을 전부 차단했음.
 
     펀딩 과열·risk-off 레짐·4H EMA200 하회·롱숏 과밀·OI 방향불일치에서는 보류. 숏 없음.
+
+    WI-6(v27, 2026-07-09): TRIGGER_MODE="zero_cross" 시 "h>0 상태+증가"(늦은 진입,
+    regime_trend와 중복)를 "h가 0선을 상향 크로스한 봉"(모멘텀 전환 초기)으로 재정의.
+    진입이 빨라지며 RSI<65 충돌 완화 + regime_trend(돌파=추세 중기)와 시간축 차별화(중복
+    해소). 보유는 exit_hold_override가 h>0 동안 flat 청산 보류(v26 vix_rsi 히스테리시스와
+    동일 구조 — 크로스 봉 단발 진입 후 모멘텀 지속 시 유지). 청산=h≤0 또는 risk-off/트레일.
     """
     h = ind["macd_hist"]
     h_prev = ind.get("macd_hist_prev", h)
@@ -378,7 +429,10 @@ def macd_momentum(macro: dict, ind: dict) -> str | None:
     bb_w = ind.get("bb_width", 100.0)
     adx = ind.get("adx", 0.0)
 
-    if bb_w < parameters.MACD_MOMENTUM_BB_WIDTH_MIN:
+    cross_mode = parameters.MACD_MOMENTUM_TRIGGER_MODE == "zero_cross"
+    # 크로스 모드는 스퀴즈 직후 발생 가능 → BB폭 게이트 제거를 옵션으로.
+    apply_bb_gate = not (cross_mode and parameters.MACD_MOMENTUM_ZERO_CROSS_DROP_BB_GATE)
+    if apply_bb_gate and bb_w < parameters.MACD_MOMENTUM_BB_WIDTH_MIN:
         return None
     if (
         _is_risk_off(_regime_state(macro))
@@ -390,12 +444,13 @@ def macd_momentum(macro: dict, ind: dict) -> str | None:
         or _oi_diverged(macro)
     ):
         return None
-    if (
-        h > 0
-        and h > h_prev
-        and rsi < parameters.MACD_MOMENTUM_RSI_LONG_MAX
-        and adx >= parameters.MACD_MOMENTUM_ADX_MIN
-    ):
+    rsi_ok = rsi < parameters.MACD_MOMENTUM_RSI_LONG_MAX
+    adx_ok = adx >= parameters.MACD_MOMENTUM_ADX_MIN
+    if cross_mode:
+        if h_prev <= 0 < h and rsi_ok and adx_ok:
+            return "long"
+        return None
+    if h > 0 and h > h_prev and rsi_ok and adx_ok:
         return "long"
     return None
 
@@ -414,6 +469,12 @@ def multi_factor(macro: dict, ind: dict) -> str | None:
     EMA55 veto 제거(arena-params-v19): 이 알고는 매크로/감정 5팩터 투표가 핵심이라
     9일 EMA가 veto로 작동하면 팩터 모두 우호적일 때도 차단되는 구조적 문제 발생.
     레짐 방향성(f1)이 이미 bearish 환경을 내부 팩터로 반영한다.
+
+    WI-1(v27, 2026-07-09): 구조 결함 수정. 기존 "5중 4"는 방향성(f1 레짐)이 선택 사항이라
+    조용한 하락장에서 f2~f5(FNG<60·VIX calm·RSI<55·펀딩 정상)만으로 4표 충족→진입했음
+    (라이브 유일 거래·현 보유 포지션이 이 패턴). MULTI_FACTOR_REGIME_REQUIRED=True 시
+    레짐(f1)을 필수 조건으로 승격하고 나머지 4팩터 중 MIN_VOTES_EX_REGIME 득표를 요구한다.
+    ALLOW_SIDEWAYS=True면 강세뿐 아니라 횡보(sideways)도 방향성 통과로 인정(bear류만 배제).
     """
     if (
         _is_risk_off(_regime_state(macro))
@@ -424,7 +485,20 @@ def multi_factor(macro: dict, ind: dict) -> str | None:
     ):
         return None
 
-    if sum(_multi_factor_factors(macro, ind).values()) >= 4:
+    factors = _multi_factor_factors(macro, ind)
+    if parameters.MULTI_FACTOR_REGIME_REQUIRED:
+        state = _regime_state(macro)
+        direction_ok = _is_bullish(state) or (
+            parameters.MULTI_FACTOR_ALLOW_SIDEWAYS and state == regime.REGIME_SIDEWAYS
+        )
+        if not direction_ok:
+            return None
+        other_votes = sum(v for k, v in factors.items() if k != "bullish_regime")
+        if other_votes >= parameters.MULTI_FACTOR_MIN_VOTES_EX_REGIME:
+            return "long"
+        return None
+
+    if sum(factors.values()) >= 4:
         return "long"
     return None
 
@@ -649,6 +723,32 @@ def omnibus_position_multiplier(macro: dict, ind: dict) -> float:
     return 1.0
 
 
+def omnibus_target_price(macro: dict, ind: dict, entry_price: float) -> float | None:
+    """WI-7: omnibus 평균회귀 진입의 익절 목표가 (진입 시점 1회 산출·고정).
+
+    RANGE(박스권 하단 매수) → BB 중앙선(bb_mid) 복귀에서 익절 (Bollinger 2002).
+    OVERSOLD_REBOUND(과매도 반등) → 진입가 + ATR×OMNIBUS_REBOUND_TARGET_ATR_MULT.
+    UP_TREND → None (추세는 트레일링 스톱이 담당, 목표가 미적용).
+    플래그 off·데이터 부족 시 None(목표가 청산 비활성 → 기존 flat 청산 경로 유지).
+
+    산출 결과는 signal_reason.omni_target_price에 고정 저장 — 진입 후 레짐/BB가 변해도
+    목표가는 진입 시점 스냅샷을 유지(fng_ref_price 패턴). backtest·live 공용.
+    """
+    if not parameters.OMNIBUS_TARGET_EXIT_ENABLED:
+        return None
+    omni_regime = _omnibus_regime(macro, ind)
+    if omni_regime == _OMNIBUS_RANGE:
+        mid = ind.get("bb_mid", 0.0) or 0.0
+        return float(mid) if mid > entry_price > 0 else None
+    if omni_regime == _OMNIBUS_DOWN_TREND:
+        sub_state, _ = _downtrend_sub_state(ind)
+        if sub_state == _OMNIBUS_OVERSOLD_REBOUND:
+            atr = ind.get("atr", 0.0) or 0.0
+            if atr > 0 and entry_price > 0:
+                return entry_price + atr * parameters.OMNIBUS_REBOUND_TARGET_ATR_MULT
+    return None
+
+
 def exit_hold_override(algo_id: str, macro: dict, ind: dict) -> bool:
     """raw flat 신호에도 청산을 보류(hold)할지 — 진입≠청산 임계 히스테리시스.
 
@@ -675,6 +775,36 @@ def exit_hold_override(algo_id: str, macro: dict, ind: dict) -> bool:
             else (vix_now < 22.0)
         )
         return vix_ok and rsi < parameters.VIX_RSI_EXIT_RSI_MAX
+
+    # WI-2: fng_contrarian 청산 히스테리시스 — 진입(FNG<30)≠청산(FNG≥NEUTRAL_MIN) 분리.
+    #   반등 초입 조기 flat 청산이 물타기 평단 이점을 버리는 문제. risk-off·breadth·
+    #   stablecoin veto는 즉시 청산(양보 없음), 보유 상한은 time_stop(72h)이 보장.
+    if algo_id == "fng_contrarian" and parameters.FNG_EXIT_HYSTERESIS_ENABLED:
+        if _is_risk_off(_regime_state(macro)):
+            return False
+        if _breadth_collapsed(macro) or _stablecoin_contracting(macro):
+            return False
+        fng = macro.get("fng")
+        if fng is None:
+            return False
+        # FNG가 아직 중립 복귀(≥NEUTRAL_MIN)에 못 미치면 flat 청산 보류(회복 대기).
+        try:
+            return float(fng) < parameters.FNG_EXIT_NEUTRAL_MIN
+        except (TypeError, ValueError):
+            return False
+
+    # WI-6: macd_momentum 보유 히스테리시스 — 크로스 봉 단발 진입 후, 모멘텀(h>0)이
+    #   지속되는 동안 flat 청산 보류. 청산=h≤0(모멘텀 소멸) 또는 risk-off veto.
+    if algo_id == "macd_momentum" and parameters.MACD_MOMENTUM_EXIT_HYSTERESIS_ENABLED:
+        if _is_risk_off(_regime_state(macro)):
+            return False
+        h = ind.get("macd_hist")
+        if h is None:
+            return False
+        try:
+            return float(h) > 0.0
+        except (TypeError, ValueError):
+            return False
 
     return False
 
@@ -780,6 +910,7 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
             diag, "above_ema200_4h", not _below_ema_trend_strict(ind, macro), veto=True
         )
         _record_condition(diag, "taker_confirms", _taker_confirms(macro), veto=True)
+        _record_condition(diag, "volume_confirms", _volume_confirms(ind), veto=True)
         _record_condition(diag, "lsr_not_crowded", not _lsr_crowded(macro), veto=True)
         _record_condition(diag, "oi_not_diverged", not _oi_diverged(macro), veto=True)
         return _finish_diag(diag)
@@ -902,12 +1033,27 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
 
         factors = _multi_factor_factors(macro, ind)
         diag["factors"] = factors
-        _record_condition(
-            diag,
-            "factor_score_at_least_4",
-            sum(1 for value in factors.values() if value) >= 4,
-            veto=True,
-        )
+        if parameters.MULTI_FACTOR_REGIME_REQUIRED:
+            state_mf = _regime_state(macro)
+            direction_ok = _is_bullish(state_mf) or (
+                parameters.MULTI_FACTOR_ALLOW_SIDEWAYS and state_mf == regime.REGIME_SIDEWAYS
+            )
+            other_votes = sum(v for k, v in factors.items() if k != "bullish_regime")
+            diag["thresholds"]["min_votes_ex_regime"] = parameters.MULTI_FACTOR_MIN_VOTES_EX_REGIME
+            _record_condition(diag, "direction_regime_ok", direction_ok, veto=True)
+            _record_condition(
+                diag,
+                "other_votes_sufficient",
+                other_votes >= parameters.MULTI_FACTOR_MIN_VOTES_EX_REGIME,
+                veto=True,
+            )
+        else:
+            _record_condition(
+                diag,
+                "factor_score_at_least_4",
+                sum(1 for value in factors.values() if value) >= 4,
+                veto=True,
+            )
         return _finish_diag(diag)
 
     if algo_id == "omnibus":

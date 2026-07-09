@@ -36,6 +36,7 @@ from .algorithms import (
     exit_hold_override,
     explain_signal,
     omnibus_position_multiplier,
+    omnibus_target_price,
     primary_flat_skip_reason,
 )
 
@@ -48,6 +49,7 @@ class OHLCV(NamedTuple):
     closes: list[float]
     last_close_time: datetime | None
     raw_klines: list[list]
+    volumes: list[float] = []  # WI-4: 돌파 확인용 봉 거래량(base asset volume, k[5])
 
 
 class MacroData(NamedTuple):
@@ -80,6 +82,7 @@ async def _fetch_ohlcv(
             datetime.fromtimestamp(int(klines[-1][6]) / 1000, tz=timezone.utc) if klines else None
         ),
         raw_klines=klines,
+        volumes=[float(k[5]) for k in klines],
     )
 
 
@@ -642,6 +645,7 @@ async def _run_cycle() -> None:
         ohlcv.highs,
         ohlcv.lows,
         ohlcv.closes,
+        volumes=ohlcv.volumes,
         interval=profile.interval,
         indicator_profile_id=indicator_profile_id,
     )
@@ -651,6 +655,13 @@ async def _run_cycle() -> None:
     # 로컬 4h 레짐을 주입해 알고리즘이 일관된 레짐 어휘(bull_trend 등)를 받도록 한다.
     # (매크로 오버레이의 BullQuiet 라벨과 algorithms.py 상수 불일치 버그 수정)
     macro["arena_regime_state"] = regime.classify_regime(ind, {}, macro).regime_state
+    # WI-10: 로컬 4h taker 매수/매도 비율 주입 — regime_trend 돌파의 주문흐름 확인을
+    # 일간 lag1 z에서 4h 값으로 교체(하루 지연 제거). market_structure 모듈 캐시(직전 4h
+    # 사이클 features — futures_stress 배선과 동일 패턴)에서 읽는다. 첫 사이클/미수집 시
+    # 없음 → 알고가 일간 z로 graceful 폴백. (_run_shadow_vnext가 매 사이클 캐시 갱신)
+    _taker_4h = market_structure.get_latest_market_features().get("taker_buy_sell_ratio")
+    if _taker_4h is not None:
+        macro["taker_ratio_4h"] = _taker_4h
     price = ohlcv.closes[-1]
     capture_results.extend(
         await data_lake.record_ohlcv_bars(
@@ -909,6 +920,11 @@ async def _run_cycle() -> None:
                 # 물타기 기준가 = 최초 진입가, 1단계 체결 표기.
                 open_signal_reason.update(_fng_open_reason())
                 open_signal_reason["fng_ref_price"] = price
+            # WI-7: omnibus 평균회귀(RANGE/REBOUND) 익절 목표가를 진입 시점에 고정.
+            if algo_id == "omnibus":
+                _omni_target = omnibus_target_price(macro, ind, price)
+                if _omni_target is not None:
+                    open_signal_reason["omni_target_price"] = _omni_target
             new_pos = await positions.open_position(
                 algo_id,
                 signal,
@@ -1128,6 +1144,7 @@ async def _run_frequency_shadow_cycle(profile_id: str) -> None:
         ohlcv.highs,
         ohlcv.lows,
         ohlcv.closes,
+        volumes=ohlcv.volumes,
         interval=profile.interval,
         indicator_profile_id=indicator_profile_id,
     )

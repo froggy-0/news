@@ -125,6 +125,27 @@ def is_trailing_exit(
     return False
 
 
+def target_exit_triggered(
+    *,
+    direction: str,
+    current_price: float,
+    target_price: float | None,
+) -> bool:
+    """평균회귀 목표가(익절) 도달 여부 — WI-7 omnibus RANGE/REBOUND.
+
+    long: current >= target, short: current <= target. target 미설정(None/≤0) 시 False.
+    익절 트리거이므로 손절과 비대칭(호출측이 min_hold보다 우선 적용). backtest는 봉 high/low
+    로 평가, live는 1m 틱으로 평가 — 동일 순수함수로 패리티.
+    """
+    if target_price is None or target_price <= 0:
+        return False
+    if direction == "long":
+        return current_price >= target_price
+    if direction == "short":
+        return current_price <= target_price
+    raise ValueError(f"unsupported direction: {direction}")
+
+
 def stop_loss_triggered(
     *,
     direction: str,
@@ -434,6 +455,10 @@ def build_signal_reason(
             "macd_hist_prev": indicators.get("macd_hist_prev"),
             "bb_pos": indicators.get("bb_pos"),
             "bb_width": indicators.get("bb_width"),
+            "bb_mid": indicators.get("bb_mid"),
+            "rsi_prev": indicators.get("rsi_prev"),
+            "rel_volume": indicators.get("rel_volume"),
+            "taker_ratio_4h": macro.get("taker_ratio_4h"),
             "atr": indicators.get("atr"),
             "adx": indicators.get("adx"),
             "ema_fast": indicators.get("ema_fast"),

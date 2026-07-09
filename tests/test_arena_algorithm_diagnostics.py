@@ -112,6 +112,8 @@ def test_signal_reason_inputs_cover_roster_diagnostics_fields() -> None:
 
 
 def test_scheduler_uses_primary_veto_as_flat_skip_reason() -> None:
+    # v28: WI-1 활성화(MULTI_FACTOR_REGIME_REQUIRED=True)로 레짐(방향성)이 필수 조건이 됨.
+    # unknown/Transitional은 강세도 횡보도 아니므로 direction_regime_ok가 최우선 veto.
     macro = {
         "arena_regime_state": "unknown",
         "regime_state": "Transitional",
@@ -124,4 +126,4 @@ def test_scheduler_uses_primary_veto_as_flat_skip_reason() -> None:
 
     reason = algorithms.primary_flat_skip_reason("multi_factor", macro, ind)
 
-    assert reason == "veto:factor_score_at_least_4"
+    assert reason == "veto:direction_regime_ok"
