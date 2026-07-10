@@ -749,6 +749,30 @@ def omnibus_target_price(macro: dict, ind: dict, entry_price: float) -> float | 
     return None
 
 
+def fng_target_pct(ind: dict, entry_price: float) -> float | None:
+    """P-A: fng_contrarian 이익 포착 목표 상승률(양수 소수). 진입 시 1회 산출.
+
+    라이브 MFE 진단: 손실 거래가 보유 중 한때 +1%↑였다가 증발(포착률 -58%). "이익이 있을
+    때 잡기". 목표는 **비율**로 저장(signal_reason.fng_target_pct) — 물타기로 평단이 내려가면
+    청산가 = 현재평단×(1+pct)가 자동으로 함께 내려가 재계산 불필요(omnibus는 절대가 고정,
+    fng는 평단이 움직여 다름). 하방 스톱은 없음(가격손절 금지 유지) — 이익 방향 익절만.
+      atr 모드: (진입 ATR × mult) / 진입가.  bb_mid 모드: (bb_mid/진입가 − 1).
+    플래그 off·데이터 부족·목표가 진입가 이하 시 None(익절 비활성).
+    """
+    if not parameters.FNG_TARGET_EXIT_ENABLED or entry_price <= 0:
+        return None
+    mode = parameters.FNG_TARGET_MODE
+    if mode == "atr":
+        atr = ind.get("atr", 0.0) or 0.0
+        if atr <= 0:
+            return None
+        return (atr * parameters.FNG_TARGET_ATR_MULT) / entry_price
+    if mode == "bb_mid":
+        mid = ind.get("bb_mid", 0.0) or 0.0
+        return (mid / entry_price - 1.0) if mid > entry_price else None
+    return None
+
+
 def exit_hold_override(algo_id: str, macro: dict, ind: dict) -> bool:
     """raw flat 신호에도 청산을 보류(hold)할지 — 진입≠청산 임계 히스테리시스.
 

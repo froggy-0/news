@@ -186,6 +186,31 @@ async def main() -> int:
         },
     )
 
+    # P-A fng 이익포착(profit target) — MFE 진단 기반
+    grid(
+        "P-A fng 이익포착",
+        "fng_contrarian",
+        {
+            "A_baseline": {},
+            "B_atr1.0": {
+                "FNG_TARGET_EXIT_ENABLED": True,
+                "FNG_TARGET_MODE": "atr",
+                "FNG_TARGET_ATR_MULT": 1.0,
+            },
+            "C_atr1.5": {
+                "FNG_TARGET_EXIT_ENABLED": True,
+                "FNG_TARGET_MODE": "atr",
+                "FNG_TARGET_ATR_MULT": 1.5,
+            },
+            "D_atr2.0": {
+                "FNG_TARGET_EXIT_ENABLED": True,
+                "FNG_TARGET_MODE": "atr",
+                "FNG_TARGET_ATR_MULT": 2.0,
+            },
+            "E_bb_mid": {"FNG_TARGET_EXIT_ENABLED": True, "FNG_TARGET_MODE": "bb_mid"},
+        },
+    )
+
     # WI-4 regime_trend volume confirm
     grid(
         "WI-4 regime_trend 볼륨확인",

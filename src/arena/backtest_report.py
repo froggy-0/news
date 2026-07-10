@@ -103,6 +103,15 @@ async def run_and_notify() -> None:
             settings=backtest.BacktestSettings(),
             funding_events=funding,
         )
+        # P-C(2026-07-10): 주간 결과를 arena_backtest_runs에 저장 → /arena-status 라이브 vs
+        #   백테스트 기준선을 주간 갱신(현재 params·최근 날짜). 이전엔 Slack 전용이라 저장
+        #   테이블이 초기 CLI 실행분(v7·수주 전)에 고정돼 있었음. macro는 arena_macro_snapshots
+        #   기반이라 라이브 커버 구간만 게이트 유효(저장본 한계는 스킬 문서에 명시). 저장 실패는
+        #   비치명 — Slack 리포트는 계속 전송.
+        try:
+            await backtest.save_result_to_supabase(db, result)
+        except Exception as exc:
+            logger.warning("backtest_report DB 저장 실패(무시): %s", exc)
         summary = build_summary(result)
         elapsed = round((datetime.now(timezone.utc) - started_at).total_seconds())
         logger.info(

@@ -35,6 +35,7 @@ from .algorithms import (
     ALGORITHMS,
     exit_hold_override,
     explain_signal,
+    fng_target_pct,
     omnibus_position_multiplier,
     omnibus_target_price,
     primary_flat_skip_reason,
@@ -920,6 +921,10 @@ async def _run_cycle() -> None:
                 # 물타기 기준가 = 최초 진입가, 1단계 체결 표기.
                 open_signal_reason.update(_fng_open_reason())
                 open_signal_reason["fng_ref_price"] = price
+                # P-A: 이익 포착 목표 상승률(비율). 물타기로 평단 하락 시 청산가 자동 하향.
+                _fng_tp = fng_target_pct(ind, price)
+                if _fng_tp is not None:
+                    open_signal_reason["fng_target_pct"] = _fng_tp
             # WI-7: omnibus 평균회귀(RANGE/REBOUND) 익절 목표가를 진입 시점에 고정.
             if algo_id == "omnibus":
                 _omni_target = omnibus_target_price(macro, ind, price)

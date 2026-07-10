@@ -73,6 +73,27 @@ async def _check_stop_loss(price: float) -> None:
                 updated = await positions.maybe_scale_in_fng_price(pos, price)
                 if updated:
                     state.open_positions[algo_id] = updated  # 인메모리 반영(4h 루프 공유)
+                    pos = updated
+            # P-A: fng 이익 포착 익절 — 평단×(1+target_pct) 도달 시 청산(물타기 후 평단 기준).
+            #   익절이므로 min_hold 무시(손절과 비대칭). 하방 스톱은 없음(가격손절 금지 유지).
+            if parameters.FNG_TARGET_EXIT_ENABLED and algo_id == "fng_contrarian":
+                tp = (pos.get("signal_reason") or {}).get("fng_target_pct")
+                if tp is not None:
+                    target = float(pos["open_price"]) * (1.0 + float(tp))
+                    if execution_rules.target_exit_triggered(
+                        direction=pos["direction"], current_price=price, target_price=target
+                    ):
+                        logger.info(
+                            "Target-exit(fng): now=%.2f  target=%.2f  avg_open=%.2f",
+                            price,
+                            target,
+                            pos["open_price"],
+                        )
+                        now = datetime.now(timezone.utc)
+                        await positions.close_position(
+                            pos["id"], now, price, close_reason="target_exit"
+                        )
+                        state.open_positions[algo_id] = None
             continue
         # WI-7: omnibus 평균회귀(RANGE/REBOUND) 익절 목표가 도달 시 청산(1m 틱 감시).
         #   목표가는 진입 시점 signal_reason.omni_target_price에 고정. 익절이므로 min_hold

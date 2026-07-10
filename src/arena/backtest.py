@@ -116,6 +116,7 @@ class SimPosition:
     fng_ref_price: float = 0.0
     fng_filled_count: int = 0
     omni_target_price: float | None = None  # WI-7: omnibus 평균회귀 익절 목표가(진입 시 고정)
+    fng_target_pct: float | None = None  # P-A: fng 이익포착 목표 상승률(평단×(1+pct) 익절)
 
     def as_live_position(self) -> dict[str, Any]:
         return {
@@ -369,6 +370,10 @@ def _open_position(
         omni_target_price = algorithms.omnibus_target_price(
             macro, frame.indicators, frame.bar.close
         )
+    # P-A: fng 이익포착 목표 상승률(비율). 물타기로 평단 하락 시 청산가 자동 하향.
+    fng_tp = None
+    if algo_id == "fng_contrarian":
+        fng_tp = algorithms.fng_target_pct(frame.indicators, frame.bar.close)
     return SimPosition(
         algo_id=algo_id,
         direction=direction,
@@ -385,6 +390,7 @@ def _open_position(
         fng_ref_price=fng_ref_price,
         fng_filled_count=fng_filled_count,
         omni_target_price=omni_target_price,
+        fng_target_pct=fng_tp,
     )
 
 
@@ -717,6 +723,34 @@ def run_replay(
                 frame_realized[algo_id] += trade.position_weight * trade.ret_pct
                 positions_by_algo[algo_id] = None
                 position = None
+            # P-A: fng 이익포착 익절(인트라바). 봉 high가 평단×(1+target_pct) 도달 시 그 가격에
+            #   체결. 물타기로 평단(open_price)이 내려가면 목표가도 함께 하향. min_hold 무관(익절).
+            if (
+                position is not None
+                and parameters.FNG_TARGET_EXIT_ENABLED
+                and algo_id == "fng_contrarian"
+                and position.fng_target_pct is not None
+            ):
+                fng_target = position.open_price * (1.0 + position.fng_target_pct)
+                if execution_rules.target_exit_triggered(
+                    direction=position.direction,
+                    current_price=frame.bar.high,
+                    target_price=fng_target,
+                ):
+                    trade = _close_position(
+                        position,
+                        close_time=frame.bar.close_time,
+                        close_data_timestamp=frame.data_timestamp,
+                        close_price=fng_target,
+                        exit_reason="target_exit",
+                        settings=settings,
+                        funding_events=funding_events,
+                    )
+                    trades.append(trade)
+                    record_realized(algo_id, trade.ret_pct, trade.close_time, trade.position_weight)
+                    frame_realized[algo_id] += trade.position_weight * trade.ret_pct
+                    positions_by_algo[algo_id] = None
+                    position = None
 
             macro = _clean_macro(frame.macro, frame.data_timestamp, settings)
             # 라이브 scheduler와 동일하게 로컬 4h 레짐을 주입(패리티). 미주입 시 백테스트는

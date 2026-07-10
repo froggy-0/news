@@ -17,7 +17,10 @@ STRATEGY_VERSION = "arena-spot-v4"
 # v28(2026-07-09): macro 백필 백테스트 검증 통과분 활성화 — WI-1(multi_factor 레짐필수,
 #   -2.63→+3.77) + WI-7(omnibus 목표가익절 atr1.0, -6.24→-4.57·승률+4%p). WI-2/4/5/6은
 #   백테스트가 개선 미지지(악화 또는 노이즈) → off 유지. 검증: scripts/analysis/wi_tuning.py.
-PARAMS_VERSION = "arena-params-v28"
+# v29(2026-07-10): P-A fng 이익포착(profit target) 활성화 — 라이브 MFE 진단(손실 6건 평균
+#   MFE +2.09%인데 실현 -1.41%, 포착률 -58%)이 "이익 증발" 정량화 → 익절 메커니즘 추가.
+#   백테스트 -3.02→-1.91(Δ+1.11)·승률 48→71%. WI-2(보유 연장)와 정반대 방향이 데이터로 옳음.
+PARAMS_VERSION = "arena-params-v29"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v2"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
@@ -190,6 +193,22 @@ PRICE_STOP_DISABLED_ALGOS: tuple[str, ...] = ("fng_contrarian",)
 TIME_STOP_HOURS_BY_ALGO: dict[str, float] = {
     "fng_contrarian": FNG_CONTRARIAN_TIME_STOP_HOURS,
 }
+
+# ── P-A: fng_contrarian 이익 포착(profit target) — 청산이 이익을 흘리는 문제 대응 ──
+# 근거(2026-07-10): 라이브 청산 6건 평균 MFE +2.09%인데 실현 -1.41%, 손실 5건 중 4건이
+#   보유 중 한때 +1% 이상이었음(MFE 포착률 -58% = 이익 증발). WI-2(청산 히스테리시스=보유
+#   연장)는 백테스트 기각됐으나(더 오래 보유는 답 아님), MFE 데이터가 가리키는 방향은
+#   "이익이 있을 때 잡기"(profit capture). omnibus v28 target_exit과 동일 메커니즘 재사용
+#   (execution_rules.target_exit_triggered, live 1m틱·backtest 봉high 체결 패리티).
+#   ⚠️ 하방 스톱은 여전히 없음(Kaminski·Lo 가격손절 금지 유지) — 이익 방향 익절만 추가.
+#   ⚠️ 물타기 상호작용: 목표가는 평단(가중평균 진입가) 기준 → scale-in 시 재계산(omnibus는
+#   진입 시 고정, fng는 평단이 움직이므로 다름). 설계: docs/arena/research/improvement-plan-v2.
+# ✅ v29 활성화: 백테스트 atr1.0 -3.02→-1.91(Δ+1.11)·승률 48→71%·거래 54→94(회전↑).
+#   atr1.0/1.5/bb_mid 3변형 모두 +1.1~1.2%p(견고), atr2.0만 악화 → 실패지점에서 가장 먼
+#   atr1.0 채택(승률·거래수 최고). 라이브 MFE 진단(포착률 -58%)과 정합. wi_tuning P-A.
+FNG_TARGET_EXIT_ENABLED = True
+FNG_TARGET_MODE = "atr"  # "atr"(평단+ATR×mult) | "bb_mid"(BB 중앙선 복귀)
+FNG_TARGET_ATR_MULT = 1.0  # atr 모드 배수 (그리드 {1.0,1.5,2.0}→1.0 채택, 2.0은 악화)
 
 # 시장 폭(breadth) 건전성: Binance top10 알트 중 7일 수익률 양(+) 비율.
 #   이 값 미만이면 BTC 단독/협소 랠리 → 복합 투표 알고 진입 보류.
