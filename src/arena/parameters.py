@@ -118,6 +118,17 @@ VOL_WEIGHT_MIN = 0.25  # 최소 노출 (현물: 자본의 25%)
 #   단일 알고가 자기 자본 100%를 단일 4H 롱에 올인하는 것을 방지.
 VOL_WEIGHT_MAX = 0.7  # 최대 노출 (현물: 레버리지 없음, 자본의 70%)
 
+# ── R2: 견고한 변동성 추정기 (2026-07-10) ──────────────────────────────────
+# 문제: realized_vol_24h(표본 6개 표준편차)는 추정 분산이 커서 사이징이 최근 몇 봉의
+#   우연에 좌우됨(저변동 착시 → 과대 사이징 → 다음 봉 손실 확대). 근거: Moreira·Muir
+#   변동성 관리는 예측 품질에 의존(Cederburg 반증) → 추정기 개선이 관건.
+# 방식: EWMA(RiskMetrics σ²=λσ²+(1−λ)r², λ≈0.94)를 6봉 표본과 블렌드. 보수 원칙으로
+#   max(6봉, EWMA) 채택 — 저변동 착시로 과대 사이징하는 것만 막고(노출 축소 방향), 확대
+#   방향은 건드리지 않아 무회귀에 가깝다. 사이징에만 사용(realized_vol_24h는 레짐·진단 유지).
+VOL_ESTIMATOR_ROBUST_ENABLED = False  # ✅ 백테스트 통과 후 on
+VOL_EWMA_LAMBDA = 0.94  # RiskMetrics 표준. 1에 가까울수록 과거 가중↑(부드러움)
+VOL_EWMA_MIN_BARS = 20  # EWMA 시드에 필요한 최소 봉 수 (미달 시 6봉값 사용)
+
 # 거래당 자본위험 예산 (고정분율 위험 사이징).
 #   weight = clamp(RISK_PER_TRADE_PCT / stop_distance_pct, MIN, MAX).
 #   손절 도달 시 손실을 자본의 ~1.5%로 균질화 → 단일 올인 진입의 꼬리손실 제거.
@@ -204,11 +215,12 @@ TIME_STOP_HOURS_BY_ALGO: dict[str, float] = {
 #   ⚠️ 물타기 상호작용: 목표가는 평단(가중평균 진입가) 기준 → scale-in 시 재계산(omnibus는
 #   진입 시 고정, fng는 평단이 움직이므로 다름). 설계: docs/arena/research/improvement-plan-v2.
 # ✅ v29 활성화: 백테스트 atr1.0 -3.02→-1.91(Δ+1.11)·승률 48→71%·거래 54→94(회전↑).
-#   atr1.0/1.5/bb_mid 3변형 모두 +1.1~1.2%p(견고), atr2.0만 악화 → 실패지점에서 가장 먼
-#   atr1.0 채택(승률·거래수 최고). 라이브 MFE 진단(포착률 -58%)과 정합. wi_tuning P-A.
+#   wi_tuning P-A 최초 gridsearch(stale macro)에서 atr1.0 채택했으나, walk-forward 6윈도
+#   검증(master_20260710, fresh macro)에서 atr2.0이 5/6 윈도 우위·fng 평균 +0.36 vs +0.03
+#   → atr2.0으로 재채택(arena-params-v30). 거래수 58→43 감소는 감수.
 FNG_TARGET_EXIT_ENABLED = True
 FNG_TARGET_MODE = "atr"  # "atr"(평단+ATR×mult) | "bb_mid"(BB 중앙선 복귀)
-FNG_TARGET_ATR_MULT = 1.0  # atr 모드 배수 (그리드 {1.0,1.5,2.0}→1.0 채택, 2.0은 악화)
+FNG_TARGET_ATR_MULT = 2.0  # atr 모드 배수 (walk-forward 6윈도 검증→2.0 채택, arena-params-v30)
 
 # 시장 폭(breadth) 건전성: Binance top10 알트 중 7일 수익률 양(+) 비율.
 #   이 값 미만이면 BTC 단독/협소 랠리 → 복합 투표 알고 진입 보류.

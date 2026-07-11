@@ -327,6 +327,35 @@ def realized_vol(closes: list[float], bars: int) -> float:
     return math.sqrt(variance)
 
 
+def realized_vol_ewma(
+    closes: list[float],
+    lam: float = parameters.VOL_EWMA_LAMBDA,
+    min_bars: int = parameters.VOL_EWMA_MIN_BARS,
+) -> float:
+    """EWMA 봉 변동성 (RiskMetrics σ²_t = λσ²_{t-1} + (1−λ)r²_t). 지수가중이라 6봉 표본
+    표준편차보다 추정 노이즈가 작다. 데이터 부족(<min_bars) 시 0.0(호출측이 6봉으로 폴백)."""
+    rets: list[float] = []
+    for prev, cur in zip(closes, closes[1:]):
+        if prev > 0 and cur > 0:
+            rets.append(math.log(cur / prev))
+    if len(rets) < min_bars:
+        return 0.0
+    var = sum(r * r for r in rets[:min_bars]) / min_bars  # 초기 window로 시드
+    for r in rets[min_bars:]:
+        var = lam * var + (1.0 - lam) * r * r
+    return math.sqrt(var) if var > 0 else 0.0
+
+
+def realized_vol_sizing(closes: list[float], bars: int) -> float:
+    """사이징용 변동성 — 플래그 on 시 max(6봉, EWMA)(보수: 저변동 착시로 과대사이징 방지),
+    off 시 기존 6봉값. combined_position_weight 입력 전용."""
+    rv6 = realized_vol(closes, bars)
+    if not parameters.VOL_ESTIMATOR_ROBUST_ENABLED:
+        return rv6
+    ewma = realized_vol_ewma(closes)
+    return max(rv6, ewma) if ewma > 0 else rv6
+
+
 def high_low_range_atr_ratio(
     highs: list[float],
     lows: list[float],
@@ -458,6 +487,8 @@ def compute(
         "return_24h": return_over_bars(closes, settings.return_24h_bars),
         "return_72h": return_over_bars(closes, settings.return_72h_bars),
         "realized_vol_24h": realized_vol(closes, settings.realized_vol_24h_bars),
+        # R2: 사이징 전용 변동성(플래그 on 시 max(6봉,EWMA)). realized_vol_24h는 레짐·진단 유지.
+        "realized_vol_sizing": realized_vol_sizing(closes, settings.realized_vol_24h_bars),
         "range_24h_atr": high_low_range_atr_ratio(
             highs,
             lows,

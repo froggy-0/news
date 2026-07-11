@@ -356,7 +356,11 @@ def _open_position(
         fng_filled_count = 1
     else:
         position_weight = execution_rules.combined_position_weight(
-            float(frame.indicators.get("realized_vol_24h") or 0.0),
+            float(
+                frame.indicators.get("realized_vol_sizing")
+                or frame.indicators.get("realized_vol_24h")
+                or 0.0
+            ),
             frame.bar.close,
             stop_loss_price,
             target_vol=parameters.VOL_TARGET_PER_BAR,

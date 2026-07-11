@@ -156,6 +156,39 @@ async def main() -> int:
             decisions[name]["dsr"] = round(dsr["dsr"], 3)
         return results
 
+    all_algos = list(b.keys())
+
+    def portfolio_ab(name, configs: dict[str, dict]):
+        """전 알고 사이징 등 포트폴리오 전역 변경용 — 총합 sum_w + 알고별 변화."""
+        print(f"\n=== {name} (포트폴리오 전역) ===")
+        pdec = {}
+        for vname, ov in configs.items():
+            trades = _run(frames, ov)
+            per = {a: _algo_stats(trades, a) for a in all_algos}
+            total = sum(per[a]["sum_w_ret"] for a in all_algos)
+            base_total = sum(b[a]["sum_w_ret"] for a in all_algos)
+            d = total - base_total
+            flag = "✅" if d > 0.05 else ("➖" if abs(d) <= 0.05 else "❌")
+            deltas = {
+                a: round(per[a]["sum_w_ret"] - b[a]["sum_w_ret"], 2)
+                for a in all_algos
+                if abs(per[a]["sum_w_ret"] - b[a]["sum_w_ret"]) > 0.01
+            }
+            print(
+                f"  {flag} {vname:20} 총합 {base_total:+.2f}→{total:+.2f} (Δ{d:+.2f})  알고별Δ{deltas}"
+            )
+            pdec[vname] = {"total_sum_w": round(total, 3), "deltas": deltas}
+        decisions[name] = pdec
+
+    # R2 EWMA 변동성 사이징 (포트폴리오 전역)
+    portfolio_ab(
+        "R2 EWMA 사이징",
+        {
+            "A_baseline(6봉)": {},
+            "B_robust(max6봉·EWMA)": {"VOL_ESTIMATOR_ROBUST_ENABLED": True},
+        },
+    )
+
     # WI-1 multi_factor
     grid(
         "WI-1 multi_factor 레짐필수",

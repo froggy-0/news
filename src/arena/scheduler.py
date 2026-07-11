@@ -905,7 +905,7 @@ async def _run_cycle() -> None:
                 position_weight = parameters.FNG_CONTRARIAN_PRICE_TRANCHES[0][1]
             else:
                 position_weight = execution_rules.combined_position_weight(
-                    ind.get("realized_vol_24h", 0.0),
+                    ind.get("realized_vol_sizing", ind.get("realized_vol_24h", 0.0)),
                     price,
                     sl_price,
                     target_vol=parameters.VOL_TARGET_PER_BAR,
