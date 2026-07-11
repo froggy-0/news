@@ -19,7 +19,7 @@
 | P-C 주간 백테스트 첫 저장 | 다음 월요일 00:10 UTC | 2026-07-13 | `/arena-status` 섹션5 STALE 경고 소멸 |
 | P-D 청산 데이터 → 지표 연결 v2 | 30일 축적 (2026-08-09~) | 8월 초 | `SELECT count(*) FROM arena_liquidation_bars` |
 | WI-1/7(v28) 라이브 검증 | multi_factor·omnibus 신규 표본 | 수주 | params_version 분리 |
-| regime_trend/macd 첫 진입 | 강세 레짐 도래 (현재 bullish_regime 73회 차단) | 시장 의존 | 섹션7 차단 사유 변화 |
+| regime_trend/macd 첫 진입 | 강세 레짐 도래 (현재 bullish_regime 73회 차단) | 시장 의존 | 섹션7 차단 사유 변화 · 진단+계획: [regime-macd-diagnosis](regime-macd-diagnosis-20260711.md) (무거래=정상, 게이트 완화 금지, SJM이 구제 경로) |
 
 ---
 
