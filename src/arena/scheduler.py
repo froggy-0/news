@@ -146,6 +146,8 @@ async def _fetch_macro() -> MacroData:
             # 시장 폭 + 온체인 유동성 (복합 투표 알고 건전성 필터)
             "breadth_up_ratio": raw.get("breadth_up_ratio"),
             "stablecoin_supply_zscore": raw.get("stablecoin_supply_zscore"),
+            # SJM 섀도우 (알고 게이트 미적용 — 30일 관찰 후 승격 여부 판단)
+            "sjm_state": raw.get("sjm_state"),
             # 변동성 환경 라벨 (사이징/신뢰도 컨텍스트)
             "vol_level": overlay.get("volLevel"),
             "vol_trend": overlay.get("volTrend"),
@@ -479,6 +481,10 @@ async def _run_shadow_vnext(
         )
         # 같은 프로세스의 realtime 수집기가 futures_stress 계산에 쓰도록 최신 features 공유
         market_structure.set_latest_market_features(snapshot.features)
+        # SJM 섀도우 상태를 feature snapshot에 포함 (로깅 전용, 알고 미연결)
+        sjm = macro.get("sjm_state")
+        if sjm is not None:
+            snapshot.features["sjm_state"] = sjm
         results.extend(
             await data_lake.record_market_structure_snapshot(
                 run_id=run_id,
