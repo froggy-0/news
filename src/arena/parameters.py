@@ -190,14 +190,12 @@ FNG_CONTRARIAN_PRICE_TRANCHES: tuple[tuple[float, float], ...] = (
     (-0.03, 0.25),  # 진입가 -3% → 실시간 추가
     (-0.06, 0.30),  # 진입가 -6% → 실시간 추가
 )
-# 시간 손절: 18 x 4h봉 = 72h 내 회귀 없으면 청산. 평균회귀 시간 손절.
-#   v22(2026-06-26): 48→72h. 실데이터 백테스트(macro 백필, 6개월)에서 진단 결과
-#   조기 청산(FNG 중립 복귀 flat)이 회복 전 손실 확정의 주원인이었음 — flat 청산 36%
-#   승률/-4.14% vs 만기보유(time_stop) 86% 승률/+2.31%. 보유기간을 늘리니 같은 물타기
-#   트레이드가 회복(평균회귀는 회복 시간 필요, Kaminski·Lo). min_hold 24→48h와 함께
-#   fng 종가자산 0.981→1.002(유일 순플러스)·승률 50→57%·MaxDD -6.3→-4.9%. ts72~120/
-#   mh48~72 plateau 중앙값 채택(과적합 회피). 재현: scripts/analysis/fng_optimize.py.
-FNG_CONTRARIAN_TIME_STOP_HOURS = 72.0
+# 시간 손절: 15 x 4h봉 = 60h 내 회귀 없으면 청산. 평균회귀 시간 손절.
+#   v22(2026-06-26): 48→72h(평균회귀 회복 시간 확보).
+#   v30(2026-07-11): 72→60h. P-A익절(atr2.0) 활성화 후 이익 거래가 조기 종료되면서
+#   남은 건 손실 거래 — ts를 줄여 빠른 손절이 더 유리(fng_optimize 재그리드:
+#   3단 ts60·mh36 종가자산 1.0269 vs 3단 ts72·mh48 1.0214, Δ+0.55%p).
+FNG_CONTRARIAN_TIME_STOP_HOURS = 60.0
 # 가격(ATR·트레일) 손절을 적용하지 않는 알고 — 역발산 계열은 가격 손절이 독.
 PRICE_STOP_DISABLED_ALGOS: tuple[str, ...] = ("fng_contrarian",)
 # 시간 손절을 적용하는 알고 → 최대 보유시간(h). 위 가격 손절 제거를 보완.
@@ -399,7 +397,7 @@ REALTIME_RISK_SUSTAINED_WINDOWS = 2
 
 MIN_HOLD_HOURS: dict[str, float] = {
     "regime_trend": 12.0,
-    "fng_contrarian": 48.0,  # v22: 24→48h. 조기 FNG-중립 flat 청산이 평균회귀 회복 전
+    "fng_contrarian": 36.0,  # v22: 24→48h. v30: 48→36h(P-A익절 상호작용, fng_optimize 재그리드)
     "vix_rsi": 12.0,
     "macd_momentum": 8.0,
     "multi_factor": 12.0,
