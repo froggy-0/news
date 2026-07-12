@@ -255,6 +255,7 @@
       border-bottom:1px solid rgba(255,255,255,.03);
       vertical-align:middle;font-size:12px;
       font-variant-numeric:tabular-nums;
+      white-space:nowrap;
     }
     .tbl td:first-child{padding-left:18px}
     .tbl tr:last-child td{border-bottom:none}
@@ -326,14 +327,45 @@
       .chart-container{height:280px}
       .eq-container{height:130px}
       .eq-stats{display:none}
-      .port-bar{grid-template-columns:1fr 1fr;gap:12px}
-      .port-label{grid-column:1/-1;margin-bottom:4px}
+      /* 포트 스탯 3개를 한 행에 — "진입 중" 단독 행의 어색한 여백 제거 */
+      .port-bar{grid-template-columns:repeat(3,1fr);gap:10px;padding:12px 14px}
+      .port-label{grid-column:1/-1;margin-bottom:2px;font-size:10px;letter-spacing:1px}
       .port-stat{text-align:left}
+      .port-stat-val{font-size:15px}
+      .port-stat-sub{font-size:9px}
+      /* 거래 로그: 가격·비중은 모바일에서 숨김 — 시각·알고·수익률·사유·보유 5컬럼.
+         수익률(핵심)이 가로 스크롤 없이 첫 화면에 보이는 것이 우선 */
+      .tbl{min-width:0}
+      .tbl th:nth-child(3),.tbl td:nth-child(3),
+      .tbl th:nth-child(4),.tbl td:nth-child(4),
+      .tbl th:nth-child(6),.tbl td:nth-child(6){display:none}
+      .tbl th{padding:9px 8px 9px 0}
+      .tbl td{padding:8px 8px 8px 0;font-size:11px}
+      .tbl td:first-child{font-size:10px}
+      .tbl .algo-chip{font-size:8px;padding:2px 4px}
+      .tbl th:first-child,.tbl td:first-child{padding-left:12px}
+      .log-head{flex-wrap:wrap;gap:8px;padding:10px 14px}
+      /* 카드: 이름 래핑 최소화 + 밀도 조정 */
+      .ac{padding:10px 11px}
+      .ac-name{font-size:10px;letter-spacing:1.1px}
+      .ac-equity{font-size:14px}
+      .eq-legend{flex-wrap:wrap;gap:10px}
+      .chart-legend{gap:12px;font-size:9px;padding:8px 14px 10px}
+      .ft{line-height:1.9;padding:14px 16px}
     }
     @media(max-width:480px){
       .wrap{padding:10px 12px 24px}
-      .hd{padding:0 12px}
+      .hd{padding:0 12px;gap:8px}
       .hd-sub,.hd-sep{display:none}
+      /* 시계는 푸터 업데이트 시각과 중복 — 가격·LIVE에 공간 양보 */
+      .kst-clock{display:none}
+      .hd-brand{gap:8px}
+      .hd-logo{height:24px;width:24px}
+      .hd-title{font-size:15px;letter-spacing:2px}
+      .btc-price{font-size:14px}
+      .btc-chg{font-size:10px}
+      .hd-right{gap:0}
+      .pos-card{min-width:100%}
     }
     @media(prefers-reduced-motion:reduce){
       *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
