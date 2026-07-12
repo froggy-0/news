@@ -107,9 +107,10 @@
     .ac{
       background:var(--panel);border:1px solid var(--border);
       border-top:2px solid var(--ac);padding:12px 14px;
-      transition:background 150ms;cursor:default;
+      transition:background 150ms;cursor:pointer;
     }
     .ac:hover{background:var(--panel-h)}
+    .ac:focus-visible{outline:1px solid var(--gold);outline-offset:1px}
     .ac-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;gap:6px}
     .ac-name{
       font-family:'Barlow Condensed',sans-serif;
@@ -281,6 +282,25 @@
       font-size:8px;color:var(--red);background:var(--red-a);
       padding:1px 4px;margin-left:4px;
     }
+    .reason-chip{
+      font-size:8px;font-weight:600;letter-spacing:.4px;
+      padding:2px 6px;border:1px solid var(--border);
+      color:var(--muted2);white-space:nowrap;
+    }
+    .reason-chip.r-target{color:var(--green);border-color:rgba(14,203,129,.35);background:var(--green-a)}
+    .reason-chip.r-trail{color:#22D3EE;border-color:rgba(34,211,238,.3);background:rgba(34,211,238,.06)}
+    .reason-chip.r-stop{color:var(--red);border-color:rgba(246,70,93,.35);background:var(--red-a)}
+    .reason-chip.r-time{color:#F0B90B;border-color:rgba(240,185,11,.3);background:rgba(240,185,11,.06)}
+
+    /* ── Period toggle (trade log) ────────────────────────── */
+    .period-toggle{display:flex;gap:2px}
+    .period-btn{
+      font-family:inherit;font-size:9px;font-weight:600;letter-spacing:.8px;
+      padding:3px 10px;background:none;border:1px solid var(--border);
+      color:var(--muted);cursor:pointer;
+    }
+    .period-btn:hover{color:var(--muted2);border-color:var(--border-l)}
+    .period-btn.active{color:var(--gold);border-color:var(--gold);background:var(--gold-a)}
 
     /* ── Footer ───────────────────────────────────────────── */
     .ft{
@@ -408,6 +428,11 @@
   <div class="log-panel">
     <div class="log-head">
       <span class="panel-title">TRADE LOG</span>
+      <div class="period-toggle" id="periodToggle" role="group" aria-label="기간 필터">
+        <button class="period-btn active" data-period="all">ALL</button>
+        <button class="period-btn" data-period="30">30D</button>
+        <button class="period-btn" data-period="7">7D</button>
+      </div>
     </div>
     <div class="tlog-scroll" role="region" aria-label="거래 기록">
       <table class="tbl" role="table" aria-label="거래 목록">
@@ -418,11 +443,13 @@
             <th scope="col">진입가</th>
             <th scope="col">청산가</th>
             <th scope="col">수익률</th>
+            <th scope="col">비중</th>
+            <th scope="col">청산사유</th>
             <th scope="col">보유</th>
           </tr>
         </thead>
         <tbody id="tradeLogBody">
-          <tr><td colspan="6" style="color:var(--muted);font-size:11px;padding:20px 18px">거래 기록 불러오는 중…</td></tr>
+          <tr><td colspan="8" style="color:var(--muted);font-size:11px;padding:20px 18px">거래 기록 불러오는 중…</td></tr>
         </tbody>
       </table>
     </div>
@@ -809,7 +836,7 @@ function renderCards(stats) {
     const hintText = skip ? `대기: ${skip}` : hint;
     // 스파크라인: 청산 누적 + 미실현 현재점
     const sparkVals = s.unrealizedPct != null ? [...s.eqSeq, s.equityTotal] : s.eqSeq;
-    return `<div class="ac${rank === 1 ? ' rank-1' : ''}" style="--ac:${cfg.color}" role="article" aria-label="${algo}${rank ? ` ${rank}위` : ' 관망'}">
+    return `<div class="ac${rank === 1 ? ' rank-1' : ''}" style="--ac:${cfg.color}" data-algo="${algo}" tabindex="0" role="button" aria-label="${algo}${rank ? ` ${rank}위` : ' 관망'} — 클릭 시 차트·거래 필터">
       <div class="ac-head">
         <span style="display:flex;align-items:baseline;gap:7px;min-width:0">
           ${rankBadge}<span class="ac-name">${algo.replace(/_/g, ' ')}</span>
@@ -882,14 +909,7 @@ function renderTabs() {
     `<button class="tab${activeTab === t.id ? ' active' : ''}" style="--ac:${t.color}" data-tab="${t.id}" role="tab" aria-selected="${activeTab === t.id}">${t.label}</button>`
   ).join('');
   el.querySelectorAll('.tab').forEach(b => {
-    b.addEventListener('click', () => {
-      if (activeTab === b.dataset.tab) return;
-      activeTab = b.dataset.tab;
-      renderTabs();
-      renderPositionStrip();
-      renderPriceChart();
-      renderLog(positions);
-    });
+    b.addEventListener('click', () => activateTab(b.dataset.tab));
   });
 }
 
@@ -1087,8 +1107,30 @@ function renderPriceChart() {
 }
 
 /* ── Render: trade log ──────────────────────────────────────── */
+// close_reason → 짧은 라벨 + 칩 스타일 (전략 투명성: 어떤 규칙이 청산했는지)
+const REASON_CHIP = {
+  target_exit:   { label: 'TARGET', cls: 'r-target' },
+  trailing_stop: { label: 'TRAIL',  cls: 'r-trail'  },
+  stop_loss:     { label: 'STOP',   cls: 'r-stop'   },
+  time_stop:     { label: 'TIME',   cls: 'r-time'   },
+  flat_signal:   { label: 'FLAT',   cls: ''         },
+  risk_off:      { label: 'RISK',   cls: 'r-stop'   },
+};
+function reasonChip(p) {
+  if (p.status !== 'closed') return '<span style="color:var(--muted)">—</span>';
+  const key = p.close_reason || (p.is_stop_loss ? 'stop_loss' : 'flat_signal');
+  const cfg = REASON_CHIP[key] || { label: key.slice(0, 8).toUpperCase(), cls: '' };
+  return `<span class="reason-chip ${cfg.cls}">${esc(cfg.label)}</span>`;
+}
+
+let logPeriod = 'all'; // 'all' | '30' | '7' — 로그 전용(트랙레코드 지표는 항상 전기간)
+
 function renderLog(ps) {
-  const view   = activeTab === 'all' ? ps : ps.filter(p => p.algo_id === activeTab);
+  let view = activeTab === 'all' ? ps : ps.filter(p => p.algo_id === activeTab);
+  if (logPeriod !== 'all') {
+    const cutoff = Date.now() - Number(logPeriod) * 86_400_000;
+    view = view.filter(p => new Date(p.open_time).getTime() >= cutoff || p.status === 'open');
+  }
   const sorted = [...view].sort((a, b) => new Date(b.open_time) - new Date(a.open_time));
   const openN  = view.filter(p => p.status === 'open').length;
   const prefix = activeTab === 'all' ? '전체' : activeTab;
@@ -1097,7 +1139,7 @@ function renderLog(ps) {
 
   const body = document.getElementById('tradeLogBody');
   if (!sorted.length) {
-    body.innerHTML = `<tr><td colspan="6" style="color:var(--muted);font-size:11px;padding:20px 18px">거래 없음</td></tr>`;
+    body.innerHTML = `<tr><td colspan="8" style="color:var(--muted);font-size:11px;padding:20px 18px">거래 없음</td></tr>`;
     return;
   }
 
@@ -1116,8 +1158,7 @@ function renderLog(ps) {
     } else if (p.ret_pct != null) {
       const pct  = (p.ret_pct * 100).toFixed(2);
       const sign = p.ret_pct >= 0 ? '+' : '';
-      const sl   = p.is_stop_loss ? '<span class="sl-tag">SL</span>' : '';
-      retHtml = `<span class="${p.ret_pct >= 0 ? 'ret-pos' : 'ret-neg'}">${sign}${pct}%${sl}</span>`;
+      retHtml = `<span class="${p.ret_pct >= 0 ? 'ret-pos' : 'ret-neg'}">${sign}${pct}%</span>`;
     } else {
       retHtml = '<span class="ret-open">—</span>';
     }
@@ -1128,6 +1169,9 @@ function renderLog(ps) {
     const holdTd = p.hold_hours != null
       ? `${Math.round(p.hold_hours)}h`
       : `<span style="color:var(--muted)">—</span>`;
+    const wTd = p.position_weight != null
+      ? `${p.position_weight.toFixed(2)}x`
+      : `<span style="color:var(--muted)">—</span>`;
 
     return `<tr class="${p.status === 'open' ? 'open-row' : ''}">
       <td style="color:var(--muted)">${ts}</td>
@@ -1135,9 +1179,49 @@ function renderLog(ps) {
       <td>$${p.open_price.toLocaleString()}</td>
       <td style="color:var(--muted2)">${exitTd}</td>
       <td>${retHtml}</td>
+      <td style="color:var(--muted2)">${wTd}</td>
+      <td>${reasonChip(p)}</td>
       <td style="color:var(--muted)">${holdTd}</td>
     </tr>`;
   }).join('');
+}
+
+/* ── Card → chart/log 연동 (점진 공개: 카드가 상세로 가는 입구) ── */
+function activateTab(tabId) {
+  if (activeTab === tabId) return;
+  activeTab = tabId;
+  renderTabs();
+  renderPositionStrip();
+  renderPriceChart();
+  renderLog(positions);
+}
+
+function setupCardNavigation() {
+  const grid = document.getElementById('algoGrid');
+  if (!grid) return;
+  const go = (target) => {
+    const card = target.closest('.ac[data-algo]');
+    if (!card) return;
+    activateTab(card.dataset.algo);
+    document.querySelector('.chart-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  grid.addEventListener('click', e => go(e.target));
+  grid.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(e.target); }
+  });
+}
+
+function setupPeriodToggle() {
+  const el = document.getElementById('periodToggle');
+  if (!el) return;
+  el.addEventListener('click', e => {
+    const btn = e.target.closest('.period-btn');
+    if (!btn || btn.dataset.period === logPeriod) return;
+    logPeriod = btn.dataset.period;
+    el.querySelectorAll('.period-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.period === logPeriod));
+    renderLog(positions);
+  });
 }
 
 /* ── Freshness (정직한 LIVE 표시) ───────────────────────────── */
@@ -1254,7 +1338,7 @@ async function fetchPositions(client) {
       open_time, close_time,
       open_price, close_price, stop_loss_price, position_weight,
       ret_pct, hit, hold_hours,
-      is_stop_loss, strategy_version, product_type, position_semantics
+      is_stop_loss, close_reason, strategy_version, product_type, position_semantics
     `)
     .order('open_time', { ascending: false })
     .limit(500);
@@ -1303,6 +1387,8 @@ function updateClock() {
 async function init() {
   initChart();
   initEqChart();
+  setupCardNavigation();
+  setupPeriodToggle();
   updateClock();
   setInterval(updateClock, 1000);
 
