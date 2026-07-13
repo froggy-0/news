@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime, timezone
 
 import websockets
@@ -26,6 +27,11 @@ from . import config, data_lake, parameters
 logger = logging.getLogger(__name__)
 
 _BUCKET_SECONDS = 4 * 3600  # 4h — arena 기본 봉과 정렬
+# 2026-07-14 진단: 서울 EC2 호스트에서 fstream.binance.com이 WS 핸드셰이크는 성공하지만
+# forceOrder 프레임을 전혀 전달하지 않음(고빈도 aggTrade로도 재현 — 데이터 전달이 구조적으로
+# 막힌 것으로 보임, docs/arena/research/priority-improvements-20260714.md §P1-3). "connected"
+# 로그만으로는 이 상태를 못 잡아내(연결은 진짜 살아있음) idle 경고를 별도로 둔다.
+_IDLE_WARNING_SECONDS = 1800.0
 
 
 def _bucket_start(ts_ms: int) -> datetime:
@@ -93,7 +99,20 @@ async def run() -> None:
                 ping_interval=parameters.WEBSOCKET_PING_INTERVAL_SECONDS,
             ) as ws:
                 logger.info("Liquidation WebSocket connected (fstream forceOrder)")
-                async for raw in ws:
+                last_event_at = time.monotonic()
+                while True:
+                    try:
+                        raw = await asyncio.wait_for(ws.recv(), timeout=_IDLE_WARNING_SECONDS)
+                    except asyncio.TimeoutError:
+                        idle_min = (time.monotonic() - last_event_at) / 60.0
+                        logger.warning(
+                            "Liquidation WebSocket idle %.0fmin — connected but no forceOrder "
+                            "frames received (structural network issue suspected, see "
+                            "priority-improvements-20260714.md)",
+                            idle_min,
+                        )
+                        continue
+                    last_event_at = time.monotonic()
                     data = json.loads(raw)
                     o = data.get("o") or {}
                     try:

@@ -104,19 +104,39 @@
   없는 유일한 두 알고. 다만 표본이 5~6건뿐이라 지금 바로 파라미터를 바꾸기보다, **R4b(fng 물타기
   제거 검증)가 끝난 뒤 같은 walk-forward 틀로 vix_rsi/multi_factor target-exit A/B**를 잡는 게
   순서상 맞다(§ 기존 로드맵 R3 SJM 다음 후보로 추가).
+- **2026-07-14 범위 결정**: 코드로 옮기지 않았다. omnibus WI-7 target_exit 구현은 algorithms.py
+  (목표가 산식) + backtest.py + stream.py + scheduler.py 4개 파일에 걸친 전용 배선이었고
+  (커밋 `9cad4d0`), 그 자체가 하나의 설계 사이클(MFE 진단 근거 → 산식 선택 → walk-forward
+  검증)을 거쳤다. vix_rsi·multi_factor에 동일 수준으로 확장하려면 같은 사이클이 필요한데
+  표본 5~6건으로는 산식 선택 근거가 부족하다. "나머지 개선사항 전부 적용" 지시를 받았지만,
+  검증 없이 라이브 청산 로직에 새 분기를 얹는 건 이 프로젝트 자체의 게이트 규칙(§ 개선 후보
+  확정 절차)과 충돌해 보류 — 표본이 쌓이는 대로(§1 대기 항목 patterns) 별도 세션에서 진행.
 
-### 6. gate_block_rates dead-weight 후보 (2026-07-13 재실행, 이전 07-11 결과와 비교 필요)
-- `regime_trend.adx_trending`: near-miss 11건, 이후 승률 82%·평균 +0.88% — 필터가 알파를 차단하는
-  쪽(dead weight 후보). 다만 표본 11건은 매우 작음.
-- `macd_momentum.rsi_below_long_max`(44건, 승률61%, +0.15%), `macd_hist_positive`(42건, 승률57%,
-  +0.38%) — 둘 다 dead weight 후보. CLAUDE.md 로드맵에 "gate_block_rates 정기화(분기1회)"가
-  이미 있고 이전 실행에서도 유사 후보로 지목된 조건이면 A/B 우선순위를 올릴 근거가 됨(§3에서
-  07-09/07-11/07-13 세 리포트 diff 확인 권장).
-- `omnibus.regime_not_risk_off`: near-miss **258건**(가장 큰 표본), 승률 53%·+0.24% — 세
-  조건 중 표본이 가장 커서 신뢰도 높은 dead-weight 후보. risk-off veto가 omnibus RANGE/REBOUND
-  진입을 과도하게 막고 있을 가능성 — 다음 A/B 대상 1순위로 제안.
-- **조치**: 위 조건들을 `wi_tuning.py` 패턴으로 A/B(단, 반드시 fresh parquet 사용 — P0-2
-  수정 후) → 대상 알고 sum_w 개선 + 타 알고 무회귀 확인 → DSR/PBO 통과분만 채택.
+### 6. gate_block_rates dead-weight 후보 — ~~2026-07-14 철회~~ (근거 불충분/이미 기각됨 확인)
+> **2026-07-14 정정**: 아래 원안은 near-miss 통계만 보고 작성한 것으로, 실제로는 적용 대상이
+> 아니다. "나머지 개선사항 전부 적용" 지시를 받고 실행하려는 과정에서 사전 문서를 재확인해
+> 발견함 — 원안을 그대로 실행하지 않고 여기 남겨 왜 기각했는지 기록한다.
+>
+> - `regime_trend.adx_trending`·`macd_momentum.rsi_below_long_max`/`macd_hist_positive`:
+>   **이미 2026-07-11 실거래 A/B로 전부 기각된 아이디어**였다
+>   ([regime-macd-diagnosis](regime-macd-diagnosis-20260711.md) §1d·§3 M-1). near-miss의
+>   "이후 6봉 수익"은 청산 로직이 없는 선행수익이라 실제 트레일링스톱·flat 청산을 거치면
+>   전부 악화로 뒤집힌다는 게 그 문서의 핵심 결론이고, "게이트 완화 튜닝 금지"가 명시적으로
+>   박제돼 있다. 내가 이번에 gate_block_rates만 재실행하고 이 선행 결론을 확인하지 않은 채
+>   "dead-weight 후보"라고 적은 것 자체가 실수였다 — SKILL.md의 "near-miss 단독으로 게이트
+>   완화 결정 금지" 규칙을 스스로 어긴 셈.
+> - `omnibus.regime_not_risk_off`: near-miss 258건으로 표본은 가장 크지만, 코드를 다시
+>   보면 이건 "제거 가능한 필터"가 아니라 `omnibus()`의 5중 레짐 상태머신(UP_TREND/RANGE/
+>   DOWN_TREND/RISK_OFF/TRANSITION)에서 RISK_OFF·TRANSITION이 애초에 어떤 서브전략에도
+>   매핑되지 않는다는 것뿐이다(`src/arena/algorithms.py:657` `if omni_regime in (RISK_OFF,
+>   TRANSITION): return None`). "완화"하려면 RISK_OFF용 신규 서브전략을 설계해야 하는데,
+>   이는 근본적으로 새 전략을 만드는 일이라 근거(near-miss 6봉 선행수익)가 위 사례와 동일한
+>   함정을 가진 채로 훨씬 큰 리스크를 정당화하기엔 부족하다.
+> - **결론**: 세 조건 모두 지금 코드 변경 없이 보류. 실제로 재검토할 가치가 있다면
+>   regime-macd-diagnosis M-3(SJM 레짐, 2026-08-10 판단 예정)이 선행 조건 — 레짐 분류기
+>   자체가 개선되면 이 조건들의 근거 데이터가 다시 계산되므로 그때 재평가.
+
+(원안 텍스트는 삭제 — 위 정정 참고)
 
 ---
 
@@ -148,11 +168,23 @@
 
 ---
 
-## 우선순위 요약
+## 적용 현황 (2026-07-14 세션 종료 시점)
 
-1. **P0-1** PARAMS_VERSION 상수 수정 + 재배포 (5분 작업, 향후 모든 버전 비교의 전제조건)
-2. **P0-2** fresh-backtest 기본 parquet 최신화 (5분 작업, 진단 정확도 직결)
-3. **P1-3** WI-9 fstream 연결 재조사 → 지역차단 확정 시 대안 소스 결정 or 로드맵에서 명시적 보류
-4. **P2-6** omnibus `regime_not_risk_off` A/B (표본 258건으로 가장 신뢰도 높은 dead-weight 후보)
-5. **P2-5** vix_rsi/multi_factor target-exit 도입 검토 (R4b·R3 이후 순번)
-6. **P4** 문서 동기화(CLAUDE.md parquet 경로, 백로그 완료 마킹 재확인)
+| 항목 | 상태 | 비고 |
+|---|---|---|
+| P0-1 PARAMS_VERSION 수정 | ✅ 적용·EC2 배포 | v29→v30, 테스트 갱신 |
+| P0-2 fresh-backtest parquet 자동 최신화 | ✅ 적용 | `master_*.parquet` 중 최신 mtime 자동 선택 |
+| P1-3 WI-9 근본 원인 확정 | ✅ 진단 완료 | fstream이 핸드셰이크는 성공·데이터 프레임 0건(aggTrade로 재현) — 구조적 네트워크 문제 확정, 지역차단이 유력 |
+| P1-3 WI-9 관측성 개선 | ✅ 적용·EC2 배포 | `liquidation_stream.py`에 30분 무음 idle 경고 로깅 추가 — "connected"만으론 안 잡히던 무음 상태를 로그로 노출 |
+| P1-3 WI-9 근본 수정(대안 데이터소스) | ⏸️ 미적용 | REST 서드파티(CoinGlass 등) 교체는 제공자·비용 결정 필요 — 사용자 확인 후 진행 |
+| P2-6 게이트 dead-weight 3건 | ❌ 철회 | 재조사 결과 이미 실거래 A/B로 기각됐거나(regime_trend/macd) 아키텍처상 단순 토글이 아님(omnibus) — 코드 변경 없음 |
+| P2-5 vix_rsi/multi_factor target-exit | ⏸️ 미적용(설계 보류) | 표본 부족 + 검증 없이 라이브 청산 로직 확장은 리스크 — 별도 세션 필요 |
+| P1-4 macro stale_hours 여유 | ⏸️ 관찰만 | 코드 변경 불필요, 계속 모니터링 |
+| P4-7 CLAUDE.md parquet 표 | ✅ 적용 | 최신 parquet 위치 각주 추가 |
+| P4-8 remaining-improvements 완료 마킹 정정 | ✅ 적용 | R4·WI-9 상태 갱신 |
+| P4-9 모니터링 루틴화 | ⏸️ 미적용 | 주기 실행은 스케줄 설정(비용·알림 수신 방식) 결정이 필요해 별도 확인 후 진행 권장 |
+
+**핵심 교훈**: 이번 세션에서 P2-6을 스스로 정정한 것 자체가 유의미한 결과다 — near-miss
+통계만으로 "적용"을 서두르면 이미 검증·기각된 아이디어를 되풀이하게 된다는 것을 실증했다.
+앞으로 gate_block_rates 결과를 개선 후보로 올릴 때는 반드시 관련 diagnosis 문서를 먼저
+확인할 것.

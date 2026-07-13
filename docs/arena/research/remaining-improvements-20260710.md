@@ -17,7 +17,7 @@
 | P-A fng 익절 라이브 검증 | `close_reason=target_exit` 표본 n≥5 | 수주 (FNG<30 발생 빈도 의존) | `/arena-status` MFE 포착률·v29 분리 |
 | P-B vix_rsi 재평가 | v26+ 진입 표본 n≥10 | ~2-4주 | `/arena-status` params_version 분리 |
 | P-C 주간 백테스트 첫 저장 | 다음 월요일 00:10 UTC | 2026-07-13 | `/arena-status` 섹션5 STALE 경고 소멸 |
-| P-D 청산 데이터 → 지표 연결 v2 | 30일 축적 (2026-08-09~) | 8월 초 | `SELECT count(*) FROM arena_liquidation_bars` |
+| P-D 청산 데이터 → 지표 연결 v2 | 🔴 2026-07-14 재평가: 축적이 아니라 **수집 자체가 0건**(EC2 fstream 구조적 네트워크 문제, [진단](priority-improvements-20260714.md) P1-3) — "기다리면 찬다"는 전제가 깨짐. 재개 조건: 네트워크 경로 확인 또는 서드파티 API 교체 | 보류(재조사 필요) | `SELECT count(*) FROM arena_liquidation_bars` |
 | WI-1/7(v28) 라이브 검증 | multi_factor·omnibus 신규 표본 | 수주 | params_version 분리 |
 | regime_trend/macd 첫 진입 | 강세 레짐 도래 (현재 bullish_regime 73회 차단) | 시장 의존 | 섹션7 차단 사유 변화 · 진단+계획: [regime-macd-diagnosis](regime-macd-diagnosis-20260711.md) (무거래=정상, 게이트 완화 금지, SJM이 구제 경로) |
 
@@ -36,9 +36,13 @@
 `indicators.realized_vol_sizing()` + `VOL_ESTIMATOR_ROBUST_ENABLED=False` 배선·배포 완료.
 A/B 백테스트 Δ+0.00 → max-bounds(0.25~0.7)가 차이를 흡수. 플래그 off 유지, 배선은 남김.
 
-### ✅ R4. fng_optimize 재실행 — 완료 (2026-07-11)
+### ✅ R4. fng_optimize 재실행 — 완료 (2026-07-11, 라벨 버그 2026-07-14 수정)
 P-A익절(atr2.0) 상태에서 ts×mh 재그리드(master_20260710):
-- **ts 72→60h, mh 48→36h 적용·배포** (arena-params-v30): 3단 ts60·mh36 종가자산 1.0269 vs 현행 1.0214
+- **ts 72→60h, mh 48→36h 적용·배포** (arena-params-v30): 3단 ts60·mh36 종가자산 1.0269 vs 현행 1.0214.
+  ⚠️ 파라미터 값 자체는 커밋 시점에 정상 반영됐으나 `PARAMS_VERSION` 상수 bump가 누락돼
+  2026-07-11~07-14 거래가 DB에 v29로 오기록되던 버그가 있었음 — 2026-07-14 수정(v25 때와
+  동일 클래스 재발, [진단](priority-improvements-20260714.md) P0-1). "완료" 마킹은 파라미터
+  값 기준으로는 정확했지만 배포 확인(버전 라벨)까지는 실제로 안 됐던 상태였다는 교훈.
 - **물타기 제거(0.15 단일) 1위(1.0339)** 발견 — P-A익절 활성화 후 추가 트랜치 효용 감소.
   근본 변경이라 별도 walk-forward 검증 후 결정 → 아래 R4b 참조.
 
