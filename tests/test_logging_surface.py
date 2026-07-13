@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 EXPECTED_LOGGER_CALL_FILES: set[str] = {
     "src/morning_brief/analysis/sentiment_join/pipeline.py",
+    "src/morning_brief/analysis/sentiment_join/risk_overlay.py",
     "src/morning_brief/data/finbert_sentiment.py",
     "src/morning_brief/signal_logger.py",
 }
@@ -17,6 +18,7 @@ EXPECTED_GET_LOGGER_FILES = {
     "src/morning_brief/analysis/sentiment_join/join.py",
     "src/morning_brief/analysis/sentiment_join/outlier_policy.py",
     "src/morning_brief/analysis/sentiment_join/pipeline.py",
+    "src/morning_brief/analysis/sentiment_join/risk_overlay.py",
     "src/morning_brief/analysis/sentiment_join/sources/binance.py",
     "src/morning_brief/analysis/sentiment_join/sources/binance_breadth.py",
     "src/morning_brief/analysis/sentiment_join/sources/defillama_stablecoins.py",
