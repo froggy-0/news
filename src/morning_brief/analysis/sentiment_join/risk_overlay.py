@@ -9,11 +9,14 @@ Layer 3 (조건부): SignalConfidence — 신호 신뢰도 (HIGH/MEDIUM/None)
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # 상수
@@ -102,6 +105,42 @@ def _read_precomputed_or_fallback(
     if len(clean) < min_periods:
         return None
     return float(clean.tail(window).quantile(quantile))
+
+
+def _compute_sjm_state(df: pd.DataFrame) -> str | None:
+    """SJM(통계적 점프모델) 2상태 레짐 분류 — 섀도우 전용 (알고 게이트 미적용).
+
+    JumpModel(n=2, penalty=15)로 bull/bear 구분. 평균 수익률 기준으로 상태 라벨 결정.
+    jumpmodels 미설치 또는 데이터 부족 시 None → 알고는 graceful 처리(veto 없음).
+    30일 관찰 후 rule-based 레짐 대비 비교로 승격 여부 결정.
+    """
+    try:
+        from jumpmodels.jump import JumpModel  # noqa: PLC0415
+        from sklearn.preprocessing import StandardScaler  # noqa: PLC0415
+    except ImportError:
+        return None
+
+    try:
+        feats = ["btc_log_return", "btc_realized_vol_20d_lag1"]
+        if any(f not in df.columns for f in feats):
+            return None
+        X = df[feats].copy().apply(pd.to_numeric, errors="coerce").dropna()
+        if len(X) < 60:
+            return None
+
+        X_scaled = StandardScaler().fit_transform(X)
+        jm = JumpModel(n_components=2, jump_penalty=15.0, random_state=42)
+        jm.fit(X_scaled)
+        states = jm.predict(X_scaled)
+
+        ret_vals = X["btc_log_return"].values
+        mean_ret_0 = ret_vals[states == 0].mean() if (states == 0).any() else 0.0
+        mean_ret_1 = ret_vals[states == 1].mean() if (states == 1).any() else 0.0
+        bull_state = 0 if mean_ret_0 >= mean_ret_1 else 1
+        return "sjm_bull" if int(states[-1]) == bull_state else "sjm_bear"
+    except Exception as exc:
+        logger.debug("SJM 계산 실패 (무시): %s", exc)
+        return None
 
 
 def compute_regime_state(df: pd.DataFrame) -> RegimeState:
@@ -200,6 +239,8 @@ def compute_regime_state(df: pd.DataFrame) -> RegimeState:
         "btc_drawdown_90d": drawdown_90d,
         "breadth_up_ratio": breadth_up_ratio,
         "stablecoin_supply_zscore": stablecoin_supply_z,
+        # SJM 섀도우: 통계적 점프모델 2상태 레짐 (알고 게이트 미적용, 30일 관찰용)
+        "sjm_state": _compute_sjm_state(df),
     }
 
     # --- 분류 로직 ---

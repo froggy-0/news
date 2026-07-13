@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from arena import backtest, realtime_risk
+from arena import backtest, parameters, realtime_risk
 
 
 def _dt(hour: int) -> datetime:
@@ -179,7 +179,10 @@ def _spot_settings(**kw) -> "backtest.BacktestSettings":
     )
 
 
-def test_fng_contrarian_scales_in_and_skips_price_stop() -> None:
+def test_fng_contrarian_scales_in_and_skips_price_stop(monkeypatch) -> None:
+    # 물타기·가격손절 제외 메커니즘 격리 검증 — P-A 이익포착은 별도 테스트(off로 격리).
+    monkeypatch.setattr(parameters, "FNG_TARGET_EXIT_ENABLED", False)
+
     # 가격 기준 물타기(트랜치 0%/-3%/-6%)·가격손절 제외 인프라를 결정적으로 검증.
     def fng_long(macro, indicators):
         return "long" if macro.get("fng", 100) < 30 else None
@@ -211,7 +214,9 @@ def test_fng_contrarian_scales_in_and_skips_price_stop() -> None:
     assert trade.open_price == pytest.approx(96.3571, abs=1e-3)
 
 
-def test_fng_contrarian_time_stop_closes_after_max_hold() -> None:
+def test_fng_contrarian_time_stop_closes_after_max_hold(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "FNG_TARGET_EXIT_ENABLED", False)  # 시간손절 격리 검증
+
     def always_fear(macro, indicators):
         return "long"  # 공포 지속 — 익절 신호 없음
 
@@ -224,6 +229,31 @@ def test_fng_contrarian_time_stop_closes_after_max_hold() -> None:
 
     # 72h(18봉) 경과 시 시간 손절 청산.
     assert any(t.exit_reason == "time_stop" for t in result.trades)
+
+
+def test_fng_contrarian_profit_target_exit(monkeypatch) -> None:
+    # P-A: 진입가+ATR×1.0 도달 시 target_exit 익절. 물타기 없이 단순 상승 시나리오.
+    monkeypatch.setattr(parameters, "FNG_TARGET_EXIT_ENABLED", True)
+    monkeypatch.setattr(parameters, "FNG_TARGET_MODE", "atr")
+    monkeypatch.setattr(parameters, "FNG_TARGET_ATR_MULT", 1.0)
+
+    def fng_long(macro, indicators):
+        return "long" if macro.get("fng", 100) < 30 else None
+
+    result = backtest.run_replay(
+        [
+            _frame(0, close=100.0, high=100.0, atr=1.0, macro={"fng": 20}),  # 진입 @100, 목표=101
+            _frame(1, close=100.5, high=101.5, atr=1.0, macro={"fng": 20}),  # high 101.5≥101 → 익절
+            _frame(2, close=100.0, high=100.0, atr=1.0, macro={"fng": 20}),
+        ],
+        strategy_fns={"fng_contrarian": fng_long},
+        settings=_spot_settings(),
+    )
+
+    assert len(result.trades) == 1
+    trade = result.trades[0]
+    assert trade.exit_reason == "target_exit"
+    assert trade.close_price == pytest.approx(101.0)  # 한계가(진입가×1.01) 체결
 
 
 def test_backtest_can_replay_live_execution_gate_blocks() -> None:

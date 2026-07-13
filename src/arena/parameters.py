@@ -13,7 +13,14 @@ from typing import Any
 STRATEGY_VERSION = "arena-spot-v4"
 # v25(2026-07-01): fng·vix_rsi breadth/stablecoin veto — 커밋 2475efb가 버전 스트링을
 #   v24로 남겨 라이브 DB가 v25 동작을 v24로 기록했음(재현성 버그). v26에서 정정.
-PARAMS_VERSION = "arena-params-v26"
+# v27(2026-07-09): 알고별 특화 개선 WI-1~10 배선(전부 플래그 off로 배포).
+# v28(2026-07-09): macro 백필 백테스트 검증 통과분 활성화 — WI-1(multi_factor 레짐필수,
+#   -2.63→+3.77) + WI-7(omnibus 목표가익절 atr1.0, -6.24→-4.57·승률+4%p). WI-2/4/5/6은
+#   백테스트가 개선 미지지(악화 또는 노이즈) → off 유지. 검증: scripts/analysis/wi_tuning.py.
+# v29(2026-07-10): P-A fng 이익포착(profit target) 활성화 — 라이브 MFE 진단(손실 6건 평균
+#   MFE +2.09%인데 실현 -1.41%, 포착률 -58%)이 "이익 증발" 정량화 → 익절 메커니즘 추가.
+#   백테스트 -3.02→-1.91(Δ+1.11)·승률 48→71%. WI-2(보유 연장)와 정반대 방향이 데이터로 옳음.
+PARAMS_VERSION = "arena-params-v29"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v2"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
@@ -111,6 +118,17 @@ VOL_WEIGHT_MIN = 0.25  # 최소 노출 (현물: 자본의 25%)
 #   단일 알고가 자기 자본 100%를 단일 4H 롱에 올인하는 것을 방지.
 VOL_WEIGHT_MAX = 0.7  # 최대 노출 (현물: 레버리지 없음, 자본의 70%)
 
+# ── R2: 견고한 변동성 추정기 (2026-07-10) ──────────────────────────────────
+# 문제: realized_vol_24h(표본 6개 표준편차)는 추정 분산이 커서 사이징이 최근 몇 봉의
+#   우연에 좌우됨(저변동 착시 → 과대 사이징 → 다음 봉 손실 확대). 근거: Moreira·Muir
+#   변동성 관리는 예측 품질에 의존(Cederburg 반증) → 추정기 개선이 관건.
+# 방식: EWMA(RiskMetrics σ²=λσ²+(1−λ)r², λ≈0.94)를 6봉 표본과 블렌드. 보수 원칙으로
+#   max(6봉, EWMA) 채택 — 저변동 착시로 과대 사이징하는 것만 막고(노출 축소 방향), 확대
+#   방향은 건드리지 않아 무회귀에 가깝다. 사이징에만 사용(realized_vol_24h는 레짐·진단 유지).
+VOL_ESTIMATOR_ROBUST_ENABLED = False  # ✅ 백테스트 통과 후 on
+VOL_EWMA_LAMBDA = 0.94  # RiskMetrics 표준. 1에 가까울수록 과거 가중↑(부드러움)
+VOL_EWMA_MIN_BARS = 20  # EWMA 시드에 필요한 최소 봉 수 (미달 시 6봉값 사용)
+
 # 거래당 자본위험 예산 (고정분율 위험 사이징).
 #   weight = clamp(RISK_PER_TRADE_PCT / stop_distance_pct, MIN, MAX).
 #   손절 도달 시 손실을 자본의 ~1.5%로 균질화 → 단일 올인 진입의 꼬리손실 제거.
@@ -172,20 +190,35 @@ FNG_CONTRARIAN_PRICE_TRANCHES: tuple[tuple[float, float], ...] = (
     (-0.03, 0.25),  # 진입가 -3% → 실시간 추가
     (-0.06, 0.30),  # 진입가 -6% → 실시간 추가
 )
-# 시간 손절: 18 x 4h봉 = 72h 내 회귀 없으면 청산. 평균회귀 시간 손절.
-#   v22(2026-06-26): 48→72h. 실데이터 백테스트(macro 백필, 6개월)에서 진단 결과
-#   조기 청산(FNG 중립 복귀 flat)이 회복 전 손실 확정의 주원인이었음 — flat 청산 36%
-#   승률/-4.14% vs 만기보유(time_stop) 86% 승률/+2.31%. 보유기간을 늘리니 같은 물타기
-#   트레이드가 회복(평균회귀는 회복 시간 필요, Kaminski·Lo). min_hold 24→48h와 함께
-#   fng 종가자산 0.981→1.002(유일 순플러스)·승률 50→57%·MaxDD -6.3→-4.9%. ts72~120/
-#   mh48~72 plateau 중앙값 채택(과적합 회피). 재현: scripts/analysis/fng_optimize.py.
-FNG_CONTRARIAN_TIME_STOP_HOURS = 72.0
+# 시간 손절: 15 x 4h봉 = 60h 내 회귀 없으면 청산. 평균회귀 시간 손절.
+#   v22(2026-06-26): 48→72h(평균회귀 회복 시간 확보).
+#   v30(2026-07-11): 72→60h. P-A익절(atr2.0) 활성화 후 이익 거래가 조기 종료되면서
+#   남은 건 손실 거래 — ts를 줄여 빠른 손절이 더 유리(fng_optimize 재그리드:
+#   3단 ts60·mh36 종가자산 1.0269 vs 3단 ts72·mh48 1.0214, Δ+0.55%p).
+FNG_CONTRARIAN_TIME_STOP_HOURS = 60.0
 # 가격(ATR·트레일) 손절을 적용하지 않는 알고 — 역발산 계열은 가격 손절이 독.
 PRICE_STOP_DISABLED_ALGOS: tuple[str, ...] = ("fng_contrarian",)
 # 시간 손절을 적용하는 알고 → 최대 보유시간(h). 위 가격 손절 제거를 보완.
 TIME_STOP_HOURS_BY_ALGO: dict[str, float] = {
     "fng_contrarian": FNG_CONTRARIAN_TIME_STOP_HOURS,
 }
+
+# ── P-A: fng_contrarian 이익 포착(profit target) — 청산이 이익을 흘리는 문제 대응 ──
+# 근거(2026-07-10): 라이브 청산 6건 평균 MFE +2.09%인데 실현 -1.41%, 손실 5건 중 4건이
+#   보유 중 한때 +1% 이상이었음(MFE 포착률 -58% = 이익 증발). WI-2(청산 히스테리시스=보유
+#   연장)는 백테스트 기각됐으나(더 오래 보유는 답 아님), MFE 데이터가 가리키는 방향은
+#   "이익이 있을 때 잡기"(profit capture). omnibus v28 target_exit과 동일 메커니즘 재사용
+#   (execution_rules.target_exit_triggered, live 1m틱·backtest 봉high 체결 패리티).
+#   ⚠️ 하방 스톱은 여전히 없음(Kaminski·Lo 가격손절 금지 유지) — 이익 방향 익절만 추가.
+#   ⚠️ 물타기 상호작용: 목표가는 평단(가중평균 진입가) 기준 → scale-in 시 재계산(omnibus는
+#   진입 시 고정, fng는 평단이 움직이므로 다름). 설계: docs/arena/research/improvement-plan-v2.
+# ✅ v29 활성화: 백테스트 atr1.0 -3.02→-1.91(Δ+1.11)·승률 48→71%·거래 54→94(회전↑).
+#   wi_tuning P-A 최초 gridsearch(stale macro)에서 atr1.0 채택했으나, walk-forward 6윈도
+#   검증(master_20260710, fresh macro)에서 atr2.0이 5/6 윈도 우위·fng 평균 +0.36 vs +0.03
+#   → atr2.0으로 재채택(arena-params-v30). 거래수 58→43 감소는 감수.
+FNG_TARGET_EXIT_ENABLED = True
+FNG_TARGET_MODE = "atr"  # "atr"(평단+ATR×mult) | "bb_mid"(BB 중앙선 복귀)
+FNG_TARGET_ATR_MULT = 2.0  # atr 모드 배수 (walk-forward 6윈도 검증→2.0 채택, arena-params-v30)
 
 # 시장 폭(breadth) 건전성: Binance top10 알트 중 7일 수익률 양(+) 비율.
 #   이 값 미만이면 BTC 단독/협소 랠리 → 복합 투표 알고 진입 보류.
@@ -219,6 +252,59 @@ OMNIBUS_REBOUND_MIN_VOTES = 3  # 4개 조건 중 최소 3개 충족 시 OVERSOLD
 OMNIBUS_TREND_SIZE_MULT = 1.0
 OMNIBUS_RANGE_SIZE_MULT = 0.40
 OMNIBUS_REBOUND_SIZE_MULT = 0.25
+
+# ── WI-1~10 알고별 특화 개선 플래그 (arena-params-v27, 2026-07-09) ───────────
+# 전부 기본 off/현행유지 — macro 백필 백테스트 통과 후 개별 on. 미충족 데이터는
+# None→graceful. 설계: docs/arena/research/next-steps-design-v1-20260709.md
+#
+# WI-1: multi_factor 레짐 필수화 — "조용한 하락장에서 방향성 팩터 없이 4표 충족→진입"
+#   구조 결함 제거. 레짐(f1)을 필수로, 나머지 4팩터 중 MIN_VOTES_EX_REGIME 득표 요구.
+#   ✅ v28 활성화: 백테스트 variant C(횡보허용) -2.63→+3.77(Δ+6.40), 거래 84→89(유지).
+MULTI_FACTOR_REGIME_REQUIRED = True
+MULTI_FACTOR_MIN_VOTES_EX_REGIME = 3
+# WI-1 중간안(C): 레짐 필수화 시 강세뿐 아니라 sideways(횡보)도 허용, bear류만 배제.
+MULTI_FACTOR_ALLOW_SIDEWAYS = True
+#
+# WI-2: fng_contrarian 청산 히스테리시스 — 진입(FNG<30)과 동일 임계로 청산(FNG≥30)하던
+#   반쪽 구조 분리. 반등 초입 조기 flat 청산이 물타기 평단 이점을 버리는 문제(라이브
+#   flat 청산 4건 평균 -0.52%). risk-off·breadth·stablecoin veto는 즉시 청산(양보 없음),
+#   time_stop(72h)이 보유 상한 보장. vix_rsi v26과 동일 메커니즘.
+FNG_EXIT_HYSTERESIS_ENABLED = False
+FNG_EXIT_NEUTRAL_MIN = 45.0  # 그리드 {40,45,50,55}에서 결정
+#
+# WI-4: kline volume 돌파 확인 — 이미 수신 중인 volume을 지표화(rel_volume)해 regime_trend
+#   Donchian 돌파의 진위 필터로 사용. 돌파봉 볼륨 ≥ 20봉 평균 ×MIN_REL. rel_volume None시 통과.
+VOLUME_CONFIRM_ENABLED = False
+VOLUME_CONFIRM_MIN_REL = 1.5
+VOLUME_SMA_PERIOD = 20
+#
+# WI-5: vix_rsi 구조 판정 — Step1: 일간 MA200 게이트 추가. Step2: 트리거를 "RSI<50 상태"에서
+#   "RSI 과매도선 상향 크로스 이벤트"로 재정의(반전 확인 매수).
+VIX_RSI_MA200_GATE_ENABLED = False
+VIX_RSI_TRIGGER_MODE = "state"  # "state"(현행) | "cross"
+VIX_RSI_CROSS_OVERSOLD = 35.0
+#
+# WI-6: macd_momentum 트리거 재정의 — "h>0 상태+증가"(늦은 진입, regime_trend와 중복)에서
+#   "h가 0선 상향 크로스한 봉"(모멘텀 전환 초기)으로. 보유는 exit_hold_override가 h>0 동안
+#   flat 청산 보류(v26 vix_rsi 히스테리시스와 동일 구조).
+MACD_MOMENTUM_TRIGGER_MODE = "state"  # "state"(현행) | "zero_cross"
+MACD_MOMENTUM_ZERO_CROSS_DROP_BB_GATE = False  # 크로스 모드에서 BB폭 게이트 제거 여부(그리드)
+MACD_MOMENTUM_EXIT_HYSTERESIS_ENABLED = False
+#
+# WI-7: omnibus RANGE/REBOUND 목표가 청산 — 평균회귀에 이론 정합적 익절(BB 중앙선) 부여.
+#   진입 시점 목표가 고정(signal_reason.omni_target_price). live는 1m 틱 감시, backtest는
+#   봉 high 도달 시 한계가 체결. UP_TREND은 목표가 미적용(트레일링이 담당). 익절이므로
+#   min_hold보다 우선(손절과 비대칭).
+# ✅ v28 활성화: 백테스트 atr1.0 -6.24→-4.57(Δ+1.67)·승률 57→61%·거래 98→106(회전↑).
+OMNIBUS_TARGET_EXIT_ENABLED = True
+OMNIBUS_REBOUND_TARGET_ATR_MULT = 1.0  # REBOUND: 진입가 + ATR×mult (그리드 {1.0,1.5,2.0}→1.0 채택)
+#
+# WI-10: regime_trend 테이커 확인을 일간 lag1 z에서 로컬 4h 값으로 — 하루 지연 제거.
+#   macro["taker_ratio_4h"](buySellRatio, 1.0=중립)가 있으면 우선 사용. 없으면 일간 z 폴백.
+#   ⚠️ live는 market_structure 모듈 캐시(직전 4h 사이클 features) 사용 — backtest는 미주입→
+#   기존 일간 z 폴백(검증된 경로). 4h 캐시는 daily lag1보다 훨씬 신선.
+TAKER_CONFIRM_4H_ENABLED = False
+TAKER_CONFIRM_RATIO_4H_MIN = 0.95
 
 RSI_PERIOD = 14
 RSI_NEUTRAL = 50.0
@@ -311,7 +397,7 @@ REALTIME_RISK_SUSTAINED_WINDOWS = 2
 
 MIN_HOLD_HOURS: dict[str, float] = {
     "regime_trend": 12.0,
-    "fng_contrarian": 48.0,  # v22: 24→48h. 조기 FNG-중립 flat 청산이 평균회귀 회복 전
+    "fng_contrarian": 36.0,  # v22: 24→48h. v30: 48→36h(P-A익절 상호작용, fng_optimize 재그리드)
     "vix_rsi": 12.0,
     "macd_momentum": 8.0,
     "multi_factor": 12.0,

@@ -35,7 +35,9 @@ from .algorithms import (
     ALGORITHMS,
     exit_hold_override,
     explain_signal,
+    fng_target_pct,
     omnibus_position_multiplier,
+    omnibus_target_price,
     primary_flat_skip_reason,
 )
 
@@ -48,6 +50,7 @@ class OHLCV(NamedTuple):
     closes: list[float]
     last_close_time: datetime | None
     raw_klines: list[list]
+    volumes: list[float] = []  # WI-4: 돌파 확인용 봉 거래량(base asset volume, k[5])
 
 
 class MacroData(NamedTuple):
@@ -80,6 +83,7 @@ async def _fetch_ohlcv(
             datetime.fromtimestamp(int(klines[-1][6]) / 1000, tz=timezone.utc) if klines else None
         ),
         raw_klines=klines,
+        volumes=[float(k[5]) for k in klines],
     )
 
 
@@ -142,6 +146,8 @@ async def _fetch_macro() -> MacroData:
             # 시장 폭 + 온체인 유동성 (복합 투표 알고 건전성 필터)
             "breadth_up_ratio": raw.get("breadth_up_ratio"),
             "stablecoin_supply_zscore": raw.get("stablecoin_supply_zscore"),
+            # SJM 섀도우 (알고 게이트 미적용 — 30일 관찰 후 승격 여부 판단)
+            "sjm_state": raw.get("sjm_state"),
             # 변동성 환경 라벨 (사이징/신뢰도 컨텍스트)
             "vol_level": overlay.get("volLevel"),
             "vol_trend": overlay.get("volTrend"),
@@ -475,6 +481,10 @@ async def _run_shadow_vnext(
         )
         # 같은 프로세스의 realtime 수집기가 futures_stress 계산에 쓰도록 최신 features 공유
         market_structure.set_latest_market_features(snapshot.features)
+        # SJM 섀도우 상태를 feature snapshot에 포함 (로깅 전용, 알고 미연결)
+        sjm = macro.get("sjm_state")
+        if sjm is not None:
+            snapshot.features["sjm_state"] = sjm
         results.extend(
             await data_lake.record_market_structure_snapshot(
                 run_id=run_id,
@@ -642,6 +652,7 @@ async def _run_cycle() -> None:
         ohlcv.highs,
         ohlcv.lows,
         ohlcv.closes,
+        volumes=ohlcv.volumes,
         interval=profile.interval,
         indicator_profile_id=indicator_profile_id,
     )
@@ -651,6 +662,13 @@ async def _run_cycle() -> None:
     # 로컬 4h 레짐을 주입해 알고리즘이 일관된 레짐 어휘(bull_trend 등)를 받도록 한다.
     # (매크로 오버레이의 BullQuiet 라벨과 algorithms.py 상수 불일치 버그 수정)
     macro["arena_regime_state"] = regime.classify_regime(ind, {}, macro).regime_state
+    # WI-10: 로컬 4h taker 매수/매도 비율 주입 — regime_trend 돌파의 주문흐름 확인을
+    # 일간 lag1 z에서 4h 값으로 교체(하루 지연 제거). market_structure 모듈 캐시(직전 4h
+    # 사이클 features — futures_stress 배선과 동일 패턴)에서 읽는다. 첫 사이클/미수집 시
+    # 없음 → 알고가 일간 z로 graceful 폴백. (_run_shadow_vnext가 매 사이클 캐시 갱신)
+    _taker_4h = market_structure.get_latest_market_features().get("taker_buy_sell_ratio")
+    if _taker_4h is not None:
+        macro["taker_ratio_4h"] = _taker_4h
     price = ohlcv.closes[-1]
     capture_results.extend(
         await data_lake.record_ohlcv_bars(
@@ -893,7 +911,7 @@ async def _run_cycle() -> None:
                 position_weight = parameters.FNG_CONTRARIAN_PRICE_TRANCHES[0][1]
             else:
                 position_weight = execution_rules.combined_position_weight(
-                    ind.get("realized_vol_24h", 0.0),
+                    ind.get("realized_vol_sizing", ind.get("realized_vol_24h", 0.0)),
                     price,
                     sl_price,
                     target_vol=parameters.VOL_TARGET_PER_BAR,
@@ -909,6 +927,15 @@ async def _run_cycle() -> None:
                 # 물타기 기준가 = 최초 진입가, 1단계 체결 표기.
                 open_signal_reason.update(_fng_open_reason())
                 open_signal_reason["fng_ref_price"] = price
+                # P-A: 이익 포착 목표 상승률(비율). 물타기로 평단 하락 시 청산가 자동 하향.
+                _fng_tp = fng_target_pct(ind, price)
+                if _fng_tp is not None:
+                    open_signal_reason["fng_target_pct"] = _fng_tp
+            # WI-7: omnibus 평균회귀(RANGE/REBOUND) 익절 목표가를 진입 시점에 고정.
+            if algo_id == "omnibus":
+                _omni_target = omnibus_target_price(macro, ind, price)
+                if _omni_target is not None:
+                    open_signal_reason["omni_target_price"] = _omni_target
             new_pos = await positions.open_position(
                 algo_id,
                 signal,
@@ -1128,6 +1155,7 @@ async def _run_frequency_shadow_cycle(profile_id: str) -> None:
         ohlcv.highs,
         ohlcv.lows,
         ohlcv.closes,
+        volumes=ohlcv.volumes,
         interval=profile.interval,
         indicator_profile_id=indicator_profile_id,
     )

@@ -114,6 +114,12 @@ SLACK_CHANNEL: str = os.environ.get("SLACK_CHANNEL", "").strip()
 
 BINANCE_WS_URL = "wss://stream.binance.com:9443/ws/btcusdt@kline_1m"
 BINANCE_COMBINED_WS_URL = "wss://stream.binance.com:9443/stream"
+# WI-9: 강제청산(forceOrder)은 선물 스트림 전용(현물 kline과 별도 커넥션·태스크).
+#   수집 전용 — 트레이딩 경로와 완전 분리(수집 실패 무영향).
+BINANCE_FUTURES_LIQUIDATION_WS_URL = "wss://fstream.binance.com/ws/btcusdt@forceOrder"
+ARENA_LIQUIDATION_STREAM_ENABLED: bool = (
+    os.environ.get("ARENA_LIQUIDATION_STREAM_ENABLED", "false").strip().lower() == "true"
+)
 BINANCE_REST_URL = "https://api.binance.com/api/v3/klines"
 BINANCE_BOOK_TICKER_URL = "https://api.binance.com/api/v3/ticker/bookTicker"
 BINANCE_DEPTH_URL = "https://api.binance.com/api/v3/depth"

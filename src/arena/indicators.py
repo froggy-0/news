@@ -114,6 +114,34 @@ def ema_value(closes: list[float], period: int) -> float:
     return values[-1] if values else 0.0
 
 
+def bb_mid(
+    closes: list[float],
+    period: int = parameters.BOLLINGER_PERIOD,
+) -> float:
+    """볼린저 밴드 중앙선(SMA). 평균회귀 목표가(WI-7 omnibus)용. 부족 시 0.0."""
+    if len(closes) < period:
+        return 0.0
+    return sum(closes[-period:]) / period
+
+
+def relative_volume(
+    volumes: list[float],
+    period: int = parameters.VOLUME_SMA_PERIOD,
+) -> float | None:
+    """직전(마지막) 봉 볼륨 / 직전 period봉 SMA. 돌파 진위 확인(WI-4)용.
+
+    >1.0 = 평균 이상 거래량 동반(진성 돌파 방증), <1.0 = 저조(가짜 돌파 의심).
+    데이터 부족·SMA 0 시 None → 알고리즘이 graceful 통과(차단하지 않음).
+    """
+    if len(volumes) < period + 1:
+        return None
+    window = volumes[-period - 1 : -1]  # 현재 봉 제외한 직전 period봉
+    sma = sum(window) / period
+    if sma <= 0:
+        return None
+    return volumes[-1] / sma
+
+
 def supertrend(
     highs: list[float],
     lows: list[float],
@@ -299,6 +327,35 @@ def realized_vol(closes: list[float], bars: int) -> float:
     return math.sqrt(variance)
 
 
+def realized_vol_ewma(
+    closes: list[float],
+    lam: float = parameters.VOL_EWMA_LAMBDA,
+    min_bars: int = parameters.VOL_EWMA_MIN_BARS,
+) -> float:
+    """EWMA 봉 변동성 (RiskMetrics σ²_t = λσ²_{t-1} + (1−λ)r²_t). 지수가중이라 6봉 표본
+    표준편차보다 추정 노이즈가 작다. 데이터 부족(<min_bars) 시 0.0(호출측이 6봉으로 폴백)."""
+    rets: list[float] = []
+    for prev, cur in zip(closes, closes[1:]):
+        if prev > 0 and cur > 0:
+            rets.append(math.log(cur / prev))
+    if len(rets) < min_bars:
+        return 0.0
+    var = sum(r * r for r in rets[:min_bars]) / min_bars  # 초기 window로 시드
+    for r in rets[min_bars:]:
+        var = lam * var + (1.0 - lam) * r * r
+    return math.sqrt(var) if var > 0 else 0.0
+
+
+def realized_vol_sizing(closes: list[float], bars: int) -> float:
+    """사이징용 변동성 — 플래그 on 시 max(6봉, EWMA)(보수: 저변동 착시로 과대사이징 방지),
+    off 시 기존 6봉값. combined_position_weight 입력 전용."""
+    rv6 = realized_vol(closes, bars)
+    if not parameters.VOL_ESTIMATOR_ROBUST_ENABLED:
+        return rv6
+    ewma = realized_vol_ewma(closes)
+    return max(rv6, ewma) if ewma > 0 else rv6
+
+
 def high_low_range_atr_ratio(
     highs: list[float],
     lows: list[float],
@@ -343,6 +400,7 @@ def compute(
     lows: list[float],
     closes: list[float],
     *,
+    volumes: list[float] | None = None,
     interval: str = parameters.BINANCE_KLINE_INTERVAL,
     indicator_profile_id: str = frequency.DEFAULT_INDICATOR_PROFILE_ID,
 ) -> dict[str, float]:
@@ -379,13 +437,21 @@ def compute(
         period=parameters.DONCHIAN_PERIOD,
     )
     adx_val, plus_di, minus_di = adx(highs, lows, closes, period=parameters.ADX_PERIOD)
-    return {
+    result = {
         "close": close,
         "rsi": rsi(
             closes,
             period=settings.rsi_period,
             recent_multiple=settings.rsi_recent_multiple,
         ),
+        # WI-5: 직전 봉 RSI — vix_rsi 크로스(과매도선 상향 돌파) 이벤트 판정용.
+        "rsi_prev": rsi(
+            closes[:-1],
+            period=settings.rsi_period,
+            recent_multiple=settings.rsi_recent_multiple,
+        )
+        if len(closes) > 1
+        else parameters.RSI_NEUTRAL,
         "macd_hist": hist,
         "macd_hist_prev": hist_prev,
         "bb_pos": bb_position(
@@ -398,6 +464,8 @@ def compute(
             period=settings.bollinger_period,
             stddev=settings.bollinger_stddev,
         ),
+        # WI-7: BB 중앙선(SMA) — omnibus RANGE 평균회귀 목표가.
+        "bb_mid": bb_mid(closes, period=settings.bollinger_period),
         "atr": atr_value,
         "atr_pct": atr_value / close if close > 0 else 0.0,
         "ema_fast": ema_fast,
@@ -419,6 +487,8 @@ def compute(
         "return_24h": return_over_bars(closes, settings.return_24h_bars),
         "return_72h": return_over_bars(closes, settings.return_72h_bars),
         "realized_vol_24h": realized_vol(closes, settings.realized_vol_24h_bars),
+        # R2: 사이징 전용 변동성(플래그 on 시 max(6봉,EWMA)). realized_vol_24h는 레짐·진단 유지.
+        "realized_vol_sizing": realized_vol_sizing(closes, settings.realized_vol_24h_bars),
         "range_24h_atr": high_low_range_atr_ratio(
             highs,
             lows,
@@ -426,3 +496,6 @@ def compute(
             settings.return_24h_bars,
         ),
     }
+    # WI-4: 상대 볼륨(돌파 확인). volumes 미전달 시 None → 알고리즘 graceful 통과.
+    result["rel_volume"] = relative_volume(volumes) if volumes else None
+    return result

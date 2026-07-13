@@ -57,7 +57,7 @@ def fng_metrics(trades):
 
 async def main():
     macro_rows = build_macro_rows(
-        Path("/Users/giwon/code/news/data/sentiment_join/sentiment_join_master_20260502.parquet")
+        Path("/Users/giwon/code/news/data/sentiment_join/master_20260710.parquet")
     )
     await positions.init()
     db = positions.db()

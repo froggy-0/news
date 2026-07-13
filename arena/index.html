@@ -82,7 +82,7 @@
 
     /* ── Portfolio bar ────────────────────────────────────── */
     .port-bar{
-      display:grid;grid-template-columns:1fr repeat(2,auto);
+      display:grid;grid-template-columns:1fr repeat(3,auto);
       align-items:center;gap:24px;
       padding:12px 18px;
       background:var(--panel);border:1px solid var(--border);
@@ -107,9 +107,10 @@
     .ac{
       background:var(--panel);border:1px solid var(--border);
       border-top:2px solid var(--ac);padding:12px 14px;
-      transition:background 150ms;cursor:default;
+      transition:background 150ms;cursor:pointer;
     }
     .ac:hover{background:var(--panel-h)}
+    .ac:focus-visible{outline:1px solid var(--gold);outline-offset:1px}
     .ac-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;gap:6px}
     .ac-name{
       font-family:'Barlow Condensed',sans-serif;
@@ -134,34 +135,34 @@
     }
     .ac-metric-val{color:var(--muted2);text-align:right}
     .ac-hint{font-size:8px;color:var(--muted);margin-top:3px;line-height:1.4;opacity:.8}
+    .ac-rank{
+      font-family:'Barlow Condensed',sans-serif;
+      font-size:11px;font-weight:800;color:var(--muted);
+      letter-spacing:.5px;flex-shrink:0;
+    }
+    .ac.rank-1{border-color:var(--gold);border-top-color:var(--ac)}
+    .ac.rank-1 .ac-rank{color:var(--gold)}
+    .watch-badge{
+      font-size:8px;font-weight:700;letter-spacing:1px;
+      padding:2px 7px;border:1px solid var(--border);color:var(--muted);
+      white-space:nowrap;flex-shrink:0;
+    }
+    .spark{width:100%;height:24px;display:block;margin:0 0 7px}
 
-    /* ── Decision diagnostics ─────────────────────────────── */
-    .diag-panel{
-      background:var(--panel);border:1px solid var(--border);
-      margin-bottom:12px;
-    }
-    .diag-head{
+    /* ── Equity panel ─────────────────────────────────────── */
+    .eq-panel{background:var(--panel);border:1px solid var(--border);margin-bottom:12px}
+    .eq-head{
       display:flex;justify-content:space-between;align-items:center;
-      padding:12px 18px;border-bottom:1px solid var(--border);gap:12px;
+      padding:10px 18px;border-bottom:1px solid var(--border);gap:12px;
     }
-    .diag-note{font-size:10px;color:var(--muted);text-align:right}
-    .diag-grid{
-      display:grid;grid-template-columns:repeat(5,1fr);
-      gap:0;border-top:0;
-    }
-    .diag-item{
-      min-width:0;padding:12px 14px;border-right:1px solid var(--border);
-      border-top:2px solid var(--dc);
-    }
-    .diag-item:last-child{border-right:none}
-    .diag-name{
-      font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;
-      letter-spacing:1.4px;color:var(--dc);text-transform:uppercase;margin-bottom:7px;
-    }
-    .diag-action{font-size:11px;font-weight:700;margin-bottom:5px}
-    .diag-meta{font-size:9px;color:var(--muted);line-height:1.6;word-break:break-word}
-    .diag-veto{font-size:9px;color:var(--muted2);line-height:1.5;margin-top:5px;word-break:break-word}
-    .diag-empty{padding:18px;color:var(--muted);font-size:11px}
+    .eq-stats{font-size:10px;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+    .eq-container{height:170px;position:relative}
+    #eqChartEl{position:absolute;inset:0}
+    .eq-legend{display:flex;gap:16px;padding:6px 18px 10px;font-size:9px;color:var(--muted)}
+    .eq-legend .swatch{display:inline-block;width:14px;height:2px;vertical-align:middle;margin-right:5px}
+
+    .live-badge.stale{color:#F0B90B}
+    .live-badge.stale .live-dot{background:#F0B90B;box-shadow:none;animation:none}
 
     /* ── Chart panel ──────────────────────────────────────── */
     .chart-panel{
@@ -254,6 +255,7 @@
       border-bottom:1px solid rgba(255,255,255,.03);
       vertical-align:middle;font-size:12px;
       font-variant-numeric:tabular-nums;
+      white-space:nowrap;
     }
     .tbl td:first-child{padding-left:18px}
     .tbl tr:last-child td{border-bottom:none}
@@ -281,6 +283,25 @@
       font-size:8px;color:var(--red);background:var(--red-a);
       padding:1px 4px;margin-left:4px;
     }
+    .reason-chip{
+      font-size:8px;font-weight:600;letter-spacing:.4px;
+      padding:2px 6px;border:1px solid var(--border);
+      color:var(--muted2);white-space:nowrap;
+    }
+    .reason-chip.r-target{color:var(--green);border-color:rgba(14,203,129,.35);background:var(--green-a)}
+    .reason-chip.r-trail{color:#22D3EE;border-color:rgba(34,211,238,.3);background:rgba(34,211,238,.06)}
+    .reason-chip.r-stop{color:var(--red);border-color:rgba(246,70,93,.35);background:var(--red-a)}
+    .reason-chip.r-time{color:#F0B90B;border-color:rgba(240,185,11,.3);background:rgba(240,185,11,.06)}
+
+    /* ── Period toggle (trade log) ────────────────────────── */
+    .period-toggle{display:flex;gap:2px}
+    .period-btn{
+      font-family:inherit;font-size:9px;font-weight:600;letter-spacing:.8px;
+      padding:3px 10px;background:none;border:1px solid var(--border);
+      color:var(--muted);cursor:pointer;
+    }
+    .period-btn:hover{color:var(--muted2);border-color:var(--border-l)}
+    .period-btn.active{color:var(--gold);border-color:var(--gold);background:var(--gold-a)}
 
     /* ── Footer ───────────────────────────────────────────── */
     .ft{
@@ -301,20 +322,50 @@
 
     /* ── Responsive ───────────────────────────────────────── */
     @media(max-width:1080px){.algo-grid{grid-template-columns:repeat(3,1fr)}}
-    @media(max-width:1080px){.diag-grid{grid-template-columns:repeat(3,1fr)}.diag-item{border-bottom:1px solid var(--border)}}
     @media(max-width:640px){
       .algo-grid{grid-template-columns:repeat(2,1fr)}
-      .diag-grid{grid-template-columns:1fr}
-      .diag-item{border-right:none}
       .chart-container{height:280px}
-      .port-bar{grid-template-columns:1fr 1fr;gap:12px}
-      .port-label{grid-column:1/-1;margin-bottom:4px}
+      .eq-container{height:130px}
+      .eq-stats{display:none}
+      /* 포트 스탯 3개를 한 행에 — "진입 중" 단독 행의 어색한 여백 제거 */
+      .port-bar{grid-template-columns:repeat(3,1fr);gap:10px;padding:12px 14px}
+      .port-label{grid-column:1/-1;margin-bottom:2px;font-size:10px;letter-spacing:1px}
       .port-stat{text-align:left}
+      .port-stat-val{font-size:15px}
+      .port-stat-sub{font-size:9px}
+      /* 거래 로그: 가격·비중은 모바일에서 숨김 — 시각·알고·수익률·사유·보유 5컬럼.
+         수익률(핵심)이 가로 스크롤 없이 첫 화면에 보이는 것이 우선 */
+      .tbl{min-width:0}
+      .tbl th:nth-child(3),.tbl td:nth-child(3),
+      .tbl th:nth-child(4),.tbl td:nth-child(4),
+      .tbl th:nth-child(6),.tbl td:nth-child(6){display:none}
+      .tbl th{padding:9px 8px 9px 0}
+      .tbl td{padding:8px 8px 8px 0;font-size:11px}
+      .tbl td:first-child{font-size:10px}
+      .tbl .algo-chip{font-size:8px;padding:2px 4px}
+      .tbl th:first-child,.tbl td:first-child{padding-left:12px}
+      .log-head{flex-wrap:wrap;gap:8px;padding:10px 14px}
+      /* 카드: 이름 래핑 최소화 + 밀도 조정 */
+      .ac{padding:10px 11px}
+      .ac-name{font-size:10px;letter-spacing:1.1px}
+      .ac-equity{font-size:14px}
+      .eq-legend{flex-wrap:wrap;gap:10px}
+      .chart-legend{gap:12px;font-size:9px;padding:8px 14px 10px}
+      .ft{line-height:1.9;padding:14px 16px}
     }
     @media(max-width:480px){
       .wrap{padding:10px 12px 24px}
-      .hd{padding:0 12px}
+      .hd{padding:0 12px;gap:8px}
       .hd-sub,.hd-sep{display:none}
+      /* 시계는 푸터 업데이트 시각과 중복 — 가격·LIVE에 공간 양보 */
+      .kst-clock{display:none}
+      .hd-brand{gap:8px}
+      .hd-logo{height:24px;width:24px}
+      .hd-title{font-size:15px;letter-spacing:2px}
+      .btc-price{font-size:14px}
+      .btc-chg{font-size:10px}
+      .hd-right{gap:0}
+      .pos-card{min-width:100%}
     }
     @media(prefers-reduced-motion:reduce){
       *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
@@ -336,9 +387,9 @@
   </div>
   <div class="hd-right">
     <span class="kst-clock" id="kstClock" aria-live="polite"></span>
-    <div class="live-badge" aria-label="실시간 연결">
+    <div class="live-badge" id="liveBadge" aria-label="실시간 연결">
       <span class="live-dot" id="liveDot" aria-hidden="true"></span>
-      LIVE
+      <span id="liveTxt">LIVE</span>
     </div>
   </div>
 </header>
@@ -346,11 +397,16 @@
 <main class="wrap">
 
   <div class="port-bar" aria-label="포트폴리오 요약">
-    <div class="port-label">현물 알고리즘당 $1,000 · 숏 진입 없음</div>
+    <div class="port-label" id="portLabel">현물 알고리즘당 $1,000 · LONG/FLAT · 왕복 ~13bps 반영</div>
     <div class="port-stat">
       <div class="port-stat-lbl">총 자산</div>
       <div class="port-stat-val" id="portTotal">—</div>
       <div class="port-stat-sub" id="portTotalPct">—</div>
+    </div>
+    <div class="port-stat">
+      <div class="port-stat-lbl">vs BTC 보유</div>
+      <div class="port-stat-val" id="portVsBtc" style="color:var(--muted2)">—</div>
+      <div class="port-stat-sub" id="portVsBtcSub">동일기간 대비</div>
     </div>
     <div class="port-stat">
       <div class="port-stat-lbl">진입 중</div>
@@ -359,23 +415,27 @@
     </div>
   </div>
 
-  <div class="algo-grid" id="algoGrid" aria-label="알고리즘 성과">
+  <section class="eq-panel" aria-label="포트폴리오 자산 곡선">
+    <div class="eq-head">
+      <span class="panel-title">EQUITY CURVE</span>
+      <span class="eq-stats" id="eqStats">—</span>
+    </div>
+    <div class="eq-container">
+      <div id="eqChartEl" role="img" aria-label="전체 알고리즘 합산 자산 곡선 — BTC 보유 벤치마크 비교"></div>
+    </div>
+    <div class="eq-legend" aria-hidden="true">
+      <span><span class="swatch" style="background:var(--gold)"></span>아레나 (6알고 합산, 실현 기준)</span>
+      <span><span class="swatch" style="background:var(--muted);opacity:.7"></span>BTC 보유 (동일 자본)</span>
+    </div>
+  </section>
+
+  <div class="algo-grid" id="algoGrid" aria-label="알고리즘 성과 리더보드">
     <div class="ac" style="--ac:#2B3139"><div class="ac-head"><div class="sk" style="height:11px;width:70%;margin-bottom:0"></div></div><div class="sk" style="height:15px;width:50%;margin-bottom:6px"></div><div class="sk" style="height:11px;width:35%;margin-bottom:10px"></div><div class="sk" style="height:9px;width:80%;margin-bottom:4px"></div><div class="sk" style="height:9px;width:60%"></div></div>
     <div class="ac" style="--ac:#2B3139"><div class="ac-head"><div class="sk" style="height:11px;width:70%;margin-bottom:0"></div></div><div class="sk" style="height:15px;width:50%;margin-bottom:6px"></div><div class="sk" style="height:11px;width:35%;margin-bottom:10px"></div><div class="sk" style="height:9px;width:80%;margin-bottom:4px"></div><div class="sk" style="height:9px;width:60%"></div></div>
     <div class="ac" style="--ac:#2B3139"><div class="ac-head"><div class="sk" style="height:11px;width:70%;margin-bottom:0"></div></div><div class="sk" style="height:15px;width:50%;margin-bottom:6px"></div><div class="sk" style="height:11px;width:35%;margin-bottom:10px"></div><div class="sk" style="height:9px;width:80%;margin-bottom:4px"></div><div class="sk" style="height:9px;width:60%"></div></div>
     <div class="ac" style="--ac:#2B3139"><div class="ac-head"><div class="sk" style="height:11px;width:70%;margin-bottom:0"></div></div><div class="sk" style="height:15px;width:50%;margin-bottom:6px"></div><div class="sk" style="height:11px;width:35%;margin-bottom:10px"></div><div class="sk" style="height:9px;width:80%;margin-bottom:4px"></div><div class="sk" style="height:9px;width:60%"></div></div>
     <div class="ac" style="--ac:#2B3139"><div class="ac-head"><div class="sk" style="height:11px;width:70%;margin-bottom:0"></div></div><div class="sk" style="height:15px;width:50%;margin-bottom:6px"></div><div class="sk" style="height:11px;width:35%;margin-bottom:10px"></div><div class="sk" style="height:9px;width:80%;margin-bottom:4px"></div><div class="sk" style="height:9px;width:60%"></div></div>
   </div>
-
-  <section class="diag-panel" aria-label="최근 알고리즘 의사결정 진단">
-    <div class="diag-head">
-      <span class="panel-title">LATEST DECISION DIAGNOSTICS</span>
-      <span class="diag-note" id="diagUpdated">최근 4H 판단의 raw signal, 실행 정책, veto 사유</span>
-    </div>
-    <div class="diag-grid" id="decisionDiag">
-      <div class="diag-empty">decision 진단 불러오는 중…</div>
-    </div>
-  </section>
 
   <div class="chart-panel">
     <div class="chart-head">
@@ -400,6 +460,11 @@
   <div class="log-panel">
     <div class="log-head">
       <span class="panel-title">TRADE LOG</span>
+      <div class="period-toggle" id="periodToggle" role="group" aria-label="기간 필터">
+        <button class="period-btn active" data-period="all">ALL</button>
+        <button class="period-btn" data-period="30">30D</button>
+        <button class="period-btn" data-period="7">7D</button>
+      </div>
     </div>
     <div class="tlog-scroll" role="region" aria-label="거래 기록">
       <table class="tbl" role="table" aria-label="거래 목록">
@@ -410,11 +475,13 @@
             <th scope="col">진입가</th>
             <th scope="col">청산가</th>
             <th scope="col">수익률</th>
+            <th scope="col">비중</th>
+            <th scope="col">청산사유</th>
             <th scope="col">보유</th>
           </tr>
         </thead>
         <tbody id="tradeLogBody">
-          <tr><td colspan="6" style="color:var(--muted);font-size:11px;padding:20px 18px">거래 기록 불러오는 중…</td></tr>
+          <tr><td colspan="8" style="color:var(--muted);font-size:11px;padding:20px 18px">거래 기록 불러오는 중…</td></tr>
         </tbody>
       </table>
     </div>
@@ -425,6 +492,7 @@
 <footer class="ft" role="contentinfo">
   현물 long/flat 모의투자 전용 — 선물 주문 없음 ·
   <span id="stratVer">arena-spot-v1</span> ·
+  <span id="freshness"></span> ·
   <span id="lastUpdate"></span>
 </footer>
 
@@ -449,6 +517,8 @@ const STARTING_CAPITAL = 1000;
 // 현물 왕복 거래비용 = 2×(fee 5 + slip 1) + spread 1 = 13bps (arena-cost-v2).
 // 미실현손익은 청산 시 이 비용이 차감되므로 표시에 미리 반영(낙관 편향 제거).
 const ROUND_TRIP_COST_PCT = 0.0013;
+// 아레나 실가동 시작 — 에쿼티 커브·벤치마크·D+N의 공통 기준점.
+const ARENA_START_MS = Date.parse('2026-06-20T00:00:00Z');
 
 const TAB_LABELS = {
   all: '전체',
@@ -477,6 +547,9 @@ let lwChart = null;
 let candleSeries = null;
 let priceLinesOpen = [];
 let activeTab = 'all';
+let eqChart = null;
+let eqSeries = null;
+let bhSeries = null;
 
 const TAB_DEFS = [
   { id: 'all', label: '전체', color: '#F0B90B' },
@@ -529,6 +602,142 @@ function esc(v) {
     .replaceAll("'", '&#039;');
 }
 
+/* ── Equity curves (트랙레코드 기본기) ──────────────────────── */
+// 청산 거래 누적으로 알고별·전체 자산 곡선을 프론트에서 파생 (추가 쿼리 없음).
+function buildCurves(ps) {
+  const closed = ps
+    .filter(p => p.status === 'closed' && p.ret_pct != null && p.close_time)
+    .sort((a, b) => new Date(a.close_time) - new Date(b.close_time));
+  const eq = {};
+  const byAlgo = {};
+  for (const a of ALGO_IDS) { eq[a] = STARTING_CAPITAL; byAlgo[a] = [STARTING_CAPITAL]; }
+  const port = [{ time: Math.floor(ARENA_START_MS / 1000), value: ALGO_IDS.length * STARTING_CAPITAL }];
+  for (const p of closed) {
+    if (!(p.algo_id in eq)) continue;
+    const w = p.position_weight != null ? p.position_weight : 1;
+    eq[p.algo_id] *= (1 + w * (p.ret_pct || 0));
+    byAlgo[p.algo_id].push(eq[p.algo_id]);
+    port.push({
+      time: Math.floor(new Date(p.close_time).getTime() / 1000),
+      value: ALGO_IDS.reduce((s, a) => s + eq[a], 0),
+    });
+  }
+  // lightweight-charts는 시간 오름차순·중복 금지 — 같은 시각은 마지막 값만 유지
+  const dedup = [];
+  for (const pt of port) {
+    if (dedup.length && dedup[dedup.length - 1].time >= pt.time) dedup[dedup.length - 1] = pt;
+    else dedup.push(pt);
+  }
+  return { port: dedup, byAlgo };
+}
+
+function maxDrawdownPct(vals) {
+  let peak = -Infinity, mdd = 0;
+  for (const v of vals) {
+    peak = Math.max(peak, v);
+    mdd = Math.min(mdd, v / peak - 1);
+  }
+  return mdd * 100;
+}
+
+function sparkSVG(vals) {
+  if (vals.length < 2) {
+    return `<svg class="spark" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">
+      <line x1="0" y1="12" x2="100" y2="12" stroke="var(--border-l)" stroke-width="1.5" stroke-dasharray="2 4"/></svg>`;
+  }
+  const min = Math.min(...vals), max = Math.max(...vals), span = (max - min) || 1;
+  const pts = vals.map((v, i) =>
+    `${(i / (vals.length - 1) * 100).toFixed(1)},${(21 - (v - min) / span * 18).toFixed(1)}`
+  ).join(' ');
+  const c = vals[vals.length - 1] >= vals[0] ? 'var(--green)' : 'var(--red)';
+  return `<svg class="spark" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">
+    <polyline points="${pts}" fill="none" stroke="${c}" stroke-width="1.5"/></svg>`;
+}
+
+function initEqChart() {
+  const container = document.getElementById('eqChartEl');
+  if (!container || typeof LightweightCharts === 'undefined') return;
+  if (eqChart) { eqChart.remove(); eqChart = null; eqSeries = null; bhSeries = null; }
+  eqChart = LightweightCharts.createChart(container, {
+    width: container.clientWidth,
+    height: container.clientHeight || 170,
+    layout: {
+      background: { type: 'solid', color: '#0B0E11' },
+      textColor: '#848E9C',
+      fontFamily: "'IBM Plex Mono', monospace",
+      fontSize: 9,
+    },
+    grid: { vertLines: { visible: false }, horzLines: { color: '#1A1F27' } },
+    rightPriceScale: { borderColor: '#2B3139' },
+    timeScale: {
+      borderColor: '#2B3139', timeVisible: false,
+      tickMarkFormatter: (t) => new Date(t * 1000).toLocaleDateString('ko-KR',
+        { month: '2-digit', day: '2-digit', timeZone: 'Asia/Seoul' }),
+    },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Magnet },
+    localization: {
+      timeFormatter: (t) => fmtKSTFull(t * 1000) + ' KST',
+      priceFormatter: (v) => '$' + v.toLocaleString('en-US', { maximumFractionDigits: 0 }),
+    },
+    handleScroll: false, handleScale: false,
+  });
+  bhSeries = eqChart.addLineSeries({
+    color: 'rgba(122,136,150,.75)', lineWidth: 1, lineStyle: 2,
+    priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+  });
+  eqSeries = eqChart.addAreaSeries({
+    lineColor: '#3D9EDB',
+    topColor: 'rgba(61,158,219,.22)', bottomColor: 'rgba(61,158,219,.02)',
+    lineWidth: 2, priceLineVisible: false,
+  });
+  const ro = new ResizeObserver(entries => {
+    if (!eqChart || !entries[0]) return;
+    const { width, height } = entries[0].contentRect;
+    eqChart.applyOptions({ width, height });
+  });
+  ro.observe(container);
+}
+
+function renderEquityChart(stats) {
+  if (!eqChart || !eqSeries || !positions.length) return;
+  const { port } = buildCurves(positions);
+  // 현재 시점(미실현 포함)을 마지막 점으로 — 커브가 "지금"까지 이어지도록
+  if (stats) {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const totalNow = ALGO_IDS.reduce((s, a) => s + stats[a].equityTotal, 0);
+    if (port.length && port[port.length - 1].time < nowSec) {
+      port.push({ time: nowSec, value: totalNow });
+    }
+  }
+  eqSeries.setData(port);
+
+  // buy&hold 벤치마크: 아레나 시작 시점 BTC에 동일 자본 투입 가정
+  const startSec = Math.floor(ARENA_START_MS / 1000);
+  const bhBars = ohlcv.filter(b => b.time >= startSec);
+  let bhLine = [], bhRetPct = null;
+  if (bhBars.length) {
+    const c0 = bhBars[0].close;
+    bhLine = bhBars.map(b => ({ time: b.time, value: ALGO_IDS.length * STARTING_CAPITAL * b.close / c0 }));
+    bhRetPct = (bhBars[bhBars.length - 1].close / c0 - 1) * 100;
+  }
+  if (bhSeries) bhSeries.setData(bhLine);
+  try { eqChart.timeScale().fitContent(); } catch (_) {}
+
+  // 헤드 스탯: MaxDD + vs BTC
+  const mdd = maxDrawdownPct(port.map(p => p.value));
+  const el = document.getElementById('eqStats');
+  if (el) {
+    const totalPct = (port[port.length - 1].value / (ALGO_IDS.length * STARTING_CAPITAL) - 1) * 100;
+    let vs = '';
+    if (bhRetPct != null) {
+      const diff = totalPct - bhRetPct;
+      vs = ` · vs BTC ${diff >= 0 ? '+' : ''}${diff.toFixed(2)}%p`;
+    }
+    el.textContent = `MaxDD ${mdd.toFixed(2)}%${vs}`;
+  }
+  return bhRetPct;
+}
+
 /* ── Algo stats ─────────────────────────────────────────────── */
 function algoStats(ps) {
   const out = {};
@@ -541,9 +750,11 @@ function algoStats(ps) {
 
     // 변동성 타깃 가중치 반영: equity = Π(1 + weight × ret_pct)
     let equity = STARTING_CAPITAL;
+    const eqSeq = [STARTING_CAPITAL];
     for (const p of done) {
       const w = p.position_weight != null ? p.position_weight : 1;
       equity *= (1 + w * (p.ret_pct || 0));
+      eqSeq.push(equity);
     }
 
     let unrealizedPct = null, equityTotal = equity, openWeight = null;
@@ -574,6 +785,8 @@ function algoStats(ps) {
       equityTotal:   parseFloat(equityTotal.toFixed(2)),
       pnl:           parseFloat((equityTotal - STARTING_CAPITAL).toFixed(2)),
       uptimeH:       parseFloat(uptimeH.toFixed(1)),
+      eqSeq:         eqSeq,
+      maxDD:         parseFloat(maxDrawdownPct(unrealizedPct != null ? [...eqSeq, equityTotal] : eqSeq).toFixed(2)),
     };
   }
   return out;
@@ -610,14 +823,23 @@ function signalHint(algo, dec) {
   return ALGO_NEEDS[algo] || null;
 }
 
-/* ── Render: algo cards ─────────────────────────────────────── */
+/* ── Render: algo cards (리더보드) ──────────────────────────── */
 function renderCards(stats) {
-  document.getElementById('algoGrid').innerHTML = ALGO_IDS.map(algo => {
+  // 5초 룰: "누가 이기고 있나" — 거래 이력 있는 알고를 자산순 정렬, 관망 알고는 뒤로
+  const traded   = ALGO_IDS.filter(a => stats[a].hasAnyTrade)
+    .sort((x, y) => stats[y].equityTotal - stats[x].equityTotal);
+  const watching = ALGO_IDS.filter(a => !stats[a].hasAnyTrade);
+  const ordered  = [...traded.map((a, i) => [a, i + 1]), ...watching.map(a => [a, null])];
+
+  document.getElementById('algoGrid').innerHTML = ordered.map(([algo, rank]) => {
     const s   = stats[algo];
     const cfg = ALGOS[algo];
     const dec = latestDecisions[algo];
     const isLong   = s.pos === 'LONG';
-    const posBadge = `<span class="pos-badge ${isLong ? 'long' : 'flat'}">${s.pos}</span>`;
+    const posBadge = rank == null
+      ? `<span class="watch-badge">관망</span>`
+      : `<span class="pos-badge ${isLong ? 'long' : 'flat'}">${s.pos}</span>`;
+    const rankBadge = rank != null ? `<span class="ac-rank">#${rank}</span>` : '';
 
     const eqColor = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
     const eqSign  = s.pnl >= 0 ? '+' : '-';
@@ -639,80 +861,32 @@ function renderCards(stats) {
       retColor = s.totalRet >= 0 ? 'var(--green)' : 'var(--red)';
     }
 
-    const uptimeTxt = s.uptimeH > 0 ? `${s.uptimeH.toFixed(0)}h` : '—';
-    const wrTxt     = s.closedN > 0 ? `${s.winRate.toFixed(0)}% (${s.closedN}건)` : '—';
+    const wrTxt  = s.closedN > 0 ? `${s.winRate.toFixed(0)}% (${s.closedN}건)` : '—';
+    const mddTxt = s.closedN > 0 || s.unrealizedPct != null ? `${s.maxDD.toFixed(1)}%` : '—';
     const hint = signalHint(algo, dec);
     const skip = dec && dec.skipped_reason ? dec.skipped_reason.replace(/^veto:/, '') : null;
     const hintText = skip ? `대기: ${skip}` : hint;
-    return `<div class="ac" style="--ac:${cfg.color}" role="article" aria-label="${algo}">
+    // 스파크라인: 청산 누적 + 미실현 현재점
+    const sparkVals = s.unrealizedPct != null ? [...s.eqSeq, s.equityTotal] : s.eqSeq;
+    return `<div class="ac${rank === 1 ? ' rank-1' : ''}" style="--ac:${cfg.color}" data-algo="${algo}" tabindex="0" role="button" aria-label="${algo}${rank ? ` ${rank}위` : ' 관망'} — 클릭 시 차트·거래 필터">
       <div class="ac-head">
-        <span class="ac-name">${algo.replace(/_/g, ' ')}</span>
+        <span style="display:flex;align-items:baseline;gap:7px;min-width:0">
+          ${rankBadge}<span class="ac-name">${algo.replace(/_/g, ' ')}</span>
+        </span>
         ${posBadge}
       </div>
       <div class="ac-equity" style="color:${s.hasAnyTrade ? eqColor : 'var(--muted2)'}">
         ${eqVal}${eqSub}
       </div>
       <div class="ac-ret" style="color:${retColor}">${retTxt}</div>
+      ${sparkSVG(sparkVals)}
       <div class="ac-metrics">
-        <div class="ac-metric"><span>총 진입 시간</span><span class="ac-metric-val">${uptimeTxt}</span></div>
         <div class="ac-metric"><span>승률</span><span class="ac-metric-val">${wrTxt}</span></div>
+        <div class="ac-metric"><span>MaxDD</span><span class="ac-metric-val">${mddTxt}</span></div>
       </div>
       ${hintText ? `<div class="ac-hint">${esc(hintText)}</div>` : ''}
     </div>`;
   }).join('');
-}
-
-function decisionVetoSummary(dec) {
-  const diag = dec && dec.reason && dec.reason.diagnostics;
-  if (!diag) return dec && dec.skipped_reason ? dec.skipped_reason : '진단 없음';
-  const failed = Array.isArray(diag.failed_conditions) ? diag.failed_conditions : [];
-  const vetoes = Array.isArray(diag.vetoes) ? diag.vetoes : [];
-  const values = [...new Set([...vetoes, ...failed])].slice(0, 4);
-  if (!values.length) return 'veto 없음';
-  return values.join(' · ');
-}
-
-function renderDecisionDiagnostics() {
-  const el = document.getElementById('decisionDiag');
-  if (!el) return;
-  const hasAny = Object.keys(latestDecisions || {}).length > 0;
-  if (!hasAny) {
-    el.innerHTML = '<div class="diag-empty">아직 표시할 decision 진단이 없습니다</div>';
-    return;
-  }
-
-  el.innerHTML = ALGO_IDS.map(algo => {
-    const cfg = ALGOS[algo] || { color: '#848E9C' };
-    const dec = latestDecisions[algo];
-    if (!dec) {
-      return `<div class="diag-item" style="--dc:${cfg.color}">
-        <div class="diag-name">${esc(algo.replace(/_/g, ' '))}</div>
-        <div class="diag-action c-muted">NO DATA</div>
-        <div class="diag-meta">최근 decision 없음</div>
-      </div>`;
-    }
-    const raw = dec.raw_signal ?? dec.signal ?? 'flat';
-    const executable = dec.executable_signal ?? 'flat';
-    const action = dec.action || 'unknown';
-    const color = action === 'hold' || executable === 'long'
-      ? 'var(--green)'
-      : action.includes('skip') || action.includes('block')
-        ? 'var(--gold)'
-        : 'var(--muted2)';
-    const veto = decisionVetoSummary(dec);
-    const created = dec.created_at ? fmtKST(dec.created_at) + ' KST' : '—';
-    return `<div class="diag-item" style="--dc:${cfg.color}">
-      <div class="diag-name">${esc(algo.replace(/_/g, ' '))}</div>
-      <div class="diag-action" style="color:${color}">${esc(action)}</div>
-      <div class="diag-meta">raw ${esc(raw)} → exec ${esc(executable)}</div>
-      <div class="diag-meta">skip ${esc(dec.skipped_reason || '—')}</div>
-      <div class="diag-veto">${esc(veto)}</div>
-      <div class="diag-meta">${esc(created)}</div>
-    </div>`;
-  }).join('');
-
-  const note = document.getElementById('diagUpdated');
-  if (note) note.textContent = '최근 decision/veto 진단 · 60초 폴링';
 }
 
 /* ── Render: portfolio bar ──────────────────────────────────── */
@@ -739,6 +913,24 @@ function renderPortfolio(stats) {
     `<span style="color:${pnlColor}">${fmt(totalPct)}%</span><span style="color:var(--muted)"> · 실현 <span style="color:${realColor}">${realPnl >= 0 ? '+$' : '-$'}${Math.abs(realPnl).toFixed(0)}</span></span>`;
   document.getElementById('portOpen').textContent  = openCount;
   document.getElementById('portOpenSub').textContent = `/ ${ALGO_IDS.length}개 진입 중`;
+
+  // vs BTC 보유 (동일 자본 동일 기간) — 벤치마크 없는 수익률은 판단 불가
+  const startSec = Math.floor(ARENA_START_MS / 1000);
+  const bhBars = ohlcv.filter(b => b.time >= startSec);
+  const vsEl = document.getElementById('portVsBtc');
+  if (vsEl && bhBars.length) {
+    const bhPct = (bhBars[bhBars.length - 1].close / bhBars[0].close - 1) * 100;
+    const diff = totalPct - bhPct;
+    const c = diff >= 0 ? 'var(--green)' : 'var(--red)';
+    vsEl.innerHTML = `<span style="color:${c}">${fmt(diff)}%p</span>`;
+    document.getElementById('portVsBtcSub').textContent = `BTC 보유 ${fmt(bhPct)}%`;
+  }
+
+  // 투명성 라벨: 규칙·비용·시작일 — 트랙레코드 신뢰의 전제
+  const days = Math.floor((Date.now() - ARENA_START_MS) / 86_400_000);
+  const lbl = document.getElementById('portLabel');
+  if (lbl) lbl.textContent =
+    `알고당 $1,000 · 현물 LONG/FLAT · 왕복 ~13bps 반영 · 2026-06-20 시작 D+${days}`;
 }
 
 /* ── Render: tabs ───────────────────────────────────────────── */
@@ -749,14 +941,7 @@ function renderTabs() {
     `<button class="tab${activeTab === t.id ? ' active' : ''}" style="--ac:${t.color}" data-tab="${t.id}" role="tab" aria-selected="${activeTab === t.id}">${t.label}</button>`
   ).join('');
   el.querySelectorAll('.tab').forEach(b => {
-    b.addEventListener('click', () => {
-      if (activeTab === b.dataset.tab) return;
-      activeTab = b.dataset.tab;
-      renderTabs();
-      renderPositionStrip();
-      renderPriceChart();
-      renderLog(positions);
-    });
+    b.addEventListener('click', () => activateTab(b.dataset.tab));
   });
 }
 
@@ -954,8 +1139,30 @@ function renderPriceChart() {
 }
 
 /* ── Render: trade log ──────────────────────────────────────── */
+// close_reason → 짧은 라벨 + 칩 스타일 (전략 투명성: 어떤 규칙이 청산했는지)
+const REASON_CHIP = {
+  target_exit:   { label: 'TARGET', cls: 'r-target' },
+  trailing_stop: { label: 'TRAIL',  cls: 'r-trail'  },
+  stop_loss:     { label: 'STOP',   cls: 'r-stop'   },
+  time_stop:     { label: 'TIME',   cls: 'r-time'   },
+  flat_signal:   { label: 'FLAT',   cls: ''         },
+  risk_off:      { label: 'RISK',   cls: 'r-stop'   },
+};
+function reasonChip(p) {
+  if (p.status !== 'closed') return '<span style="color:var(--muted)">—</span>';
+  const key = p.close_reason || (p.is_stop_loss ? 'stop_loss' : 'flat_signal');
+  const cfg = REASON_CHIP[key] || { label: key.slice(0, 8).toUpperCase(), cls: '' };
+  return `<span class="reason-chip ${cfg.cls}">${esc(cfg.label)}</span>`;
+}
+
+let logPeriod = 'all'; // 'all' | '30' | '7' — 로그 전용(트랙레코드 지표는 항상 전기간)
+
 function renderLog(ps) {
-  const view   = activeTab === 'all' ? ps : ps.filter(p => p.algo_id === activeTab);
+  let view = activeTab === 'all' ? ps : ps.filter(p => p.algo_id === activeTab);
+  if (logPeriod !== 'all') {
+    const cutoff = Date.now() - Number(logPeriod) * 86_400_000;
+    view = view.filter(p => new Date(p.open_time).getTime() >= cutoff || p.status === 'open');
+  }
   const sorted = [...view].sort((a, b) => new Date(b.open_time) - new Date(a.open_time));
   const openN  = view.filter(p => p.status === 'open').length;
   const prefix = activeTab === 'all' ? '전체' : activeTab;
@@ -964,7 +1171,7 @@ function renderLog(ps) {
 
   const body = document.getElementById('tradeLogBody');
   if (!sorted.length) {
-    body.innerHTML = `<tr><td colspan="6" style="color:var(--muted);font-size:11px;padding:20px 18px">거래 없음</td></tr>`;
+    body.innerHTML = `<tr><td colspan="8" style="color:var(--muted);font-size:11px;padding:20px 18px">거래 없음</td></tr>`;
     return;
   }
 
@@ -983,8 +1190,7 @@ function renderLog(ps) {
     } else if (p.ret_pct != null) {
       const pct  = (p.ret_pct * 100).toFixed(2);
       const sign = p.ret_pct >= 0 ? '+' : '';
-      const sl   = p.is_stop_loss ? '<span class="sl-tag">SL</span>' : '';
-      retHtml = `<span class="${p.ret_pct >= 0 ? 'ret-pos' : 'ret-neg'}">${sign}${pct}%${sl}</span>`;
+      retHtml = `<span class="${p.ret_pct >= 0 ? 'ret-pos' : 'ret-neg'}">${sign}${pct}%</span>`;
     } else {
       retHtml = '<span class="ret-open">—</span>';
     }
@@ -995,6 +1201,9 @@ function renderLog(ps) {
     const holdTd = p.hold_hours != null
       ? `${Math.round(p.hold_hours)}h`
       : `<span style="color:var(--muted)">—</span>`;
+    const wTd = p.position_weight != null
+      ? `${p.position_weight.toFixed(2)}x`
+      : `<span style="color:var(--muted)">—</span>`;
 
     return `<tr class="${p.status === 'open' ? 'open-row' : ''}">
       <td style="color:var(--muted)">${ts}</td>
@@ -1002,9 +1211,71 @@ function renderLog(ps) {
       <td>$${p.open_price.toLocaleString()}</td>
       <td style="color:var(--muted2)">${exitTd}</td>
       <td>${retHtml}</td>
+      <td style="color:var(--muted2)">${wTd}</td>
+      <td>${reasonChip(p)}</td>
       <td style="color:var(--muted)">${holdTd}</td>
     </tr>`;
   }).join('');
+}
+
+/* ── Card → chart/log 연동 (점진 공개: 카드가 상세로 가는 입구) ── */
+function activateTab(tabId) {
+  if (activeTab === tabId) return;
+  activeTab = tabId;
+  renderTabs();
+  renderPositionStrip();
+  renderPriceChart();
+  renderLog(positions);
+}
+
+function setupCardNavigation() {
+  const grid = document.getElementById('algoGrid');
+  if (!grid) return;
+  const go = (target) => {
+    const card = target.closest('.ac[data-algo]');
+    if (!card) return;
+    activateTab(card.dataset.algo);
+    document.querySelector('.chart-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  grid.addEventListener('click', e => go(e.target));
+  grid.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(e.target); }
+  });
+}
+
+function setupPeriodToggle() {
+  const el = document.getElementById('periodToggle');
+  if (!el) return;
+  el.addEventListener('click', e => {
+    const btn = e.target.closest('.period-btn');
+    if (!btn || btn.dataset.period === logPeriod) return;
+    logPeriod = btn.dataset.period;
+    el.querySelectorAll('.period-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.period === logPeriod));
+    renderLog(positions);
+  });
+}
+
+/* ── Freshness (정직한 LIVE 표시) ───────────────────────────── */
+function renderFreshness() {
+  const times = Object.values(latestDecisions || {})
+    .map(d => new Date(d.created_at).getTime()).filter(Number.isFinite);
+  if (!times.length) return;
+  const last = Math.max(...times);
+  const ageMin = (Date.now() - last) / 60_000;
+  const el = document.getElementById('freshness');
+  if (el) {
+    const ageTxt = ageMin < 60 ? `${Math.round(ageMin)}분 전` : `${(ageMin / 60).toFixed(1)}h 전`;
+    el.textContent = `마지막 판단 ${fmtKST(last)} KST (${ageTxt}, 4h 주기)`;
+  }
+  // 4h 주기 + 30분 유예 초과 시 STALE — 거짓 LIVE보다 정직한 상태가 신뢰를 만듦
+  const badge = document.getElementById('liveBadge');
+  const txt = document.getElementById('liveTxt');
+  if (badge && txt) {
+    const stale = ageMin > 4.5 * 60;
+    badge.classList.toggle('stale', stale);
+    txt.textContent = stale ? 'STALE' : 'LIVE';
+  }
 }
 
 /* ── Full render pipeline ───────────────────────────────────── */
@@ -1013,7 +1284,8 @@ function renderAll(ps) {
   const stats = algoStats(ps);
   renderPortfolio(stats);
   renderCards(stats);
-  renderDecisionDiagnostics();
+  renderEquityChart(stats);
+  renderFreshness();
   renderTabs();
   renderPositionStrip();
   renderPriceChart();
@@ -1046,6 +1318,7 @@ async function fetchBtcPrice() {
       const stats = algoStats(positions);
       renderPortfolio(stats);
       renderCards(stats);
+      renderEquityChart(stats);
       renderPositionStrip();
     }
   } catch(_) {}
@@ -1054,7 +1327,8 @@ async function fetchBtcPrice() {
 /* ── Binance OHLC klines ────────────────────────────────────── */
 async function fetchKlines() {
   try {
-    const r = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=4h&limit=300');
+    // limit 1000 (≈166일): 벤치마크가 아레나 시작일(2026-06-20)을 항상 커버하도록
+    const r = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=4h&limit=1000');
     if (!r.ok) return;
     const d = await r.json();
     ohlcv = d.map(k => ({
@@ -1065,6 +1339,11 @@ async function fetchKlines() {
       close: parseFloat(k[4]),
     }));
     renderPriceChart();
+    if (positions.length) {
+      const stats = algoStats(positions);
+      renderPortfolio(stats);      // vs BTC 스탯은 klines 필요
+      renderEquityChart(stats);    // 벤치마크 라인도 klines 필요
+    }
   } catch(_) {}
 }
 
@@ -1091,7 +1370,7 @@ async function fetchPositions(client) {
       open_time, close_time,
       open_price, close_price, stop_loss_price, position_weight,
       ret_pct, hit, hold_hours,
-      is_stop_loss, strategy_version, product_type, position_semantics
+      is_stop_loss, close_reason, strategy_version, product_type, position_semantics
     `)
     .order('open_time', { ascending: false })
     .limit(500);
@@ -1139,6 +1418,9 @@ function updateClock() {
 /* ── Init ───────────────────────────────────────────────────── */
 async function init() {
   initChart();
+  initEqChart();
+  setupCardNavigation();
+  setupPeriodToggle();
   updateClock();
   setInterval(updateClock, 1000);
 
@@ -1167,7 +1449,7 @@ async function init() {
       const stats = algoStats(positions);
       renderCards(stats);
     }
-    renderDecisionDiagnostics();
+    renderFreshness();
   }, 60_000);
 }
 

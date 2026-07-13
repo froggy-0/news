@@ -1,0 +1,199 @@
+{
+  "R2 EWMA 사이징": {
+    "A_baseline(6봉)": {
+      "total_sum_w": -0.986,
+      "deltas": {}
+    },
+    "B_robust(max6봉·EWMA)": {
+      "total_sum_w": -0.986,
+      "deltas": {}
+    }
+  },
+  "WI-1 multi_factor 레짐필수": {
+    "target": "multi_factor",
+    "best": "B_레짐필수+4중3(강세만)",
+    "results": {
+      "A_baseline(5중4)": {
+        "n": 64,
+        "win": 50.0,
+        "sum_w_ret": 0.957
+      },
+      "B_레짐필수+4중3(강세만)": {
+        "n": 31,
+        "win": 45.2,
+        "sum_w_ret": 2.012
+      },
+      "C_레짐필수+4중3(횡보허용)": {
+        "n": 64,
+        "win": 50.0,
+        "sum_w_ret": 0.957
+      }
+    },
+    "dsr": 0.256
+  },
+  "WI-2 fng 청산 히스테리시스": {
+    "target": "fng_contrarian",
+    "best": "A_baseline",
+    "results": {
+      "A_baseline": {
+        "n": 43,
+        "win": 69.8,
+        "sum_w_ret": 2.179
+      },
+      "B_neutral40": {
+        "n": 39,
+        "win": 69.2,
+        "sum_w_ret": 0.045
+      },
+      "C_neutral45": {
+        "n": 39,
+        "win": 69.2,
+        "sum_w_ret": 0.045
+      },
+      "D_neutral50": {
+        "n": 39,
+        "win": 69.2,
+        "sum_w_ret": 0.045
+      },
+      "E_neutral55": {
+        "n": 39,
+        "win": 69.2,
+        "sum_w_ret": 0.045
+      }
+    },
+    "dsr": 0.682
+  },
+  "P-A fng 이익포착": {
+    "target": "fng_contrarian",
+    "best": "A_baseline",
+    "results": {
+      "A_baseline": {
+        "n": 43,
+        "win": 69.8,
+        "sum_w_ret": 2.179
+      },
+      "B_atr1.0": {
+        "n": 58,
+        "win": 75.9,
+        "sum_w_ret": 0.23
+      },
+      "C_atr1.5": {
+        "n": 46,
+        "win": 73.9,
+        "sum_w_ret": 1.883
+      },
+      "D_atr2.0": {
+        "n": 43,
+        "win": 69.8,
+        "sum_w_ret": 2.179
+      },
+      "E_bb_mid": {
+        "n": 40,
+        "win": 65.0,
+        "sum_w_ret": -0.148
+      }
+    },
+    "dsr": 0.682
+  },
+  "WI-4 regime_trend 볼륨확인": {
+    "target": "regime_trend",
+    "best": "B_vol1.2",
+    "results": {
+      "A_baseline": {
+        "n": 6,
+        "win": 16.7,
+        "sum_w_ret": -0.909
+      },
+      "B_vol1.2": {
+        "n": 4,
+        "win": 25.0,
+        "sum_w_ret": -0.138
+      },
+      "C_vol1.5": {
+        "n": 3,
+        "win": 0.0,
+        "sum_w_ret": -1.184
+      }
+    }
+  },
+  "WI-5 vix_rsi 구조": {
+    "target": "vix_rsi",
+    "best": "A_baseline",
+    "results": {
+      "A_baseline": {
+        "n": 24,
+        "win": 54.2,
+        "sum_w_ret": 1.715
+      },
+      "B_ma200게이트": {
+        "n": 8,
+        "win": 25.0,
+        "sum_w_ret": -4.331
+      },
+      "C_크로스35": {
+        "n": 3,
+        "win": 33.3,
+        "sum_w_ret": -0.358
+      },
+      "D_크로스30": {
+        "n": 0,
+        "win": 0.0,
+        "sum_w_ret": 0.0
+      },
+      "E_ma200+크로스35": {
+        "n": 3,
+        "win": 33.3,
+        "sum_w_ret": -0.358
+      }
+    },
+    "dsr": 0.59
+  },
+  "WI-6 macd 0선크로스": {
+    "target": "macd_momentum",
+    "best": "B_zero_cross",
+    "results": {
+      "A_baseline": {
+        "n": 5,
+        "win": 20.0,
+        "sum_w_ret": -2.159
+      },
+      "B_zero_cross": {
+        "n": 3,
+        "win": 33.3,
+        "sum_w_ret": -0.78
+      },
+      "C_zero_cross_noBB": {
+        "n": 4,
+        "win": 25.0,
+        "sum_w_ret": -1.247
+      }
+    }
+  },
+  "WI-7 omnibus 목표가익절": {
+    "target": "omnibus",
+    "best": "A_baseline",
+    "results": {
+      "A_baseline": {
+        "n": 98,
+        "win": 61.2,
+        "sum_w_ret": -2.769
+      },
+      "B_atr1.0": {
+        "n": 98,
+        "win": 61.2,
+        "sum_w_ret": -2.769
+      },
+      "C_atr1.5": {
+        "n": 91,
+        "win": 57.1,
+        "sum_w_ret": -6.368
+      },
+      "D_atr2.0": {
+        "n": 90,
+        "win": 56.7,
+        "sum_w_ret": -5.107
+      }
+    },
+    "dsr": 0.163
+  }
+}
