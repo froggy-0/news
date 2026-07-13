@@ -20,7 +20,11 @@ STRATEGY_VERSION = "arena-spot-v4"
 # v29(2026-07-10): P-A fng 이익포착(profit target) 활성화 — 라이브 MFE 진단(손실 6건 평균
 #   MFE +2.09%인데 실현 -1.41%, 포착률 -58%)이 "이익 증발" 정량화 → 익절 메커니즘 추가.
 #   백테스트 -3.02→-1.91(Δ+1.11)·승률 48→71%. WI-2(보유 연장)와 정반대 방향이 데이터로 옳음.
-PARAMS_VERSION = "arena-params-v29"
+# v30(2026-07-11): fng target ATR 배수 1.0→2.0 재채택(walk-forward 6윈도 검증) + time_stop
+#   72→60h·min_hold 48→36h 재튜닝(fng_optimize 재그리드, P-A익절과의 상호작용 반영).
+#   ⚠️ 커밋(b9e3c7e·21bcdd8) 메시지엔 v30 명시했으나 이 상수 bump가 누락돼 v29로 오기록되던
+#   버그를 2026-07-14 발견·수정(v25 때와 동일 클래스 재발 — 위 주석 참조).
+PARAMS_VERSION = "arena-params-v30"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v2"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
