@@ -33,6 +33,7 @@ from . import (
 )
 from .algorithms import (
     ALGORITHMS,
+    atr_target_price,
     exit_hold_override,
     explain_signal,
     fng_target_pct,
@@ -936,6 +937,19 @@ async def _run_cycle() -> None:
                 _omni_target = omnibus_target_price(macro, ind, price)
                 if _omni_target is not None:
                     open_signal_reason["omni_target_price"] = _omni_target
+            # Tier2: 범용 목표가 익절(vix_rsi/multi_factor 등). dict에 없으면 무효과.
+            if (
+                parameters.GENERIC_TARGET_EXIT_ENABLED
+                and algo_id in parameters.TARGET_EXIT_ATR_MULT_BY_ALGO
+            ):
+                _target = atr_target_price(
+                    signal,
+                    price,
+                    ind.get("atr", 0.0) or 0.0,
+                    parameters.TARGET_EXIT_ATR_MULT_BY_ALGO[algo_id],
+                )
+                if _target is not None:
+                    open_signal_reason["target_price"] = _target
             new_pos = await positions.open_position(
                 algo_id,
                 signal,

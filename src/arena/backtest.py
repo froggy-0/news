@@ -70,8 +70,11 @@ class BacktestSettings:
     symbol: str = parameters.BINANCE_SYMBOL
     interval: str = parameters.BINANCE_KLINE_INTERVAL
     fee_bps: float = parameters.FEE_BPS
-    slippage_bps: float = 0.0
-    spread_bps_round_trip: float = 0.0
+    # base cost scenario(frequency.py _add_costs)와 일치 — live 왕복 13bps(fee5/leg+slip1/leg+spread1RT).
+    # W1(2026-07-15): 분석 하니스 다수가 cost scenario 미주입 bare BacktestSettings()로 호출돼
+    # 기본값 0이면 왕복 10bps로 과소계상 → 회전율 높은 config가 체계적으로 유리해지는 편향이 있었음.
+    slippage_bps: float = 1.0
+    spread_bps_round_trip: float = 1.0
     funding_buffer_bps_per_8h: float = 0.0
     ecr_threshold: float = 1.3
     max_trades_per_day_per_algo: float = 3.0
@@ -117,6 +120,9 @@ class SimPosition:
     fng_filled_count: int = 0
     omni_target_price: float | None = None  # WI-7: omnibus 평균회귀 익절 목표가(진입 시 고정)
     fng_target_pct: float | None = None  # P-A: fng 이익포착 목표 상승률(평단×(1+pct) 익절)
+    target_price: float | None = (
+        None  # Tier2: 범용 목표가 익절(vix_rsi/multi_factor 등, 진입 시 고정)
+    )
 
     def as_live_position(self) -> dict[str, Any]:
         return {
@@ -368,6 +374,11 @@ def _open_position(
             weight_min=parameters.VOL_WEIGHT_MIN,
             weight_max=parameters.VOL_WEIGHT_MAX,
         )
+        # W2(2026-07-15): omnibus 레짐별 사이즈 배수(UP=1.0/RANGE=0.40/REBOUND=0.25) —
+        # live(scheduler.py)에만 적용되고 backtest에는 누락돼 있던 패리티 버그 수정.
+        # 이 배수 없이는 RANGE/REBOUND 백테스트 가중수익이 2.5~4배 과대계상됨.
+        if algo_id == "omnibus":
+            position_weight *= algorithms.omnibus_position_multiplier(macro, frame.indicators)
     # WI-7: omnibus 평균회귀 익절 목표가(진입 시점 고정). live scheduler와 동일 순수함수.
     omni_target_price = None
     if algo_id == "omnibus":
@@ -378,6 +389,18 @@ def _open_position(
     fng_tp = None
     if algo_id == "fng_contrarian":
         fng_tp = algorithms.fng_target_pct(frame.indicators, frame.bar.close)
+    # Tier2: 범용 목표가 익절(vix_rsi·multi_factor 등). dict에 없는 알고는 None(무효과).
+    target_price = None
+    if (
+        parameters.GENERIC_TARGET_EXIT_ENABLED
+        and algo_id in parameters.TARGET_EXIT_ATR_MULT_BY_ALGO
+    ):
+        target_price = algorithms.atr_target_price(
+            direction,
+            frame.bar.close,
+            frame.indicators.get("atr", 0.0) or 0.0,
+            parameters.TARGET_EXIT_ATR_MULT_BY_ALGO[algo_id],
+        )
     return SimPosition(
         algo_id=algo_id,
         direction=direction,
@@ -395,6 +418,7 @@ def _open_position(
         fng_filled_count=fng_filled_count,
         omni_target_price=omni_target_price,
         fng_target_pct=fng_tp,
+        target_price=target_price,
     )
 
 
@@ -755,6 +779,33 @@ def run_replay(
                     frame_realized[algo_id] += trade.position_weight * trade.ret_pct
                     positions_by_algo[algo_id] = None
                     position = None
+            # Tier2: 범용 목표가 익절(vix_rsi/multi_factor 등, 진입 시 고정된 target_price).
+            #   omnibus/fng 전용 필드와 별개 — dict에 없는 알고는 target_price가 항상 None.
+            #   익절이므로 min_hold 무관(기존 target_exit 패턴과 동일 비대칭).
+            if (
+                position is not None
+                and parameters.GENERIC_TARGET_EXIT_ENABLED
+                and position.target_price is not None
+                and execution_rules.target_exit_triggered(
+                    direction=position.direction,
+                    current_price=frame.bar.high,
+                    target_price=position.target_price,
+                )
+            ):
+                trade = _close_position(
+                    position,
+                    close_time=frame.bar.close_time,
+                    close_data_timestamp=frame.data_timestamp,
+                    close_price=position.target_price,
+                    exit_reason="target_exit",
+                    settings=settings,
+                    funding_events=funding_events,
+                )
+                trades.append(trade)
+                record_realized(algo_id, trade.ret_pct, trade.close_time, trade.position_weight)
+                frame_realized[algo_id] += trade.position_weight * trade.ret_pct
+                positions_by_algo[algo_id] = None
+                position = None
 
             macro = _clean_macro(frame.macro, frame.data_timestamp, settings)
             # 라이브 scheduler와 동일하게 로컬 4h 레짐을 주입(패리티). 미주입 시 백테스트는

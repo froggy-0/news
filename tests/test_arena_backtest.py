@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from arena import backtest, parameters, realtime_risk
+from arena import algorithms, backtest, parameters, realtime_risk
 
 
 def _dt(hour: int) -> datetime:
@@ -58,7 +58,7 @@ def test_backtest_stop_loss_uses_intrabar_ohlc_and_live_cost_rule() -> None:
     trade = result.trades[0]
     assert trade.exit_reason == "stop_loss"
     assert trade.close_price == pytest.approx(97.5)
-    assert trade.ret_pct == pytest.approx(-0.026)
+    assert trade.ret_pct == pytest.approx(-0.0263)  # W1: 기본 왕복비용 10bps→13bps
     assert result.equity_curve[-1].open_position["direction"] == "long"
 
 
@@ -363,6 +363,66 @@ def test_backtest_portfolio_risk_blocks_excess_long_exposure() -> None:
     assert result.equity_curve[1].open_position is None
     assert len(result.risk_events) == 2
     assert {event.event_type for event in result.risk_events} == {"max_long_positions"}
+
+
+def test_omnibus_range_entry_applies_live_size_multiplier() -> None:
+    # W2(2026-07-15): omnibus_position_multiplier(RANGE=0.40)가 backtest _open_position에도
+    # 적용돼야 live(scheduler.py:925)와 사이징이 일치한다 — 이전엔 combined_position_weight
+    # 그대로 써서 RANGE/REBOUND 가중수익이 과대계상되던 패리티 버그.
+    range_macro = {"arena_regime_state": "sideways"}
+    range_ind = {
+        "rsi": 20.0,
+        "macd_hist": 0.0,
+        "macd_hist_prev": 0.0,
+        "bb_pos": 0.2,  # < OMNIBUS_BB_POS_RANGE_ENTRY(0.30) → NEAR_LOW
+        "adx": 10.0,
+        "atr": 1.0,
+        "atr_pct": 0.01,
+        "ema_fast": 100.0,
+        "ema_slow": 100.0,
+    }
+    frames = [
+        backtest.ReplayFrame(
+            bar=backtest.ReplayBar(
+                open_time=_dt(0),
+                close_time=_dt(4),
+                open=100.0,
+                high=101.0,
+                low=99.0,
+                close=100.0,
+            ),
+            indicators=range_ind,
+            macro=range_macro,
+        ),
+        backtest.ReplayFrame(
+            bar=backtest.ReplayBar(
+                open_time=_dt(4),
+                close_time=_dt(8),
+                open=100.0,
+                high=101.0,
+                low=99.0,
+                close=100.0,
+            ),
+            indicators=range_ind,
+            macro=range_macro,
+        ),
+    ]
+    result = backtest.run_replay(
+        frames,
+        strategy_fns={"omnibus": algorithms.omnibus},
+        settings=backtest.BacktestSettings(
+            close_open_at_end=True,
+            product_type="spot",
+            position_semantics="spot_long_flat",
+        ),
+    )
+
+    assert len(result.trades) == 1
+    # combined_position_weight는 항상 VOL_WEIGHT_MIN(0.25) 이상으로 클램프되므로, RANGE 배수
+    # (0.40) 미적용 버그가 재발하면 이 값이 절대 0.25 밑으로 못 내려간다 — 엄격히 미만이어야
+    # 배수가 실제로 곱해졌다는 증거. 지표 조합이 결정적이라 정확한 기대값(0.10)도 함께 고정.
+    assert result.trades[0].position_weight == pytest.approx(0.10)
+    assert result.trades[0].position_weight < parameters.VOL_WEIGHT_MIN
 
 
 def test_load_frames_from_supabase_paginates_ohlcv_rows() -> None:

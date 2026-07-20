@@ -773,6 +773,22 @@ def fng_target_pct(ind: dict, entry_price: float) -> float | None:
     return None
 
 
+def atr_target_price(direction: str, entry_price: float, atr: float, mult: float) -> float | None:
+    """Tier 2: 범용 목표가 익절 (진입가 ± ATR×mult). vix_rsi·multi_factor용.
+
+    omnibus/fng처럼 레짐 조건부·물타기 재계산이 필요 없는 단순 알고에 한해 사용 —
+    `parameters.TARGET_EXIT_ATR_MULT_BY_ALGO`에 항목이 있을 때만 호출측이 사용.
+    진입 시 1회 산출·고정(signal_reason.target_price). backtest·live 공용.
+    """
+    if entry_price <= 0 or atr <= 0 or mult <= 0:
+        return None
+    if direction == "long":
+        return entry_price + atr * mult
+    if direction == "short":
+        return entry_price - atr * mult
+    return None
+
+
 def exit_hold_override(algo_id: str, macro: dict, ind: dict) -> bool:
     """raw flat 신호에도 청산을 보류(hold)할지 — 진입≠청산 임계 히스테리시스.
 

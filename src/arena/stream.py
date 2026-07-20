@@ -115,6 +115,29 @@ async def _check_stop_loss(price: float) -> None:
                 state.open_positions[algo_id] = None
                 _last_persisted_stop.pop(algo_id, None)
                 continue
+        # Tier2: 범용 목표가 익절(vix_rsi/multi_factor 등, 진입 시 signal_reason.target_price
+        #   고정). dict에 없는 알고는 target_price가 저장돼 있지 않아 항상 no-op.
+        if (
+            parameters.GENERIC_TARGET_EXIT_ENABLED
+            and algo_id in parameters.TARGET_EXIT_ATR_MULT_BY_ALGO
+        ):
+            _reason = pos.get("signal_reason") or {}
+            _target = _reason.get("target_price")
+            if execution_rules.target_exit_triggered(
+                direction=pos["direction"], current_price=price, target_price=_target
+            ):
+                logger.info(
+                    "Target-exit(%s): now=%.2f  target=%.2f  open=%.2f",
+                    algo_id,
+                    price,
+                    float(_target),
+                    pos["open_price"],
+                )
+                now = datetime.now(timezone.utc)
+                await positions.close_position(pos["id"], now, price, close_reason="target_exit")
+                state.open_positions[algo_id] = None
+                _last_persisted_stop.pop(algo_id, None)
+                continue
         await _ratchet_trailing_stop(algo_id, pos, price)
         if _is_stop_triggered(pos, price):
             sl = pos.get("stop_loss_price", "fallback")

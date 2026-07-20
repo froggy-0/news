@@ -273,6 +273,6 @@ def test_backtest_includes_funding_in_net_return() -> None:
 
     trade = result.trades[0]
     assert trade.gross_ret_pct == pytest.approx(0.01)
-    assert trade.trading_cost_pct == pytest.approx(0.001)
+    assert trade.trading_cost_pct == pytest.approx(0.0013)  # W1: 기본 왕복비용 10bps→13bps
     assert trade.funding_ret_pct == pytest.approx(-0.001)
-    assert trade.ret_pct == pytest.approx(0.008)
+    assert trade.ret_pct == pytest.approx(0.0077)
