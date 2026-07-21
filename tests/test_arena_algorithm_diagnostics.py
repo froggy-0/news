@@ -78,6 +78,70 @@ def test_fng_vix_unknown_multiplier_applies_only_when_regime_unknown(monkeypatch
     )
 
 
+def test_fng_duration_scale_defaults_to_noop() -> None:
+    assert parameters.FNG_DURATION_FEATURE_ENABLED is False
+    assert algorithms.fng_duration_scale({"fng_days_below_30": 1}) == 1.0
+    assert algorithms.fng_duration_scale({"fng_days_below_30": None}) == 1.0
+
+
+def test_fng_duration_scale_day1_reduced_when_enabled(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "FNG_DURATION_FEATURE_ENABLED", True)
+    monkeypatch.setattr(parameters, "FNG_DURATION_MODE", "sizing")
+    monkeypatch.setattr(parameters, "FNG_DAY1_SIZE_MULT", 0.5)
+    assert algorithms.fng_duration_scale({"fng_days_below_30": 0}) == 0.5
+    assert algorithms.fng_duration_scale({"fng_days_below_30": 1}) == 0.5
+    assert algorithms.fng_duration_scale({"fng_days_below_30": 2}) == 1.0
+    assert algorithms.fng_duration_scale({"fng_days_below_30": 10}) == 1.0
+    # 필드 미수집(None) → graceful 1.0.
+    assert algorithms.fng_duration_scale({"fng_days_below_30": None}) == 1.0
+
+
+def test_fng_duration_scale_noop_in_gate_mode(monkeypatch) -> None:
+    # sizing 계산은 MODE=="sizing"일 때만 — gate 모드에선 사이징 쪽은 항상 1.0.
+    monkeypatch.setattr(parameters, "FNG_DURATION_FEATURE_ENABLED", True)
+    monkeypatch.setattr(parameters, "FNG_DURATION_MODE", "gate")
+    assert algorithms.fng_duration_scale({"fng_days_below_30": 0}) == 1.0
+
+
+def test_fng_scaled_tranches_identity_at_scale_1() -> None:
+    assert algorithms.fng_scaled_tranches(1.0) is parameters.FNG_CONTRARIAN_PRICE_TRANCHES
+
+
+def test_fng_scaled_tranches_scales_weight_keeps_drop() -> None:
+    scaled = algorithms.fng_scaled_tranches(0.5)
+    for (drop, w), (orig_drop, orig_w) in zip(scaled, parameters.FNG_CONTRARIAN_PRICE_TRANCHES):
+        assert drop == orig_drop
+        assert w == orig_w * 0.5
+
+
+def test_fng_contrarian_gate_mode_blocks_short_duration_fear(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "FNG_DURATION_FEATURE_ENABLED", True)
+    monkeypatch.setattr(parameters, "FNG_DURATION_MODE", "gate")
+    monkeypatch.setattr(parameters, "FNG_DURATION_MIN_DAYS", 2)
+    macro = {
+        "arena_regime_state": "bull_trend",
+        "fng": 20.0,
+        "btc_drawdown_90d": -0.15,
+        "fng_days_below_30": 1,
+    }
+    assert algorithms.fng_contrarian(macro, {}) is None
+    macro["fng_days_below_30"] = 2
+    assert algorithms.fng_contrarian(macro, {}) == "long"
+    # 필드 미수집 → graceful(게이트 미적용).
+    macro["fng_days_below_30"] = None
+    assert algorithms.fng_contrarian(macro, {}) == "long"
+
+
+def test_fng_contrarian_default_off_unaffected_by_duration_feature() -> None:
+    macro = {
+        "arena_regime_state": "bull_trend",
+        "fng": 20.0,
+        "btc_drawdown_90d": -0.15,
+        "fng_days_below_30": 1,
+    }
+    assert algorithms.fng_contrarian(macro, {}) == "long"
+
+
 def test_fng_contrarian_stabilization_blocks_worsening_momentum() -> None:
     # 게이트 통과 macro: 공포(fng<30)·risk-off 아님·충분한 낙폭.
     macro = {"arena_regime_state": "bull_trend", "fng": 20.0, "btc_drawdown_90d": -0.15}

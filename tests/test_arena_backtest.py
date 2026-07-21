@@ -269,6 +269,66 @@ def test_fng_contrarian_unknown_regime_multiplier_defaults_off(monkeypatch) -> N
     assert result.trades[0].position_weight == pytest.approx(0.15)
 
 
+def test_fng_contrarian_duration_sizing_scales_all_tranches_uniformly(monkeypatch) -> None:
+    # P3(2026-07-21, 신규·미검증): 공포 1일차(fng_days_below_30<=1) 진입은 스케줄 전체
+    # (1차 트랜치 + 물타기 트랜치 + 상한)가 균일하게 축소돼야 한다.
+    monkeypatch.setattr(parameters, "FNG_TARGET_EXIT_ENABLED", False)
+    monkeypatch.setattr(parameters, "FNG_DURATION_FEATURE_ENABLED", True)
+    monkeypatch.setattr(parameters, "FNG_DURATION_MODE", "sizing")
+    monkeypatch.setattr(parameters, "FNG_DAY1_SIZE_MULT", 0.5)
+
+    def fng_long(macro, indicators):
+        return "long" if macro.get("fng", 100) < 30 else None
+
+    result = backtest.run_replay(
+        [
+            _frame(0, close=100.0, macro={"fng": 25, "fng_days_below_30": 1}),
+            _frame(1, close=98.0, low=96.5, macro={"fng": 15, "fng_days_below_30": 2}),
+            _frame(2, close=95.0, low=93.0, macro={"fng": 5, "fng_days_below_30": 3}),
+            _frame(3, close=70.0, low=65.0, macro={"fng": 5, "fng_days_below_30": 4}),
+            *[
+                _frame(i, close=72.0, macro={"fng": 20, "fng_days_below_30": 5})
+                for i in range(4, 12)
+            ],
+            _frame(12, close=95.0, macro={"fng": 60, "fng_days_below_30": 0}),
+        ],
+        strategy_fns={"fng_contrarian": fng_long},
+        settings=_spot_settings(),
+    )
+
+    assert len(result.trades) == 1
+    trade = result.trades[0]
+    # 스케일 0.5 적용 시 누적 비중 0.70×0.5=0.35(상한도 스케일), 평단은 동일 비율이라 불변.
+    assert trade.position_weight == pytest.approx(0.35)
+    assert trade.open_price == pytest.approx(96.3571, abs=1e-3)
+
+
+def test_fng_contrarian_duration_sizing_defaults_off(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "FNG_TARGET_EXIT_ENABLED", False)
+    assert parameters.FNG_DURATION_FEATURE_ENABLED is False
+
+    def fng_long(macro, indicators):
+        return "long" if macro.get("fng", 100) < 30 else None
+
+    result = backtest.run_replay(
+        [
+            _frame(0, close=100.0, macro={"fng": 25, "fng_days_below_30": 1}),
+            _frame(1, close=98.0, low=96.5, macro={"fng": 15, "fng_days_below_30": 2}),
+            *[
+                _frame(i, close=98.0, macro={"fng": 20, "fng_days_below_30": 5})
+                for i in range(2, 12)
+            ],
+            _frame(12, close=98.0, macro={"fng": 60, "fng_days_below_30": 0}),
+        ],
+        strategy_fns={"fng_contrarian": fng_long},
+        settings=_spot_settings(),
+    )
+
+    assert len(result.trades) == 1
+    # 기본 off → 스케일 미적용, 기존 동작(0.15+0.25=0.40, 3차 트랜치 미도달) 그대로.
+    assert result.trades[0].position_weight == pytest.approx(0.40)
+
+
 def test_fng_contrarian_time_stop_closes_after_max_hold(monkeypatch) -> None:
     monkeypatch.setattr(parameters, "FNG_TARGET_EXIT_ENABLED", False)  # 시간손절 격리 검증
 

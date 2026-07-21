@@ -118,6 +118,7 @@ class SimPosition:
     risk_snapshot: dict[str, Any]
     fng_ref_price: float = 0.0
     fng_filled_count: int = 0
+    fng_duration_scale: float = 1.0  # P3: 진입 시점 fng_days_below_30 기반 사이징 배수
     omni_target_price: float | None = None  # WI-7: omnibus 평균회귀 익절 목표가(진입 시 고정)
     fng_target_pct: float | None = None  # P-A: fng 이익포착 목표 상승률(평단×(1+pct) 익절)
     target_price: float | None = (
@@ -355,9 +356,12 @@ def _open_position(
     # 포지션 사이징 — live(scheduler)와 동일 가중치를 백테스트 equity에도 반영.
     fng_ref_price = 0.0
     fng_filled_count = 0
+    fng_duration_scale = 1.0
     if algo_id == "fng_contrarian" and parameters.FNG_CONTRARIAN_SCALE_IN_ENABLED:
         # 역발산: 1차 트랜치만 진입. 추가 트랜치는 가격 하락 시 물타기(_maybe_scale_in_fng_sim).
-        position_weight = parameters.FNG_CONTRARIAN_PRICE_TRANCHES[0][1]
+        # P3(2026-07-21, 미검증): fng_days_below_30 기반 균일 스케일(전 트랜치 비례 축소).
+        fng_duration_scale = algorithms.fng_duration_scale(macro)
+        position_weight = algorithms.fng_scaled_tranches(fng_duration_scale)[0][1]
         fng_ref_price = frame.bar.close  # 물타기 기준가 = 최초 진입가
         fng_filled_count = 1
     else:
@@ -421,6 +425,7 @@ def _open_position(
         risk_snapshot=risk_snapshot,
         fng_ref_price=fng_ref_price,
         fng_filled_count=fng_filled_count,
+        fng_duration_scale=fng_duration_scale,
         omni_target_price=omni_target_price,
         fng_target_pct=fng_tp,
         target_price=target_price,
@@ -435,11 +440,14 @@ def _maybe_scale_in_fng_sim(position: SimPosition, eval_price: float) -> SimPosi
     추가분 없으면 원본 포지션 그대로 반환.
     """
     ref_price = position.fng_ref_price or position.open_price
+    # P3(2026-07-21, 미검증): 진입 시점 고정된 scale로 스케줄 전체를 균일 스케일 —
+    # 물타기 발동 가격(drop)은 원본과 동일, 비중만 축소된다.
+    tranches = algorithms.fng_scaled_tranches(position.fng_duration_scale)
     pending = execution_rules.pending_price_tranches(
         eval_price,
         ref_price,
         position.fng_filled_count,
-        parameters.FNG_CONTRARIAN_PRICE_TRANCHES,
+        tranches,
     )
     if not pending:
         return position
@@ -448,8 +456,8 @@ def _maybe_scale_in_fng_sim(position: SimPosition, eval_price: float) -> SimPosi
         position.position_weight,
         ref_price,
         pending,
-        parameters.FNG_CONTRARIAN_PRICE_TRANCHES,
-        parameters.VOL_WEIGHT_MAX,
+        tranches,
+        parameters.VOL_WEIGHT_MAX * position.fng_duration_scale,
     )
     if applied <= 0:
         return position
@@ -1081,6 +1089,8 @@ def _macro_signal_from_snapshot(row: dict[str, Any], decision_time: datetime) ->
         # 시장 폭 + 온체인 유동성 (복합 투표 알고 건전성 필터)
         "breadth_up_ratio": raw.get("breadth_up_ratio"),
         "stablecoin_supply_zscore": raw.get("stablecoin_supply_zscore"),
+        # P3(2026-07-21): fng<30 연속일수 — fng_contrarian 진입 품질 피처
+        "fng_days_below_30": raw.get("fng_days_below_30"),
         # 변동성 환경 라벨 (사이징/신뢰도 컨텍스트)
         "vol_level": risk_overlay.get("volLevel"),
         "vol_trend": risk_overlay.get("volTrend"),

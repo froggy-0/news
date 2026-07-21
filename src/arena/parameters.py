@@ -194,6 +194,23 @@ FNG_CONTRARIAN_PRICE_TRANCHES: tuple[tuple[float, float], ...] = (
     (-0.03, 0.25),  # 진입가 -3% → 실시간 추가
     (-0.06, 0.30),  # 진입가 -6% → 실시간 추가
 )
+
+# ── ❌ P3: FNG 지속기간 피처 (fng_days_below_30) — 무효과/미채택 (2026-07-21 실측) ──
+# 근거: 공포 1일차(뉴스 쇼크)와 N일 지속(매도 소진)의 평균회귀 품질이 다르다(Kaminski·Lo)는
+#   가설로 sizing(0.5/0.3)·gate(N=2/3/5) 그리드를 11개월 백테스트+WF 6윈도로 검증
+#   (`scripts/analysis/fng_duration_tuning.py`, 결과 docs/arena/research/
+#   fng-duration-tuning-results.json). **sizing형은 거래수 불변에 sum_w_ret Δ+0.04~0.05
+#   (baseline +2.45%의 <2%) — 사실상 무효과.** gate형 N=2/3은 Δ+0.06~0.11로 근소한
+#   개선처럼 보이나 DSR=0.447(약한 신호, 채택 기준 미달)이고 WF 6윈도 전체에서 양의윈도
+#   비율이 baseline과 동일(4/6, 전 config 무차이) — 노이즈와 구분 불가. N=5는 거래수
+#   51→48·Δ-0.47로 명확히 악화. **결론: 채택하지 않음**(파라미터 핏이라 DSR 엄격 적용,
+#   구조적 결함이 아니므로 완화 불가) — day1 vs N일+ 진입 품질 차이 가설 자체가 이 데이터셋
+#   에서 기각. 인프라(risk_overlay.py 산출·algorithms.fng_duration_scale/fng_scaled_tranches·
+#   backtest/scheduler/positions 배선·유닛테스트)는 재사용 가능하게 보존, 기본 off.
+FNG_DURATION_FEATURE_ENABLED = False
+FNG_DURATION_MODE = "sizing"  # "sizing" | "gate"
+FNG_DAY1_SIZE_MULT = 0.5
+FNG_DURATION_MIN_DAYS = 2
 # 시간 손절: 15 x 4h봉 = 60h 내 회귀 없으면 청산. 평균회귀 시간 손절.
 #   v22(2026-06-26): 48→72h(평균회귀 회복 시간 확보).
 #   v30(2026-07-11): 72→60h. P-A익절(atr2.0) 활성화 후 이익 거래가 조기 종료되면서

@@ -107,6 +107,25 @@ def _read_precomputed_or_fallback(
     return float(clean.tail(window).quantile(quantile))
 
 
+def _fng_streak_below(series: pd.Series, threshold: float) -> int | None:
+    """시계열 끝에서 역방향으로 threshold 미만이 연속된 일수(P3, arena fng_contrarian용).
+
+    공포 1일차(뉴스 쇼크, 추가 하락 여지)와 N일 지속(매도 소진)의 평균회귀 품질이
+    다르다는 근거(Kaminski·Lo)에 기반한 진입 품질 피처. lag 불요 — FNG는 발표 즉시
+    가용하므로 기존 `fng` 필드와 동일 취급(당일 값 포함해도 누수 아님). 마지막 값이
+    임계 이상이면 0. 결측일은 스트릭 중단(보수적 — 결측을 "공포 아님"으로 취급).
+    """
+    s = pd.to_numeric(series, errors="coerce")
+    if s.empty:
+        return None
+    streak = 0
+    for val in reversed(s.tolist()):
+        if pd.isna(val) or val >= threshold:
+            break
+        streak += 1
+    return streak
+
+
 def _compute_sjm_state(df: pd.DataFrame) -> str | None:
     """SJM(통계적 점프모델) 2상태 레짐 분류 — 섀도우 전용 (알고 게이트 미적용).
 
@@ -239,6 +258,9 @@ def compute_regime_state(df: pd.DataFrame) -> RegimeState:
         "btc_drawdown_90d": drawdown_90d,
         "breadth_up_ratio": breadth_up_ratio,
         "stablecoin_supply_zscore": stablecoin_supply_z,
+        # P3(2026-07-21): fng<30 연속일수 — arena fng_contrarian 진입 품질 피처(공포 1일차 vs
+        # N일 지속 매도소진 구분). lag 불요, fng와 동일 컬럼에서 파생.
+        "fng_days_below_30": _fng_streak_below(df.get("fng_value", pd.Series(dtype=float)), 30.0),
         # SJM 섀도우: 통계적 점프모델 2상태 레짐 (알고 게이트 미적용, 30일 관찰용)
         "sjm_state": _compute_sjm_state(df),
     }

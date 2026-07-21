@@ -1,0 +1,167 @@
+{
+  "single_frame": {
+    "A_baseline(off)": {
+      "n": 51,
+      "win": 58.8,
+      "sum_w_ret": 2.452
+    },
+    "B_sizing0.5": {
+      "n": 51,
+      "win": 58.8,
+      "sum_w_ret": 2.49
+    },
+    "C_sizing0.3": {
+      "n": 51,
+      "win": 58.8,
+      "sum_w_ret": 2.506
+    },
+    "D_gateN2": {
+      "n": 51,
+      "win": 58.8,
+      "sum_w_ret": 2.512
+    },
+    "E_gateN3": {
+      "n": 50,
+      "win": 60.0,
+      "sum_w_ret": 2.559
+    },
+    "F_gateN5": {
+      "n": 48,
+      "win": 58.3,
+      "sum_w_ret": 1.978
+    }
+  },
+  "walk_forward": {
+    "A_baseline(off)": {
+      "per_window": [
+        -0.3,
+        -1.53,
+        0.76,
+        1.1,
+        1.69,
+        0.04
+      ],
+      "n_per_window": [
+        1,
+        6,
+        14,
+        9,
+        12,
+        9
+      ],
+      "pos_windows": 4,
+      "mean": 0.295,
+      "stdev": 1.047
+    },
+    "B_sizing0.5": {
+      "per_window": [
+        -0.3,
+        -1.53,
+        0.8,
+        1.1,
+        1.69,
+        0.04
+      ],
+      "n_per_window": [
+        1,
+        6,
+        14,
+        9,
+        12,
+        9
+      ],
+      "pos_windows": 4,
+      "mean": 0.301,
+      "stdev": 1.05
+    },
+    "C_sizing0.3": {
+      "per_window": [
+        -0.3,
+        -1.53,
+        0.82,
+        1.1,
+        1.69,
+        0.04
+      ],
+      "n_per_window": [
+        1,
+        6,
+        14,
+        9,
+        12,
+        9
+      ],
+      "pos_windows": 4,
+      "mean": 0.304,
+      "stdev": 1.051
+    },
+    "D_gateN2": {
+      "per_window": [
+        -0.3,
+        -1.53,
+        0.82,
+        1.1,
+        1.69,
+        0.04
+      ],
+      "n_per_window": [
+        1,
+        6,
+        14,
+        9,
+        12,
+        9
+      ],
+      "pos_windows": 4,
+      "mean": 0.305,
+      "stdev": 1.052
+    },
+    "E_gateN3": {
+      "per_window": [
+        -0.3,
+        -1.53,
+        0.87,
+        1.1,
+        1.69,
+        0.04
+      ],
+      "n_per_window": [
+        1,
+        6,
+        13,
+        9,
+        12,
+        9
+      ],
+      "pos_windows": 4,
+      "mean": 0.312,
+      "stdev": 1.056
+    },
+    "F_gateN5": {
+      "per_window": [
+        0.0,
+        -1.53,
+        0.67,
+        1.1,
+        1.69,
+        0.04
+      ],
+      "n_per_window": [
+        0,
+        6,
+        12,
+        9,
+        12,
+        9
+      ],
+      "pos_windows": 4,
+      "mean": 0.33,
+      "stdev": 1.019
+    }
+  },
+  "dsr": {
+    "best": "E_gateN3",
+    "sharpe": 0.175,
+    "dsr": 0.447
+  }
+}

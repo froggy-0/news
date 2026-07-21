@@ -396,6 +396,11 @@ def fng_contrarian(macro: dict, ind: dict) -> str | None:
             max_abs_hist=_momentum_magnitude_threshold("fng_contrarian", ind),
         ):
             return None
+        # P3 게이트형(2026-07-21, 미검증): 공포 지속일수 부족(뉴스 쇼크 1일차 등) 시 보류.
+        if parameters.FNG_DURATION_FEATURE_ENABLED and parameters.FNG_DURATION_MODE == "gate":
+            days = macro.get("fng_days_below_30")
+            if days is not None and days < parameters.FNG_DURATION_MIN_DAYS:
+                return None
         return "long"
     return None
 
@@ -827,6 +832,32 @@ def fng_target_pct(ind: dict, entry_price: float) -> float | None:
         mid = ind.get("bb_mid", 0.0) or 0.0
         return (mid / entry_price - 1.0) if mid > entry_price else None
     return None
+
+
+def fng_duration_scale(macro: dict) -> float:
+    """P3(2026-07-21, 신규·미검증): fng<30 연속일수 기반 진입 사이징 배수.
+
+    공포 1일차(뉴스 쇼크, 추가 하락 여지)는 FNG_DAY1_SIZE_MULT로 축소, 2일+(매도 소진
+    확률↑)는 1.0(정상). MODE!="sizing"이거나 필드 미수집(None)이면 1.0(무효과) — 진입
+    시점 1회 산출해 이후 물타기 트랜치에도 동일하게 적용(fng_scaled_tranches).
+    """
+    if not parameters.FNG_DURATION_FEATURE_ENABLED or parameters.FNG_DURATION_MODE != "sizing":
+        return 1.0
+    days = macro.get("fng_days_below_30")
+    if days is None:
+        return 1.0
+    return parameters.FNG_DAY1_SIZE_MULT if days <= 1 else 1.0
+
+
+def fng_scaled_tranches(scale: float) -> tuple[tuple[float, float], ...]:
+    """FNG_CONTRARIAN_PRICE_TRANCHES를 scale로 균일 스케일(하락률은 그대로, 비중만).
+
+    scale=1.0(기본/미적용)이면 원본 그대로 반환 — 물타기 스케줄 자체(발동 가격)는 항상
+    동일하고, 각 단계의 비중만 진입 시점 확신도에 비례해 축소된다.
+    """
+    if scale == 1.0:
+        return parameters.FNG_CONTRARIAN_PRICE_TRANCHES
+    return tuple((drop, w * scale) for drop, w in parameters.FNG_CONTRARIAN_PRICE_TRANCHES)
 
 
 def atr_target_price(direction: str, entry_price: float, atr: float, mult: float) -> float | None:

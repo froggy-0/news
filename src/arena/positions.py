@@ -9,7 +9,7 @@ from typing import Any
 from supabase import AsyncClient, acreate_client
 
 from . import config, execution_rules, parameters, state
-from .algorithms import ALGORITHMS
+from .algorithms import ALGORITHMS, fng_scaled_tranches
 
 logger = logging.getLogger(__name__)
 
@@ -236,7 +236,10 @@ async def maybe_scale_in_fng_price(current: dict, price: float) -> dict | None:
     reason = current.get("signal_reason") or {}
     ref_price = float(reason.get("fng_ref_price") or current.get("open_price") or 0.0)
     filled = int(reason.get("fng_filled_count") or 1)
-    tranches = parameters.FNG_CONTRARIAN_PRICE_TRANCHES
+    # P3(2026-07-21, 미검증): 진입 시점 고정된 scale(signal_reason.fng_duration_scale)로
+    # 스케줄 전체를 균일 스케일 — backtest._maybe_scale_in_fng_sim과 동일 로직.
+    scale = float(reason.get("fng_duration_scale") or 1.0)
+    tranches = fng_scaled_tranches(scale)
     pending = execution_rules.pending_price_tranches(price, ref_price, filled, tranches)
     if not pending:
         return None
@@ -247,7 +250,7 @@ async def maybe_scale_in_fng_price(current: dict, price: float) -> dict | None:
         ref_price,
         pending,
         tranches,
-        parameters.VOL_WEIGHT_MAX,
+        parameters.VOL_WEIGHT_MAX * scale,
     )
     if applied <= 0:
         return None

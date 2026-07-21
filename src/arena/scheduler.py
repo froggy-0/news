@@ -36,11 +36,15 @@ from .algorithms import (
     atr_target_price,
     exit_hold_override,
     explain_signal,
+    fng_scaled_tranches,
     fng_target_pct,
     fng_vix_unknown_multiplier,
     omnibus_position_multiplier,
     omnibus_target_price,
     primary_flat_skip_reason,
+)
+from .algorithms import (
+    fng_duration_scale as fng_duration_scale_fn,
 )
 
 logger = logging.getLogger(__name__)
@@ -148,6 +152,8 @@ async def _fetch_macro() -> MacroData:
             # 시장 폭 + 온체인 유동성 (복합 투표 알고 건전성 필터)
             "breadth_up_ratio": raw.get("breadth_up_ratio"),
             "stablecoin_supply_zscore": raw.get("stablecoin_supply_zscore"),
+            # P3(2026-07-21): fng<30 연속일수 — fng_contrarian 진입 품질 피처
+            "fng_days_below_30": raw.get("fng_days_below_30"),
             # SJM 섀도우 (알고 게이트 미적용 — 30일 관찰 후 승격 여부 판단)
             "sjm_state": raw.get("sjm_state"),
             # 변동성 환경 라벨 (사이징/신뢰도 컨텍스트)
@@ -908,9 +914,12 @@ async def _run_cycle() -> None:
             is_fng_scale = (
                 algo_id == "fng_contrarian" and parameters.FNG_CONTRARIAN_SCALE_IN_ENABLED
             )
+            fng_duration_scale = 1.0
             if is_fng_scale:
                 # 역발산: 1차 트랜치만 진입. 물타기는 가격 하락 시 실시간(stream)으로 추가.
-                position_weight = parameters.FNG_CONTRARIAN_PRICE_TRANCHES[0][1]
+                # P3(2026-07-21, 미검증): fng_days_below_30 기반 균일 스케일.
+                fng_duration_scale = fng_duration_scale_fn(macro)
+                position_weight = fng_scaled_tranches(fng_duration_scale)[0][1]
             else:
                 position_weight = execution_rules.combined_position_weight(
                     ind.get("realized_vol_sizing", ind.get("realized_vol_24h", 0.0)),
@@ -933,6 +942,8 @@ async def _run_cycle() -> None:
                 # 물타기 기준가 = 최초 진입가, 1단계 체결 표기.
                 open_signal_reason.update(_fng_open_reason())
                 open_signal_reason["fng_ref_price"] = price
+                # P3: 진입 시점 스케일 고정 — 이후 stream.py 물타기가 동일 배수로 재사용.
+                open_signal_reason["fng_duration_scale"] = fng_duration_scale
                 # P-A: 이익 포착 목표 상승률(비율). 물타기로 평단 하락 시 청산가 자동 하향.
                 _fng_tp = fng_target_pct(ind, price)
                 if _fng_tp is not None:

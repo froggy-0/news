@@ -249,3 +249,25 @@ def _momentum_not_worsening(
 
 ⚠️ `.claude/skills/arena-exit-tuning/SKILL.md`에도 이 결과를 반영해야 하나, 스킬 파일 자기수정은 이번 세션에서 harness 권한 분류기가 차단(스킬 파일 편집은 사용자의 명시적 요청이 있을 때만 허용) — 사용자가 원하면 별도로 반영.
 
+---
+
+## 10. P3 후속 — FNG 지속기간 피처 (2026-07-21, §9 이후 추가 실행)
+
+`return-improvement-priorities-20260715.md` P3 / `implementation-plan-w-series-20260715.md` W5 설계 그대로 구현·검증.
+
+**구현**: `risk_overlay.py`에 `_fng_streak_below()`(fng<30 연속일수, lag 불요) 추가 → `regimeRaw.fng_days_below_30` → `backtest._macro_signal_from_snapshot`·`scheduler._fetch_macro` 매핑 → `algorithms.fng_duration_scale()`(sizing 배수 산출)·`algorithms.fng_scaled_tranches()`(트랜치 스케줄 균일 스케일) → `backtest.py`(`SimPosition.fng_duration_scale` 필드, 초기 진입+`_maybe_scale_in_fng_sim` 물타기 양쪽)·`scheduler.py`(초기 진입, `signal_reason.fng_duration_scale`에 진입 시점 고정)·`positions.py`(`maybe_scale_in_fng_price`, 저장된 scale 재사용) 전체 배선. gate 변형은 `fng_contrarian()`에 `fng_days_below_30 < FNG_DURATION_MIN_DAYS` 조건 추가. 플래그 전부 기본 off. 유닛테스트 15건(risk_overlay 6·algorithms 6·backtest 2 신규 + gate/sizing 조합) 추가.
+
+**검증** (`scripts/analysis/fng_duration_tuning.py`, master_20260710.parquet, 11개월, W1 13bps 하니스 + WF 6윈도):
+
+| config | 단일프레임 Δsum_w | WF 양의윈도 | 판정 |
+|---|---|---|---|
+| B sizing 0.5 | +0.04 | 4/6 (baseline과 동일) | 무효과 |
+| C sizing 0.3 | +0.05 | 4/6 (baseline과 동일) | 무효과 |
+| D gate N=2 | +0.06 | 4/6 (baseline과 동일) | 무효과 |
+| E gate N=3 | +0.11 (최선, DSR=0.447) | 4/6 (baseline과 동일) | 미달(약한 신호) |
+| F gate N=5 | -0.47 (n 51→48) | 4/6 | 악화 |
+
+**결론**: sizing형은 거래수가 불변인데도 sum_w_ret 변화가 baseline(+2.45%)의 2% 미만 — 공포 1일차 진입이 이 데이터셋에서 다른 날과 품질 차이가 거의 없다는 뜻(가설 반증). gate형 N=2/3의 근소한 개선은 DSR 0.447로 채택 기준 미달이고 WF에서 baseline과 양의윈도 비율이 완전히 동일(6윈도 전부 무차이) — 노이즈와 구분 불가. N=5는 거래 51→48건으로 줄면서 명확히 악화(WI-4 게이트형 붕괴 패턴 재현). **채택하지 않음**(파라미터 핏, DSR 엄격 적용). 인프라는 Tier2/P4와 동일 관례로 기본 off 상태 보존. 원본 결과: `docs/arena/research/fng-duration-tuning-results.json`.
+
+이로써 `return-improvement-priorities-20260715.md`의 P1~P4가 전부 완료됐다 — **파라미터 튜닝으로 짜낼 수 있는 것은 확정적으로 소진**. 남은 항목(P5 청산 API·P6-a 숏 트랙)은 사용자 결정이 필요하고, P6-b·P7은 저효과 유지보수성 작업이다.
+
