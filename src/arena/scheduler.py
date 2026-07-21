@@ -37,6 +37,7 @@ from .algorithms import (
     exit_hold_override,
     explain_signal,
     fng_target_pct,
+    fng_vix_unknown_multiplier,
     omnibus_position_multiplier,
     omnibus_target_price,
     primary_flat_skip_reason,
@@ -923,6 +924,10 @@ async def _run_cycle() -> None:
                 # omnibus: 레짐별 추가 배수 적용 (UP_TREND=1.0, RANGE=0.4, REBOUND=0.25)
                 if algo_id == "omnibus":
                     position_weight *= omnibus_position_multiplier(macro, ind)
+            # P4(2026-07-21, 신규·미검증): unknown 레짐 진입 사이징 완화. dict에 없으면
+            # 1.0(무효과). fng는 최초 1차 트랜치에만 적용(이후 물타기는 정상 스케줄 유지).
+            if algo_id in ("fng_contrarian", "vix_rsi"):
+                position_weight *= fng_vix_unknown_multiplier(algo_id, macro)
             open_signal_reason = _signal_reason(algo_id, signal, ind, macro)
             if is_fng_scale:
                 # 물타기 기준가 = 최초 진입가, 1단계 체결 표기.

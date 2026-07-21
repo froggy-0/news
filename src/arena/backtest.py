@@ -379,6 +379,11 @@ def _open_position(
         # 이 배수 없이는 RANGE/REBOUND 백테스트 가중수익이 2.5~4배 과대계상됨.
         if algo_id == "omnibus":
             position_weight *= algorithms.omnibus_position_multiplier(macro, frame.indicators)
+    # P4(2026-07-21, 신규·미검증): unknown 레짐 진입 사이징 완화. dict에 없으면 1.0(무효과).
+    # fng_contrarian은 최초 1차 트랜치에만 적용(이후 가격 기준 물타기는 정상 스케줄 유지 —
+    # 진입 시점 레짐 불확실성은 초기 확신도만 낮출 뿐, 추가 하락이 주는 정보는 별개).
+    if algo_id in ("fng_contrarian", "vix_rsi"):
+        position_weight *= algorithms.fng_vix_unknown_multiplier(algo_id, macro)
     # WI-7: omnibus 평균회귀 익절 목표가(진입 시점 고정). live scheduler와 동일 순수함수.
     omni_target_price = None
     if algo_id == "omnibus":

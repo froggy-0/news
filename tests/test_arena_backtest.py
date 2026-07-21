@@ -214,6 +214,61 @@ def test_fng_contrarian_scales_in_and_skips_price_stop(monkeypatch) -> None:
     assert trade.open_price == pytest.approx(96.3571, abs=1e-3)
 
 
+def test_fng_contrarian_unknown_regime_multiplier_scales_first_tranche_only(monkeypatch) -> None:
+    # P4(2026-07-21, 신규·미검증): UNKNOWN_REGIME_SIZE_MULT_BY_ALGO가 최초 1차 트랜치에만
+    # 적용되고, 이후 가격 기준 물타기(fill_price_tranches)는 정상 절대비중·정상 상한대로
+    # 진행돼야 한다 — "진입 시점 확신도"만 낮추고 물타기 스케줄 자체는 건드리지 않는 설계.
+    monkeypatch.setattr(parameters, "FNG_TARGET_EXIT_ENABLED", False)
+    monkeypatch.setattr(parameters, "UNKNOWN_REGIME_SIZE_MULT_BY_ALGO", {"fng_contrarian": 0.5})
+
+    def fng_long(macro, indicators):
+        return "long" if macro.get("fng", 100) < 30 else None
+
+    result = backtest.run_replay(
+        [
+            _frame(0, close=100.0, macro={"fng": 25, "arena_regime_state": "unknown"}),
+            _frame(1, close=98.0, low=96.5, macro={"fng": 15, "arena_regime_state": "unknown"}),
+            *[
+                _frame(i, close=98.0, macro={"fng": 20, "arena_regime_state": "unknown"})
+                for i in range(2, 12)
+            ],
+            _frame(12, close=98.0, macro={"fng": 60, "arena_regime_state": "unknown"}),
+        ],
+        strategy_fns={"fng_contrarian": fng_long},
+        settings=_spot_settings(),
+    )
+
+    assert len(result.trades) == 1
+    trade = result.trades[0]
+    # 1차 트랜치 0.15×0.5=0.075 + 2차 트랜치(정상 0.25, 배수 미적용) = 0.325.
+    assert trade.position_weight == pytest.approx(0.325)
+
+
+def test_fng_contrarian_unknown_regime_multiplier_defaults_off(monkeypatch) -> None:
+    # 빈 dict(기본값)면 unknown 레짐이어도 기존 동작(0.15 첫 트랜치)과 완전히 동일.
+    monkeypatch.setattr(parameters, "FNG_TARGET_EXIT_ENABLED", False)
+    assert parameters.UNKNOWN_REGIME_SIZE_MULT_BY_ALGO == {}
+
+    def fng_long(macro, indicators):
+        return "long" if macro.get("fng", 100) < 30 else None
+
+    result = backtest.run_replay(
+        [
+            _frame(0, close=100.0, macro={"fng": 25, "arena_regime_state": "unknown"}),
+            *[
+                _frame(i, close=100.0, macro={"fng": 20, "arena_regime_state": "unknown"})
+                for i in range(1, 12)
+            ],
+            _frame(12, close=100.0, macro={"fng": 60, "arena_regime_state": "unknown"}),
+        ],
+        strategy_fns={"fng_contrarian": fng_long},
+        settings=_spot_settings(),
+    )
+
+    assert len(result.trades) == 1
+    assert result.trades[0].position_weight == pytest.approx(0.15)
+
+
 def test_fng_contrarian_time_stop_closes_after_max_hold(monkeypatch) -> None:
     monkeypatch.setattr(parameters, "FNG_TARGET_EXIT_ENABLED", False)  # 시간손절 격리 검증
 

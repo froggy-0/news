@@ -17,6 +17,8 @@
   --fresh-backtest : macro 백필 백테스트 즉석 재계산(~30-60s, 정확한 대조). 기본은 저장본.
   --algo <id>      : 특정 알고만 상세.
   --days <n>       : 차단 사유 집계 기간(기본 14일).
+  --since-version  : 섹션2에 "현재 버전 이후만" 서브테이블 추가(기본: parameters.PARAMS_VERSION).
+                     P0(성과회계 분리) — 구버전 유산 손실이 현행 파라미터 성과를 가리는 것 방지.
 
 재현: .venv/bin/python3 scripts/analysis/arena_status.py
 """
@@ -35,9 +37,21 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from arena import positions  # noqa: E402
+from arena import parameters, positions  # noqa: E402
 
 ALGOS = ["regime_trend", "fng_contrarian", "vix_rsi", "macd_momentum", "multi_factor", "omnibus"]
+
+
+def _version_num(v: str | None) -> int:
+    """'arena-params-v30' → 30. 파싱 불가 시 -1(항상 필터 밖)."""
+    if not v:
+        return -1
+    try:
+        return int(v.rsplit("v", 1)[-1])
+    except ValueError:
+        return -1
+
+
 PRICE_URL = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
 
 
@@ -244,6 +258,11 @@ def main() -> int:
         default=None,
         help="기본: data/sentiment_join/ 내 최신 master*.parquet 자동 선택",
     )
+    ap.add_argument(
+        "--since-version",
+        default=parameters.PARAMS_VERSION,
+        help="섹션2 '현재 버전 이후만' 필터 기준(기본: 현재 PARAMS_VERSION)",
+    )
     args = ap.parse_args()
     if args.parquet is None:
         args.parquet = _latest_parquet()
@@ -319,6 +338,32 @@ async def _run(args) -> int:
         for v in vers:
             vs = _agg([t for t in closed if t.get("params_version") == v])
             out.append(f"  {v}: n={vs['n']} win={vs['win']:.0f}% 가중합={vs['sum_w']:+.2f}%")
+
+    # ── P0: 현재 버전 이후만 (성과회계 분리) ────────────────────
+    since_num = _version_num(args.since_version)
+    since_closed = [c for c in closed if _version_num(c.get("params_version")) >= since_num]
+    if since_closed:
+        out.append(f"\n### 현재 버전(`{args.since_version}`) 이후만 — 레거시 버전 손실 분리")
+        out.append("algo | n | win% | 가중합% | 기대값%/T | PF")
+        for a in ALGOS:
+            ts = [c for c in since_closed if c["algo_id"] == a]
+            if not ts:
+                continue
+            s = _agg(ts)
+            pf = f"{s['pf']:.2f}" if s["pf"] != float("inf") else "inf"
+            warn = " (표본 부족)" if s["n"] < 10 else ""
+            out.append(
+                f"{a} | {s['n']} | {s['win']:.0f} | {s['sum_w']:+.2f} | {s['expectancy']:+.2f} | "
+                f"{pf}{warn}"
+            )
+        legacy_closed = [c for c in closed if _version_num(c.get("params_version")) < since_num]
+        if legacy_closed:
+            legacy_sum = _agg(legacy_closed)["sum_w"]
+            since_sum = _agg(since_closed)["sum_w"]
+            out.append(
+                f"(레거시 {len(legacy_closed)}건 누적 {legacy_sum:+.2f}% vs 현행 "
+                f"{len(since_closed)}건 {since_sum:+.2f}% — 누적 성과가 구버전에 지배되면 여기서 드러남)"
+            )
 
     # ── 3. MFE/MAE 청산 품질 ────────────────────────────────────
     out.append("\n## 3. MFE/MAE 청산 품질 (보유중 최대 유리/불리, 4h봉 기준)")

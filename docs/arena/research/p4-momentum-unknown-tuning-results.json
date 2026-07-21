@@ -1,0 +1,110 @@
+{
+  "7.2 fng momentum 매그니튜드": {
+    "target": "fng_contrarian",
+    "best": "A_baseline",
+    "results": {
+      "A_baseline": {
+        "n": 51,
+        "win": 58.8,
+        "sum_w_ret": 2.452
+      },
+      "B_atr0.15": {
+        "n": 47,
+        "win": 55.3,
+        "sum_w_ret": 0.532
+      },
+      "C_atr0.25": {
+        "n": 49,
+        "win": 55.1,
+        "sum_w_ret": 1.695
+      },
+      "D_atr0.40": {
+        "n": 50,
+        "win": 58.0,
+        "sum_w_ret": 2.106
+      }
+    },
+    "dsr": 0.53
+  },
+  "7.2 vix_rsi momentum 매그니튜드": {
+    "target": "vix_rsi",
+    "best": "A_baseline",
+    "results": {
+      "A_baseline": {
+        "n": 19,
+        "win": 68.4,
+        "sum_w_ret": 5.79
+      },
+      "B_atr0.15": {
+        "n": 12,
+        "win": 58.3,
+        "sum_w_ret": -0.459
+      },
+      "C_atr0.25": {
+        "n": 16,
+        "win": 62.5,
+        "sum_w_ret": 2.15
+      },
+      "D_atr0.40": {
+        "n": 18,
+        "win": 66.7,
+        "sum_w_ret": 4.131
+      }
+    },
+    "dsr": 0.664
+  },
+  "7.1 fng unknown 사이징": {
+    "target": "fng_contrarian",
+    "best": "A_baseline",
+    "results": {
+      "A_baseline": {
+        "n": 51,
+        "win": 58.8,
+        "sum_w_ret": 2.452
+      },
+      "B_mult0.5": {
+        "n": 51,
+        "win": 58.8,
+        "sum_w_ret": 2.271
+      },
+      "C_mult0.65": {
+        "n": 51,
+        "win": 58.8,
+        "sum_w_ret": 2.325
+      },
+      "D_mult0.8": {
+        "n": 51,
+        "win": 58.8,
+        "sum_w_ret": 2.38
+      }
+    },
+    "dsr": 0.53
+  },
+  "7.1 vix_rsi unknown 사이징": {
+    "target": "vix_rsi",
+    "best": "A_baseline",
+    "results": {
+      "A_baseline": {
+        "n": 19,
+        "win": 68.4,
+        "sum_w_ret": 5.79
+      },
+      "B_mult0.5": {
+        "n": 19,
+        "win": 68.4,
+        "sum_w_ret": 4.239
+      },
+      "C_mult0.65": {
+        "n": 19,
+        "win": 68.4,
+        "sum_w_ret": 4.704
+      },
+      "D_mult0.8": {
+        "n": 19,
+        "win": 68.4,
+        "sum_w_ret": 5.17
+      }
+    },
+    "dsr": 0.664
+  }
+}

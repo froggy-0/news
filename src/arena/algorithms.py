@@ -49,6 +49,30 @@ def _is_risk_off(state: str | None) -> bool:
     return state in _RISK_OFF_REGIMES
 
 
+def _regime_unknown(macro: dict) -> bool:
+    """로컬 4h 레짐이 미분류(unknown/미수집)인지 — 매크로 오버레이 폴백 이전의 원시 상태.
+
+    fng_contrarian/vix_rsi는 이 상태를 진입 veto로 쓰지 않는다(risk-off 체크만 하고
+    unknown 자체는 통과시킴) — P4(unknown 조이기)는 그 대신 사이징을 낮춰
+    (fng_vix_unknown_multiplier) 완화한다.
+    """
+    local = macro.get("arena_regime_state")
+    return not local or local == regime.REGIME_UNKNOWN
+
+
+def fng_vix_unknown_multiplier(algo_id: str, macro: dict) -> float:
+    """unknown 레짐 진입 사이징 완화 (P4, 2026-07-21, 신규·미검증).
+
+    parameters.UNKNOWN_REGIME_SIZE_MULT_BY_ALGO에 algo_id가 없거나 로컬 레짐이 unknown이
+    아니면 1.0(무효과). omnibus_position_multiplier와 동일 배선 패턴(backtest._open_position·
+    scheduler._run_cycle에서 position_weight에 곱함).
+    """
+    mult = parameters.UNKNOWN_REGIME_SIZE_MULT_BY_ALGO.get(algo_id)
+    if mult is None or not _regime_unknown(macro):
+        return 1.0
+    return mult
+
+
 def _funding_hot(macro: dict) -> bool:
     """펀딩 z-score 과열 여부 — 롱 과밀(과열) 시 True (진입 억제)."""
     z = macro.get("funding_zscore")
@@ -246,13 +270,22 @@ def _drawdown_sufficient(macro: dict) -> bool:
         return True
 
 
-def _momentum_not_worsening(ind: dict, *, enabled: bool = True) -> bool:
+def _momentum_not_worsening(
+    ind: dict, *, enabled: bool = True, max_abs_hist: float | None = None
+) -> bool:
     """하락 모멘텀이 더 악화되지 않을 때만 True — freefall 한복판 진입(칼받기) 회피.
 
     MACD 히스토그램이 직전 봉 대비 상승(>=)이면 하락 가속이 멈춘 것으로 본다(평균회귀
     진입 타이밍 필터: 매도 소진 대기). 미수집(None) 시 True(graceful). v23 백테스트
     (macro 백필 6개월): fng 종가자산 1.002→1.011·MaxDD -4.9→-2.9%·2월 -2.47→-1.40%.
     재현: scripts/analysis 실험. 플래그 FNG_CONTRARIAN_STABILIZATION_ENABLED.
+
+    매그니튜드 게이트(2026-07-21, 신규·미검증): 방향만 보고 크기를 안 봐서 "직전보다는
+    덜 나쁘지만 여전히 깊은 음수"인 진입을 걸러내지 못한다는 라이브 관찰(arena-status
+    2026-07-21 — fng/vix_rsi 손실 다수가 macd_hist 음수 진입에 집중)에 대응. max_abs_hist가
+    주어지면 방향 조건을 통과해도 |mh|가 그 값 이상이면 여전히 차단(칼받기 지속 구간).
+    기본 None(기존 동작과 동일) — parameters.MOMENTUM_MAGNITUDE_GATE_ATR_MULT_BY_ALGO가
+    빈 dict인 한 무효과. A/B 전 채택 금지.
     """
     if not enabled:
         return True
@@ -261,9 +294,25 @@ def _momentum_not_worsening(ind: dict, *, enabled: bool = True) -> bool:
     if mh is None or mhp is None:
         return True
     try:
-        return float(mh) >= float(mhp)
+        mh_f, mhp_f = float(mh), float(mhp)
     except (TypeError, ValueError):
         return True
+    if mh_f < mhp_f:
+        return False
+    if max_abs_hist is not None and mh_f < -abs(max_abs_hist):
+        return False
+    return True
+
+
+def _momentum_magnitude_threshold(algo_id: str, ind: dict) -> float | None:
+    """ATR×배수로 정규화된 |macd_hist| 임계 — 없으면(dict 미등록) None(무효과)."""
+    mult = parameters.MOMENTUM_MAGNITUDE_GATE_ATR_MULT_BY_ALGO.get(algo_id)
+    if mult is None:
+        return None
+    atr = ind.get("atr")
+    if not atr:
+        return None
+    return float(atr) * mult
 
 
 def regime_trend(macro: dict, ind: dict) -> str | None:
@@ -340,8 +389,11 @@ def fng_contrarian(macro: dict, ind: dict) -> str | None:
         return None
     if fng < parameters.FNG_LONG_BELOW:
         # 안정화 게이트(v23): 하락 모멘텀이 더 악화되는 중이면 진입 보류(칼받기 회피).
+        # 매그니튜드 확장(2026-07-21, 미검증): 방향 개선돼도 여전히 깊은 음수면 차단.
         if not _momentum_not_worsening(
-            ind, enabled=parameters.FNG_CONTRARIAN_STABILIZATION_ENABLED
+            ind,
+            enabled=parameters.FNG_CONTRARIAN_STABILIZATION_ENABLED,
+            max_abs_hist=_momentum_magnitude_threshold("fng_contrarian", ind),
         ):
             return None
         return "long"
@@ -385,7 +437,11 @@ def vix_rsi(macro: dict, ind: dict) -> str | None:
         return None
     if parameters.VIX_RSI_MA200_GATE_ENABLED and _below_ma200(macro):
         return None
-    if not _momentum_not_worsening(ind, enabled=parameters.VIX_RSI_STABILIZATION_ENABLED):
+    if not _momentum_not_worsening(
+        ind,
+        enabled=parameters.VIX_RSI_STABILIZATION_ENABLED,
+        max_abs_hist=_momentum_magnitude_threshold("vix_rsi", ind),
+    ):
         return None
 
     # q40 기준 +5% 이내(VIX_CALM_TOLERANCE_BAND)는 실질 calm으로 인정.

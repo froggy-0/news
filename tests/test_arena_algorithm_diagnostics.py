@@ -1,4 +1,81 @@
-from arena import algorithms, execution_rules
+from arena import algorithms, execution_rules, parameters
+
+
+def test_momentum_not_worsening_magnitude_gate_blocks_deep_negative_even_if_improving() -> None:
+    # 방향은 개선(hist -3.0 → -2.5, mh>=mhp)이지만 여전히 max_abs_hist(2.0)보다 깊은 음수
+    # → 매그니튜드 게이트가 없으면(max_abs_hist=None) 통과, 있으면 차단.
+    ind = {"macd_hist": -2.5, "macd_hist_prev": -3.0}
+    assert algorithms._momentum_not_worsening(ind, max_abs_hist=None) is True
+    assert algorithms._momentum_not_worsening(ind, max_abs_hist=2.0) is False
+    # 임계 안쪽(|-1.0| < 2.0)이면 매그니튜드 게이트 있어도 통과.
+    ind_shallow = {"macd_hist": -1.0, "macd_hist_prev": -1.5}
+    assert algorithms._momentum_not_worsening(ind_shallow, max_abs_hist=2.0) is True
+
+
+def test_momentum_magnitude_threshold_defaults_to_none_when_algo_not_in_dict() -> None:
+    # 기본 빈 dict → 등록 안 된 알고는 항상 None(무효과).
+    assert parameters.MOMENTUM_MAGNITUDE_GATE_ATR_MULT_BY_ALGO == {}
+    assert algorithms._momentum_magnitude_threshold("fng_contrarian", {"atr": 100.0}) is None
+
+
+def test_momentum_magnitude_threshold_scales_by_atr(monkeypatch) -> None:
+    monkeypatch.setattr(
+        parameters, "MOMENTUM_MAGNITUDE_GATE_ATR_MULT_BY_ALGO", {"fng_contrarian": 0.25}
+    )
+    assert algorithms._momentum_magnitude_threshold("fng_contrarian", {"atr": 100.0}) == 25.0
+    # atr 미수집 → None(graceful).
+    assert algorithms._momentum_magnitude_threshold("fng_contrarian", {}) is None
+    # 임계 dict에 없는 알고는 여전히 None.
+    assert algorithms._momentum_magnitude_threshold("vix_rsi", {"atr": 100.0}) is None
+
+
+def test_fng_contrarian_default_off_unaffected_by_magnitude_gate_dict() -> None:
+    # 빈 dict(기본값)일 때 fng_contrarian 진입 로직은 기존 동작과 완전히 동일해야 한다.
+    macro = {"arena_regime_state": "bull_trend", "fng": 20.0, "btc_drawdown_90d": -0.15}
+    assert algorithms.fng_contrarian(macro, {"macd_hist": -50.0, "macd_hist_prev": -60.0}) == "long"
+
+
+def test_regime_unknown_reads_raw_local_regime_before_overlay_fallback() -> None:
+    assert algorithms._regime_unknown({}) is True
+    assert algorithms._regime_unknown({"arena_regime_state": "unknown"}) is True
+    # 오버레이(regime_state)가 뭐든 로컬이 unknown이면 unknown으로 본다 — _regime_state()의
+    # 폴백과 달리 이 헬퍼는 "로컬이 실제로 분류됐는가"만 본다.
+    assert (
+        algorithms._regime_unknown({"arena_regime_state": "unknown", "regime_state": "BullQuiet"})
+        is True
+    )
+    assert algorithms._regime_unknown({"arena_regime_state": "bull_trend"}) is False
+
+
+def test_fng_vix_unknown_multiplier_defaults_to_noop() -> None:
+    assert parameters.UNKNOWN_REGIME_SIZE_MULT_BY_ALGO == {}
+    macro = {"arena_regime_state": "unknown"}
+    assert algorithms.fng_vix_unknown_multiplier("fng_contrarian", macro) == 1.0
+    assert algorithms.fng_vix_unknown_multiplier("vix_rsi", macro) == 1.0
+
+
+def test_fng_vix_unknown_multiplier_applies_only_when_regime_unknown(monkeypatch) -> None:
+    monkeypatch.setattr(
+        parameters, "UNKNOWN_REGIME_SIZE_MULT_BY_ALGO", {"fng_contrarian": 0.5, "vix_rsi": 0.65}
+    )
+    assert (
+        algorithms.fng_vix_unknown_multiplier("fng_contrarian", {"arena_regime_state": "unknown"})
+        == 0.5
+    )
+    assert (
+        algorithms.fng_vix_unknown_multiplier("vix_rsi", {"arena_regime_state": "unknown"}) == 0.65
+    )
+    # 로컬 레짐이 분류돼 있으면(unknown 아님) 무효과 — 오버레이가 뭐든 상관없다.
+    assert (
+        algorithms.fng_vix_unknown_multiplier(
+            "fng_contrarian", {"arena_regime_state": "bull_trend"}
+        )
+        == 1.0
+    )
+    # dict에 없는 알고는 항상 1.0.
+    assert (
+        algorithms.fng_vix_unknown_multiplier("omnibus", {"arena_regime_state": "unknown"}) == 1.0
+    )
 
 
 def test_fng_contrarian_stabilization_blocks_worsening_momentum() -> None:

@@ -324,6 +324,32 @@ TAKER_CONFIRM_RATIO_4H_MIN = 0.95
 GENERIC_TARGET_EXIT_ENABLED = True  # 스위치 자체는 on, 대상 알고는 아래 dict가 결정(빈 dict=무효과)
 TARGET_EXIT_ATR_MULT_BY_ALGO: dict[str, float] = {}
 
+# ── ❌ 모멘텀 매그니튜드 게이트 (fng_contrarian·vix_rsi) — 기각 (2026-07-21 실측) ────
+# 근거: /arena-status(2026-07-21) — fng·vix_rsi 라이브 손실의 다수가 진입 시 macd_hist
+#   음수(칼받기 유사 패턴, 승률 25~33%)인데 _momentum_not_worsening()은 방향(mh>=mh_prev)만
+#   보고 크기를 안 봐서 "직전보다 덜 나쁜 깊은 음수"를 걸러내지 못함 — 이라는 가설이었으나,
+#   11개월 macro 백필 백테스트(master_20260710, W1 13bps 하니스)에서 ATR×{0.15,0.25,0.40}
+#   전 변형이 baseline 대비 악화(fng Δ-0.35~-1.92, vix_rsi Δ-0.35~-6.25, 거래수·승률 동반
+#   감소) — 걸러낸 "깊은 음수" 진입들이 실제로는 순양(+)이었음. **채택하지 않음**(재시도
+#   금지). 재현: scripts/analysis/p4_momentum_unknown_tuning.py, 결과:
+#   docs/arena/research/p4-momentum-unknown-tuning-results.json. 인프라(algorithms.
+#   _momentum_magnitude_threshold·_momentum_not_worsening의 max_abs_hist)는 코드
+#   재사용 가능하도록 보존(빈 dict=off, TARGET_EXIT_ATR_MULT_BY_ALGO와 동일 관례).
+MOMENTUM_MAGNITUDE_GATE_ATR_MULT_BY_ALGO: dict[str, float] = {}
+
+# ── ❌ unknown 레짐 사이징 완화 (fng_contrarian·vix_rsi) — 기각 (2026-07-21 실측) ────
+# 근거: return-improvement-priorities-20260715.md P4 — 라이브 손실의 레짐 분포가 unknown에
+#   과대표집(fng 10건 중 6, vix_rsi 6건 중 5)돼 사이징을 낮추면 개선될 것이라는 가설이었으나,
+#   11개월 macro 백필 백테스트에서 배수 {0.5, 0.65, 0.8} 전 변형이 baseline 대비 악화
+#   (fng Δ-0.07~-0.18, vix_rsi Δ-0.62~-1.55, 거래수는 불변·sum_w_ret만 하락) — unknown
+#   레짐 진입도 baseline 전체와 동일하게 순양(+)이었고, 사이징을 줄이면 그 기여분만
+#   깎였을 뿐. 라이브 n=16 표본에서 관찰된 상관은 (오버레이가 이 기간 내내 'Transitional'
+#   로 균일했던 것과 맞물려) 이 11개월 창에서는 재현되지 않음. **채택하지 않음**(재시도
+#   금지). 재현·결과는 위 매그니튜드 게이트 항목과 동일 스크립트/파일. 인프라
+#   (algorithms.fng_vix_unknown_multiplier)는 코드 재사용 가능하도록 보존. fng·vix_rsi는
+#   반드시 독립 A/B — vix_rsi는 구조 게이트 추가 시 항상 악화된 전례(WI-5 기각).
+UNKNOWN_REGIME_SIZE_MULT_BY_ALGO: dict[str, float] = {}
+
 RSI_PERIOD = 14
 RSI_NEUTRAL = 50.0
 RSI_RECENT_MULTIPLE = 3
