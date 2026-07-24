@@ -1331,6 +1331,22 @@ def test_compute_sentiment_aggregate_normal() -> None:
     assert agg["bearishRatio"] == round(1 / 5, 4)
 
 
+def test_compute_sentiment_aggregate_even_median() -> None:
+    """짝수 표본 median = 두 중앙값 평균 (이전 sorted[n//2] 상향 편향 회귀 방지)."""
+    from morning_brief.public_site import _compute_sentiment_aggregate
+
+    items = [
+        {"sentimentScore": -0.4, "sentimentLabel": "bearish"},
+        {"sentimentScore": 0.0, "sentimentLabel": "neutral"},
+        {"sentimentScore": 0.2, "sentimentLabel": "neutral"},
+        {"sentimentScore": 0.8, "sentimentLabel": "bullish"},
+    ]
+    agg = _compute_sentiment_aggregate(items)
+    # 정렬: [-0.4, 0.0, 0.2, 0.8] → median = (0.0 + 0.2) / 2 = 0.1
+    # 버그 버전(sorted[2])은 0.2를 반환했음.
+    assert agg["median"] == round(0.1, 4)
+
+
 def test_compute_sentiment_aggregate_with_nulls() -> None:
     """null 포함: None 항목은 제외."""
     from morning_brief.public_site import _compute_sentiment_aggregate

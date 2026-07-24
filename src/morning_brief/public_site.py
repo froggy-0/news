@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import re
+import statistics
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -568,8 +569,9 @@ def _compute_sentiment_aggregate(items: list[dict[str, Any]]) -> dict[str, Any]:
     ]
     n = len(scores)
     mean = sum(scores) / n
-    sorted_scores = sorted(scores)
-    median = sorted_scores[n // 2]
+    # 짝수 표본에서 두 중앙값의 평균을 취하는 정식 median (이전 sorted[n//2]는 상위 중앙 원소만
+    # 취해 짝수 n에서 상향 편향됐음). display 전용 필드지만 정확성 위해 statistics.median 사용.
+    median = statistics.median(scores)
     std = (sum((s - mean) ** 2 for s in scores) / n) ** 0.5
     return {
         "mean": round(mean, 4),
