@@ -116,9 +116,17 @@ regime 피처 전부 `_lag1` 시리즈 사용(`risk_overlay.py:185-218`) — ETF
 `risk_overlay.py:129-162`. 2026-07-14부터 관측 시작(CLAUDE.md 기록 07-11과 불일치), **전 관측치 `sjm_bear`
 단일**(2026-07-24 확인, 별도 진단). 한 번도 전환 안 해 승격 판단 근거 자체가 아직 없음. 관찰 계속(≥1회 전환 필요).
 
-### 3.3 ⚠️ 뉴스 기사 dedup 미확인
-`pipeline.py`에서 명시적 dedup(`drop_duplicates`/URL·title 유니크) 코드가 안 보임. 같은 사건 다수 매체 중복
-보도가 감성 평균을 편향시킬 수 있음(1.2와 결합 시 악화). **확인·보강 후보**.
+### 3.3 ✅ 뉴스 기사 dedup — production 이미 2단 수행 (2026-07-24 정정, 오탐이었음)
+> **정정**: 초기 감사에서 "dedup 미확인"으로 적었으나 이는 `pipeline.py`만 보고 내린 **오탐**.
+> 실제 dedup은 `news.py`/`news_selection.py` 깊숙이 있음.
+
+`_compute_sentiment_aggregate`의 입력 `all_news`(=`public_news_packet`, `news.py:1073`)는
+`public_ranked_items = _dedup_and_rank(...)`(`news.py:1008`)에서 나온다. `_dedup_and_rank`
+(`news_selection.py:329-383`)는 **Step 1 URL dedup + Step 2 퍼지 title dedup(`_title_dedup_key`,
+점수 기반 tiebreak)** 2단 처리. 따라서 집계 입력엔 중복이 거의 없음.
+
+§6 A/B에서 관측한 **dup rate 48.9%는 raw_backup 아카이브가 날짜별 여러 패킷 파일을 누적 저장한
+아티팩트**일 뿐(단일 실행 all_news가 아님) — 실제 집계 경로엔 무관. **dead lever 확정, 액션 없음.**
 
 ### 3.4 ✅ 나머지 매크로/시장 피처는 실사용
 regimeRaw 16피처가 arena 6알고 게이트로 실제 소비됨(CLAUDE.md 게이트 표와 일치). breadth·stablecoin·LSR·taker·
@@ -143,15 +151,16 @@ MA200·drawdown 전부 특정 알고 veto에 연결. gate_block_rates 재실행(
 | # | 항목 | 심각도 | 공수 | 근거 |
 |---|---|---|---|---|
 | 1 | ❌ 뉴스 감성 **confidence 가중 평균** — **A/B 기각(2026-07-24)** | ~~🔴 높음~~ | — | §6 |
-| 2 | 뉴스 기사 **dedup** 확인·보강 — **A/B에서 dup 48.9% 실측**, 승격 후보 | ⚠️ 중 | 소 | `pipeline.py` (§3.3, §6) |
+| 2 | ✅ 뉴스 기사 **dedup** — **production 이미 2단 수행(오탐 정정)**, dead lever | ~~⚠️ 중~~ | — | `news_selection.py:329` (§3.3) |
 | 3 | `exchange_outflow` **결정**(구현 or 제거) | ⚠️ 중 | — | `exchange_outflow.py` (§3.1) |
 | 4 | ✅ median 계산 `statistics.median()`로 수정 — **완료(53208c9)** | 🟢 낮음 | 소 | `public_site.py:573` (§1.3) |
 | 5 | sentiment_join VIX/저커버리지 **명시적 stale 컷** 검토 | 🟢 낮음 | 소 | `vix.py`, `quality.py` (§2.4) |
 | 6 | 하이브리드 점수 **히스토리 리스케일 아티팩트** 문서화(비교 시 주의) | 🟢 낮음 | 소 | `hybrid_index.py:487` (§2.4-4) |
 
-**핵심 메시지**: 구조·방어·누수방지·이상치처리는 이미 잘 돼 있다. §1.2에서 "가장 실질적 결함"으로
-지목했던 confidence 가중은 **실측 A/B로 예측력 개선이 없음이 확인돼 기각**(§6). 뉴스 단순평균 자체는
-IC +0.17로 유효. 남은 실질 레버는 **dedup**(dup 48.9% 실측)과 exchange_outflow 결정 정도.
+**핵심 메시지 (2026-07-24 최종)**: 구조·방어·누수방지·이상치처리는 이미 잘 돼 있다. 뉴스 감성 관련
+두 후보 레버가 모두 닫혔다 — (1) confidence 가중은 **A/B로 무효과 기각**(§6), (2) dedup은 **production이
+이미 2단 수행**(§3.3, 초기 오탐 정정). 뉴스 단순평균 자체는 IC +0.17로 유효. **코드 레벨에서 검증된
+개선 여지는 소진**됐고, 남은 건 exchange_outflow 결정(#3, 사용자 판단)·저심각도 유지보수(#5/#6)뿐.
 
 ---
 
@@ -176,8 +185,8 @@ Spearman IC 비교 + 부트스트랩 5000회 CI.
 
 **부수 발견**:
 1. 뉴스 **단순평균 IC fwd_1d = +0.17** — 일간 감성 피처로는 유의미한 예측력. 단순평균 유지 정당.
-2. **URL dedup rate 48.9%** 실측(699→357건). production `pipeline.py`의 dedup 여부 미확인 —
-   confidence보다 **dedup이 더 유망한 레버**일 수 있음(별도 검증 후보, §5 #2).
+2. ~~URL dedup rate 48.9%~~ → **오탐 정정(§3.3)**: 이 48.9%는 아카이브 누적 아티팩트이고
+   production은 `news_selection.py:_dedup_and_rank`로 이미 2단 dedup 수행. dead lever.
 3. ⚠️ 소표본(n=52, 55일 아카이브 한정). 더 긴 창은 R2 curated 브리프(per-article 점수 보존) 접근 필요 —
    로컬 R2 자격증명 미설정이라 현재 불가.
 
@@ -188,6 +197,7 @@ Spearman IC 비교 + 부트스트랩 5000회 CI.
 
 ## 부록: 확신도 표기
 
-- **CONFIRMED**(코드 정독으로 확정): §1.1, §1.2, §1.3, §2.1, §2.2, §2.3, §3.1, §4
-- **CONFIRMED**(실측 A/B): §6(confidence 가중 무효과, dedup 48.9%)
-- **PLAUSIBLE**(코드 근거 있으나 실측/표본 검증 권장): §2.4(stale 빈도), §3.3(production dedup 여부)
+- **CONFIRMED**(코드 정독으로 확정): §1.1, §1.2, §1.3, §2.1, §2.2, §2.3, §3.1, §3.3(production 2단 dedup), §4
+- **CONFIRMED**(실측 A/B): §6(confidence 가중 무효과)
+- **RETRACTED**(초기 오탐): §3.3의 "dedup 미확인" — production `news_selection.py`가 이미 수행
+- **PLAUSIBLE**(코드 근거 있으나 실측/표본 검증 권장): §2.4(stale 빈도)
