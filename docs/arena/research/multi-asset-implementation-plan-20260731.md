@@ -80,8 +80,17 @@ BTC 단일자산으로는 검증 불가능했던 **cross-asset robustness**(전�
 
 ### 2.2 작업 항목
 
-#### P1-1. 자산 상수 및 프로파일 정의
+#### P1-1. 자산 상수 및 프로파일 정의 — ✅ 구현 완료 (2026-07-31, 커밋 9f5a311)
 **파일**: `src/arena/parameters.py`, `src/arena/frequency.py`, `src/arena/config.py`
+
+실측 결과: 계획대로 구현. `frequency.py`에
+`multi_asset_shadow_profile_id()`/`_register_multi_asset_shadow_profiles()`를 추가해
+`parameters.MULTI_ASSET_SYMBOLS`를 순회하며 `shadow_4h_ethusdt`/`shadow_4h_solusdt`
+프로파일을 `LIVE_4H_PROFILE_ID`와 완전 동일한 파라미터로 자동 등록(비용산식 포함).
+테스트 2건 추가(`test_multi_asset_shadow_defaults_off_and_symbols_include_btc_eth_sol`,
+`test_multi_asset_shadow_profiles_registered_for_eth_and_sol`) — 150개 arena 테스트
+전체 통과, `live_4h` 프로파일 무변경 확인. PARAMS_VERSION bump 없음(인프라 추가, 거래
+파라미터 값 변경 아님 — W1/W2와 동일 원칙).
 
 - `parameters.py`: `BINANCE_SYMBOL`(기존, BTC 라이브용)은 **그대로 두고**, 신규 상수 추가:
   ```
@@ -99,8 +108,14 @@ BTC 단일자산으로는 검증 불가능했던 **cross-asset robustness**(전�
 
 **검증**: `tests/test_arena_parameters.py`에 상수 존재·기본 off 상태 단언 추가.
 
-#### P1-2. 스키마 마이그레이션 (B1 해소)
+#### P1-2. 스키마 마이그레이션 (B1 해소) — ✅ 파일 작성 완료 (2026-07-31, 커밋 9f5a311)
 **파일**: `supabase/migrations/20260731_arena_multi_asset_v1.sql`(신규)
+
+⚠️ **파일 작성만 완료, DB 적용은 별도** — 이 프로젝트는 마이그레이션을 Supabase MCP가
+아니라 `psql`/Dashboard SQL Editor로 수동 적용하는 관례([deploy-runbook.md](../operations/deploy-runbook.md)).
+`supabase/migrations/`가 `.gitignore`에 있으나 기존 파일들처럼 `git add -f`로 강제
+추가해 커밋함(로컬 스크래치 방지용 무시규칙, 확정 마이그레이션은 예외 처리하는 기존
+관례 확인 후 동일하게 처리).
 
 ```sql
 ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS symbol TEXT;
