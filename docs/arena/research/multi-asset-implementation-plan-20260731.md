@@ -202,31 +202,52 @@ ruff 통과.
   자산 간 값이 덮어써짐 → `set/get_latest_market_features`를 심볼 키 dict로 변경 필요
   (`market_structure.py:98,239` 확인).
 
-#### P1-5. 백테스트 하네스 멀티자산화
-**파일**: `src/arena/backtest.py`, `scripts/analysis/backtest_with_macro_backfill.py`
+#### P1-5. 백테스트 하네스 멀티자산화 — ✅ 구현+실행 완료 (2026-07-31, 커밋 5473146)
+**파일**: `scripts/analysis/backfill_ohlcv_symbol.py`(신규), `scripts/analysis/backtest_with_macro_backfill.py`
 
-- `load_frames_from_supabase(symbol=...)`는 이미 심볼 인자 보유(1134,1248) → 호출부만
-  변경.
-- `backtest_with_macro_backfill.py`에 `--symbol` 인자 추가. **macro_rows는 3자산 공통**
-  (parquet에서 재구성한 글로벌 regimeRaw를 그대로 주입) — Track B 설계와 일치.
-- **선결 확인**: `arena_ohlcv_bars`에 ETHUSDT/SOLUSDT 4H 봉이 **아직 없다**. 20개월치
-  백테스트를 하려면 Binance klines에서 히스토리를 수집해 적재하는 선행 작업 필요
-  (`data_lake.record_ohlcv_bars(symbol=...)`가 이미 심볼 지원). 1회성 백필 스크립트
-  `scripts/analysis/backfill_ohlcv_symbol.py` 신설 권장.
+- `backfill_ohlcv_symbol.py` 신설·**실제 실행**: Binance klines를 페이지네이션 수집해
+  `arena_ohlcv_bars`에 upsert. ETHUSDT·SOLUSDT 각 **3,822행**(2024-11-01~2026-07-31)
+  실제 백필 완료 — Supabase 직접 조회로 적재 확인(마이그레이션 불필요, 이 테이블은
+  symbol 컬럼 기존 보유).
+- `backtest_with_macro_backfill.py`에 `--symbol` 추가, macro_rows는 3자산 공통 유지.
+  **실제 실행 검증**: `--symbol ETHUSDT`/`--symbol SOLUSDT` 둘 다 20개월 macro 백필
+  데이터로 정상 실행 — ETHUSDT 241건, SOLUSDT 247건 거래, macro 커버리지 100%
+  (1966/1966 프레임), 6개 알고 전부 정상 산출.
 
-#### P1-6. 분석 스크립트 심볼 인자화 (B6)
-**파일**: `scripts/analysis/` 하위 — `wi_tuning.py:93`, `gate_block_rates.py:78`,
-`exec_gate_ecr_sensitivity.py:88`, `fng_optimize.py:68` 등
+#### P1-6. Track A/B 교차자산 리포트 — ✅ 구현+실행 완료 (2026-07-31, 커밋 7fec8e9)
+**파일**: `scripts/analysis/cross_asset_report.py`(신규)
 
-- 각 스크립트에 `--symbol` 인자 추가(기본값 `BTCUSDT`로 기존 동작 보존).
-- **신규 스크립트 `scripts/analysis/cross_asset_report.py`**: 설계문서 §5.1의 지표
-  전체(거래수·비용후 expectancy·B&H 대비 초과수익·노출시간/beta-adjusted·PF·MaxDD·
-  MAE/MFE·turnover·레짐별 성과·단일거래 기여도)를 **Algorithm × Asset 매트릭스**로
-  산출하고, **Track A/B를 별도 표로 분리 출력**(설계문서 §5.2 조건6).
-- `arena_status.py`에 `--symbol` 인자 추가(현행 BTC 전용 뷰 유지 + 자산 선택 가능).
+기존 `wi_tuning.py` 등 분석스크립트의 `--symbol` 개별 추가(B6)는 지금 라운드에서는
+보류 — `cross_asset_report.py` 하나로 P1-6의 핵심 목적(Track A/B 교차자산 판정)을
+충족했고, 나머지 스크립트들은 특정 가설 재검증용이라 필요 시점에 개별 추가하는 게
+더 실용적(지금 전부 추가하면 쓰이지 않을 코드가 늘어남).
 
-#### P1-7. 대시보드 자산 탭 (B4)
+`cross_asset_report.py`가 산출: n·win%·expectancy·PF·가중합수익·vs buy&hold 초과수익·
+최대낙폭·평균MFE/MAE(4H봉 high/low 기준)·노출률(exposure%)·단일거래 지배도를
+**Algorithm × Asset 매트릭스**로, **Track A/B 완전 분리 출력**(설계문서 원칙6 — 자산별
+평균 금지, 원칙 §3.2 disclosure — Track A도 BTC 공유 veto 있음을 헤더에 명시).
+
+**실제 실행 결과**(20개월 macro 백필, 3자산 실데이터 — 판정용이 아닌 파이프라인
+동작 검증 목적, 정식 판정은 설계문서 §5.2/§5.3 기준 적용 후 별도):
+```
+BTCUSDT: frames=3772  trades=420  buy&hold=-15.12%
+ETHUSDT: frames=3788  trades=421  buy&hold=-26.73%
+SOLUSDT: frames=3788  trades=472  buy&hold=-59.66%
+```
+6알고×3자산 전부 결과 정상 생성 확인(파이프라인 무결성 검증 완료). ⚠️ 이 수치들을
+"1차 실험 결과"로 해석·판정하는 건 별도 작업 — 지금은 "코드가 실제로 3자산에서
+작동한다"는 것만 확인된 상태.
+
+#### P1-7. 대시보드 자산 탭 — ⏸️ 보류 (2026-07-31 사용자 결정)
 **파일**: `arena/index.html`
+
+착수 전 확인 중 발견: 대시보드는 `paper_positions`(포지션 단위 open/close 손익궤적)를
+읽어 렌더링하는데, ETH/SOL은 (a) `ENABLE_ARENA_MULTI_ASSET_SHADOW` 플래그가 여전히
+off(EC2 미배포)이고 (b) 설령 켜도 경량 shadow 경로(P1-4)는 `arena_shadow_decisions`에
+신호만 기록하지 포지션 단위 손익곡선을 만들지 않음 — 즉 지금 자산 탭을 만들어도 ETH/SOL
+쪽엔 보여줄 실체가 없음. 실제 Track A/B 결과는 P1-6(백테스트 스크립트) 산출물이지 라이브
+누적 데이터가 아님. **사용자 결정: 보류** — shadow 플래그를 켜서 몇 주 축적되거나
+cross_asset_report 판정이 난 뒤 대시보드를 별도로 다시 다룬다.
 
 - 상단에 BTC/ETH/SOL 탭 UI 추가. 선택 심볼을 전역 변수화하고 다음을 파라미터화:
   - 가격 티커 fetch(1306), 캔들 klines fetch(1331) — `symbol=` 쿼리 치환
@@ -316,17 +337,17 @@ P1-1 자산 상수·프로파일·플래그                                    �
 P1-3 포지션 레이어 심볼 인지 ─┐                                   ✅ 완료
 P1-4 스케줄러 shadow 사이클 ─┤ (병렬 가능)                        ✅ 완료(경량 신규 경로로 계획 수정)
         ↓                    │
-[백필] ETH/SOL OHLCV 히스토리 적재  ← P1-5의 선결                 ⬜ 미착수
+[백필] ETH/SOL OHLCV 히스토리 적재  ← P1-5의 선결                 ✅ 완료(각 3,822행 실제 백필)
         ↓
-P1-5 백테스트 하네스 멀티자산화                                   ⬜ 미착수
+P1-5 백테스트 하네스 멀티자산화                                   ✅ 완료(ETH 241건·SOL 247건 실제 실행 검증)
         ↓
-P1-6 분석 스크립트 + cross_asset_report.py                       ⬜ 미착수
+P1-6 cross_asset_report.py                                       ✅ 완료(3자산×6알고 실제 실행, Track A/B 분리 출력)
         ↓
-P1-8 테스트 (전 단계 회귀 확인)                                   ✅ P1-1~P1-4분은 완료(152개 통과), 나머지는 해당 단계에서 추가
+P1-8 테스트 (전 단계 회귀 확인)                                   ✅ 신규 src 코드는 152개 테스트, 신규 스크립트는 실행검증(기존 관례)
         ↓
-P1-7 대시보드 자산 탭                                             ⬜ 미착수
+P1-7 대시보드 자산 탭                                             ⏸️ 보류(라이브 손익데이터 부재 확인, 사용자 결정)
         ↓
-[판정] 설계문서 §5.2 기준으로 A/B/C/D 분기 결정
+[판정] 설계문서 §5.2 기준으로 A/B/C/D 분기 결정                   ⬜ 미착수 — cross_asset_report 결과를 판정기준에 대입하는 별도 작업
         ↓
 Phase 2 착수 여부 결정 (D면 취소)
 ```
@@ -348,17 +369,22 @@ Supabase 조회) 아직 미적용. 이 세션의 도구로는 적용 불가(Post
 
 ## 6. 남은 미결정 사항
 
-1. ~~omnibus 트랙 배정~~ — **해결됨**(2026-07-31 코드검증, 설계문서 §3.3). Track A
-   포함 확정. 부수적으로 Track A 3개 알고(regime_trend·macd_momentum·omnibus) 전부가
-   funding/LSR/MA200/ETF흐름 4개 veto를 통해 BTC 전용 macro dict에 의존한다는 사실도
-   확인됨 — P1-4에 처리방침(자산고유 성분/공유 성분 분리) 반영 완료.
-2. **ETH/SOL 실시간 1분 수집 여부** — Phase 1 권장안은 "BTC만 유지"(부하·안정성). 단
-   이 경우 ETH/SOL은 4H 봉 기반 MFE/MAE만 산출 가능(1분 정밀화 불가) — 설계문서 §5.1의
-   MAE/MFE 지표 해상도가 자산별로 다르다는 점을 결과 해석 시 명시해야 함.
-3. **shadow 결과의 대시보드 공개 시점** — 내부 검증 완료 전에 공개할지, 판정 후 공개할지.
-4. **Track A `cross_asset_report.py` 출력 시 disclosure 문구 추가**(P1-6) — Track A
-   결과표에 "funding/LSR/MA200/ETF유출 veto는 BTC 값 공유"라는 각주를 넣어야
-   "순수 자산고유 검증"으로 오독되지 않게 한다.
+1. ~~omnibus 트랙 배정~~ — **해결됨**(설계문서 §3.3, Track A 포함 확정).
+2. ~~Track A disclosure 문구~~ — **해결됨**(`cross_asset_report.py` 출력 헤더에
+   "funding/LSR/MA200/ETF유출 veto는 BTC 공유값" 명시 완료).
+3. **ETH/SOL 실시간 1분 수집 여부** — 여전히 미결정. Phase 1 권장안은 "BTC만 유지"
+   (부하·안정성). 이 경우 ETH/SOL은 4H 봉 기반 MFE/MAE만 산출 가능(현재
+   `cross_asset_report.py`가 이미 이 방식으로 계산 중 — 1분 정밀화 아님, 결과 해석 시
+   명시 필요).
+4. **P1-7 대시보드** — 보류 확정(§ P1-7). shadow 플래그를 켜 라이브 데이터가 쌓이거나,
+   `cross_asset_report.py` 기반 정적 뷰로 갈지 재검토 필요.
+5. **[신규] §5.2/§5.3 판정 적용** — `cross_asset_report.py`가 실제 3자산×6알고 수치를
+   산출했으나, 이를 설계문서 §5.2("제한적 교차자산 전이성 있음") / §5.3("BTC 특화")
+   판정기준에 대입해 A/B/C/D 분기를 실제로 결정하는 작업은 아직 안 함 — 지금까지는
+   "파이프라인이 작동한다"만 확인됐고 "결과가 무엇을 의미하는지" 판정은 별도.
+6. **[신규] shadow 플래그 실배포 여부** — `ENABLE_ARENA_MULTI_ASSET_SHADOW`는 여전히
+   기본 off. EC2에 배포·플래그 on 하는 것은 이번 세션 범위 밖(로컬 코드 구현까지만) —
+   실행하려면 배포 런북 절차 필요.
 
 ## 관련 문서
 - [structural-priority-multi-asset-expansion-20260730.md](structural-priority-multi-asset-expansion-20260730.md) — 실험설계(문제진단·자산선정·Track A/B·판정기준)
