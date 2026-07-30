@@ -391,6 +391,10 @@ async def record_macro_snapshot(
     payload: dict[str, Any],
     signal: dict[str, Any],
 ) -> CaptureWriteResult:
+    # payload(R2 latest.json 원본 전체, 행당 ~132KB)는 저장하지 않는다 — risk_overlay만
+    # 실제로 조회되고(backtest.py/arena_status.py 전부 risk_overlay만 select) payload/
+    # payload_hash는 어디서도 읽힌 적 없는 write-only 컬럼이었음(2026-07-31 DB 사이즈
+    # 진단, 309행에 42MB TOAST 확인 후 컬럼 자체를 드롭). 스키마와 코드를 함께 정정.
     risk_overlay = payload.get("riskOverlay") if isinstance(payload, dict) else None
     row = {
         "run_id": run_id,
@@ -398,8 +402,6 @@ async def record_macro_snapshot(
         "source_url": source_url,
         "reference_date": signal.get("reference_date"),
         "stale_hours": signal.get("stale_hours"),
-        "payload_hash": payload_hash(payload),
-        "payload": payload,
         "risk_overlay": risk_overlay if isinstance(risk_overlay, dict) else {},
     }
     return await _safe_execute(
@@ -744,6 +746,10 @@ async def record_realtime_feature_bar(row: dict[str, Any]) -> CaptureWriteResult
 
 
 async def record_realtime_risk_state(decision: RealtimeRiskDecision) -> CaptureWriteResult:
+    # risk_snapshot(= decision.as_dict() 전체)은 저장하지 않는다 — 아래 별도 컬럼들과
+    # 완전히 중복이었음(행당 크기 실측 risk_snapshot≈2.1KB ≈ 나머지 컬럼 합 2.5KB,
+    # 2026-07-31 DB 사이즈 진단). scheduler._latest_realtime_risk_features()가
+    # row.get("risk_snapshot") or row로 이미 폴백 처리돼 있어 컬럼 제거로도 안전.
     row = {
         "symbol": decision.symbol,
         "window_start": _ts(decision.window_start),
@@ -757,7 +763,6 @@ async def record_realtime_risk_state(decision: RealtimeRiskDecision) -> CaptureW
         "feature_snapshot": decision.feature_snapshot,
         "baseline_snapshot": decision.baseline_snapshot,
         "policy_snapshot": decision.as_dict()["policy"],
-        "risk_snapshot": decision.as_dict(),
         "evaluated_at": _ts(decision.evaluated_at),
     }
     return await _safe_execute_optional_schema(
