@@ -470,7 +470,13 @@ EXEC_GATE_MAX_SLIPPAGE_BPS = 8.0
 EXEC_GATE_MIN_DEPTH_SCORE = 0.5
 EXEC_GATE_MAX_LATENCY_MS = 750.0
 EXEC_GATE_VOL_SPIKE_MAX = 1.0
+# 2026-07-30 진단(논문 λ 재현 세션 중 발견): REST /depth limit=20은 BTCUSDT 10bps 밴드의
+# 5~6%만 커버(실측: mid 대비 20번째 레벨이 0.5~0.65bps 거리, 10bps 밴드 안 채움) —
+# depth_10bp_bid/ask_usd가 실제값의 ~1.5~2%로 과소추정(실측 $98K vs 실제 $6.26M, 60배차)
+# → depth_too_thin/slippage_too_high 오탐 유발. limit={100,500,1000,5000} 실측 결과
+# 1000부터 양쪽(bid/ask) 10bps 완전 커버(5000과 동일 값, 추가 이득 없음).
 EXEC_GATE_MIN_DEPTH_10BP_USD = 1_000_000.0
+EXEC_GATE_DEPTH_SNAPSHOT_LIMIT = 1000
 SHADOW_ORDER_NOTIONAL_USD = 1_000.0
 SHADOW_ORDER_TIMEOUT_SEC = 30
 SHADOW_ARRIVAL_BENCHMARK_SEC = 1

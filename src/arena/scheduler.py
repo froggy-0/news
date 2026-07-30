@@ -188,9 +188,17 @@ async def _fetch_book_ticker(symbol: str) -> tuple[float | None, float | None]:
 async def _fetch_depth_snapshot(
     symbol: str,
 ) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
-    """의사결정 시점 depth20 스냅샷. 실패해도 shadow TCA만 degraded 처리된다."""
+    """의사결정 시점 오더북 스냅샷. 실패해도 shadow TCA만 degraded 처리된다.
+
+    limit=1000(parameters.EXEC_GATE_DEPTH_SNAPSHOT_LIMIT) — 이전 limit=20은 BTCUSDT
+    10bps 밴드의 5~6%만 커버해 depth_10bp_*_usd가 실제값의 ~1.5~2%로 과소추정되던
+    버그(2026-07-30 진단, 실측 $98K vs 실제 $6.26M) 수정.
+    """
     try:
-        url = f"{config.BINANCE_DEPTH_URL}?symbol={symbol}&limit=20"
+        url = (
+            f"{config.BINANCE_DEPTH_URL}?symbol={symbol}"
+            f"&limit={parameters.EXEC_GATE_DEPTH_SNAPSHOT_LIMIT}"
+        )
         async with httpx.AsyncClient(timeout=parameters.HTTP_TIMEOUT_SECONDS) as client:
             res = await client.get(url)
             res.raise_for_status()
