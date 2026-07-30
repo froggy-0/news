@@ -1265,6 +1265,145 @@ async def _run_frequency_shadow_cycle(profile_id: str) -> None:
     )
 
 
+async def _run_asset_shadow_cycle(symbol: str) -> None:
+    """멀티자산 확장 1차(BTC 제외 ETH/SOL) 경량 shadow 사이클 (2026-07-31, P1-4).
+
+    설계문서(docs/arena/research/structural-priority-multi-asset-expansion-20260730.md)의
+    Track A/B 검증용. `_run_shadow_vnext()`가 재사용하는 sleeves.SHADOW_SLEEVES는
+    trend_core(regime_trend) 1개만 등록돼 있어 6개 알고 전부를 검증하려면 적합하지
+    않음(구현 중 확인) — 대신 sleeves/allocator/execution_gate vNext 프레임워크는
+    건드리지 않고, 6개 production ALGORITHMS를 직접 호출해 record_shadow_decision에
+    최소 필드만 기록하는 경량 전용 경로로 구현한다. paper_positions는 접촉하지 않음
+    (라이브 BTC 트랙레코드 무영향, 실험원칙4 shadow-only).
+    """
+    profile_id = frequency.multi_asset_shadow_profile_id(symbol)
+    profile = frequency.get_frequency_profile(profile_id)
+    indicator_profile_id = profile.default_indicator_profile_id
+    cost_scenario = frequency.get_cost_scenario(
+        profile.frequency_profile_id,
+        profile.default_cost_scenario_id,
+    )
+    run_id = data_lake.new_run_id()
+    started_at = datetime.now(timezone.utc)
+    capture_results: list[data_lake.CaptureWriteResult] = []
+    base_params_snapshot = _base_params_snapshot(
+        profile=profile,
+        indicator_profile_id=indicator_profile_id,
+        cost_scenario=cost_scenario,
+    )
+    logger.info("Multi-asset shadow cycle start: %s", symbol)
+    capture_results.append(
+        await data_lake.record_run_started(
+            run_id=run_id,
+            started_at=started_at,
+            params_snapshot=base_params_snapshot,
+            symbol=profile.symbol,
+            interval=profile.interval,
+            frequency_profile_id=profile.frequency_profile_id,
+            indicator_profile_id=indicator_profile_id,
+            cost_model_version=cost_scenario.cost_model_version,
+            cost_scenario_id=cost_scenario.cost_scenario_id,
+            product_type=config.TARGET_PRODUCT,
+            position_semantics=config.POSITION_SEMANTICS,
+        )
+    )
+    try:
+        ohlcv, macro_data = await asyncio.gather(
+            _fetch_ohlcv(
+                symbol=profile.symbol,
+                interval=profile.interval,
+                limit=config.KLINES_LIMIT,
+            ),
+            _fetch_macro(),
+        )
+    except Exception as exc:
+        logger.error("Multi-asset shadow data failed (%s): %s", symbol, exc)
+        await data_lake.record_run_completed(
+            run_id=run_id,
+            completed_at=datetime.now(timezone.utc),
+            status="data_failed",
+            error_message=str(exc),
+            capture_results=capture_results,
+        )
+        return
+
+    if not ohlcv.closes:
+        await data_lake.record_run_completed(
+            run_id=run_id,
+            completed_at=datetime.now(timezone.utc),
+            status="data_failed",
+            error_message="empty_closes",
+            capture_results=capture_results,
+        )
+        return
+
+    now = datetime.now(timezone.utc)
+    data_timestamp = _data_timestamp(ohlcv, now)
+    ind = indicators.compute(
+        ohlcv.highs,
+        ohlcv.lows,
+        ohlcv.closes,
+        volumes=ohlcv.volumes,
+        interval=profile.interval,
+        indicator_profile_id=indicator_profile_id,
+    )
+
+    # arena_regime_state는 이 자산 자신의 ind로 재계산(100% 자산고유, 설계문서 §3.1
+    # 코드검증 결과). 나머지 macro(funding/LSR/etf/ma200 등)는 BTC 전용 R2 파이프라인
+    # 산출물이라 재계산 경로가 없어 그대로 공유(Phase1 확정, 자산별 재계산 금지 아님 —
+    # 애초에 재계산할 자산별 데이터가 존재하지 않음).
+    regime_decision = regime.classify_regime(
+        ind, market_features=None, macro=dict(macro_data.signal)
+    )
+    asset_macro = dict(macro_data.signal)
+    asset_macro["arena_regime_state"] = regime_decision.regime_state
+
+    for algo_id in ALGORITHMS:
+        diag = explain_signal(algo_id, asset_macro, ind)
+        direction = diag.get("raw_signal")
+        signal = sleeves.SleeveSignal(
+            sleeve_id="multi_asset_shadow",
+            algo_id=algo_id,
+            direction=direction,
+            confidence=1.0 if direction else 0.0,
+            raw_score=1.0 if direction == "long" else (-1.0 if direction == "short" else 0.0),
+            target_weight=0.0,
+            reason={"diagnostics": diag},
+            feature_snapshot={"indicators": dict(ind), "macro": dict(asset_macro)},
+        )
+        allocation = sleeves.AllocationDecision(
+            allowed=True,
+            target_weight=0.0,
+            risk_budget=0.0,
+            reason={"note": "multi_asset_shadow_record_only_no_execution"},
+            regime_snapshot=regime_decision.as_dict(),
+            risk_snapshot={},
+        )
+        capture_results.append(
+            await data_lake.record_shadow_decision(
+                run_id=run_id,
+                signal=signal,
+                allocation=allocation,
+            )
+        )
+
+    await data_lake.record_run_completed(
+        run_id=run_id,
+        completed_at=datetime.now(timezone.utc),
+        status="completed",
+        data_timestamp=data_timestamp,
+        capture_results=capture_results,
+    )
+
+
+async def _run_multi_asset_shadow_cycle_safe(symbol: str) -> None:
+    """_run_asset_shadow_cycle 래퍼 — 예상치 못한 예외로 인한 job 중단 방지."""
+    try:
+        await _run_asset_shadow_cycle(symbol)
+    except Exception:
+        logger.exception("Multi-asset shadow cycle 처리되지 않은 예외 (%s)", symbol)
+
+
 def _frequency_shadow_cron(profile: frequency.FrequencyProfile) -> dict[str, object]:
     if profile.decision_cadence_minutes < 60:
         return {"hour": "*", "minute": f"*/{profile.decision_cadence_minutes}"}
@@ -1321,6 +1460,17 @@ async def run() -> None:
                 args=[profile_id],
                 **cron,
             )
+    if config.ENABLE_ARENA_MULTI_ASSET_SHADOW:
+        # 메인 BTC 사이클(:05)과 겹치지 않게 :20에 실행 — 자원 분산 목적일 뿐, 4H
+        # 주기 자체는 실험원칙5(동일 워크포워드 구간)에 따라 라이브와 동일.
+        for symbol in config.ARENA_MULTI_ASSET_SHADOW_SYMBOLS:
+            scheduler.add_job(
+                _run_multi_asset_shadow_cycle_safe,
+                "cron",
+                args=[symbol],
+                hour=parameters.SCHEDULER_CRON_HOUR,
+                minute=20,
+            )
     # 주간 백테스트 리포트: 매주 월요일 00:10 UTC = 09:10 KST
     scheduler.add_job(
         _run_weekly_backtest_safe,
@@ -1338,6 +1488,13 @@ async def run() -> None:
             *[
                 _run_frequency_shadow_cycle(profile_id)
                 for profile_id in config.ARENA_FREQUENCY_SHADOW_PROFILES
+            ]
+        )
+    if config.ENABLE_ARENA_MULTI_ASSET_SHADOW:
+        await asyncio.gather(
+            *[
+                _run_multi_asset_shadow_cycle_safe(symbol)
+                for symbol in config.ARENA_MULTI_ASSET_SHADOW_SYMBOLS
             ]
         )
 

@@ -33,9 +33,17 @@ def db() -> AsyncClient:
     return _db()
 
 
-async def refresh_open_positions() -> None:
-    """DB에서 오픈 포지션 로드 → state.open_positions 갱신."""
-    res = await _db().table("paper_positions").select("*").eq("status", "open").execute()
+async def refresh_open_positions(*, symbol: str | None = None) -> None:
+    """DB에서 오픈 포지션 로드 → state.open_positions 갱신.
+
+    symbol=None(기본)이면 기존과 동일하게 전체 조회 — BTC 라이브 경로 무회귀.
+    멀티자산 shadow는 paper_positions를 쓰지 않으므로 이 필터는 향후 live 전환
+    대비용(P1-3, 설계문서 §2.2 원칙2).
+    """
+    query = _db().table("paper_positions").select("*").eq("status", "open")
+    if symbol is not None:
+        query = query.eq("symbol", symbol)
+    res = await query.execute()
     by_algo: dict[str, dict | None] = {k: None for k in ALGORITHMS}
     for row in res.data:
         by_algo[row["algo_id"]] = row
@@ -45,19 +53,22 @@ async def refresh_open_positions() -> None:
     )
 
 
-async def risk_metrics(now: datetime) -> dict[str, Any]:
-    """Return realized daily PnL and per-algo max drawdown from closed paper trades."""
+async def risk_metrics(now: datetime, *, symbol: str | None = None) -> dict[str, Any]:
+    """Return realized daily PnL and per-algo max drawdown from closed paper trades.
+
+    symbol=None(기본)이면 기존과 동일하게 전체 자산 합산 — BTC 라이브 경로 무회귀.
+    """
     now_utc = execution_rules.parse_utc_datetime(now)
     day_start = datetime.combine(now_utc.date(), time.min, tzinfo=timezone.utc)
-    res = (
-        await _db()
+    query = (
+        _db()
         .table("paper_positions")
         .select("algo_id,ret_pct,close_time,position_weight")
         .eq("status", "closed")
-        .order("close_time")
-        .limit(10000)
-        .execute()
     )
+    if symbol is not None:
+        query = query.eq("symbol", symbol)
+    res = await query.order("close_time").limit(10000).execute()
 
     daily_realized = 0.0
     equity_by_algo: dict[str, float] = {}
@@ -103,6 +114,7 @@ async def open_position(
     position_weight: float = 1.0,
     slippage_bps: float = 0.0,
     spread_bps_round_trip: float = 0.0,
+    symbol: str = parameters.BINANCE_SYMBOL,
     params_snapshot: dict[str, Any],
     indicator_snapshot: dict[str, Any],
     macro_snapshot: dict[str, Any],
@@ -117,6 +129,7 @@ async def open_position(
     trail_distance = execution_rules.trail_distance_from_stop(open_price, stop_loss_price)
     payload = {
         "algo_id": algo_id,
+        "symbol": symbol,
         "direction": direction,
         "status": "open",
         "open_time": open_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -141,6 +154,9 @@ async def open_position(
         "position_semantics": config.POSITION_SEMANTICS,
     }
     # 아직 마이그레이션 전인 DB(컬럼 부재)에서도 안전하게 동작하도록 선택 컬럼 fallback.
+    # symbol: 2026-07-31 멀티자산 마이그레이션(20260731_arena_multi_asset_v1.sql) 미적용
+    # 상태에서도 라이브 BTC 경로가 깨지지 않도록 포함 — 적용 전엔 자동 생략, 적용 후엔
+    # 자동으로 포함(코드 변경 불필요).
     _optional_columns = (
         "risk_snapshot",
         "slippage_bps",
@@ -149,6 +165,7 @@ async def open_position(
         "position_semantics",
         "position_weight",
         "trail_distance",
+        "symbol",
     )
     try:
         res = await _db().table("paper_positions").insert(payload).execute()

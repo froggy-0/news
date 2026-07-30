@@ -144,26 +144,42 @@ CREATE INDEX IF NOT EXISTS idx_paper_positions_symbol_status
   문제가 자산 축에서 재발함. **shadow 단계에선 `paper_positions`를 안 쓰므로 즉시
   문제되진 않지만, live 전환 시 반드시 선결**.
 
-#### P1-4. 스케줄러 멀티자산 shadow 사이클
-**파일**: `src/arena/scheduler.py`
+#### P1-4. 스케줄러 멀티자산 shadow 사이클 — ✅ 구현 완료 (2026-07-31)
+**파일**: `src/arena/scheduler.py`, `tests/test_arena_multi_asset_shadow.py`(신규)
 
-`_run_frequency_shadow_cycle`(1127)을 템플릿으로 `_run_asset_shadow_cycle(symbol)` 신설:
-- `frequency.get_frequency_profile(f"shadow_4h_{symbol.lower()}")`로 프로파일 획득
-- `_fetch_ohlcv(symbol=profile.symbol, ...)` — 이미 심볼 인자 받음(69)
-- `_fetch_macro()` — **심볼 인자 없이 그대로 호출**(글로벌 피처 공유, 설계 의도)
+⚠️ **구현 중 계획 수정 발견**: 당초 "`_run_shadow_vnext(...)` 재사용" 전제가 부정확했음
+— `_run_shadow_vnext`가 호출하는 `sleeves.SHADOW_SLEEVES`에는 `trend_core_sleeve`
+(regime_trend) **1개만** 등록돼 있고, fng_contrarian·vix_rsi·macd_momentum·
+multi_factor·omnibus 5개는 이 vNext 프레임워크에 없음. 그대로 재사용하면 6개 알고 중
+1개만 멀티자산 검증되는 상태가 됨. 사용자 확인 후 **경량 신규 경로**로 결정(대안이었던
+"sleeves 프레임워크 확장"은 기존 BTC 단일-sleeve 연구에 영향범위가 생겨 기각).
+
+**실제 구현**: `_run_asset_shadow_cycle(symbol)` 신설 — `_run_frequency_shadow_cycle`을
+구조적 템플릿으로 삼되, sleeves/allocator/execution_gate vNext 프레임워크는 전혀
+건드리지 않고 `algorithms.ALGORITHMS` 6개를 `explain_signal()`로 직접 호출해
+`data_lake.record_shadow_decision()`에 최소 필드만 기록(`sleeve_id="multi_asset_shadow"`
+로 vNext 단일-sleeve 경로와 구분).
+- `frequency.multi_asset_shadow_profile_id(symbol)`로 프로파일 획득(P1-1에서 이미 구현)
+- `_fetch_ohlcv(symbol=profile.symbol, ...)` — 자산 자신의 OHLCV
+- `_fetch_macro()` — 심볼 인자 없이 그대로 호출(글로벌 피처 공유, 설계 의도)
 - `indicators.compute(...)` — 자산 자신의 OHLCV로 독립 계산
-- **`regime.classify_regime(ind, ...)`를 이 자산의 `ind`로 직접 호출해 `arena_regime_state`를
-  계산하고, `_fetch_macro()`가 반환한 공유 macro dict를 복사한 뒤 그 값을 덮어써서 이
-  사이클 전용 macro dict를 만든다.** ⚠️ **코드검증으로 확인된 필수 사항**(2026-07-31,
-  설계문서 §3.1/§3.3): `arena_regime_state`는 100% 자산고유라 자산별로 재계산해야
-  하지만, `funding_zscore`/`long_short_ratio_zscore`/`etf_flow_zscore`/
-  `btc_above_ma200` 4개는 BTC 전용 R2 파이프라인 산출물이라 **재계산 경로가 없음** —
-  그대로 공유 유지(3자산 전부 BTC 값, Phase 1 범위 내 확정). 이 두 처리를 뒤섞으면
-  (예: `arena_regime_state`까지 BTC 값을 그대로 쓰면) Track A의 "로컬 레짐은 자산고유"
-  전제 자체가 깨짐 — 반드시 분리 처리.
-- `_run_shadow_vnext(...)` 재사용 → `record_shadow_decision`에만 기록
-- `run()`(1305)에 플래그 가드 하에 심볼별 cron job 등록. 기존 BTC `_run_cycle_safe`
-  job은 **손대지 않음**.
+- **`regime.classify_regime(ind, market_features=None, macro=shared)`로 이 자산의 `ind`만
+  으로 `arena_regime_state`를 로컬 재계산**하고, 공유 macro dict를 복사해 그 값만
+  덮어씀 — 나머지(funding/LSR/etf/ma200 등 BTC 전용 4개 포함 전체)는 그대로 공유
+  (§3.1/§3.3 코드검증 결론 그대로 구현).
+- `market_structure.set_latest_market_features()`는 호출하지 않음 — 이 함수가 전역
+  단일 dict(심볼 미구분)라 BTC 값을 덮어쓸 위험이 있었는데(구현 전 코드 확인으로
+  발견), 경량 경로가 애초에 이 모듈을 타지 않아 자동으로 회피됨. 별도 수정 불필요.
+- `run()`에 `config.ENABLE_ARENA_MULTI_ASSET_SHADOW` 플래그 가드 하에 심볼별 cron job
+  등록(메인 BTC 사이클 :05와 안 겹치게 :20). 기존 BTC `_run_cycle_safe` job은 **무변경**.
+- `_run_multi_asset_shadow_cycle_safe(symbol)` 래퍼로 예외 격리(`_run_cycle_safe`와
+  동일 패턴).
+
+**테스트**: `paper_positions`(open/close/refresh_open_positions)에 절대 접촉하지 않음을
+monkeypatch로 강제 검증, 6개 알고 전부 기록되는지, `arena_regime_state`가 로컬 재계산
+되고(BTC 공유값 "bull_trend"와 다른 결과로 덮어써짐) BTC 전용 피처(`etf_flow_zscore`
+등)는 공유값 그대로인지 확인. **152개 arena 테스트 전체 통과**(150+2, 회귀 없음),
+ruff 통과.
 
 **주의점**:
 - `_fetch_depth_snapshot`/`_book_execution_features`는 심볼별 호출 필요(오더북은
@@ -291,25 +307,24 @@ CREATE INDEX IF NOT EXISTS idx_paper_positions_symbol_status
 ## 5. 착수 순서 (의존성 기준)
 
 ```
-[선결] omnibus 트랙 배정 결정 (설계문서 §3.3)
-   └─ 코드 확인: RISK_OFF/TRANSITION의 글로벌 신호 개입 여부
+[선결] omnibus 트랙 배정 결정 (설계문서 §3.3)                    ✅ 완료(코드검증, Track A 포함)
         ↓
-P1-2 스키마 마이그레이션 (paper_positions.symbol)
+P1-2 스키마 마이그레이션 (paper_positions.symbol)                ✅ 파일 작성 완료 — ⚠️ DB 적용 대기(수동)
         ↓
-P1-1 자산 상수·프로파일·플래그
+P1-1 자산 상수·프로파일·플래그                                    ✅ 완료
         ↓
-P1-3 포지션 레이어 심볼 인지 ─┐
-P1-4 스케줄러 shadow 사이클 ─┤ (병렬 가능)
+P1-3 포지션 레이어 심볼 인지 ─┐                                   ✅ 완료
+P1-4 스케줄러 shadow 사이클 ─┤ (병렬 가능)                        ✅ 완료(경량 신규 경로로 계획 수정)
         ↓                    │
-[백필] ETH/SOL OHLCV 히스토리 적재  ← P1-5의 선결
+[백필] ETH/SOL OHLCV 히스토리 적재  ← P1-5의 선결                 ⬜ 미착수
         ↓
-P1-5 백테스트 하네스 멀티자산화
+P1-5 백테스트 하네스 멀티자산화                                   ⬜ 미착수
         ↓
-P1-6 분석 스크립트 + cross_asset_report.py
+P1-6 분석 스크립트 + cross_asset_report.py                       ⬜ 미착수
         ↓
-P1-8 테스트 (전 단계 회귀 확인)
+P1-8 테스트 (전 단계 회귀 확인)                                   ✅ P1-1~P1-4분은 완료(152개 통과), 나머지는 해당 단계에서 추가
         ↓
-P1-7 대시보드 자산 탭
+P1-7 대시보드 자산 탭                                             ⬜ 미착수
         ↓
 [판정] 설계문서 §5.2 기준으로 A/B/C/D 분기 결정
         ↓
@@ -318,7 +333,16 @@ Phase 2 착수 여부 결정 (D면 취소)
 
 **체크포인트**: P1-8 완료 시점에 "기존 150+ arena 테스트 + 신규 멀티자산 테스트 전체
 통과 + 플래그 off 상태에서 EC2 배포해 기존 동작 무변경 확인"을 반드시 거친 후에만
-플래그를 켠다.
+플래그를 켠다. **현재 플래그는 여전히 기본 off — P1-4까지 완료됐어도 EC2 라이브 동작은
+무변경.**
+
+⚠️ **DB 적용 관련**: `paper_positions.symbol` 컬럼은 실측 확인 결과(2026-07-31, 실제
+Supabase 조회) 아직 미적용. 이 세션의 도구로는 적용 불가(PostgREST가 DDL 미지원,
+`psql`/`supabase` CLI 로컬 미설치, 직접 Postgres 연결정보 `.env`에 없음) — 기존 관례대로
+사용자가 Dashboard SQL Editor 또는 `psql`로 수동 적용해야 함. `positions.open_position()`은
+컬럼 부재 시 자동 fallback(symbol 없이 재시도)하도록 구현돼 있어 **마이그레이션 미적용
+상태에서도 기존 라이브 동작에 영향 없음**(P1-3 구현 시 기존 optional-column 패턴에
+편입, 코드 변경 불필요 확인됨).
 
 ---
 
