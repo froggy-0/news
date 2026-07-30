@@ -9,6 +9,7 @@ from typing import Any
 from . import parameters
 
 LIVE_4H_PROFILE_ID = "live_4h"
+MULTI_ASSET_SHADOW_PROFILE_PREFIX = "shadow_4h_"
 DEFAULT_INDICATOR_PROFILE_ID = "time_normalized_v1"
 INTRADAY_INDICATOR_PROFILE_ID = "intraday_native_v1"
 COST_MODEL_VERSION = "arena-cost-v2"
@@ -252,6 +253,60 @@ _add_costs(
         ("high", parameters.FEE_BPS, 8.0, 10.0, 2.0),
     ],
 )
+
+
+def multi_asset_shadow_profile_id(symbol: str) -> str:
+    """멀티자산 shadow 전용 frequency_profile_id (예: ETHUSDT -> shadow_4h_ethusdt).
+
+    LIVE_4H_PROFILE_ID는 BTC 라이브 경로 전용이라 값·의미를 바꾸지 않는다. 신규 자산은
+    전부 이 접두사의 별도 프로파일로 등록되며 live_enabled=False(shadow만).
+    """
+    return f"{MULTI_ASSET_SHADOW_PROFILE_PREFIX}{symbol.lower()}"
+
+
+def _register_multi_asset_shadow_profiles() -> None:
+    """2026-07-31 멀티자산 확장 1차(BTC 제외 ETH/SOL) — shadow 전용 프로파일 등록.
+
+    설계문서(docs/arena/research/structural-priority-multi-asset-expansion-20260730.md
+    §4 원칙2)에 따라 LIVE_4H_PROFILE_ID와 완전히 동일한 파라미터(train/test/embargo/
+    ecr_threshold/max_trades/min_hold/비용산식)를 심볼만 바꿔 재사용한다. 자산별
+    재튜닝 금지.
+    """
+    base = FREQUENCY_PROFILES[LIVE_4H_PROFILE_ID]
+    for symbol in parameters.MULTI_ASSET_SYMBOLS:
+        if symbol == parameters.BINANCE_SYMBOL:
+            continue
+        profile_id = multi_asset_shadow_profile_id(symbol)
+        FREQUENCY_PROFILES[profile_id] = FrequencyProfile(
+            frequency_profile_id=profile_id,
+            symbol=symbol,
+            interval=base.interval,
+            decision_cadence_minutes=base.decision_cadence_minutes,
+            live_enabled=False,
+            shadow_candidate=True,
+            train_days=base.train_days,
+            test_days=base.test_days,
+            embargo_hours=base.embargo_hours,
+            ecr_threshold=base.ecr_threshold,
+            max_trades_per_day_per_algo=base.max_trades_per_day_per_algo,
+            min_hold_hours=dict(base.min_hold_hours),
+            min_hold_fallback_hours=base.min_hold_fallback_hours,
+            default_indicator_profile_id=base.default_indicator_profile_id,
+            default_cost_scenario_id=base.default_cost_scenario_id,
+        )
+        # 동일 비용 산식 재사용 (실험 원칙5: 동일 거래비용 산식) — LIVE_4H_PROFILE_ID의
+        # low/base/high 행을 그대로 복제.
+        _add_costs(
+            profile_id,
+            [
+                ("low", parameters.FEE_BPS, 0.0, 0.0, 0.0),
+                ("base", parameters.FEE_BPS, 1.0, 1.0, 0.0),
+                ("high", parameters.FEE_BPS, 2.0, 3.0, 0.0),
+            ],
+        )
+
+
+_register_multi_asset_shadow_profiles()
 
 
 def get_frequency_profile(profile_id: str = LIVE_4H_PROFILE_ID) -> FrequencyProfile:

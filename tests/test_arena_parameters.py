@@ -183,6 +183,38 @@ def test_strategy_version_metadata_matches_parameter_versions() -> None:
     json.dumps(row)
 
 
+def test_multi_asset_shadow_defaults_off_and_symbols_include_btc_eth_sol() -> None:
+    """2026-07-31 멀티자산 확장 P1-1 — 기본값은 off, BTC 라이브 경로 무회귀 보장."""
+    assert parameters.MULTI_ASSET_SYMBOLS == ("BTCUSDT", "ETHUSDT", "SOLUSDT")
+    assert parameters.ARENA_MULTI_ASSET_SHADOW_ENABLED is False
+    assert parameters.ARENA_MULTI_ASSET_SHADOW_SYMBOLS == ("ETHUSDT", "SOLUSDT")
+    assert config.ENABLE_ARENA_MULTI_ASSET_SHADOW is False
+    assert config.ARENA_MULTI_ASSET_SHADOW_SYMBOLS == ("ETHUSDT", "SOLUSDT")
+    # BTC 라이브 프로파일은 절대 변경되면 안 됨 (기존 데이터와의 연속성).
+    live = frequency.get_frequency_profile(frequency.LIVE_4H_PROFILE_ID)
+    assert live.symbol == "BTCUSDT"
+    assert live.live_enabled is True
+
+
+def test_multi_asset_shadow_profiles_registered_for_eth_and_sol() -> None:
+    """ETH/SOL shadow 프로파일이 BTC 라이브와 동일 파라미터(자산별 재튜닝 없음)로 등록됨."""
+    live = frequency.get_frequency_profile(frequency.LIVE_4H_PROFILE_ID)
+    for symbol in ("ETHUSDT", "SOLUSDT"):
+        profile_id = frequency.multi_asset_shadow_profile_id(symbol)
+        profile = frequency.get_frequency_profile(profile_id)
+        assert profile.symbol == symbol
+        assert profile.live_enabled is False
+        assert profile.shadow_candidate is True
+        assert profile.interval == live.interval
+        assert profile.train_days == live.train_days
+        assert profile.test_days == live.test_days
+        assert profile.ecr_threshold == live.ecr_threshold
+        assert profile.min_hold_hours == live.min_hold_hours
+        cost = frequency.get_cost_scenario(profile_id, "base")
+        live_cost = frequency.get_cost_scenario(frequency.LIVE_4H_PROFILE_ID, "base")
+        assert cost.trading_cost_bps_round_trip == live_cost.trading_cost_bps_round_trip
+
+
 def test_feature_registry_rows_are_leakage_safe_model_inputs() -> None:
     rows = feature_registry.feature_registry_rows()
     by_name = {row["feature_name"]: row for row in rows}

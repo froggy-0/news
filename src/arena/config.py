@@ -54,6 +54,10 @@ ENABLE_ARENA_EXECUTION_GATE_LIVE: bool = _bool_env(
     "ENABLE_ARENA_EXECUTION_GATE_LIVE",
     parameters.ARENA_EXECUTION_GATE_LIVE_ENABLED,
 )
+ENABLE_ARENA_MULTI_ASSET_SHADOW: bool = _bool_env(
+    "ENABLE_ARENA_MULTI_ASSET_SHADOW",
+    parameters.ARENA_MULTI_ASSET_SHADOW_ENABLED,
+)
 TARGET_PRODUCT: str = parameters.TARGET_PRODUCT
 POSITION_SEMANTICS: str = parameters.POSITION_SEMANTICS
 SHORT_SIGNAL_ACTION: str = parameters.SHORT_SIGNAL_ACTION
@@ -184,6 +188,14 @@ ARENA_FREQUENCY_SHADOW_PROFILES: tuple[str, ...] = tuple(
         ",".join(parameters.ARENA_FREQUENCY_SHADOW_PROFILES),
     ).split(",")
     if profile.strip()
+)
+ARENA_MULTI_ASSET_SHADOW_SYMBOLS: tuple[str, ...] = tuple(
+    symbol.strip()
+    for symbol in os.environ.get(
+        "ARENA_MULTI_ASSET_SHADOW_SYMBOLS",
+        ",".join(parameters.ARENA_MULTI_ASSET_SHADOW_SYMBOLS),
+    ).split(",")
+    if symbol.strip()
 )
 
 
