@@ -10,7 +10,7 @@ def test_arena_parameter_snapshot_is_json_serializable() -> None:
 
     assert snapshot["params_version"] == parameters.PARAMS_VERSION
     assert snapshot["feature_set_version"] == parameters.FEATURE_SET_VERSION
-    assert snapshot["params_version"] == "arena-params-v31"
+    assert snapshot["params_version"] == "arena-params-v32"
     assert snapshot["feature_set_version"] == "arena-features-v8"
     assert snapshot["position_sizing"]["vol_weight_max"] == 0.7
     assert snapshot["position_sizing"]["risk_per_trade_pct"] == 0.015
@@ -154,6 +154,21 @@ def test_macd_momentum_signal_conditions() -> None:
         )
         == "long"
     )
+
+
+def test_multi_factor_sideways_excluded_by_default() -> None:
+    """v32 (2026-07-30): 정성분석(라이브 손실 6/7이 sideways 진입) + 20개월 백필 재검증
+    (Δ+9.45, 전/후반 분할 둘 다 개선)으로 MULTI_FACTOR_ALLOW_SIDEWAYS True→False 번복."""
+    macro = {"arena_regime_state": "sideways", "fng": 40.0}
+    ind = {"rsi": 40.0}
+    assert parameters.MULTI_FACTOR_ALLOW_SIDEWAYS is False
+    assert algorithms.multi_factor(macro, ind) is None
+    saved = parameters.MULTI_FACTOR_ALLOW_SIDEWAYS
+    try:
+        parameters.MULTI_FACTOR_ALLOW_SIDEWAYS = True
+        assert algorithms.multi_factor(macro, ind) == "long"
+    finally:
+        parameters.MULTI_FACTOR_ALLOW_SIDEWAYS = saved
 
 
 def test_strategy_version_metadata_matches_parameter_versions() -> None:

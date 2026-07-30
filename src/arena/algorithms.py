@@ -388,6 +388,11 @@ def fng_contrarian(macro: dict, ind: dict) -> str | None:
     if _stablecoin_contracting(macro):
         return None
     if fng < parameters.FNG_LONG_BELOW:
+        if (
+            parameters.FNG_CONTRARIAN_MIN_FEAR is not None
+            and fng < parameters.FNG_CONTRARIAN_MIN_FEAR
+        ):
+            return None
         # 안정화 게이트(v23): 하락 모멘텀이 더 악화되는 중이면 진입 보류(칼받기 회피).
         # 매그니튜드 확장(2026-07-21, 미검증): 방향 개선돼도 여전히 깊은 음수면 차단.
         if not _momentum_not_worsening(
@@ -465,6 +470,8 @@ def vix_rsi(macro: dict, ind: dict) -> str | None:
         return None
 
     if rsi < parameters.VIX_RSI_LONG_MAX:
+        if parameters.VIX_RSI_MIN_RSI is not None and rsi < parameters.VIX_RSI_MIN_RSI:
+            return None
         return "long"
     return None
 

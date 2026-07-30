@@ -24,7 +24,7 @@ STRATEGY_VERSION = "arena-spot-v4"
 #   72→60h·min_hold 48→36h 재튜닝(fng_optimize 재그리드, P-A익절과의 상호작용 반영).
 #   ⚠️ 커밋(b9e3c7e·21bcdd8) 메시지엔 v30 명시했으나 이 상수 bump가 누락돼 v29로 오기록되던
 #   버그를 2026-07-14 발견·수정(v25 때와 동일 클래스 재발 — 위 주석 참조).
-PARAMS_VERSION = "arena-params-v31"
+PARAMS_VERSION = "arena-params-v32"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v2"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
@@ -283,8 +283,17 @@ OMNIBUS_REBOUND_SIZE_MULT = 0.25
 #   ✅ v28 활성화: 백테스트 variant C(횡보허용) -2.63→+3.77(Δ+6.40), 거래 84→89(유지).
 MULTI_FACTOR_REGIME_REQUIRED = True
 MULTI_FACTOR_MIN_VOTES_EX_REGIME = 3
-# WI-1 중간안(C): 레짐 필수화 시 강세뿐 아니라 sideways(횡보)도 허용, bear류만 배제.
-MULTI_FACTOR_ALLOW_SIDEWAYS = True
+# WI-1 중간안(C, 11개월 데이터로 채택) → v32(2026-07-30)에서 False로 번복.
+# 정성분석(/arena-status 세션, 라이브 39건 원문 판독): multi_factor 손실 7건 중 6건이
+# arena_regime_state=sideways 진입에 집중(승률14% vs 비횡보 67%) — 발견 계기로 20개월
+# 백필(3766봉) 재검증: True(현행) sum_w=-10.02%(n=146) → False(강세전용) sum_w=-0.57%
+# (n=51, Δ+9.45). 전/후반 분할(2025-09-19 기준)에서도 양쪽 다 개선(Δ+2.79/+6.60,
+# 한쪽 쏠림 아님) — omnibus stop A/B(2026-07-25)가 기각된 이유였던 "전반부에만 몰림"
+# 패턴과 다름. ⚠️ DSR=0.181로 낮음(여전히 PF<1, "엣지 발견"이 아니라 "손실 축소" —
+# P7 macd RSI 완화와 동일 해석 프레임) — 후속 라이브 트랙레코드로 재확인 필요.
+# 재현: scripts/analysis/qual_hypothesis_tuning.py. 근거: docs/arena/research/
+# qualitative-analysis-multi-factor-sideways-20260730.md
+MULTI_FACTOR_ALLOW_SIDEWAYS = False
 #
 # WI-2: fng_contrarian 청산 히스테리시스 — 진입(FNG<30)과 동일 임계로 청산(FNG≥30)하던
 #   반쪽 구조 분리. 반등 초입 조기 flat 청산이 물타기 평단 이점을 버리는 문제(라이브
@@ -384,7 +393,18 @@ REGIME_LONG_STATE = "BullQuiet"
 REGIME_SHORT_STATE = "BearPanic"
 FNG_LONG_BELOW = 30.0
 FNG_SHORT_ABOVE = 70.0
+# 정성분석 가설(2026-07-30) — 라이브 12건(소표본) 중 손실 평균 FNG≈20.7 vs 승리 평균
+# FNG≈26.4로 "얕은 공포가 유리"해 보였으나, 20개월 백필(n=52) 그리드 A/B에서 기각:
+# min15/20/22 전부 baseline(+2.50%) 대비 악화(-1.76~-3.20). 깊은 공포 진입이 실제로는
+# 순기여 중이었음 — 소표본 착시. ❌ 채택하지 않음(재시도 금지). 인프라는 재사용 가능하게
+# 보존(qual_hypothesis_tuning.py 재현).
+FNG_CONTRARIAN_MIN_FEAR: float | None = None
 VIX_RSI_LONG_MAX = 50.0
+# 정성분석 가설(2026-07-30) — 라이브 7건(소표본) 중 손실 RSI 36.7~47.0 vs 승리 RSI
+# 48.95/49.5로 "얕은 침체가 유리"해 보였으나, 20개월 백필(n=35) 그리드 A/B에서 무효과
+# 확정: min35 Δ0, min40 Δ+0.17(노이즈), min45 Δ-2.95(악화). ❌ 채택하지 않음(재시도
+# 금지). 인프라는 재사용 가능하게 보존(qual_hypothesis_tuning.py 재현).
+VIX_RSI_MIN_RSI: float | None = None
 # VIX q40 임계값 허용 밴드: VIX가 q40보다 이 배수 이내로 높으면 "실질 calm"으로 인정.
 # 근거: q40는 90일 롤링 추정치로 일일 오차 2~3%가 존재. 18.44 vs 17.85 = 3.3% — 통계적 노이즈.
 # Ref: VIX percentile band interpretation (CBOE 2023 VIX whitepaper)
