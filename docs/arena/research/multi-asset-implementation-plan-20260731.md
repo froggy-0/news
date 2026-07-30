@@ -412,10 +412,16 @@ Supabase MCP로 DB 사이즈를 진단하다 마이그레이션 적용과 무관
 완료, 파일은 이력 기록용. `src/arena/data_lake.py`의 쓰기 경로도 함께 정리(더 이상
 드롭된 필드를 채우지 않음), 152개 arena 테스트 회귀 없음.
 
-⚠️ **남은 구조적 이슈(이번엔 미처리)**: `arena_realtime_risk_states`/`_events`가
-1분 주기로 무한히 계속 쌓이는 구조라 보존정책(retention) 없이는 장기적으로 계속
-증가한다. 이번엔 컬럼 중복만 제거했고, "N일 이상 된 행 삭제"같은 보존정책은 스케줄
-잡(코드+배포) 추가가 필요해 별도 작업으로 남겨둠.
+4. **보존정책(retention) 추가** — `arena_realtime_risk_states`/`_events`가 1분 주기로
+   무한히 계속 쌓이는 구조라 컬럼 중복 제거만으로는 장기 증가를 못 막음. EC2 코드
+   변경 없이 **`pg_cron`(Supabase 확장, 기존 미설치 상태였음)으로 DB 레벨 스케줄 잡**
+   등록 — 매일 03:00 UTC에 `window_start`가 180일 지난 행을 두 테이블에서 삭제
+   (`20260731_arena_realtime_risk_retention_policy.sql`). 180일로 넉넉히 잡은 이유:
+   `replay_realtime_risk_gate.py`(리스크 게이트 효용 검증 연구)가 과거 데이터를 최대한
+   활용하는 게 유리해서 짧게 자르지 않음. 현재 데이터가 6주치뿐이라 이 정책은 지금
+   당장 아무것도 삭제하지 않고 앞으로의 무한 증가만 선제적으로 방지.
+
+**DB 최적화 최종**: 579MB → 378MB(-35%) + 향후 무제한 증가 방지 정책까지 완료.
 
 ## 관련 문서
 - [structural-priority-multi-asset-expansion-20260730.md](structural-priority-multi-asset-expansion-20260730.md) — 실험설계(문제진단·자산선정·Track A/B·판정기준)
