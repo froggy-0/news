@@ -12,6 +12,13 @@ backtest.load_frames_from_supabase(macro_rows=...)로 주입. 4H 봉에는 _late
 재현:
   .venv/bin/python3 scripts/analysis/backtest_with_macro_backfill.py \
       --parquet data/sentiment_join/sentiment_join_master_20260502.parquet
+  .venv/bin/python3 scripts/analysis/backtest_with_macro_backfill.py --symbol ETHUSDT \
+      --parquet data/sentiment_join/master_20260710.parquet
+
+멀티자산 확장(2026-07-31, P1-5): --symbol으로 ETH/SOL도 실행 가능. macro_rows는 BTC
+시장전체 regimeRaw 그대로(3자산 공유 — 설계문서 §3.1 Track A/B 확정 원칙, 자산별
+재계산 아님). arena_ohlcv_bars에 해당 심볼 히스토리가 먼저 있어야 하며,
+scripts/analysis/backfill_ohlcv_symbol.py로 백필한다.
 """
 
 from __future__ import annotations
@@ -102,6 +109,12 @@ async def main() -> int:
     ap.add_argument(
         "--parquet", default="data/sentiment_join/sentiment_join_master_20260502.parquet"
     )
+    ap.add_argument(
+        "--symbol",
+        default=parameters.BINANCE_SYMBOL,
+        help="BTCUSDT(기본)|ETHUSDT|SOLUSDT — arena_ohlcv_bars에 해당 심볼 히스토리가 "
+        "먼저 있어야 함(backfill_ohlcv_symbol.py 참조)",
+    )
     args = ap.parse_args()
 
     parquet = Path(args.parquet)
@@ -118,18 +131,32 @@ async def main() -> int:
     await positions.init()
     db = positions.db()
     warmup = parameters.MACD_SLOW_PERIOD + parameters.MACD_SIGNAL_PERIOD
-    profile = frequency.get_frequency_profile(frequency.LIVE_4H_PROFILE_ID)
+    symbol = args.symbol
+    profile_id = (
+        frequency.LIVE_4H_PROFILE_ID
+        if symbol == parameters.BINANCE_SYMBOL
+        else frequency.multi_asset_shadow_profile_id(symbol)
+    )
+    profile = frequency.get_frequency_profile(profile_id)
+    print(f"symbol={symbol}  frequency_profile_id={profile_id}")
 
-    # (1) 백필 macro 주입
+    # (1) 백필 macro 주입 — macro_rows는 BTC 시장전체 regimeRaw 그대로, 자산 무관 공유
+    # (설계문서 §3.1 Track A/B 확정 원칙 — 자산별 재계산 아님).
     frames_bf = await backtest.load_frames_from_supabase(
         db,
-        symbol=parameters.BINANCE_SYMBOL,
-        interval=parameters.BINANCE_KLINE_INTERVAL,
+        symbol=symbol,
+        interval=profile.interval,
         limit=2000,
         warmup_bars=warmup,
         indicator_profile_id=profile.default_indicator_profile_id,
         macro_rows=macro_rows,
     )
+    if not frames_bf:
+        print(
+            f"frames 없음 — arena_ohlcv_bars에 {symbol} 히스토리가 없을 수 있음. "
+            "scripts/analysis/backfill_ohlcv_symbol.py로 먼저 백필하세요."
+        )
+        return 1
     covered = sum(1 for f in frames_bf if f.macro.get("btc_drawdown_90d") is not None)
     print(
         f"frames={len(frames_bf)}  {frames_bf[0].bar.close_time.date()} ~ "
@@ -137,21 +164,21 @@ async def main() -> int:
         f"낙폭 macro 커버: {covered}/{len(frames_bf)}"
     )
     res_bf = backtest.run_replay(frames_bf, settings=backtest.BacktestSettings())
-    summarize("macro 백필 (라이브 게이트 적용)", res_bf.trades)
+    summarize(f"macro 백필 (라이브 게이트 적용, {symbol})", res_bf.trades)
     dump_fng(res_bf.trades)
 
     # (2) 대조군: macro 없음(기존 동작 — 게이트 스킵)
     frames_none = await backtest.load_frames_from_supabase(
         db,
-        symbol=parameters.BINANCE_SYMBOL,
-        interval=parameters.BINANCE_KLINE_INTERVAL,
+        symbol=symbol,
+        interval=profile.interval,
         limit=2000,
         warmup_bars=warmup,
         indicator_profile_id=profile.default_indicator_profile_id,
         macro_rows=[],
     )
     res_none = backtest.run_replay(frames_none, settings=backtest.BacktestSettings())
-    summarize("대조군: macro 없음(게이트 스킵)", res_none.trades)
+    summarize(f"대조군: macro 없음(게이트 스킵, {symbol})", res_none.trades)
     return 0
 
 
