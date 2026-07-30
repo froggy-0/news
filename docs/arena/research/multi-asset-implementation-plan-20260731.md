@@ -153,8 +153,20 @@ CREATE INDEX IF NOT EXISTS idx_paper_positions_symbol_status
 **주의점**:
 - `_fetch_depth_snapshot`/`_book_execution_features`는 심볼별 호출 필요(오더북은
   자산 고유) — `EXEC_GATE_DEPTH_SNAPSHOT_LIMIT=1000`이 ETH/SOL에서도 10bps 밴드를
-  덮는지 **실측 확인 필요**(BTC 기준으로 정해진 값. 유동성이 얕은 자산은 더 적은
-  레벨로도 덮이므로 문제없을 가능성이 높지만, 확인 없이 가정하지 말 것).
+  덮는지 **실측 완료(2026-07-31, Binance 공개 API 직접 호출)**:
+
+  | symbol | mid | 마지막레벨거리(bid/ask, bps) | 10bp 커버 | depth_10bp_usd(bid/ask) |
+  |---|---|---|---|---|
+  | BTCUSDT | 64,650 | 17.0 / 34.6 | ✅ | $7.21M / $8.33M |
+  | ETHUSDT | 1,915 | 76.1 / 95.9 | ✅ | $1.81M / $1.60M |
+  | SOLUSDT | 74.6 | 1340.6 / 1340.6 | ✅(과잉커버) | $0.62M / $0.41M |
+
+  `EXEC_GATE_DEPTH_SNAPSHOT_LIMIT=1000` 그대로 재사용 가능 — 심볼별 조정 불필요.
+  SOL은 유동성이 얕아 마지막 레벨까지의 거리가 1340bps로 오히려 10bps 요구치를
+  압도적으로 초과 커버(예상대로 "유동성이 얕을수록 같은 레벨수로 더 넓은 밴드를
+  덮는다"는 방향과 일치).
+- klines(4H OHLCV) 실측도 완료 — ETHUSDT/SOLUSDT 둘 다 정상 응답 확인, 히스토리
+  충분(수년치, 20개월 백테스트 창에 문제없음).
 - `market_structure`/`realtime_market` 모듈 캐시가 심볼 구분 없이 전역 단일 슬롯이면
   자산 간 값이 덮어써짐 → `set/get_latest_market_features`를 심볼 키 dict로 변경 필요
   (`market_structure.py:98,239` 확인).
