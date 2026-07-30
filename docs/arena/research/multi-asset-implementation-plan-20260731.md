@@ -1,6 +1,9 @@
 # 멀티자산 확장 구현 계획 (BTC·ETH·SOL) — 2026-07-31
 
-> **상태: 계획 문서. 구현 착수 전. 코드 변경 없음.**
+> **상태: P1-1~P1-6 구현·실행 완료, P1-7만 보류.** 마이그레이션 2건(paper_positions.symbol,
+> arena_backtest_trades exit_reason 제약)도 Supabase MCP 연결 후 프로덕션에 적용
+> 완료(2026-07-31) — BTC/ETH/SOL 백테스트 결과가 실제로 `arena_backtest_runs/trades/
+> equity_curve`에 영구 저장돼 있음(§7 참조).
 > 설계 근거: [structural-priority-multi-asset-expansion-20260730.md](structural-priority-multi-asset-expansion-20260730.md)
 > (문제진단·자산선정·Track A/B 분리·판정기준). 이 문서는 그 설계를 **현 코드베이스에
 > 어떻게 구현할지**를 파일·함수 단위로 상세화한 실행계획이다.
@@ -385,6 +388,34 @@ Supabase 조회) 아직 미적용. 이 세션의 도구로는 적용 불가(Post
 6. **[신규] shadow 플래그 실배포 여부** — `ENABLE_ARENA_MULTI_ASSET_SHADOW`는 여전히
    기본 off. EC2에 배포·플래그 on 하는 것은 이번 세션 범위 밖(로컬 코드 구현까지만) —
    실행하려면 배포 런북 절차 필요.
+7. ~~파산된 마이그레이션 2건(paper_positions.symbol, exit_reason 제약) DB 미적용~~ —
+   **해결됨**(2026-07-31). Supabase MCP 연결 후 `apply_migration`으로 프로덕션에 직접
+   적용, `persist_cross_asset_backtest.py` 재실행으로 BTC(420건)·ETH(421건)·
+   SOL(472건) 전부 `arena_backtest_runs/trades/equity_curve`에 영구 저장 완료.
+
+## 7. DB 사이즈 최적화 (부수 작업, 2026-07-31)
+
+Supabase MCP로 DB 사이즈를 진단하다 마이그레이션 적용과 무관하게 디스크 낭비를
+발견해 별도로 정리했다. 아레나 확장과 직접 관련은 없지만 같은 세션에서 처리:
+
+1. **`arena_macro_snapshots.payload`/`payload_hash` 제거** — R2 latest.json 원본
+   전체(행당 132KB)를 write-only로 저장, 어디서도 조회 안 됨. 42MB → 408kB.
+2. **`arena_realtime_risk_states.risk_snapshot` 제거** — 같은 행의 5개 별도 컬럼을
+   완전 중복 저장. `scheduler.py`의 기존 `row.get("risk_snapshot") or row` 폴백으로
+   안전하게 제거 가능함을 코드로 확인 후 처리. 321MB → 166MB.
+3. **미사용 인덱스 22개 제거**(`idx_scan=0` + Supabase advisor 일치 확인) — ~5.3MB.
+
+**DB 전체: 579MB → 378MB(-35%)**. 전부 `git`에 마이그레이션 파일로도 기록
+(`20260731_arena_macro_snapshots_drop_unused_payload.sql`,
+`20260731_arena_realtime_risk_states_drop_duplicate_snapshot.sql`,
+`20260731_drop_unused_indexes.sql`) — Supabase MCP로 프로덕션에는 이미 직접 적용
+완료, 파일은 이력 기록용. `src/arena/data_lake.py`의 쓰기 경로도 함께 정리(더 이상
+드롭된 필드를 채우지 않음), 152개 arena 테스트 회귀 없음.
+
+⚠️ **남은 구조적 이슈(이번엔 미처리)**: `arena_realtime_risk_states`/`_events`가
+1분 주기로 무한히 계속 쌓이는 구조라 보존정책(retention) 없이는 장기적으로 계속
+증가한다. 이번엔 컬럼 중복만 제거했고, "N일 이상 된 행 삭제"같은 보존정책은 스케줄
+잡(코드+배포) 추가가 필요해 별도 작업으로 남겨둠.
 
 ## 관련 문서
 - [structural-priority-multi-asset-expansion-20260730.md](structural-priority-multi-asset-expansion-20260730.md) — 실험설계(문제진단·자산선정·Track A/B·판정기준)
