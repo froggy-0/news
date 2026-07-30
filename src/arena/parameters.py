@@ -24,7 +24,7 @@ STRATEGY_VERSION = "arena-spot-v4"
 #   72→60h·min_hold 48→36h 재튜닝(fng_optimize 재그리드, P-A익절과의 상호작용 반영).
 #   ⚠️ 커밋(b9e3c7e·21bcdd8) 메시지엔 v30 명시했으나 이 상수 bump가 누락돼 v29로 오기록되던
 #   버그를 2026-07-14 발견·수정(v25 때와 동일 클래스 재발 — 위 주석 참조).
-PARAMS_VERSION = "arena-params-v30"
+PARAMS_VERSION = "arena-params-v31"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v2"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
@@ -389,8 +389,20 @@ VIX_RSI_LONG_MAX = 50.0
 # 근거: q40는 90일 롤링 추정치로 일일 오차 2~3%가 존재. 18.44 vs 17.85 = 3.3% — 통계적 노이즈.
 # Ref: VIX percentile band interpretation (CBOE 2023 VIX whitepaper)
 VIX_CALM_TOLERANCE_BAND = 1.05  # q40 기준 +5% 이내는 calm으로 처리
+# P8(2026-07-26): execution_gate.py의 _expected_return_bps() 폴백에서만 사용(algorithms.py의
+# 실제 macd_momentum 신호 로직과는 무관, v19에서 이미 제거됨). 과거엔 이 0.10 배수 단독으로
+# 기대수익을 산출해 구조적으로 ecr_multiple(3.0) 요구선을 못 넘었음(신호 168/168 100% 거부,
+# docs/arena/research/dormant-data-audit-20260726.md) — macd_hist와 max()로 묶어 완화.
 MACD_ATR_THRESHOLD_MULTIPLE = 0.10
-MACD_MOMENTUM_RSI_LONG_MAX = 65.0  # 과매수 구간 롱 진입 차단
+# P7(2026-07-25): 65.0→75.0. 20개월 백필(3740봉) near-miss 분석에서 rsi_below_long_max
+# 유일차단 n=83·평균 이후6봉수익 +0.58%·승률64%로 알파 차단 확인(기존 11개월 near-miss는
+# n=6~13로 판단 불가 수준이었음). 그리드 A/B(65/70/75/100)로 검증: PF 0.36→0.98 단조개선,
+# 가중합 -3.23%→-0.19%(75에서 최적, 100은 -0.29%로 과잉완화). 다른 알고와 파라미터 격리
+# (macd_momentum 전용), 손절 등 리스크 레이어 변경 없음. 그래도 PF<1이라 "엣지 발견"이
+# 아니라 "과잉필터 완화로 손실 축소"로 해석할 것 — walk-forward 후반부(10개월) 표본이
+# 여전히 작아(n=4) 재검증 필요. 재현: 백테스트 우선순위 분석 참조
+# (docs/arena/research/priority-analysis-20260725.md §3.8).
+MACD_MOMENTUM_RSI_LONG_MAX = 75.0  # 과매수 구간 롱 진입 차단
 MACD_MOMENTUM_RSI_SHORT_MIN = 35.0  # 과매도 구간 숏 진입 차단
 MACD_MOMENTUM_BB_WIDTH_MIN = 3.5  # BB 폭 최소값 (% of SMA): 미달 시 횡보장으로 판단, 진입 차단
 # macd_momentum 전용 ADX 임계 — 공유 ADX_TREND_MIN(20)보다 약간 완화.

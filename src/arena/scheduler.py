@@ -522,6 +522,7 @@ async def _run_shadow_vnext(
             gate_decision = execution_gate.evaluate_execution_gate(
                 algo_id=sleeve_signal.algo_id,
                 signal=sleeve_signal.direction,
+                macro=macro,
                 indicators=ind,
                 realtime_features=snapshot.features,
                 cost_scenario=cost_scenario,
@@ -877,6 +878,7 @@ async def _run_cycle() -> None:
             gate_decision = execution_gate.evaluate_execution_gate(
                 algo_id=algo_id,
                 signal=signal,
+                macro=macro,
                 indicators=ind,
                 realtime_features=execution_features,
                 cost_scenario=cost_scenario,
@@ -1029,6 +1031,7 @@ async def _run_cycle() -> None:
                 gate_decision = gate_decision or execution_gate.evaluate_execution_gate(
                     algo_id=algo_id,
                     signal=signal,
+                    macro=macro,
                     indicators=ind,
                     realtime_features=execution_features,
                     cost_scenario=cost_scenario,

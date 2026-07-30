@@ -58,6 +58,7 @@ async def main() -> int:
     )
     ap.add_argument("--algos", default="regime_trend,macd_momentum,multi_factor,vix_rsi,omnibus")
     ap.add_argument("--forward-bars", type=int, default=6)
+    ap.add_argument("--limit", type=int, default=2000, help="조회할 4H봉 수(기본 2000≈11개월)")
     ap.add_argument("--out", default="")
     args = ap.parse_args()
 
@@ -76,7 +77,7 @@ async def main() -> int:
         db,
         symbol=parameters.BINANCE_SYMBOL,
         interval=parameters.BINANCE_KLINE_INTERVAL,
-        limit=2000,
+        limit=args.limit,
         warmup_bars=warmup,
         indicator_profile_id=profile.default_indicator_profile_id,
         macro_rows=macro_rows,

@@ -10,7 +10,7 @@ def test_arena_parameter_snapshot_is_json_serializable() -> None:
 
     assert snapshot["params_version"] == parameters.PARAMS_VERSION
     assert snapshot["feature_set_version"] == parameters.FEATURE_SET_VERSION
-    assert snapshot["params_version"] == "arena-params-v30"
+    assert snapshot["params_version"] == "arena-params-v31"
     assert snapshot["feature_set_version"] == "arena-features-v8"
     assert snapshot["position_sizing"]["vol_weight_max"] == 0.7
     assert snapshot["position_sizing"]["risk_per_trade_pct"] == 0.015
@@ -133,12 +133,26 @@ def test_macd_momentum_signal_conditions() -> None:
     # BB width filter: choppy market (bb_width < 3.5) → always None
     choppy = {"rsi": 50.0, "bb_width": 3.0, "macd_hist_prev": 0.05}
     assert algorithms.macd_momentum({}, {"macd_hist": 0.5, "atr": 1.0, **choppy}) is None
-    # RSI filter: long blocked when RSI ≥ 65
+    # RSI filter: long blocked when RSI >= 75 (P7 2026-07-25: 65→75, near-miss n=83 evidence)
     assert (
         algorithms.macd_momentum(
-            {}, {"macd_hist": 0.5, "atr": 1.0, "rsi": 65.0, "bb_width": 5.0, "macd_hist_prev": 0.3}
+            {}, {"macd_hist": 0.5, "atr": 1.0, "rsi": 75.0, "bb_width": 5.0, "macd_hist_prev": 0.3}
         )
         is None
+    )
+    assert (
+        algorithms.macd_momentum(
+            {},
+            {
+                "macd_hist": 0.5,
+                "atr": 1.0,
+                "rsi": 70.0,
+                "adx": 25.0,
+                "bb_width": 5.0,
+                "macd_hist_prev": 0.3,
+            },
+        )
+        == "long"
     )
 
 

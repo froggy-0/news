@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from . import execution_rules, frequency, parameters, risk
+from . import algorithms, execution_rules, frequency, parameters, risk
 
 
 @dataclass(frozen=True)
@@ -76,12 +76,42 @@ def _float(value: Any) -> float | None:
         return None
 
 
-def _price_edge_bps(signal: str | None, indicators: dict[str, Any], close: float) -> float:
+def _expected_return_bps(
+    algo_id: str,
+    signal: str | None,
+    macro: dict[str, Any],
+    indicators: dict[str, Any],
+    close: float,
+) -> float:
+    """알고 실제 목표가/경제성 기반 기대수익(bps).
+
+    2026-07-26 감사(docs/arena/research/dormant-data-audit-20260726.md): 이전 구현은
+    ATR×MACD_ATR_THRESHOLD_MULTIPLE(0.10, 모든 알고 공통)를 썼는데, 이는 실제 알고리즘의
+    목표수익과 무관하고 스케일이 구조적으로 작아(7~55bps) expected_cost×ecr_multiple
+    요구선(30~2190bps)을 수학적으로 못 넘김 — 신호 존재 168/168 사이클(100%) 거부 확인.
+
+    우선순위: (1) 알고별 실제 목표가 메커니즘(omnibus/fng, 있으면 그 거리를 그대로 사용)
+    → (2) 범용 목표가(TARGET_EXIT_ATR_MULT_BY_ALGO에 등록된 알고) → (3) 목표가 메커니즘이
+    없는 알고(regime_trend·macd_momentum 등 트레일링 전용)는 omnibus REBOUND의 검증된
+    평균회귀 목표 규모(ATR×OMNIBUS_REBOUND_TARGET_ATR_MULT=1.0)를 보수적 기준으로 재사용.
+    """
     if not signal or close <= 0:
         return 0.0
-    macd_hist = abs(_float(indicators.get("macd_hist")) or 0.0)
     atr = _float(indicators.get("atr")) or 0.0
-    edge_price = max(macd_hist, atr * parameters.MACD_ATR_THRESHOLD_MULTIPLE)
+
+    if algo_id == "omnibus":
+        target = algorithms.omnibus_target_price(macro, indicators, close)
+        if target is not None:
+            return abs(target - close) / close * 10_000.0
+    if algo_id == "fng_contrarian":
+        pct = algorithms.fng_target_pct(indicators, close)
+        if pct is not None:
+            return pct * 10_000.0
+    if algo_id in parameters.TARGET_EXIT_ATR_MULT_BY_ALGO and atr > 0:
+        mult = parameters.TARGET_EXIT_ATR_MULT_BY_ALGO[algo_id]
+        return atr * mult / close * 10_000.0
+    macd_hist = abs(_float(indicators.get("macd_hist")) or 0.0)
+    edge_price = max(macd_hist, atr * parameters.OMNIBUS_REBOUND_TARGET_ATR_MULT)
     return edge_price / close * 10_000.0
 
 
@@ -114,6 +144,7 @@ def evaluate_execution_gate(
     *,
     algo_id: str,
     signal: str | None,
+    macro: dict[str, Any] | None = None,
     indicators: dict[str, Any],
     realtime_features: dict[str, Any] | None,
     cost_scenario: frequency.CostScenario,
@@ -124,7 +155,7 @@ def evaluate_execution_gate(
     policy = policy or ExecutionGatePolicy()
     features = dict(realtime_features or {})
     close = _float(indicators.get("close")) or _float(features.get("last_price")) or 0.0
-    expected_return = _price_edge_bps(signal, indicators, close)
+    expected_return = _expected_return_bps(algo_id, signal, macro or {}, indicators, close)
     expected_cost = expected_cost_bps(cost_scenario, features)
     spread = _float(features.get("spread_bps_avg"))
     slippage = _float(features.get("expected_slippage_bps"))
