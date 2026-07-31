@@ -1,7 +1,9 @@
 # 크립토 뉴스 소스 확장 계획 (BTC → BTC·ETH·SOL) — 2026-07-31
 
-> **상태: 조사·설계만 완료, 구현 대기.** newsdata.io/apitube.io API 키를 사용자가
-> 직접 발급받은 뒤 진행. **코드 변경 없음.**
+> **상태: 구현·배포 완료 (2026-07-31).** 사용자가 `NEWSIO_API_KEY`/`APITUBE_API_KEY`를
+> GitHub repo secrets에 등록 → newsdata.io만 실제 구현(§4 참조, apitube.io는 실측 후
+> 배제). 아래 §1~§3은 최초 설계 그대로 보존(실제 구현이 이 설계와 정확히 일치함을
+> 대조 확인할 수 있도록), 실행 결과는 §4에 추가.
 
 ---
 
@@ -159,3 +161,51 @@ _collect_primary_crypto_items()
 - `.github/workflows/morning-brief.yml` — secrets/vars 배선 위치
 - `src/morning_brief/analysis/sentiment_join/hybrid_index.py` — `news_sentiment_mean_lag1`이
   하이브리드 지수에 반영되는 지점(§0-4 공유 구조 확인 근거)
+
+---
+
+## 4. 실행 기록 (2026-07-31)
+
+### 4.1 apitube.io 실측 결과 — 배제
+사용자가 발급받은 실제 라이브 키로 `https://api.apitube.io/v1/news/everything` 직접
+호출 테스트. 크립토 기사 자체는 정상 반환됐으나(예: "Bitcoin ETFs soak up flows while
+Ethereum and Solana lag"), **무료 플랜에서 URL을 담는 모든 필드가 마스킹됨** —
+`href`/`source.domain`/`links[].url` 전부 `"...(+N chars hidden)...[Upgrade subscription
+plan]"` placeholder로 치환되어 있었다. 이 프로젝트의 `NewsItem`은 `url`이 필수
+필드(`if not title or not url: return None` 패턴 전역 적용)라 apitube.io 무료 플랜은
+구조적으로 사용 불가. 사용자에게 보고 후 "오케이 진행"(newsdata.io만으로 진행) 확인받음.
+→ **apitube.io는 구현하지 않음.** 실측에 사용한 라이브 키는 셸 변수로만 다뤘고 어떤
+응답 로그·커밋에도 남기지 않았음.
+
+### 4.2 newsdata.io 구현 (설계 §2와 100% 일치)
+- `src/morning_brief/data/providers.py` — `NEWSDATA_IO = "newsdata_io"` 상수 추가.
+- `src/morning_brief/data/sources/newsdata_provider.py`(신규) — `/1/crypto` 단발 호출
+  (페이지네이션 없음, 무료 200크레딧/일 보존), `coin` 필드를 그대로 `item.topic`에
+  매핑(§2.3 버그 재발 방지 원칙 그대로 적용), `link`/`pubDate`/`source_name` 필드 매핑.
+- `src/morning_brief/data/sources/provider_runtime.py` — `"newsdata_io"` `ProviderPolicy`
+  추가(`coindesk`와 동일 파라미터).
+- `src/morning_brief/config.py` — `newsdata_key`(env `NEWSIO_API_KEY`, 기존 GitHub secret
+  이름과 정확히 일치시킴)·`newsdata_enabled`·`newsdata_max_items`(1~10 clamp)·
+  `newsdata_lookback_hours`(12~168 clamp)·`newsdata_coins`(기본 `"BTC,ETH,SOL"`)·
+  `newsdata_domains` 필드 추가.
+- `src/morning_brief/data/news.py` — `_collect_newsdata_items()` 추가,
+  `_collect_primary_crypto_items()`의 `ThreadPoolExecutor`에 병렬 편입(`max_workers` 3→4),
+  기존 thenewsapi/marketaux 2페이지 폴백 로직과 별도로 최종 병합 단계에서만 반영.
+- `src/morning_brief/data/news_policy.py` — `TOPIC_KEYWORDS`에 `ethereum(1.4)/eth(1.3)/
+  solana(1.3)/sol(1.1)` 추가.
+- `.github/workflows/morning-brief.yml` — `NEWSIO_API_KEY`(secret) +
+  `NEWSDATA_ENABLED`/`NEWSDATA_MAX_ITEMS`/`NEWSDATA_LOOKBACK_HOURS`/`NEWSDATA_COINS`/
+  `NEWSDATA_DOMAINS`(vars, 기본값 포함) 배선 — `COINDESK_NEWS_*` 패턴과 동일.
+- `tests/test_newsdata_provider.py`(신규, 6 tests) — 정규화·무료플랜 10건 cap·키 없을 때
+  graceful skip·HTTP 오류/응답 status 오류 graceful degradation·url 없는 기사 스킵 검증.
+  전체 관련 회귀 테스트(`test_coindesk_news.py`/`test_news_packet.py`/`test_news_quality.py`/
+  `test_thenewsapi_provider.py`/`test_public_news_analysis.py`/`test_config.py`) +
+  `ruff check` 전부 통과.
+- §2.6 원칙 유지: `sovereign_score`는 여전히 어떤 알고도 읽지 않음 — 이번 확장은
+  대시보드/이메일 뉴스 커버리지 개선일 뿐 트레이딩 로직에는 영향 없음.
+
+### 4.3 실파이프라인 동작 확인
+`gh workflow run` + `workflow_dispatch`로 실제 GitHub Actions 실행 → 로그에서
+`provider=newsdata_io` 관련 이벤트 확인(§5 참조). 로컬에는 `NEWSIO_API_KEY` 값이 없어
+(GitHub secret으로만 존재) 로컬 curl 검증은 불가능했고, 검증은 전적으로 실제 프로덕션
+워크플로 실행을 통해 수행함.

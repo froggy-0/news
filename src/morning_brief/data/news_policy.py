@@ -195,6 +195,10 @@ TOPIC_KEYWORDS = {
     "semiconductor": 1.5,
     "bitcoin": 1.7,
     "btc": 1.6,
+    "ethereum": 1.4,
+    "eth": 1.3,
+    "solana": 1.3,
+    "sol": 1.1,
     "etf": 1.2,
     "regulation": 1.0,
 }

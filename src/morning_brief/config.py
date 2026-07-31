@@ -65,6 +65,12 @@ class Settings:
     coindesk_news_weekend_lookback_hours: int
     coindesk_news_max_items: int
     coindesk_news_categories: str
+    newsdata_key: str
+    newsdata_enabled: bool
+    newsdata_max_items: int
+    newsdata_lookback_hours: int
+    newsdata_coins: str
+    newsdata_domains: str
     grok_api_key: str
     grok_model: str
     grok_x_keyword_search_enabled: bool
@@ -254,6 +260,16 @@ def load_settings() -> Settings:
             "COINDESK_NEWS_MAX_ITEMS", default=18, minimum=1, maximum=30
         ),
         coindesk_news_categories=os.getenv("COINDESK_NEWS_CATEGORIES", "BTC").strip() or "BTC",
+        newsdata_key=os.getenv("NEWSIO_API_KEY", "").strip(),
+        newsdata_enabled=_env_bool("NEWSDATA_ENABLED", True),
+        newsdata_max_items=_env_bounded_int(
+            "NEWSDATA_MAX_ITEMS", default=10, minimum=1, maximum=10
+        ),
+        newsdata_lookback_hours=_env_bounded_int(
+            "NEWSDATA_LOOKBACK_HOURS", default=36, minimum=12, maximum=168
+        ),
+        newsdata_coins=os.getenv("NEWSDATA_COINS", "BTC,ETH,SOL").strip() or "BTC,ETH,SOL",
+        newsdata_domains=os.getenv("NEWSDATA_DOMAINS", "").strip(),
         grok_api_key=os.getenv("GROK_API_KEY", "").strip(),
         grok_model=os.getenv("GROK_MODEL", "grok-4-1-fast-non-reasoning").strip(),
         grok_x_keyword_search_enabled=_env_bool("GROK_X_KEYWORD_SEARCH_ENABLED", False),

@@ -192,6 +192,12 @@ jobs:
           COINDESK_NEWS_WEEKEND_LOOKBACK_HOURS: ${{ vars.COINDESK_NEWS_WEEKEND_LOOKBACK_HOURS || '72' }}
           COINDESK_NEWS_MAX_ITEMS: ${{ vars.COINDESK_NEWS_MAX_ITEMS || '12' }}
           COINDESK_NEWS_CATEGORIES: ${{ vars.COINDESK_NEWS_CATEGORIES || 'BTC' }}
+          NEWSIO_API_KEY: ${{ secrets.NEWSIO_API_KEY || '' }}
+          NEWSDATA_ENABLED: ${{ vars.NEWSDATA_ENABLED || 'true' }}
+          NEWSDATA_MAX_ITEMS: ${{ vars.NEWSDATA_MAX_ITEMS || '10' }}
+          NEWSDATA_LOOKBACK_HOURS: ${{ vars.NEWSDATA_LOOKBACK_HOURS || '36' }}
+          NEWSDATA_COINS: ${{ vars.NEWSDATA_COINS || 'BTC,ETH,SOL' }}
+          NEWSDATA_DOMAINS: ${{ vars.NEWSDATA_DOMAINS || '' }}
           GROK_API_KEY: ""
           GROK_MODEL: grok-4.20-beta-latest-non-reasoning
           GROK_X_KEYWORD_SEARCH_ENABLED: "false"

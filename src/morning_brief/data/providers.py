@@ -23,6 +23,7 @@ GROK_WEB_SEARCH = "grok_web_search"
 COINDESK_API = "coindesk_api"
 THENEWSAPI = "thenewsapi"
 MARKETAUX = "marketaux"
+NEWSDATA_IO = "newsdata_io"
 
 # ---------------------------------------------------------------------------
 # Runtime circuit breaker constants

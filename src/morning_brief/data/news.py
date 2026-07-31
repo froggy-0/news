@@ -40,6 +40,7 @@ from morning_brief.data.sources.marketaux_provider import (
     fetch_marketaux_page,
 )
 from morning_brief.data.sources.newsapi_provider import fetch_news_from_newsapi
+from morning_brief.data.sources.newsdata_provider import fetch_newsdata_crypto_news
 from morning_brief.data.sources.perplexity_search import fetch_news_from_perplexity
 from morning_brief.data.sources.perplexity_sonar import (
     TopicSummary,
@@ -319,6 +320,43 @@ def _collect_marketaux_page(
         return MarketauxPage(items=[], has_next=False, requested_limit=0, page=page)
 
 
+def _collect_newsdata_items(
+    settings: Settings,
+    *,
+    observer: PipelineObserver | None = None,
+) -> list[NewsItem]:
+    """newsdata.io /1/crypto — 단발 호출(페이지네이션 없음, 무료 200크레딧/일 보존)."""
+    if not settings.newsdata_enabled or not settings.newsdata_key:
+        return []
+    try:
+        return fetch_newsdata_crypto_news(
+            api_key=settings.newsdata_key,
+            max_items=settings.newsdata_max_items,
+            lookback_hours=settings.newsdata_lookback_hours,
+            coins=settings.newsdata_coins,
+            domainurl=settings.newsdata_domains,
+            observer=observer,
+        )
+    except Exception as exc:
+        log_structured(
+            logger,
+            event="error.raised",
+            message="newsdata.io에서 뉴스를 가져오지 못해 다른 소스로 이어갈게요.",
+            level=logging.WARNING,
+            provider="newsdata_io",
+            reason=str(exc),
+            error_type=type(exc).__name__,
+        )
+        if observer is not None:
+            observer.log_event(
+                "newsdata_news_degraded",
+                level=logging.WARNING,
+                reason=str(exc),
+                error_type=type(exc).__name__,
+            )
+        return []
+
+
 def _collect_primary_crypto_items(
     settings: Settings,
     *,
@@ -330,7 +368,7 @@ def _collect_primary_crypto_items(
         max_items, settings.marketaux_max_items, MARKETAUX_FREE_PLAN_MAX_LIMIT
     )
 
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=4) as executor:
         coindesk_future = executor.submit(_collect_coindesk_items, settings, observer=observer)
         thenewsapi_future = executor.submit(
             _collect_thenewsapi_page,
@@ -346,9 +384,11 @@ def _collect_primary_crypto_items(
             page=1,
             observer=observer,
         )
+        newsdata_future = executor.submit(_collect_newsdata_items, settings, observer=observer)
         coindesk_items = coindesk_future.result()
         first_page = thenewsapi_future.result()
         marketaux_first_page = marketaux_future.result()
+        newsdata_items = newsdata_future.result()
 
     thenewsapi_items = list(first_page.items)
     marketaux_items = list(marketaux_first_page.items)
@@ -479,14 +519,26 @@ def _collect_primary_crypto_items(
             else "free_plan_guardrail"
         )
 
+    # newsdata.io는 단발 호출(페이지네이션 없음, 무료 200크레딧/일 보존) — 최종 병합에만 반영.
+    if newsdata_items:
+        items = _dedup_and_rank(
+            _merge_rank(
+                items,
+                newsdata_items,
+                max_items=max(max_items * 2, len(items) + len(newsdata_items)),
+            ),
+            max_items=max(max_items * 2, len(items) + len(newsdata_items)),
+        )
+
     log_structured(
         logger,
         event="selection.complete",
-        message="1차 crypto 수집에 CoinDesk, TheNewsAPI, Marketaux를 반영했어요.",
+        message="1차 crypto 수집에 CoinDesk, TheNewsAPI, Marketaux, newsdata.io를 반영했어요.",
         provider="marketaux",
         coindesk_count=len(coindesk_items),
         thenewsapi_count=len(thenewsapi_items),
         marketaux_count=len(marketaux_items),
+        newsdata_count=len(newsdata_items),
         kept_count=len(items),
         requested_size=first_page.requested_size,
         pages_fetched=1 + int(additional_page_used),
@@ -505,6 +557,7 @@ def _collect_primary_crypto_items(
             coindesk_count=len(coindesk_items),
             thenewsapi_count=len(thenewsapi_items),
             marketaux_count=len(marketaux_items),
+            newsdata_count=len(newsdata_items),
             kept_count=len(items),
             requested_size=first_page.requested_size,
             pages_fetched=1 + int(additional_page_used),
