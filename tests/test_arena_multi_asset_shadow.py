@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from arena import algorithms, data_lake, scheduler
+from arena import algorithms, data_lake, market_structure, scheduler
 
 
 def _fake_ohlcv() -> scheduler.OHLCV:
@@ -74,6 +74,28 @@ def test_asset_shadow_cycle_records_all_six_algos_without_touching_positions(
     monkeypatch.setattr(scheduler.data_lake, "record_run_completed", record_run_completed)
     monkeypatch.setattr(scheduler.data_lake, "record_shadow_decision", record_shadow_decision)
 
+    # Part A(원시수집)+Part B(z스코어) 목킹 — 실제 DB 접촉 없이 override 동작만 검증.
+    fake_snapshot = market_structure.MarketStructureSnapshot(
+        symbol="ETHUSDT",
+        interval="4h",
+        data_timestamp=datetime(2026, 7, 31, 8, 0, tzinfo=timezone.utc),
+        fetched_at=datetime(2026, 7, 31, 8, 0, tzinfo=timezone.utc),
+    )
+    fetch_market_structure = AsyncMock(return_value=fake_snapshot)
+    record_market_structure = AsyncMock(return_value=[])
+    monkeypatch.setattr(
+        scheduler.market_structure, "fetch_market_structure_snapshot", fetch_market_structure
+    )
+    monkeypatch.setattr(
+        scheduler.data_lake, "record_market_structure_snapshot", record_market_structure
+    )
+    compute_funding_zscore = AsyncMock(return_value=1.23)
+    compute_lsr_zscore = AsyncMock(return_value=-0.45)
+    monkeypatch.setattr(
+        scheduler.futures_baseline, "compute_funding_zscore", compute_funding_zscore
+    )
+    monkeypatch.setattr(scheduler.futures_baseline, "compute_lsr_zscore", compute_lsr_zscore)
+
     # paper_positions에 절대 접촉하지 않아야 함 — 호출되면 즉시 실패시켜 검증.
     def _forbidden(*args, **kwargs):  # pragma: no cover - 호출되면 안 됨
         raise AssertionError("multi-asset shadow cycle must not touch paper_positions")
@@ -99,9 +121,18 @@ def test_asset_shadow_cycle_records_all_six_algos_without_touching_positions(
         # arena_regime_state는 이 자산(sideways 유도 지표) 기준으로 로컬 재계산 —
         # 공유 macro의 BTC 값("bull_trend")을 덮어썼는지가 핵심 검증 포인트.
         assert macro_snapshot["arena_regime_state"] == "sideways"
-        # BTC 전용 글로벌 피처는 공유값 그대로 유지(Phase1 설계 확정 — 재계산 경로 없음).
+        # 진짜 시장전체 지표(ETF흐름)는 공유값 그대로 유지(Phase1 설계 확정).
         assert macro_snapshot["etf_flow_zscore"] == -2.0
-        assert macro_snapshot["funding_zscore"] == 0.5
+        # funding/LSR은 자산고유 데이터라 BTC 공유값(0.5)이 아니라 이 자산 자신의
+        # 롤링 z스코어로 override돼야 함(2026-07-31 futures_baseline 배선).
+        assert macro_snapshot["funding_zscore"] == 1.23
+        assert macro_snapshot["long_short_ratio_zscore"] == -0.45
+
+    fetch_market_structure.assert_called_once()
+    assert fetch_market_structure.call_args.kwargs["symbol"] == "ETHUSDT"
+    record_market_structure.assert_called_once()
+    compute_funding_zscore.assert_called_once_with("ETHUSDT")
+    compute_lsr_zscore.assert_called_once_with("ETHUSDT")
 
     assert record_run_completed.call_args.kwargs["status"] == "completed"
 

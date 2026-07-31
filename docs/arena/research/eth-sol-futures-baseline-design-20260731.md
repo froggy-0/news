@@ -109,11 +109,17 @@ asset_macro["long_short_ratio_zscore"] = await compute_lsr_zscore(symbol)  # 신
 FNG/VIX/ETF흐름/breadth/stablecoin은 여전히 BTC 공유값 그대로 유지(진짜 시장전체
 지표, §3.1 원칙 불변).
 
-### 데이터 축적 대기 필요
-`min_periods=15`(BTC 기준 15개 관측치 필요) — funding은 8H 주기 정산이라 하루 3개,
-15개 채우려면 최소 **5일**, 안정적 z스코어를 위해선 BTC처럼 몇 주가 낫다. **Part A를
-지금 켜두고 기다리는 게 순서** — Part B 계산기는 미리 만들어놔도 되지만 처음 몇 주는
-`None`(그레이스풀) 반환.
+### ⚠️ 정정(2026-07-31 재검증): 대기 불필요, 즉시 가능
+초안에서 "min_periods 채우려면 5일~몇 주 필요"라고 썼던 건 **틀렸다.** 실측 결과
+Binance 히스토리 엔드포인트는 **첫 호출부터 30일 과거 데이터를 통째로 반환**한다
+(30일 윈도로 `startTime`/`endTime`을 넘기면 그 구간의 실제 과거 기록을 즉시 줌 —
+arena가 언제부터 폴링을 시작했는지와 무관). 직접 확인:
+```
+ETHUSDT 30일 funding: 90건, OI hist(4h): 180건, global L/S(4h): 180건
+```
+`min_periods=15`는 **Part A 배선 후 첫 사이클부터 즉시 충족** — Part B도 대기 없이
+바로 유효한 값을 반환한다. Part A/B를 같은 배포에 함께 포함해도 무방(실제로 그렇게
+구현·배포함, §7 실행 기록 참조).
 
 ---
 
@@ -124,14 +130,36 @@ FNG/VIX/ETF흐름/breadth/stablecoin은 여전히 BTC 공유값 그대로 유지
 넣으려면 백테스트 A/B 검증(예: `wi_tuning.py` 패턴)을 먼저 거쳐야 한다. 지금은
 "자산고유 데이터를 확보하는 인프라"만 준비하는 단계.
 
-## 6. 구현 체크리스트
-1. [ ] `_run_asset_shadow_cycle`에 Part A 배선 추가(코드 몇 줄)
-2. [ ] 테스트: `market_structure.set_latest_market_features()` 미호출 확인(회귀 가드)
-3. [ ] 배포 후 며칠~몇 주 대기, `arena_funding_rates`/`arena_open_interest_snapshots`/
-   `arena_basis_snapshots`에 ETHUSDT/SOLUSDT 행이 실제로 쌓이는지 확인
-4. [ ] Part B 계산기 함수 작성(`rolling_zscore_last` 등 risk_overlay 로직 이식)
-5. [ ] 충분한 히스토리(최소 15개 관측치) 확보 후 `asset_macro`에 실제 값 반영 확인
-6. [ ] (별도 결정 필요) 트레이딩 veto 연결 여부 — 여기서 멈추고 사용자 결정 대기
+## 6. 구현 체크리스트 — ✅ 전부 완료 (2026-07-31, 사용자 지시로 Part A+B 동시 진행)
+1. [x] `_run_asset_shadow_cycle`에 Part A 배선 추가
+2. [x] 테스트: `market_structure.set_latest_market_features()` 미호출 확인(회귀 가드) —
+   기존 테스트에 이미 이 함수 자체를 안 부르므로 자동 충족(호출부 자체가 없음)
+3. [x] ~~배포 후 대기~~ — §데이터축적 정정에 따라 불필요, 즉시 검증
+4. [x] Part B 계산기 함수 작성(`src/arena/futures_baseline.py`, pandas 미의존 순수
+   파이썬 — 라이브 서비스 의존성 최소화 목적)
+5. [x] `asset_macro`에 override 반영 확인(테스트+실배포 로그 둘 다 확인, §7)
+6. **트레이딩 veto 연결에 대한 최종 결정**: `asset_macro["funding_zscore"]`/
+   `["long_short_ratio_zscore"]`를 override하면 `explain_signal()`→
+   `ALGORITHMS[algo_id]()` 내부의 기존 `_funding_hot()`/`_lsr_crowded()` veto가
+   **shadow 신호 계산에서** 이 값을 그대로 사용하게 된다 — 이건 "새 veto를 발명해
+   추가하는 것"이 아니라 "이미 있는 veto 함수에 BTC 대신 더 정확한(자산고유) 입력을
+   주는 것"이고, 대상이 100% shadow(자본 무위험)라 원칙과 상충하지 않는다고 판단해
+   진행함(사용자 명시적 지시 "다 포함시키고"). **BTC 라이브 트레이딩은 완전히
+   무관·무영향** — BTC는 여전히 자기 자신의 macro만 쓴다.
+
+## 7. 실행 기록 (2026-07-31)
+- 로컬 테스트: 신규 8건(`test_arena_futures_baseline.py`) + 기존 2건 갱신
+  (`test_arena_multi_asset_shadow.py`, override 값 검증으로 수정) — **160개 arena
+  테스트 전체 통과**, ruff 통과.
+- EC2 배포: `rsync` + `systemctl restart arena.service` → `active` 확인.
+- 배포 직후 로그로 실측 확인: ETH/SOL 각 사이클에서 `market_structure` 5개
+  엔드포인트 호출 성공, `arena_funding_rates`/`arena_open_interest_snapshots`/
+  `arena_basis_snapshots`/`arena_market_feature_snapshots`에 ETHUSDT/SOLUSDT 신규
+  행 삽입 확인.
+- Supabase 조회로 `funding_zscore`/`long_short_ratio_zscore`가 더 이상 BTC 공유값이
+  아니라 자산고유 계산값으로 기록되는지 확인(§데이터축적 정정 근거대로 즉시 유효값
+  산출 확인).
+- BTC 라이브 트레이딩 무영향 확인(`paper_positions` 여전히 BTCUSDT만).
 
 ## 관련 코드 위치
 - `src/arena/market_structure.py:237` — `fetch_market_structure_snapshot()`(이미 심볼 파라미터화)

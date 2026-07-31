@@ -18,6 +18,7 @@ from . import (
     execution_gate,
     execution_rules,
     frequency,
+    futures_baseline,
     indicators,
     market_structure,
     parameters,
@@ -1349,14 +1350,39 @@ async def _run_asset_shadow_cycle(symbol: str) -> None:
     )
 
     # arena_regime_state는 이 자산 자신의 ind로 재계산(100% 자산고유, 설계문서 §3.1
-    # 코드검증 결과). 나머지 macro(funding/LSR/etf/ma200 등)는 BTC 전용 R2 파이프라인
-    # 산출물이라 재계산 경로가 없어 그대로 공유(Phase1 확정, 자산별 재계산 금지 아님 —
-    # 애초에 재계산할 자산별 데이터가 존재하지 않음).
+    # 코드검증 결과). FNG/VIX/ETF흐름/breadth/stablecoin은 진짜 시장전체 지표라 BTC
+    # 공유값 그대로 유지(Phase1 확정 불변).
     regime_decision = regime.classify_regime(
         ind, market_features=None, macro=dict(macro_data.signal)
     )
     asset_macro = dict(macro_data.signal)
     asset_macro["arena_regime_state"] = regime_decision.regime_state
+
+    # Part A(원시 수집) + Part B(롤링 z스코어) — 2026-07-31, eth-sol-futures-baseline
+    # 설계문서. funding/LSR은 BTC 시장전체 지표가 아니라 자산고유 데이터라, BTC 공유값
+    # 대신 이 자산 자신의 Binance 선물 데이터로 직접 z스코어를 계산해 override한다.
+    # 실패해도 그레이스풀(None → 기존 veto 함수가 스킵 처리, 사이클 안 죽음).
+    try:
+        market_snapshot = await market_structure.fetch_market_structure_snapshot(
+            symbol=profile.symbol,
+            interval=profile.interval,
+            data_timestamp=data_timestamp,
+            spot_close=ohlcv.closes[-1],
+            limit=config.KLINES_LIMIT,
+        )
+        capture_results.extend(
+            await data_lake.record_market_structure_snapshot(
+                run_id=run_id,
+                snapshot=market_snapshot,
+            )
+        )
+    except Exception as exc:
+        logger.warning("Multi-asset market structure 수집 실패(%s): %s", symbol, exc)
+
+    asset_macro["funding_zscore"] = await futures_baseline.compute_funding_zscore(profile.symbol)
+    asset_macro["long_short_ratio_zscore"] = await futures_baseline.compute_lsr_zscore(
+        profile.symbol
+    )
 
     for algo_id in ALGORITHMS:
         diag = explain_signal(algo_id, asset_macro, ind)
