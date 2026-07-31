@@ -1,9 +1,11 @@
 # 멀티자산 확장 구현 계획 (BTC·ETH·SOL) — 2026-07-31
 
-> **상태: P1-1~P1-6 구현·실행 완료, P1-7만 보류.** 마이그레이션 2건(paper_positions.symbol,
-> arena_backtest_trades exit_reason 제약)도 Supabase MCP 연결 후 프로덕션에 적용
-> 완료(2026-07-31) — BTC/ETH/SOL 백테스트 결과가 실제로 `arena_backtest_runs/trades/
-> equity_curve`에 영구 저장돼 있음(§7 참조).
+> **상태: P1-1~P1-6 구현·실행 완료, §5.2/§5.3 판정까지 실행 완료, P1-7만 보류.**
+> 마이그레이션 2건(paper_positions.symbol, arena_backtest_trades exit_reason 제약)도
+> Supabase MCP 연결 후 프로덕션에 적용 완료(2026-07-31) — BTC/ETH/SOL 백테스트 결과가
+> 실제로 `arena_backtest_runs/trades/equity_curve`에 영구 저장돼 있음(§7 참조).
+> **최종 판정: 6개 알고 전부 §5.2 미통과 → §6.1 D분기(BTC 특정 규칙 명시, 확대 중단,
+> 이 표본창의 만료조건부)** — 상세: [cross-asset-verdict-20260731.md](cross-asset-verdict-20260731.md).
 > 설계 근거: [structural-priority-multi-asset-expansion-20260730.md](structural-priority-multi-asset-expansion-20260730.md)
 > (문제진단·자산선정·Track A/B 분리·판정기준). 이 문서는 그 설계를 **현 코드베이스에
 > 어떻게 구현할지**를 파일·함수 단위로 상세화한 실행계획이다.
@@ -381,10 +383,10 @@ Supabase 조회) 아직 미적용. 이 세션의 도구로는 적용 불가(Post
    명시 필요).
 4. **P1-7 대시보드** — 보류 확정(§ P1-7). shadow 플래그를 켜 라이브 데이터가 쌓이거나,
    `cross_asset_report.py` 기반 정적 뷰로 갈지 재검토 필요.
-5. **[신규] §5.2/§5.3 판정 적용** — `cross_asset_report.py`가 실제 3자산×6알고 수치를
-   산출했으나, 이를 설계문서 §5.2("제한적 교차자산 전이성 있음") / §5.3("BTC 특화")
-   판정기준에 대입해 A/B/C/D 분기를 실제로 결정하는 작업은 아직 안 함 — 지금까지는
-   "파이프라인이 작동한다"만 확인됐고 "결과가 무엇을 의미하는지" 판정은 별도.
+5. ~~§5.2/§5.3 판정 적용~~ — **해결됨**(2026-07-31). `scripts/analysis/cross_asset_verdict.py`
+   신설(비용민감도·레짐지배 조건 추가 실행) → 8개 조건 전부 6알고에 적용. **결과:
+   전 알고 §5.2 미통과, §6.1 D분기(BTC 특정 규칙으로 명시, 확대 중단)** — 단 이 창
+   (3자산 동반하락)의 만료조건부 결론. 상세: [cross-asset-verdict-20260731.md](cross-asset-verdict-20260731.md).
 6. **[신규] shadow 플래그 실배포 여부** — `ENABLE_ARENA_MULTI_ASSET_SHADOW`는 여전히
    기본 off. EC2에 배포·플래그 on 하는 것은 이번 세션 범위 밖(로컬 코드 구현까지만) —
    실행하려면 배포 런북 절차 필요.
