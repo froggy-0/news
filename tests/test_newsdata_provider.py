@@ -45,6 +45,9 @@ def test_fetch_newsdata_crypto_news_normalizes_results(monkeypatch):
     assert captured["params"]["apikey"] == "test-key"
     assert captured["params"]["coin"] == "BTC,ETH,SOL"
     assert captured["params"]["size"] == 10
+    # 무료 플랜은 from_date/to_date를 422로 거부함(실측) — 절대 보내지 않아야 함
+    assert "from_date" not in captured["params"]
+    assert "to_date" not in captured["params"]
     assert len(items) == 1
     item = items[0]
     assert item.provider == "newsdata_io"
@@ -96,6 +99,43 @@ def test_fetch_newsdata_crypto_news_degrades_on_status_error(monkeypatch):
 
     items = fetch_newsdata_crypto_news(api_key="test-key", max_items=10, lookback_hours=36)
     assert items == []
+
+
+def test_fetch_newsdata_crypto_news_filters_stale_items_client_side(monkeypatch):
+    # 무료 플랜은 from_date/to_date를 못 쓰므로 lookback_hours는 응답을 받은 뒤
+    # published_at 기준으로 직접 걸러내야 한다.
+    stale = datetime(2026, 7, 20, 0, 0, 0, tzinfo=timezone.utc)
+    fresh = datetime(2026, 7, 31, 6, 0, 0, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(
+        "morning_brief.data.sources.newsdata_provider.get_json_with_retry",
+        lambda url, **kwargs: {
+            "status": "success",
+            "results": [
+                {
+                    "link": "https://example.com/stale",
+                    "title": "Stale article",
+                    "coin": ["BTC"],
+                    "pubDate": stale.strftime("%Y-%m-%d %H:%M:%S"),
+                },
+                {
+                    "link": "https://example.com/fresh",
+                    "title": "Fresh article",
+                    "coin": ["BTC"],
+                    "pubDate": fresh.strftime("%Y-%m-%d %H:%M:%S"),
+                },
+            ],
+        },
+    )
+
+    items = fetch_newsdata_crypto_news(
+        api_key="test-key",
+        max_items=10,
+        lookback_hours=36,
+        now=datetime(2026, 7, 31, 8, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert [item.url for item in items] == ["https://example.com/fresh"]
 
 
 def test_fetch_newsdata_crypto_news_skips_items_without_url():

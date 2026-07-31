@@ -204,8 +204,23 @@ plan]"` placeholder로 치환되어 있었다. 이 프로젝트의 `NewsItem`은
 - §2.6 원칙 유지: `sovereign_score`는 여전히 어떤 알고도 읽지 않음 — 이번 확장은
   대시보드/이메일 뉴스 커버리지 개선일 뿐 트레이딩 로직에는 영향 없음.
 
-### 4.3 실파이프라인 동작 확인
-`gh workflow run` + `workflow_dispatch`로 실제 GitHub Actions 실행 → 로그에서
-`provider=newsdata_io` 관련 이벤트 확인(§5 참조). 로컬에는 `NEWSIO_API_KEY` 값이 없어
-(GitHub secret으로만 존재) 로컬 curl 검증은 불가능했고, 검증은 전적으로 실제 프로덕션
-워크플로 실행을 통해 수행함.
+### 4.3 실파이프라인 동작 확인 — 1차 시도에서 실제 버그 발견 및 수정
+`gh workflow run` + `workflow_dispatch`로 실제 GitHub Actions 실행 → 첫 실행에서
+`provider=newsdata_io | event=error.raised | reason=HTTP 422 응답을 받았어요` 확인.
+로컬에는 `NEWSIO_API_KEY` 값이 없어(GitHub secret으로만 존재) 원인 파악을 위해
+워크플로에 **임시 curl 진단 스텝**(키는 로그에서 REDACTED 처리, 응답 바디만 노출)을
+추가해 재실행 → 실제 원인 확보:
+```json
+{"status":"error","results":{"message":"Access Denied! To use the date parameter, please upgrade your plan or contact support.","code":"UnsupportedParameter"}}
+```
+**무료 플랜은 `from_date`/`to_date` 파라미터 자체를 거부한다**(공식 OpenAPI 스펙에는
+이 플랜 제약이 명시돼 있지 않아 사전 문서 조사로는 알 수 없었던 사실). 수정:
+- `newsdata_provider.py` — `from_date`/`to_date`를 요청에서 완전히 제거, 날짜
+  파라미터 없이 최신순 응답을 받은 뒤 `lookback_hours`는 `published_at` 기준
+  클라이언트 사이드 필터로 적용(CoinDesk 연동이 이미 쓰는 사후 필터 패턴과 동일한
+  접근으로 통일).
+- `tests/test_newsdata_provider.py` — `from_date`/`to_date` 미전송 검증 +
+  클라이언트 사이드 lookback 필터링 검증 테스트 추가(총 7 tests, 전부 통과).
+- 진단용 curl 스텝은 원인 확보 직후 워크플로에서 제거.
+
+수정 반영 후 재실행(2차) → 로그에서 실제 성공 확인(§4.4).

@@ -27,23 +27,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: DEBUG newsdata.io raw response (temporary, remove after diagnosis)
-        env:
-          NEWSIO_API_KEY: ${{ secrets.NEWSIO_API_KEY }}
-        run: |
-          curl -s -o /tmp/newsdata_debug.json -w "HTTP_STATUS:%{http_code}\n" \
-            "https://newsdata.io/api/1/crypto" \
-            --data-urlencode "apikey=${NEWSIO_API_KEY}" \
-            --data-urlencode "coin=BTC,ETH,SOL" \
-            --data-urlencode "language=en" \
-            --data-urlencode "size=10" \
-            --data-urlencode "from_date=$(date -u -d '36 hours ago' '+%Y-%m-%d %H:%M:%S')" \
-            --data-urlencode "to_date=$(date -u '+%Y-%m-%d %H:%M:%S')" \
-            --data-urlencode "removeduplicate=1" \
-            -G
-          echo "--- response body (key redacted) ---"
-          sed "s/${NEWSIO_API_KEY}/REDACTED/g" /tmp/newsdata_debug.json
-
       - name: Set up Python
         uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
         with:

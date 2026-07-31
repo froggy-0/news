@@ -9,6 +9,12 @@
   36시간 lookback을 쓰므로 문제없음.
 - `coin` 파라미터로 정확히 티커 필터링 가능(`coin=BTC,ETH,SOL`).
 - `domainurl` 파라미터로 공식 도메인 화이트리스트 필터링 가능.
+- ⚠️ `from_date`/`to_date`는 무료 플랜에서 사용 불가(실측, 2026-07-31): 프로덕션에서
+  `422 UnsupportedParameter — "Access Denied! To use the date parameter, please
+  upgrade your plan or contact support."` 확인됨. 문서(OpenAPI 스펙)에는 이 플랜
+  제약이 드러나지 않아 사전에 알 수 없었음 — 날짜 파라미터를 아예 보내지 않고
+  최신순 응답을 받은 뒤 `lookback_hours`는 클라이언트 사이드에서만 필터링한다
+  (CoinDesk 연동의 `_dedup_latest`/사후 필터 패턴과 동일).
 """
 
 from __future__ import annotations
@@ -105,13 +111,14 @@ def fetch_newsdata_crypto_news(
     run_now = run_now.astimezone(timezone.utc)
     start_at = run_now - timedelta(hours=lookback_hours)
 
+    # from_date/to_date는 무료 플랜에서 422(UnsupportedParameter)로 거부됨(실측) —
+    # 날짜 파라미터 없이 최신순으로 받은 뒤 lookback_hours는 아래에서 클라이언트
+    # 사이드로 필터링한다.
     params: dict[str, Any] = {
         "apikey": api_key,
         "coin": coins,
         "language": "en",
         "size": min(max_items, FREE_PLAN_MAX_PAGE_SIZE),
-        "from_date": start_at.strftime("%Y-%m-%d %H:%M:%S"),
-        "to_date": run_now.strftime("%Y-%m-%d %H:%M:%S"),
         "removeduplicate": 1,
     }
     if domainurl:
@@ -162,9 +169,17 @@ def fetch_newsdata_crypto_news(
     if not isinstance(raw_results, list):
         raw_results = []
 
-    items = [
-        item for raw in raw_results if isinstance(raw, dict) if (item := _article_to_news_item(raw))
-    ][:max_items]
+    items = []
+    for raw in raw_results:
+        if not isinstance(raw, dict):
+            continue
+        item = _article_to_news_item(raw)
+        if item is None:
+            continue
+        if item.published_at is not None and item.published_at < start_at:
+            continue
+        items.append(item)
+    items = items[:max_items]
 
     log_structured(
         logger,
