@@ -223,4 +223,13 @@ plan]"` placeholder로 치환되어 있었다. 이 프로젝트의 `NewsItem`은
   클라이언트 사이드 lookback 필터링 검증 테스트 추가(총 7 tests, 전부 통과).
 - 진단용 curl 스텝은 원인 확보 직후 워크플로에서 제거.
 
-수정 반영 후 재실행(2차) → 로그에서 실제 성공 확인(§4.4).
+수정 반영 후 재실행(2차, run 30621753232) → 로그에서 실제 성공 확인:
+```
+provider=newsdata_io | event=selection.complete | candidate_count=10 | kept_count=10
+provider=marketaux | event=selection.complete | kept_count=15 | 1차 crypto 수집에
+  CoinDesk, TheNewsAPI, Marketaux, newsdata.io를 반영했어요.
+```
+전체 워크플로 3개 job(sentiment-join·brief 생성·프론트 배포) 전부 성공(✓), 소요
+3분59초. newsdata.io가 10건 전부 통과(36시간 lookback 내 최신 기사만 반환된 것으로
+보임 — 클라이언트 사이드 필터가 정상 동작). 프로덕션 파이프라인에서 newsdata.io가
+실제로 동작함을 확인 완료.
