@@ -6,6 +6,12 @@
 > 실제로 `arena_backtest_runs/trades/equity_curve`에 영구 저장돼 있음(§7 참조).
 > **최종 판정: 6개 알고 전부 §5.2 미통과 → §6.1 D분기(BTC 특정 규칙 명시, 확대 중단,
 > 이 표본창의 만료조건부)** — 상세: [cross-asset-verdict-20260731.md](cross-asset-verdict-20260731.md).
+> **2026-07-31 EC2 배포 + `ENABLE_ARENA_MULTI_ASSET_SHADOW=true` 활성화 완료.** 재시작
+> 직후 로그·Supabase 조회로 검증: ETH/SOL 각각 6알고 shadow 신호가 `arena_shadow_decisions`에
+> 정상 기록(예: ETH multi_factor=long, SOL fng_contrarian=long), `paper_positions`는
+> 여전히 BTCUSDT뿐(41건, 재시작 직후 BTC 라이브 신규 포지션도 정상 오픈됨) — 라이브
+> 트레이딩·자산 격리 둘 다 실측 확인. D판정과 무관하게 shadow는 자본무위험 관측이라
+> 앞으로 이 데이터가 계속 쌓인다(다른 표본창 재검증 대비).
 > 설계 근거: [structural-priority-multi-asset-expansion-20260730.md](structural-priority-multi-asset-expansion-20260730.md)
 > (문제진단·자산선정·Track A/B 분리·판정기준). 이 문서는 그 설계를 **현 코드베이스에
 > 어떻게 구현할지**를 파일·함수 단위로 상세화한 실행계획이다.
