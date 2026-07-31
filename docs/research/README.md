@@ -6,5 +6,6 @@
 | --- | --- |
 | `sentiment-join-pipeline-research.md` | Sentiment Join 연구 메모 |
 | `eda-visualization-questionnaire.md` | EDA/시각화 질문서 |
+| `crypto-news-source-expansion-plan-20260731.md` | CoinDesk/CoinGecko 뉴스API 유료화 확인 + newsdata.io/apitube.io 무료 대안 조사·설계(키 발급 대기) |
 
 결론이 코드나 운영에 반영되면 해당 영역 문서에 요약을 승격하고, 원 연구 문서는 근거 링크로 유지합니다.
