@@ -156,9 +156,17 @@ ETHUSDT 30일 funding: 90건, OI hist(4h): 180건, global L/S(4h): 180건
   엔드포인트 호출 성공, `arena_funding_rates`/`arena_open_interest_snapshots`/
   `arena_basis_snapshots`/`arena_market_feature_snapshots`에 ETHUSDT/SOLUSDT 신규
   행 삽입 확인.
-- Supabase 조회로 `funding_zscore`/`long_short_ratio_zscore`가 더 이상 BTC 공유값이
-  아니라 자산고유 계산값으로 기록되는지 확인(§데이터축적 정정 근거대로 즉시 유효값
-  산출 확인).
+- Supabase 조회로 실제 값 확인:
+  ```
+  SOLUSDT funding_zscore = 1.5433953031930765   (자산고유 실계산값, BTC 공유값 아님)
+  SOLUSDT long_short_ratio_zscore = null
+  ```
+  **funding은 예상대로 즉시 유효값** — `arena_funding_rates`가 첫 사이클부터 90행
+  확보(§데이터축적 정정과 일치). **LSR은 아직 null**인데 이는 버그가 아니라 예상된
+  차이: LSR의 원천(`arena_market_feature_snapshots.features->>'top_position_ls_ratio'`)은
+  Binance가 즉시 과거 데이터를 주는 funding과 달리 **arena 자신이 4H마다 한 행씩
+  쌓아야 하는 스냅샷**이라, `min_periods=15` 충족까지 15사이클×4H ≈ **2.5일** 필요.
+  이후 자동으로 유효값 산출 시작(그레이스풀 None → 실값 전환, 별도 조치 불필요).
 - BTC 라이브 트레이딩 무영향 확인(`paper_positions` 여전히 BTCUSDT만).
 
 ## 관련 코드 위치
