@@ -127,7 +127,11 @@ def fetch_marketaux_page(
             "search": search,
             "domains": _normalize_csv(domains),
             "language": _normalize_csv(language),
-            "published_after": start_at.isoformat(timespec="seconds").replace("+00:00", "Z"),
+            # 실측(2026-08-03, GH Actions 임시 curl 진단): 초/Z 포함 포맷은 400
+            # {"code":"malformed_parameters","message":"The published_after parameter(s)
+            # are incorrectly formatted."}로 거부됨. 공식 문서 예시(2026-06-01T00:00)와
+            # 동일하게 분 단위·타임존 표기 없이 전송.
+            "published_after": start_at.strftime("%Y-%m-%dT%H:%M"),
             "sort": "published_at",
             "limit": requested_limit,
             "page": page,

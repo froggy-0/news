@@ -60,6 +60,34 @@ def test_fetch_marketaux_page_normalizes_results(monkeypatch):
     assert page.items[0].published_at == datetime(2026, 3, 13, 1, 23, 45, tzinfo=timezone.utc)
 
 
+def test_fetch_marketaux_page_sends_published_after_without_seconds_or_offset(monkeypatch):
+    # 2026-08-03 실측(GH Actions 임시 curl 진단): 초/Z 포함 포맷은
+    # {"code":"malformed_parameters","message":"The published_after parameter(s)
+    # are incorrectly formatted."}로 400 거부됨. 공식 문서 예시("2026-06-01T00:00")와
+    # 동일하게 분 단위·타임존 표기 없이 보내야 한다 — 회귀 방지용 테스트.
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        "morning_brief.data.sources.marketaux_provider.get_json_with_retry",
+        lambda url, **kwargs: (
+            captured.update(kwargs)
+            or {"meta": {"found": 0, "returned": 0, "limit": 3, "page": 1}, "data": []}
+        ),
+    )
+
+    fetch_marketaux_page(
+        api_key="test-key",
+        max_items=3,
+        lookback_hours=36,
+        language="en",
+        domains="reuters.com",
+        search="bitcoin",
+        now=datetime(2026, 8, 3, 14, 46, 17, 123456, tzinfo=timezone.utc),
+    )
+
+    assert captured["params"]["published_after"] == "2026-08-02T02:46"
+
+
 def test_fetch_marketaux_page_caps_free_plan_limit(monkeypatch):
     captured: dict[str, object] = {}
 
