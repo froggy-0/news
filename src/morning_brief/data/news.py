@@ -22,6 +22,7 @@ from morning_brief.data.news_rollout import (
     record_news_rollout_run,
     should_reduce_legacy_broad_fallback,
 )
+from morning_brief.data.sources.asset_news_publisher import publish_asset_news
 from morning_brief.data.sources.coindesk_news import fetch_coindesk_news
 from morning_brief.data.sources.gemini_grounding import fetch_gemini_grounding
 from morning_brief.data.sources.google_news_rss import fetch_news_from_google_rss
@@ -389,6 +390,16 @@ def _collect_primary_crypto_items(
         first_page = thenewsapi_future.result()
         marketaux_first_page = marketaux_future.result()
         newsdata_items = newsdata_future.result()
+
+    # 아레나 ETH/SOL 대시보드 보조 뉴스 — BTC 브리핑 랭킹/병합과 무관하게, newsdata가
+    # 원래 태깅한 ETH/SOL 기사를 전부 그대로 보존해 기록한다(최종 브리핑 컷과 별개).
+    # 실패해도 본 파이프라인에 영향 없음(publish_asset_news가 예외를 삼킴).
+    if newsdata_items:
+        publish_asset_news(
+            newsdata_items,
+            supabase_url=settings.supabase_url,
+            service_role_key=settings.supabase_service_role_key,
+        )
 
     thenewsapi_items = list(first_page.items)
     marketaux_items = list(marketaux_first_page.items)

@@ -80,6 +80,36 @@
     /* ── Layout ───────────────────────────────────────────── */
     .wrap{max-width:1480px;margin:0 auto;padding:16px 20px 32px}
 
+    /* ── Asset switcher ───────────────────────────────────── */
+    .asset-switcher{
+      display:flex;gap:6px;max-width:1480px;margin:0 auto;
+      padding:12px 20px 0;
+    }
+    .atab{
+      font-family:'Barlow Condensed',sans-serif;
+      font-size:12px;font-weight:700;letter-spacing:1.5px;
+      text-transform:uppercase;padding:6px 16px;
+      background:transparent;border:1px solid var(--border);
+      color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:6px;
+      transition:color 120ms,border-color 120ms,background 120ms;
+    }
+    .atab:hover{color:var(--muted2);border-color:var(--border-l)}
+    .atab.active{
+      color:var(--ac);border-color:var(--ac);
+      background:color-mix(in srgb,var(--ac) 10%,transparent);
+    }
+    .atab-shadow{
+      font-size:7px;font-weight:700;letter-spacing:.5px;color:#F0B90B;
+      border:1px solid rgba(240,185,11,.4);padding:1px 4px;
+      background:rgba(240,185,11,.08);
+    }
+    .shadow-banner{
+      max-width:1480px;margin:10px auto 0;padding:8px 20px;
+      background:rgba(240,185,11,.08);border:1px solid rgba(240,185,11,.35);
+      color:#F0B90B;font-size:11px;font-weight:600;letter-spacing:.2px;
+      display:flex;align-items:center;gap:6px;line-height:1.4;
+    }
+
     /* ── Portfolio bar ────────────────────────────────────── */
     .port-bar{
       display:grid;grid-template-columns:1fr repeat(3,auto);
@@ -232,6 +262,19 @@
     .pos-unrl{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
     .pos-meta{font-size:10px;color:var(--muted2);line-height:1.7}
 
+    /* ── News panel (ETH/SOL shadow 전용) ────────────────────── */
+    .news-panel{background:var(--panel);border:1px solid var(--border);margin-bottom:12px}
+    .news-body{padding:2px 0}
+    .news-item{
+      display:flex;justify-content:space-between;align-items:baseline;gap:14px;
+      padding:9px 18px;border-bottom:1px solid rgba(255,255,255,.03);
+    }
+    .news-item:last-child{border-bottom:none}
+    .news-item a{color:var(--muted2);text-decoration:none;font-size:12px;line-height:1.4}
+    .news-item a:hover{color:var(--gold)}
+    .news-meta{color:var(--muted);font-size:9px;white-space:nowrap;flex-shrink:0}
+    .news-empty{color:var(--muted);font-size:11px;padding:18px}
+
     /* ── Log panel ────────────────────────────────────────── */
     .log-panel{background:var(--panel);border:1px solid var(--border)}
     .log-head{
@@ -324,6 +367,9 @@
     @media(max-width:1080px){.algo-grid{grid-template-columns:repeat(3,1fr)}}
     @media(max-width:640px){
       .algo-grid{grid-template-columns:repeat(2,1fr)}
+      .asset-switcher{padding:10px 14px 0}
+      .atab{font-size:10px;padding:5px 11px}
+      .shadow-banner{padding:7px 14px;font-size:10px;margin-top:8px}
       .chart-container{height:280px}
       .eq-container{height:130px}
       .eq-stats{display:none}
@@ -379,7 +425,7 @@
     <img src="/logo.png" class="hd-logo" alt="SovereignWon">
     <span class="hd-title">SOVEREIGN ARENA</span>
     <div class="hd-sep" aria-hidden="true"></div>
-    <span class="hd-sub">BTCUSDT · 4H · 현물 LONG/FLAT</span>
+    <span class="hd-sub" id="hdSub">BTCUSDT · 4H · 현물 LONG/FLAT</span>
   </div>
   <div class="hd-center">
     <span class="btc-price" id="btcPrice" aria-live="polite" aria-label="BTC 현재가">—</span>
@@ -394,9 +440,14 @@
   </div>
 </header>
 
+<div class="asset-switcher" id="assetSwitcher" role="tablist" aria-label="자산 선택"></div>
+<div class="shadow-banner" id="shadowBanner" style="display:none">
+  <span>⚠ SHADOW MODE — <span class="shadow-symbol"></span>는 페이퍼 실거래가 아닌 신호 관측 전용입니다 (자본 무위험, portfolio 미반영)</span>
+</div>
+
 <main class="wrap">
 
-  <div class="port-bar" aria-label="포트폴리오 요약">
+  <div class="port-bar btc-only" aria-label="포트폴리오 요약">
     <div class="port-label" id="portLabel">현물 알고리즘당 $1,000 · LONG/FLAT · 왕복 ~13bps 반영</div>
     <div class="port-stat">
       <div class="port-stat-lbl">총 자산</div>
@@ -415,7 +466,7 @@
     </div>
   </div>
 
-  <section class="eq-panel" aria-label="포트폴리오 자산 곡선">
+  <section class="eq-panel btc-only" aria-label="포트폴리오 자산 곡선">
     <div class="eq-head">
       <span class="panel-title">EQUITY CURVE</span>
       <span class="eq-stats" id="eqStats">—</span>
@@ -446,21 +497,28 @@
     <div class="chart-container">
       <div id="lwChartEl" role="img" aria-label="BTC 4H 캔들차트 — 알고리즘 진입·청산 마커 포함"></div>
     </div>
-    <div class="chart-legend" aria-hidden="true">
+    <div class="chart-legend btc-only" aria-hidden="true">
       <div>▲ <span>매수 진입 (알고 색상)</span></div>
       <div>▼ <span>청산 (초록=수익 / 빨강=손실)</span></div>
       <div>── <span>진입가선</span></div>
       <div>⋯ <span>손절선</span></div>
     </div>
-    <div class="pos-strip" id="posStrip" aria-label="진입 중 포지션" aria-live="polite">
+    <div class="pos-strip btc-only" id="posStrip" aria-label="진입 중 포지션" aria-live="polite">
       <span class="pos-flat-msg">진입 중인 포지션 없음</span>
     </div>
   </div>
 
+  <div class="news-panel" id="assetNewsPanel" style="display:none">
+    <div class="log-head">
+      <span class="panel-title">RELATED NEWS</span>
+    </div>
+    <div class="news-body" id="assetNewsBody"></div>
+  </div>
+
   <div class="log-panel">
     <div class="log-head">
-      <span class="panel-title">TRADE LOG</span>
-      <div class="period-toggle" id="periodToggle" role="group" aria-label="기간 필터">
+      <span class="panel-title" id="logPanelTitle">TRADE LOG</span>
+      <div class="period-toggle btc-only" id="periodToggle" role="group" aria-label="기간 필터">
         <button class="period-btn active" data-period="all">ALL</button>
         <button class="period-btn" data-period="30">30D</button>
         <button class="period-btn" data-period="7">7D</button>
@@ -469,7 +527,7 @@
     <div class="tlog-scroll" role="region" aria-label="거래 기록">
       <table class="tbl" role="table" aria-label="거래 목록">
         <thead>
-          <tr>
+          <tr id="tradeLogHead">
             <th scope="col">시각 (KST)</th>
             <th scope="col">알고리즘</th>
             <th scope="col">진입가</th>
@@ -550,6 +608,18 @@ let activeTab = 'all';
 let eqChart = null;
 let eqSeries = null;
 let bhSeries = null;
+
+// ── 멀티자산(shadow) — ETH/SOL은 signal-only 관측, paper_positions 미접촉 ──
+// (docs/arena/research/multi-asset-implementation-plan-20260731.md P1-4/P1-7)
+const ASSETS = {
+  BTC: { symbol: 'BTCUSDT', label: 'BTC', color: '#F0B90B' },
+  ETH: { symbol: 'ETHUSDT', label: 'ETH', color: '#8B9DC3' },
+  SOL: { symbol: 'SOLUSDT', label: 'SOL', color: '#9945FF' },
+};
+let activeAsset = 'BTC';
+let supaClient = null;
+let shadowDecisionsCache = [];
+let latestShadowByAlgo = {};
 
 const TAB_DEFS = [
   { id: 'all', label: '전체', color: '#F0B90B' },
@@ -1223,9 +1293,15 @@ function activateTab(tabId) {
   if (activeTab === tabId) return;
   activeTab = tabId;
   renderTabs();
-  renderPositionStrip();
-  renderPriceChart();
-  renderLog(positions);
+  if (activeAsset === 'BTC') {
+    renderPositionStrip();
+    renderPriceChart();
+    renderLog(positions);
+  } else {
+    renderShadowPriceChart();
+    const view = activeTab === 'all' ? shadowDecisionsCache : shadowDecisionsCache.filter(d => d.algo_id === activeTab);
+    renderShadowLog(view);
+  }
 }
 
 function setupCardNavigation() {
@@ -1258,7 +1334,8 @@ function setupPeriodToggle() {
 
 /* ── Freshness (정직한 LIVE 표시) ───────────────────────────── */
 function renderFreshness() {
-  const times = Object.values(latestDecisions || {})
+  const src = activeAsset === 'BTC' ? latestDecisions : latestShadowByAlgo;
+  const times = Object.values(src || {})
     .map(d => new Date(d.created_at).getTime()).filter(Number.isFinite);
   if (!times.length) return;
   const last = Math.max(...times);
@@ -1300,35 +1377,28 @@ function renderAll(ps) {
   if (el) el.textContent = new Date().toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul' }) + ' KST 업데이트';
 }
 
-/* ── BTC price ticker ───────────────────────────────────────── */
-async function fetchBtcPrice() {
+/* ── 가격 티커 (현재 선택 자산 기준) ─────────────────────────── */
+async function fetchPrice(symbol) {
   try {
-    const r = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT');
+    const r = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`);
     if (!r.ok) return;
     const d   = await r.json();
     const price = parseFloat(d.lastPrice);
-    latestBtcPrice = price;
+    latestBtcPrice = price; // BTC 외 자산 선택 시에도 "현재 선택자산 가격"으로 재사용
     const chg = parseFloat(d.priceChangePercent);
     document.getElementById('btcPrice').textContent =
-      '$' + price.toLocaleString('en-US', { maximumFractionDigits: 0 });
+      '$' + price.toLocaleString('en-US', { maximumFractionDigits: price < 10 ? 4 : 0 });
     const cel = document.getElementById('btcChg');
     cel.textContent = `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%`;
     cel.className   = 'btc-chg ' + (chg >= 0 ? 'c-green' : 'c-red');
-    if (positions.length) {
-      const stats = algoStats(positions);
-      renderPortfolio(stats);
-      renderCards(stats);
-      renderEquityChart(stats);
-      renderPositionStrip();
-    }
   } catch(_) {}
 }
 
-/* ── Binance OHLC klines ────────────────────────────────────── */
-async function fetchKlines() {
+/* ── Binance OHLC klines (현재 선택 자산 기준) ──────────────── */
+async function fetchKlinesData(symbol) {
   try {
     // limit 1000 (≈166일): 벤치마크가 아레나 시작일(2026-06-20)을 항상 커버하도록
-    const r = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=4h&limit=1000');
+    const r = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=4h&limit=1000`);
     if (!r.ok) return;
     const d = await r.json();
     ohlcv = d.map(k => ({
@@ -1338,13 +1408,214 @@ async function fetchKlines() {
       low:   parseFloat(k[3]),
       close: parseFloat(k[4]),
     }));
+  } catch(_) {}
+}
+
+// 가격/캔들 갱신 후 현재 활성 자산에 맞는 렌더 경로로 분기
+function refreshAssetView() {
+  if (activeAsset === 'BTC') {
     renderPriceChart();
     if (positions.length) {
       const stats = algoStats(positions);
-      renderPortfolio(stats);      // vs BTC 스탯은 klines 필요
-      renderEquityChart(stats);    // 벤치마크 라인도 klines 필요
+      renderPortfolio(stats);
+      renderCards(stats);
+      renderEquityChart(stats);
+      renderPositionStrip();
     }
-  } catch(_) {}
+  } else {
+    renderShadowPriceChart();
+  }
+}
+
+/* ── Shadow (ETH/SOL 신호관측) ──────────────────────────────── */
+// arena_shadow_decisions는 run_id로만 arena_runs와 연결(symbol은 join 필요).
+// sleeve_id='multi_asset_shadow'가 P1-4 경량 경로의 마커.
+async function fetchShadowData(client, symbol) {
+  try {
+    const { data, error } = await client
+      .from('arena_shadow_decisions')
+      .select('algo_id, signal, action, reason, created_at, arena_runs!inner(symbol)')
+      .eq('sleeve_id', 'multi_asset_shadow')
+      .eq('arena_runs.symbol', symbol)
+      .order('created_at', { ascending: false })
+      .limit(120);
+    if (error) { console.error('[Arena] shadow fetch error:', error.message); return { list: [], byAlgo: {} }; }
+    const list = data || [];
+    const byAlgo = {};
+    for (const d of list) if (!byAlgo[d.algo_id]) byAlgo[d.algo_id] = d; // 최신순 정렬이라 첫 값이 latest
+    return { list, byAlgo };
+  } catch(_) { return { list: [], byAlgo: {} }; }
+}
+
+// explain_signal() 진단(diag) — dec.reason.diagnostics: raw_signal/vetoes/failed_conditions/factor_score
+function shadowHint(dec) {
+  const diag = dec && dec.reason && dec.reason.diagnostics;
+  if (!diag) return null;
+  if (diag.raw_signal === 'long') {
+    return `레짐 ${diag.effective_regime_state || '—'} · 팩터 ${diag.factor_score ?? '—'}`;
+  }
+  const blocker = (diag.vetoes && diag.vetoes[0]) || (diag.failed_conditions && diag.failed_conditions[0]);
+  return blocker ? `대기: ${blocker}` : (ALGO_NEEDS[dec.algo_id] || null);
+}
+
+function renderShadowCards(byAlgo) {
+  document.getElementById('algoGrid').innerHTML = ALGO_IDS.map(algo => {
+    const dec = byAlgo[algo];
+    const cfg = ALGOS[algo];
+    const isLong = dec && dec.action === 'shadow_open';
+    const label  = !dec ? '대기' : isLong ? 'LONG' : dec.action === 'shadow_blocked' ? 'BLOCKED' : 'FLAT';
+    const hint   = dec ? shadowHint(dec) : '데이터 수집 중';
+    const ts     = dec ? fmtKST(dec.created_at) : '—';
+    return `<div class="ac" style="--ac:${cfg.color}" data-algo="${algo}" tabindex="0" role="button" aria-label="${algo} shadow — 클릭 시 신호로그 필터">
+      <div class="ac-head">
+        <span class="ac-name">${algo.replace(/_/g, ' ')}</span>
+        <span class="pos-badge ${isLong ? 'long' : 'flat'}">${label}</span>
+      </div>
+      <div class="ac-equity" style="color:var(--muted2);font-size:12px">SHADOW · 실거래 아님</div>
+      <div class="ac-metrics">
+        <div class="ac-metric"><span>최근 판단</span><span class="ac-metric-val">${ts}</span></div>
+      </div>
+      ${hint ? `<div class="ac-hint">${esc(hint)}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderShadowPriceChart() {
+  if (!lwChart || !candleSeries || !ohlcv.length) return;
+  candleSeries.setData(ohlcv);
+  clearPriceLines();
+  candleSeries.setMarkers([]); // shadow엔 실체결 진입/청산이 없음 — 캔들만 표시
+  const lastT = ohlcv[ohlcv.length - 1].time;
+  try { lwChart.timeScale().setVisibleRange({ from: lastT - 14 * 24 * 3600, to: lastT + 3600 }); } catch(_) {}
+  const view = activeTab === 'all' ? shadowDecisionsCache : shadowDecisionsCache.filter(d => d.algo_id === activeTab);
+  document.getElementById('tradeCountLabel').textContent = `SHADOW ${view.length}건 신호 기록`;
+}
+
+function renderLogHeader(mode) {
+  const tr = document.getElementById('tradeLogHead');
+  if (!tr) return;
+  tr.innerHTML = mode === 'shadow'
+    ? `<th scope="col">시각 (KST)</th><th scope="col">알고리즘</th><th scope="col">신호</th><th scope="col">액션</th><th scope="col">사유</th>`
+    : `<th scope="col">시각 (KST)</th><th scope="col">알고리즘</th><th scope="col">진입가</th><th scope="col">청산가</th><th scope="col">수익률</th><th scope="col">비중</th><th scope="col">청산사유</th><th scope="col">보유</th>`;
+}
+
+function renderShadowLog(list) {
+  const body = document.getElementById('tradeLogBody');
+  document.getElementById('tradeCountLabel').textContent = `SHADOW 신호 ${list.length}건`;
+  if (!list.length) {
+    body.innerHTML = `<tr><td colspan="5" style="color:var(--muted);font-size:11px;padding:20px 18px">아직 shadow 신호 기록 없음</td></tr>`;
+    return;
+  }
+  body.innerHTML = list.map(d => {
+    const cfg = ALGOS[d.algo_id] || { color: '#848E9C' };
+    const sig = d.signal ? d.signal.toUpperCase() : 'FLAT';
+    const sigColor = d.signal === 'long' ? 'var(--green)' : 'var(--muted)';
+    const diag = d.reason && d.reason.diagnostics;
+    const reasonTxt = diag
+      ? ((diag.vetoes && diag.vetoes[0]) || (diag.failed_conditions && diag.failed_conditions[0]) ||
+         (diag.raw_signal === 'long' ? '진입조건 충족' : '—'))
+      : '—';
+    return `<tr>
+      <td style="color:var(--muted)">${fmtKST(d.created_at)}</td>
+      <td><span class="algo-chip" style="color:${cfg.color};border-color:${cfg.color}40">${d.algo_id}</span></td>
+      <td style="color:${sigColor}">${sig}</td>
+      <td style="color:var(--muted2)">${esc(d.action)}</td>
+      <td style="color:var(--muted2);white-space:normal">${esc(reasonTxt)}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ── 관련 뉴스 (ETH/SOL shadow 전용, arena_asset_news) ──────── */
+async function fetchAssetNews(client, symbol, limit = 8) {
+  try {
+    const { data, error } = await client
+      .from('arena_asset_news')
+      .select('title, url, source, published_at')
+      .eq('symbol', symbol)
+      .order('published_at', { ascending: false })
+      .limit(limit);
+    if (error) { console.error('[Arena] asset news fetch error:', error.message); return []; }
+    return data || [];
+  } catch(_) { return []; }
+}
+
+function renderAssetNews(list) {
+  const body = document.getElementById('assetNewsBody');
+  if (!body) return;
+  if (!list.length) {
+    body.innerHTML = `<div class="news-empty">아직 수집된 관련 뉴스 없음</div>`;
+    return;
+  }
+  body.innerHTML = list.map(n => `<div class="news-item">
+    <a href="${esc(n.url)}" target="_blank" rel="noopener noreferrer">${esc(n.title)}</a>
+    <span class="news-meta">${esc(n.source || '')}${n.published_at ? ' · ' + fmtKST(n.published_at) : ''}</span>
+  </div>`).join('');
+}
+
+/* ── Render: asset switcher ─────────────────────────────────── */
+function renderAssetSwitcher() {
+  const el = document.getElementById('assetSwitcher');
+  if (!el) return;
+  el.innerHTML = Object.keys(ASSETS).map(k => {
+    const shadowTag = k !== 'BTC' ? ' <span class="atab-shadow">SHADOW</span>' : '';
+    return `<button class="atab${activeAsset === k ? ' active' : ''}" style="--ac:${ASSETS[k].color}" data-asset="${k}" role="tab" aria-selected="${activeAsset === k}">${ASSETS[k].label}${shadowTag}</button>`;
+  }).join('');
+  el.querySelectorAll('.atab').forEach(b => {
+    b.addEventListener('click', () => switchAsset(b.dataset.asset));
+  });
+}
+
+function setBtcOnlyVisible(visible) {
+  document.querySelectorAll('.btc-only').forEach(el => { el.style.display = visible ? '' : 'none'; });
+}
+
+async function switchAsset(assetKey) {
+  if (assetKey === activeAsset || !ASSETS[assetKey]) return;
+  activeAsset = assetKey;
+  activeTab = 'all';
+  const meta = ASSETS[assetKey];
+  renderAssetSwitcher();
+  renderTabs();
+
+  const hdSub = document.getElementById('hdSub');
+  if (hdSub) hdSub.textContent = assetKey === 'BTC'
+    ? 'BTCUSDT · 4H · 현물 LONG/FLAT'
+    : `${meta.symbol} · 4H · SHADOW 신호 관측`;
+
+  const banner = document.getElementById('shadowBanner');
+  if (banner) {
+    banner.style.display = assetKey === 'BTC' ? 'none' : 'flex';
+    const symEl = banner.querySelector('.shadow-symbol');
+    if (symEl) symEl.textContent = meta.symbol;
+  }
+  setBtcOnlyVisible(assetKey === 'BTC');
+
+  const logTitle = document.getElementById('logPanelTitle');
+  if (logTitle) logTitle.textContent = assetKey === 'BTC' ? 'TRADE LOG' : 'SHADOW SIGNAL LOG';
+  renderLogHeader(assetKey === 'BTC' ? 'live' : 'shadow');
+
+  ohlcv = [];
+  await Promise.all([fetchKlinesData(meta.symbol), fetchPrice(meta.symbol)]);
+
+  const newsPanel = document.getElementById('assetNewsPanel');
+  if (newsPanel) newsPanel.style.display = assetKey === 'BTC' ? 'none' : '';
+
+  if (assetKey === 'BTC') {
+    latestDecisions = await fetchDecisions(supaClient);
+    renderAll(positions);
+  } else {
+    const [{ list, byAlgo }, news] = await Promise.all([
+      fetchShadowData(supaClient, meta.symbol),
+      fetchAssetNews(supaClient, meta.symbol),
+    ]);
+    shadowDecisionsCache = list;
+    latestShadowByAlgo = byAlgo;
+    renderShadowCards(byAlgo);
+    renderShadowPriceChart();
+    renderShadowLog(list);
+    renderAssetNews(news);
+    renderFreshness();
+  }
 }
 
 /* ── Supabase ───────────────────────────────────────────────── */
@@ -1423,14 +1694,16 @@ async function init() {
   setupPeriodToggle();
   updateClock();
   setInterval(updateClock, 1000);
+  renderAssetSwitcher();
 
-  fetchBtcPrice();
-  setInterval(fetchBtcPrice, 60_000);
-  fetchKlines();
-  setInterval(fetchKlines, 300_000);
+  fetchPrice(ASSETS[activeAsset].symbol);
+  setInterval(() => { fetchPrice(ASSETS[activeAsset].symbol).then(refreshAssetView); }, 60_000);
+  fetchKlinesData(ASSETS[activeAsset].symbol).then(() => renderPriceChart());
+  setInterval(() => { fetchKlinesData(ASSETS[activeAsset].symbol).then(refreshAssetView); }, 300_000);
   renderTabs();
 
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  supaClient = client;
   const [data, decisions] = await Promise.all([
     fetchPositions(client),
     fetchDecisions(client),
@@ -1444,10 +1717,14 @@ async function init() {
   }
 
   setInterval(async () => {
-    latestDecisions = await fetchDecisions(client);
-    if (positions.length) {
-      const stats = algoStats(positions);
-      renderCards(stats);
+    if (activeAsset === 'BTC') {
+      latestDecisions = await fetchDecisions(client);
+      if (positions.length) renderCards(algoStats(positions));
+    } else {
+      const { list, byAlgo } = await fetchShadowData(client, ASSETS[activeAsset].symbol);
+      shadowDecisionsCache = list;
+      latestShadowByAlgo = byAlgo;
+      renderShadowCards(byAlgo);
     }
     renderFreshness();
   }, 60_000);
