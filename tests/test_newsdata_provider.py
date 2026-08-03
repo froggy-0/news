@@ -39,6 +39,11 @@ def test_fetch_newsdata_crypto_news_normalizes_results(monkeypatch):
         max_items=10,
         lookback_hours=36,
         coins="BTC,ETH,SOL",
+        # pubDate가 "2026-07-31 08:00:00"으로 고정돼 있어, now를 실제 시각(wall clock)에
+        # 맡기면 36시간 lookback 밖으로 밀려나 items가 빈 리스트가 되는 시한부 버그가 있었다
+        # (CI에서 2026-08-01 이후 계속 실패). now를 기사와 같은 시각대로 고정해 시간에
+        # 의존하지 않게 한다.
+        now=datetime(2026, 7, 31, 8, 30, 0, tzinfo=timezone.utc),
     )
 
     assert captured["url"] == "https://newsdata.io/api/1/crypto"

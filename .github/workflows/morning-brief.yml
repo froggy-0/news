@@ -27,6 +27,24 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: DEBUG marketaux raw response (temporary, remove after diagnosis)
+        env:
+          MARKETAUX_KEY: ${{ secrets.MARKETAUX_KEY }}
+        run: |
+          curl -s -o /tmp/marketaux_debug.json -w "HTTP_STATUS:%{http_code}\n" \
+            "https://api.marketaux.com/v1/news/all" \
+            --data-urlencode "api_token=${MARKETAUX_KEY}" \
+            --data-urlencode "search=(bitcoin | btc | ethereum | eth | crypto | stablecoin | \"bitcoin etf\") -scam" \
+            --data-urlencode "domains=reuters.com,bloomberg.com,cnbc.com,coindesk.com,theblock.co,cointelegraph.com" \
+            --data-urlencode "language=en" \
+            --data-urlencode "published_after=$(date -u -d '36 hours ago' '+%Y-%m-%dT%H:%M:%S')Z" \
+            --data-urlencode "sort=published_at" \
+            --data-urlencode "limit=3" \
+            --data-urlencode "page=1" \
+            -G
+          echo "--- response body (key redacted) ---"
+          sed "s/${MARKETAUX_KEY}/REDACTED/g" /tmp/marketaux_debug.json
+
       - name: Set up Python
         uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
         with:
