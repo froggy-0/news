@@ -772,6 +772,16 @@ def omnibus(macro: dict, ind: dict) -> str | None:
     return None
 
 
+def omnibus_regime_for(macro: dict, ind: dict) -> str:
+    """`_omnibus_regime`의 공개 래퍼 — 포지션 스냅샷(macro/ind)에서 진입 시점 레그를
+    재계산할 때 모듈 밖(backtest.py/stream.py)에서 쓰기 위함. P1 후속(2026-08-04)
+    omnibus 레그별 손절 정책의 코드 앵커. omnibus_target_price/position_multiplier와
+    동일하게 이 함수도 stateless — 저장된 macro_snapshot/indicator_snapshot을 넣으면
+    진입 시점 레그가 그대로 재현된다.
+    """
+    return _omnibus_regime(macro, ind)
+
+
 def omnibus_position_multiplier(macro: dict, ind: dict) -> float:
     """omnibus 레짐별 포지션 사이즈 배수 (combined_position_weight에 추가 곱함).
 
@@ -939,6 +949,46 @@ def exit_hold_override(algo_id: str, macro: dict, ind: dict) -> bool:
             return float(h) > 0.0
         except (TypeError, ValueError):
             return False
+
+    # P1(2026-08-04): regime_trend 청산 히스테리시스 — donchian_breakout(지속확률 30.1%,
+    #   이벤트성)이 진입 조건에 재사용돼 진입 직후 조기청산되는 문제 분리.
+    #   설계: docs/arena/research/entry-exit-separation-design-20260804.md
+    #   구현계획: docs/arena/research/entry-exit-separation-implementation-plan-20260804.md §4
+    if algo_id == "regime_trend" and parameters.REGIME_TREND_EXIT_HYSTERESIS_ENABLED:
+        # 양보 없는 즉시청산(vix_rsi:897-900, fng:914-915와 동일 원칙)
+        if _is_risk_off(_regime_state(macro)):
+            return False
+        if _breadth_collapsed(macro) or _stablecoin_contracting(macro):
+            return False
+
+        if parameters.REGIME_TREND_EXIT_MODE == "donchian_exit":
+            # 변형B: 반대편(하단) 채널 이탈 전까지 보유 — 터틀 원형(진입 상단20/청산 하단20).
+            close = ind.get("close", 0.0)
+            dc_lower = ind.get("donchian_lower", 0.0)
+            if dc_lower <= 0:
+                return False  # 지표 미산출 시 기존 동작(즉시청산) 유지 — graceful
+            return close > dc_lower
+
+        # 변형A(기본): 상태 조건(지속확률 87~99%)만 유지, 이벤트 조건(donchian_breakout)
+        # 및 라이브 전용 미검증 5개 조건(etf/taker/volume/lsr/oi)은 보유 판정에서 제외.
+        state = _regime_state(macro)
+        ema_fast = ind.get("ema_fast", 0.0)
+        ema_slow = ind.get("ema_slow", 0.0)
+        adx = ind.get("adx", 0.0)
+        rsi = ind.get("rsi", 50.0)
+
+        ema_ok = ema_fast > ema_slow
+        if parameters.REGIME_TREND_EXIT_STATE_REQUIRE_SLOPE:
+            ema_ok = ema_ok and ind.get("ema_fast_slope", 0.0) > 0  # A2
+
+        return (
+            _is_bullish(state)
+            and ema_ok
+            and adx >= parameters.ADX_TREND_MIN
+            and not _below_ema_trend_strict(ind, macro)
+            and rsi < parameters.TREND_CORE_RSI_LONG_MAX
+            and not _funding_hot(macro)
+        )
 
     return False
 

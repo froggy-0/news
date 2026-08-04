@@ -695,11 +695,20 @@ def run_replay(
             position = positions_by_algo[algo_id]
             # 역발산 계열은 가격 손절 제외 — 시간 손절로 대체(아래 time_stop 블록).
             price_stop_on = algo_id not in parameters.PRICE_STOP_DISABLED_ALGOS
+            omni_leg = (
+                algorithms.omnibus_regime_for(position.macro_snapshot, position.indicator_snapshot)
+                if (position and algo_id == "omnibus")
+                else None
+            )
+            if omni_leg is not None and omni_leg in parameters.OMNIBUS_PRICE_STOP_DISABLED_LEGS:
+                price_stop_on = False
             stop_fill = (
                 _stop_fill_price(position, frame.bar) if (position and price_stop_on) else None
             )
             # 시간 손절: 최대 보유시간 초과 시 청산(가격 손절 제거 알고 보완).
             ts_hours = parameters.TIME_STOP_HOURS_BY_ALGO.get(algo_id)
+            if omni_leg is not None and omni_leg in parameters.OMNIBUS_LEG_TIME_STOP_HOURS:
+                ts_hours = parameters.OMNIBUS_LEG_TIME_STOP_HOURS[omni_leg]
             if (
                 position
                 and stop_fill is None

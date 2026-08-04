@@ -185,6 +185,89 @@ def test_vix_rsi_exit_hold_override_hysteresis() -> None:
     assert algorithms.exit_hold_override("multi_factor", macro, {"rsi": 55.0}) is False
 
 
+def test_regime_trend_exit_hold_override_disabled_by_default() -> None:
+    # §5-1 무회귀: 플래그 off면 항상 False(기존 즉시청산 동작 그대로).
+    macro = {"arena_regime_state": "bull_trend", "funding_zscore": 0.0}
+    ind = {"ema_fast": 2.0, "ema_slow": 1.0, "ema_fast_slope": 0.1, "adx": 25.0, "rsi": 50.0}
+    assert algorithms.exit_hold_override("regime_trend", macro, ind) is False
+
+
+def test_regime_trend_exit_hold_override_variant_a_state_conditions(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "REGIME_TREND_EXIT_HYSTERESIS_ENABLED", True)
+    macro = {"arena_regime_state": "bull_trend", "funding_zscore": 0.0}
+    # 상태조건(EMA정배열·ADX강함·RSI<70·funding미과열) 전부 참, donchian_breakout은
+    # 아예 안 봄(변형A는 이벤트 조건을 보유판정에서 제외) → hold.
+    ind_ok = {"ema_fast": 2.0, "ema_slow": 1.0, "ema_fast_slope": -0.1, "adx": 25.0, "rsi": 50.0}
+    assert algorithms.exit_hold_override("regime_trend", macro, ind_ok) is True
+
+    # EMA 역배열 → 청산.
+    ind_bad_ema = dict(ind_ok, ema_fast=1.0, ema_slow=2.0)
+    assert algorithms.exit_hold_override("regime_trend", macro, ind_bad_ema) is False
+
+    # ADX 약화(<20) → 청산.
+    ind_weak_adx = dict(ind_ok, adx=15.0)
+    assert algorithms.exit_hold_override("regime_trend", macro, ind_weak_adx) is False
+
+    # RSI 과열(>=70) → 청산.
+    ind_hot_rsi = dict(ind_ok, rsi=75.0)
+    assert algorithms.exit_hold_override("regime_trend", macro, ind_hot_rsi) is False
+
+    # funding 과열 → 청산.
+    macro_hot = dict(macro, funding_zscore=parameters.FUNDING_HOT_ZSCORE + 1)
+    assert algorithms.exit_hold_override("regime_trend", macro_hot, ind_ok) is False
+
+
+def test_regime_trend_exit_hold_override_variant_a_slope_ab(monkeypatch) -> None:
+    macro = {"arena_regime_state": "bull_trend", "funding_zscore": 0.0}
+    # 기울기 음전(ema_fast_slope<0), 정배열은 유지.
+    ind = {"ema_fast": 2.0, "ema_slow": 1.0, "ema_fast_slope": -0.1, "adx": 25.0, "rsi": 50.0}
+
+    monkeypatch.setattr(parameters, "REGIME_TREND_EXIT_HYSTERESIS_ENABLED", True)
+    monkeypatch.setattr(parameters, "REGIME_TREND_EXIT_STATE_REQUIRE_SLOPE", False)
+    # A1(기울기 제외): 정배열만 보므로 hold 유지.
+    assert algorithms.exit_hold_override("regime_trend", macro, ind) is True
+
+    monkeypatch.setattr(parameters, "REGIME_TREND_EXIT_STATE_REQUIRE_SLOPE", True)
+    # A2(기울기 포함): 기울기 음전이라 청산.
+    assert algorithms.exit_hold_override("regime_trend", macro, ind) is False
+
+
+def test_regime_trend_exit_hold_override_variant_b_donchian_exit(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "REGIME_TREND_EXIT_HYSTERESIS_ENABLED", True)
+    monkeypatch.setattr(parameters, "REGIME_TREND_EXIT_MODE", "donchian_exit")
+    macro = {"arena_regime_state": "bull_trend", "funding_zscore": 0.0}
+    # 종가가 하단 채널 위 → 보유.
+    ind_above = {"close": 105.0, "donchian_lower": 100.0}
+    assert algorithms.exit_hold_override("regime_trend", macro, ind_above) is True
+    # 종가가 하단 이탈 → 청산.
+    ind_below = {"close": 95.0, "donchian_lower": 100.0}
+    assert algorithms.exit_hold_override("regime_trend", macro, ind_below) is False
+    # 지표 미산출(0) → graceful, 기존 동작(즉시청산) 유지.
+    ind_missing = {"close": 105.0, "donchian_lower": 0.0}
+    assert algorithms.exit_hold_override("regime_trend", macro, ind_missing) is False
+
+
+def test_regime_trend_exit_hold_override_no_hysteresis_bypass(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "REGIME_TREND_EXIT_HYSTERESIS_ENABLED", True)
+    # risk-off·breadth붕괴·stablecoin수축은 히스테리시스에 양보하지 않고 즉시청산.
+    ind_ok = {"ema_fast": 2.0, "ema_slow": 1.0, "adx": 25.0, "rsi": 50.0, "funding_zscore": 0.0}
+
+    macro_risk_off = {"arena_regime_state": "bear_trend"}
+    assert algorithms.exit_hold_override("regime_trend", macro_risk_off, ind_ok) is False
+
+    macro_breadth = {
+        "arena_regime_state": "bull_trend",
+        "breadth_up_ratio": parameters.BREADTH_HEALTHY_MIN - 0.1,
+    }
+    assert algorithms.exit_hold_override("regime_trend", macro_breadth, ind_ok) is False
+
+    macro_stable = {
+        "arena_regime_state": "bull_trend",
+        "stablecoin_supply_zscore": parameters.STABLECOIN_CONTRACTION_Z - 1,
+    }
+    assert algorithms.exit_hold_override("regime_trend", macro_stable, ind_ok) is False
+
+
 def test_below_ma200_structural_gate_reads_macro_flag() -> None:
     # btc_above_ma200=0(하회) → 역추세/모멘텀 롱 보류 트리거.
     assert algorithms._below_ma200({"btc_above_ma200": 0.0}) is True

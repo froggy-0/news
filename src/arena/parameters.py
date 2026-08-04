@@ -229,6 +229,16 @@ PRICE_STOP_DISABLED_ALGOS: tuple[str, ...] = ("fng_contrarian",)
 TIME_STOP_HOURS_BY_ALGO: dict[str, float] = {
     "fng_contrarian": FNG_CONTRARIAN_TIME_STOP_HOURS,
 }
+#
+# P1 후속(2026-08-04): omnibus 손절폭 레그별 진단 — DOWN_TREND(REBOUND) 레그만
+#   손절 비중·손절당 손실이 최악(10~14%/−3.6~−4.2%), RANGE·UP_TREND은 문제 아님
+#   (root-cause 문서 §12, omnibus-stop-distance-design-20260804.md §2). 2026-07-25
+#   시도가 omnibus 전체에 블랑켓 적용해 전/후반 불일치로 보류된 데 대한 가설(레그
+#   혼합)을 검증하기 위해, 위 PRICE_STOP_DISABLED_ALGOS/TIME_STOP_HOURS_BY_ALGO와
+#   같은 원칙을 omnibus 레그 단위로 좁혀 재적용한다. 기본값 전부 off/빈 컨테이너.
+#   설계: docs/arena/research/omnibus-stop-distance-design-20260804.md
+OMNIBUS_PRICE_STOP_DISABLED_LEGS: tuple[str, ...] = ()  # 예: ("DOWN_TREND",)
+OMNIBUS_LEG_TIME_STOP_HOURS: dict[str, float] = {}  # 예: {"DOWN_TREND": 72.0}
 
 # ── P-A: fng_contrarian 이익 포착(profit target) — 청산이 이익을 흘리는 문제 대응 ──
 # 근거(2026-07-10): 라이브 청산 6건 평균 MFE +2.09%인데 실현 -1.41%, 손실 5건 중 4건이
@@ -326,6 +336,20 @@ VIX_RSI_CROSS_OVERSOLD = 35.0
 MACD_MOMENTUM_TRIGGER_MODE = "state"  # "state"(현행) | "zero_cross"
 MACD_MOMENTUM_ZERO_CROSS_DROP_BB_GATE = False  # 크로스 모드에서 BB폭 게이트 제거 여부(그리드)
 MACD_MOMENTUM_EXIT_HYSTERESIS_ENABLED = False
+#
+# P1(2026-08-04): regime_trend 청산 히스테리시스 — 진입조건(이벤트 포함)이 곧 보유조건인
+#   구조를 분리. donchian_breakout 지속확률 30.1%(이벤트, 정의상 1회성)인데 보유
+#   판정에 재사용돼 진입 12회 중 9회가 다음 봉에 조기청산(2023-2024 상승장 실측).
+#   근거: MOP 2012(JFE) 추세 지속 1~12개월 vs 실측 중앙보유 8h(4H봉 2개).
+#   설계: docs/arena/research/entry-exit-separation-design-20260804.md
+#   구현계획: docs/arena/research/entry-exit-separation-implementation-plan-20260804.md
+REGIME_TREND_EXIT_HYSTERESIS_ENABLED = False
+REGIME_TREND_EXIT_MODE = (
+    "state"  # "state"(변형A: 상태조건 유지) | "donchian_exit"(변형B: 반대편 채널 이탈)
+)
+REGIME_TREND_EXIT_STATE_REQUIRE_SLOPE = (
+    False  # 변형A만: True=A2(기울기 포함) False=A1(기울기 제외, 권장)
+)
 #
 # WI-7: omnibus RANGE/REBOUND 목표가 청산 — 평균회귀에 이론 정합적 익절(BB 중앙선) 부여.
 #   진입 시점 목표가 고정(signal_reason.omni_target_price). live는 1m 틱 감시, backtest는

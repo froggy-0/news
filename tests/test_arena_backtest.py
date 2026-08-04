@@ -346,6 +346,115 @@ def test_fng_contrarian_time_stop_closes_after_max_hold(monkeypatch) -> None:
     assert any(t.exit_reason == "time_stop" for t in result.trades)
 
 
+def test_omnibus_regime_for_wraps_omnibus_regime() -> None:
+    # 공개 래퍼가 내부 _omnibus_regime과 동일하게 동작(backtest.py/stream.py 앵커).
+    macro = {"arena_regime_state": "bear_trend"}
+    assert algorithms.omnibus_regime_for(macro, {}) == "DOWN_TREND"
+    assert algorithms.omnibus_regime_for({"arena_regime_state": "bull_trend"}, {}) == "UP_TREND"
+
+
+def _force_local_regime(monkeypatch, regime_state: str) -> None:
+    """run_replay 루프는 매 bar `regime.classify_regime_variant()`로 arena_regime_state를
+    지표에서 직접 재계산해 macro에 주입한다(backtest.py — 라이브 로컬레짐 패리티, 테스트
+    프레임이 macro에 직접 넣은 arena_regime_state는 이 재계산으로 덮어써진다). 레그를
+    결정적으로 통제하려면 분류기 자체를 고정해야 한다."""
+    from arena import regime as regime_module
+
+    def _fixed(
+        indicators, market_features=None, macro=None, *, variant=regime_module.REGIME_VARIANT_STRICT
+    ):
+        return regime_module.RegimeDecision(
+            regime_state=regime_state, confidence=1.0, reason={}, feature_snapshot={}
+        )
+
+    monkeypatch.setattr(regime_module, "classify_regime_variant", _fixed)
+    monkeypatch.setattr(backtest.regime, "classify_regime_variant", _fixed)
+
+
+def test_omnibus_leg_price_stop_disabled_skips_stop_loss(monkeypatch) -> None:
+    # P1 후속: DOWN_TREND 레그만 가격손절 제외 시, 손절가를 뚫는 폭락에도 청산 안 됨.
+    _force_local_regime(monkeypatch, "bear_trend")
+    monkeypatch.setattr(parameters, "OMNIBUS_PRICE_STOP_DISABLED_LEGS", ("DOWN_TREND",))
+    monkeypatch.setattr(parameters, "OMNIBUS_TARGET_EXIT_ENABLED", False)
+
+    def always_long(macro, indicators):
+        return "long"
+
+    frames = [
+        _frame(0, close=100.0),  # 진입
+        # 정상이면 손절가(≈97.5, ATR=1×2.5 clamp)를 뚫는 폭락 — 그러나 제외돼야 함.
+        _frame(1, open_price=99.0, high=100.0, low=80.0, close=98.0),
+        *[_frame(i, close=98.0) for i in range(2, 4)],
+    ]
+    result = backtest.run_replay(
+        frames, strategy_fns={"omnibus": always_long}, settings=_spot_settings()
+    )
+
+    assert not any(t.exit_reason in ("stop_loss", "trailing_stop") for t in result.trades)
+
+
+def test_omnibus_leg_price_stop_disabled_does_not_affect_other_legs(monkeypatch) -> None:
+    # 특이성 검증: DOWN_TREND만 제외했을 때 UP_TREND 레그는 기존처럼 정상 손절돼야 함
+    # — 2026-07-25 "레그 혼합" 가설(omnibus-stop-distance-design-20260804.md §3)의
+    # 핵심 전제(레그를 분리하면 다른 레그는 안 건드림)를 코드 레벨에서 보증.
+    _force_local_regime(monkeypatch, "bull_trend")
+    monkeypatch.setattr(parameters, "OMNIBUS_PRICE_STOP_DISABLED_LEGS", ("DOWN_TREND",))
+    monkeypatch.setattr(parameters, "OMNIBUS_TARGET_EXIT_ENABLED", False)
+
+    def always_long(macro, indicators):
+        return "long"
+
+    frames = [
+        _frame(0, close=100.0),  # UP_TREND 진입
+        _frame(1, open_price=99.0, high=100.0, low=80.0, close=98.0),
+    ]
+    result = backtest.run_replay(
+        frames, strategy_fns={"omnibus": always_long}, settings=_spot_settings()
+    )
+
+    assert len(result.trades) == 1
+    assert result.trades[0].exit_reason in ("stop_loss", "trailing_stop")
+
+
+def test_omnibus_leg_time_stop_hours_override(monkeypatch) -> None:
+    _force_local_regime(monkeypatch, "bear_trend")
+    monkeypatch.setattr(parameters, "OMNIBUS_LEG_TIME_STOP_HOURS", {"DOWN_TREND": 12.0})
+    monkeypatch.setattr(parameters, "OMNIBUS_TARGET_EXIT_ENABLED", False)
+
+    def always_long(macro, indicators):
+        return "long"
+
+    # 가격 변동 없음(손절/익절 미발동) — 12h(3봉) 경과 시 레그별 시간손절만으로 청산돼야 함.
+    frames = [_frame(i, close=100.0) for i in range(6)]
+    result = backtest.run_replay(
+        frames, strategy_fns={"omnibus": always_long}, settings=_spot_settings()
+    )
+
+    assert any(t.exit_reason == "time_stop" for t in result.trades)
+
+
+def test_omnibus_leg_overrides_default_off(monkeypatch) -> None:
+    # 빈 튜플/빈 dict(기본값)면 omnibus도 기존 전역 ATR 손절 그대로 — 무회귀.
+    assert parameters.OMNIBUS_PRICE_STOP_DISABLED_LEGS == ()
+    assert parameters.OMNIBUS_LEG_TIME_STOP_HOURS == {}
+    _force_local_regime(monkeypatch, "bear_trend")
+    monkeypatch.setattr(parameters, "OMNIBUS_TARGET_EXIT_ENABLED", False)
+
+    def always_long(macro, indicators):
+        return "long"
+
+    frames = [
+        _frame(0, close=100.0),
+        _frame(1, open_price=99.0, high=100.0, low=80.0, close=98.0),
+    ]
+    result = backtest.run_replay(
+        frames, strategy_fns={"omnibus": always_long}, settings=_spot_settings()
+    )
+
+    assert len(result.trades) == 1
+    assert result.trades[0].exit_reason in ("stop_loss", "trailing_stop")
+
+
 def test_fng_contrarian_profit_target_exit(monkeypatch) -> None:
     # P-A: 진입가+ATR×1.0 도달 시 target_exit 익절. 물타기 없이 단순 상승 시나리오.
     monkeypatch.setattr(parameters, "FNG_TARGET_EXIT_ENABLED", True)

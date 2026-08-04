@@ -138,6 +138,14 @@ async def _check_stop_loss(price: float) -> None:
                 state.open_positions[algo_id] = None
                 _last_persisted_stop.pop(algo_id, None)
                 continue
+        # P1 후속(2026-08-04): omnibus 레그별 가격손절 제외 — 진입 시점
+        # signal_reason.diagnostics.factors.omni_regime으로 레그 판별(backtest.py
+        # omnibus_regime_for()와 동일 원칙, live는 이미 저장된 값을 그대로 읽음).
+        if algo_id == "omnibus" and parameters.OMNIBUS_PRICE_STOP_DISABLED_LEGS:
+            _diag = (pos.get("signal_reason") or {}).get("diagnostics") or {}
+            _leg = (_diag.get("factors") or {}).get("omni_regime")
+            if _leg in parameters.OMNIBUS_PRICE_STOP_DISABLED_LEGS:
+                continue
         await _ratchet_trailing_stop(algo_id, pos, price)
         if _is_stop_triggered(pos, price):
             sl = pos.get("stop_loss_price", "fallback")

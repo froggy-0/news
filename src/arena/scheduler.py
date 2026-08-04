@@ -771,6 +771,15 @@ async def _run_cycle() -> None:
             # 시간 손절(가격 손절 제거 알고 보완): 최대 보유시간 초과 시 청산.
             ts_hours = parameters.TIME_STOP_HOURS_BY_ALGO.get(algo_id)
             if (
+                algo_id == "omnibus"
+                and current is not None
+                and parameters.OMNIBUS_LEG_TIME_STOP_HOURS
+            ):
+                _diag = (current.get("signal_reason") or {}).get("diagnostics") or {}
+                _leg = (_diag.get("factors") or {}).get("omni_regime")
+                if _leg in parameters.OMNIBUS_LEG_TIME_STOP_HOURS:
+                    ts_hours = parameters.OMNIBUS_LEG_TIME_STOP_HOURS[_leg]
+            if (
                 current is not None
                 and ts_hours
                 and execution_rules.time_stop_triggered(current["open_time"], now, ts_hours)
