@@ -29,6 +29,7 @@ import numpy as np  # noqa: E402
 from backtest_with_macro_backfill import build_macro_rows  # noqa: E402
 from validation_stats import (  # noqa: E402
     deflated_sharpe_ratio,
+    effective_trial_count,
 )
 
 from arena import backtest, frequency, parameters, positions  # noqa: E402
@@ -150,10 +151,15 @@ async def main() -> int:
             },
         }
         if len(usable) >= 2 and best in usable:
-            dsr = deflated_sharpe_ratio(np.asarray(usable[best]), len(usable))
+            n_trials = effective_trial_count(len(usable), algo_id=target)
+            dsr = deflated_sharpe_ratio(np.asarray(usable[best]), n_trials)
             # PBO는 동일 길이 시계열 필요 → 트레이드 수 달라 스킵, DSR만.
-            print(f"      best={best}  DSR sharpe={dsr['sharpe']:.3f} dsr={dsr['dsr']:.3f}")
+            print(
+                f"      best={best}  DSR sharpe={dsr['sharpe']:.3f} "
+                f"dsr={dsr['dsr']:.3f} n_trials={n_trials}"
+            )
             decisions[name]["dsr"] = round(dsr["dsr"], 3)
+            decisions[name]["n_trials"] = n_trials
         return results
 
     all_algos = list(b.keys())

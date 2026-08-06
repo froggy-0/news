@@ -30,6 +30,38 @@ from pathlib import Path
 import numpy as np
 from scipy.stats import norm
 
+DEFAULT_TRIAL_LEDGER_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "docs/arena/research/specification-trial-ledger-20260804.json"
+)
+
+
+def documented_trial_count(algo_id: str, *, ledger_path: Path | None = None) -> int:
+    """문서로 복원 가능한 알고별 누적 사양탐색 횟수의 하한."""
+    path = ledger_path or DEFAULT_TRIAL_LEDGER_PATH
+    data = json.loads(path.read_text())
+    algo = data.get("algorithms", {}).get(algo_id)
+    if algo is None:
+        return 0
+    baseline = int(algo.get("baseline_trials", 0))
+    variants = sum(int(event["non_baseline_trials"]) for event in algo.get("events", []))
+    return baseline + variants
+
+
+def effective_trial_count(
+    local_n_trials: int,
+    *,
+    algo_id: str | None = None,
+    ledger_path: Path | None = None,
+) -> int:
+    """현재 그리드와 문서화된 누적 탐색 중 더 보수적인 시행횟수를 반환."""
+    if local_n_trials < 1:
+        raise ValueError("local_n_trials must be >= 1")
+    documented = (
+        documented_trial_count(algo_id, ledger_path=ledger_path) if algo_id is not None else 0
+    )
+    return max(local_n_trials, documented)
+
 
 def _sharpe(returns: np.ndarray) -> float:
     if returns.size < 2:
@@ -49,7 +81,8 @@ def deflated_sharpe_ratio(
     """관측 Sharpe가 다중검정 하에서 우연이 아닐 확률(DSR).
 
     returns: 선택된(최적) config의 트레이드/기간 수익률 배열.
-    n_trials: 시도한 config 총수(그리드 크기) — selection bias 보정 강도.
+    n_trials: 시도한 config 누적 총수 — selection bias 보정 강도. 현재 그리드 크기가 아니라
+      같은 전략에 대해 과거에 평가한 사양까지 포함해야 한다.
     반환: {sharpe, dsr, expected_max_sharpe_noise}.
     """
     returns = np.asarray(returns, dtype=float)
@@ -141,14 +174,22 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", required=True, help="{config명: [수익률,...]} JSON 파일")
     ap.add_argument("--splits", type=int, default=16)
+    ap.add_argument("--algo", help="누적 시행횟수 원장을 적용할 알고 ID")
+    ap.add_argument("--n-trials", type=int, help="원장 대신 적용할 누적 시행횟수")
     args = ap.parse_args()
     data = json.loads(Path(args.json).read_text())
-    n_trials = len(data)
+    local_n_trials = len(data)
+    if args.n_trials is not None:
+        if args.n_trials < local_n_trials:
+            ap.error("--n-trials must be >= the number of configs in --json")
+        n_trials = args.n_trials
+    else:
+        n_trials = effective_trial_count(local_n_trials, algo_id=args.algo)
     # 최적 config = 총수익 기준.
     best = max(data, key=lambda k: sum(data[k]))
     dsr = deflated_sharpe_ratio(np.asarray(data[best], dtype=float), n_trials)
     pbo = probability_of_backtest_overfitting(data, n_splits=args.splits)
-    print(f"configs={n_trials}  best={best}")
+    print(f"configs_local={local_n_trials}  n_trials_effective={n_trials}  best={best}")
     print(
         f"DSR(best): sharpe={dsr['sharpe']:.3f}  dsr={dsr['dsr']:.3f}  "
         f"(≥0.95 권장)  skew={dsr.get('skew', 0):.2f}  kurt={dsr.get('kurtosis', 0):.2f}"

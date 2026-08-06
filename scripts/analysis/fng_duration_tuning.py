@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import numpy as np  # noqa: E402
 from backtest_with_macro_backfill import build_macro_rows  # noqa: E402
-from validation_stats import deflated_sharpe_ratio  # noqa: E402
+from validation_stats import deflated_sharpe_ratio, effective_trial_count  # noqa: E402
 
 from arena import backtest, frequency, parameters, positions  # noqa: E402
 
@@ -187,11 +187,18 @@ async def main() -> int:
     if usable:
         best = max(single_results, key=lambda k: single_results[k]["sum_w_ret"])
         if best in usable:
-            dsr = deflated_sharpe_ratio(np.asarray(usable[best]), len(usable))
+            n_trials = effective_trial_count(len(usable), algo_id=TARGET)
+            dsr = deflated_sharpe_ratio(np.asarray(usable[best]), n_trials)
             print(
-                f"\n  best(단일프레임)={best}  DSR sharpe={dsr['sharpe']:.3f} dsr={dsr['dsr']:.3f}"
+                f"\n  best(단일프레임)={best}  DSR sharpe={dsr['sharpe']:.3f} "
+                f"dsr={dsr['dsr']:.3f} n_trials={n_trials}"
             )
-            dsr_out = {"best": best, "sharpe": round(dsr["sharpe"], 3), "dsr": round(dsr["dsr"], 3)}
+            dsr_out = {
+                "best": best,
+                "sharpe": round(dsr["sharpe"], 3),
+                "dsr": round(dsr["dsr"], 3),
+                "n_trials": n_trials,
+            }
 
     out = {
         "single_frame": {

@@ -1,0 +1,86 @@
+{
+  "as_of": "2026-08-04",
+  "method": "Documented lower bound. Count one original baseline per algorithm and each evaluated non-baseline configuration once. Repeated baseline rows are not counted again. Undocumented development iterations are excluded.",
+  "algorithms": {
+    "fng_contrarian": {
+      "baseline_trials": 1,
+      "events": [
+        {
+          "id": "wi2_exit_hysteresis",
+          "source": "scripts/analysis/wi_tuning.py",
+          "non_baseline_trials": 4
+        },
+        {
+          "id": "pa_profit_capture",
+          "source": "scripts/analysis/wi_tuning.py",
+          "non_baseline_trials": 4
+        },
+        {
+          "id": "time_stop_min_hold_tranches",
+          "source": "scripts/analysis/fng_optimize.py",
+          "non_baseline_trials": 9
+        },
+        {
+          "id": "scale_in_walk_forward",
+          "source": "scripts/analysis/walk_forward_validate.py",
+          "non_baseline_trials": 2
+        },
+        {
+          "id": "fear_duration",
+          "source": "scripts/analysis/fng_duration_tuning.py",
+          "non_baseline_trials": 5
+        },
+        {
+          "id": "momentum_magnitude",
+          "source": "scripts/analysis/p4_momentum_unknown_tuning.py",
+          "non_baseline_trials": 3
+        },
+        {
+          "id": "unknown_regime_sizing",
+          "source": "scripts/analysis/p4_momentum_unknown_tuning.py",
+          "non_baseline_trials": 3
+        },
+        {
+          "id": "fear_lower_band",
+          "source": "scripts/analysis/qual_hypothesis_tuning.py",
+          "non_baseline_trials": 3
+        }
+      ]
+    },
+    "vix_rsi": {
+      "baseline_trials": 1,
+      "events": [
+        {
+          "id": "wi5_structure",
+          "source": "scripts/analysis/wi_tuning.py",
+          "non_baseline_trials": 4
+        },
+        {
+          "id": "time_stop_min_hold",
+          "source": "scripts/analysis/exit_tuning.py",
+          "non_baseline_trials": 8
+        },
+        {
+          "id": "target_exit",
+          "source": "scripts/analysis/target_exit_walk_forward.py",
+          "non_baseline_trials": 4
+        },
+        {
+          "id": "momentum_magnitude",
+          "source": "scripts/analysis/p4_momentum_unknown_tuning.py",
+          "non_baseline_trials": 3
+        },
+        {
+          "id": "unknown_regime_sizing",
+          "source": "scripts/analysis/p4_momentum_unknown_tuning.py",
+          "non_baseline_trials": 3
+        },
+        {
+          "id": "rsi_lower_band",
+          "source": "scripts/analysis/qual_hypothesis_tuning.py",
+          "non_baseline_trials": 3
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,751 @@
+{
+  "method": {
+    "threshold": 3.0,
+    "cost_model": "arena-cost-v2/base, 봉 주기 무관 거래당 산식 (fixed spec)",
+    "interval": "1d (4h 원자재를 완전한 UTC 캘린더데이로 재표본화)",
+    "returns": "trade gross_ret_pct and trading_cost_pct times position_weight",
+    "bootstrap": "trade resampling, 5000 draws, deterministic seeds",
+    "fixed_specification": true,
+    "bull_macro_coverage": {
+      "fng": 1.0,
+      "funding": 1.0,
+      "funding_zscore": 1.0
+    }
+  },
+  "windows": {
+    "bull": {
+      "BTCUSDT": {
+        "frames": 362,
+        "start": "2023-08-04T23:59:59+00:00",
+        "end": "2024-07-30T23:59:59+00:00",
+        "buy_and_hold_pct": 126.7205368290707,
+        "algorithms": {
+          "regime_trend": {
+            "trades": 0,
+            "gross_return_pct": 0.0,
+            "trading_cost_pct": 0.0,
+            "net_return_pct": 0.0,
+            "gross_edge_per_trade_bps": null,
+            "cost_per_trade_bps": null,
+            "edge_cost_ratio": null,
+            "edge_cost_ci95_low": null,
+            "edge_cost_ci95_high": null,
+            "point_pass": false,
+            "inference_ready": false
+          },
+          "fng_contrarian": {
+            "trades": 3,
+            "gross_return_pct": 4.009257422152911,
+            "trading_cost_pct": 0.12999999999999998,
+            "net_return_pct": 3.8792574221529112,
+            "gross_edge_per_trade_bps": 133.6419140717637,
+            "cost_per_trade_bps": 4.333333333333333,
+            "edge_cost_ratio": 30.84044170886855,
+            "edge_cost_ci95_low": -9.40979261909494,
+            "edge_cost_ci95_high": 90.82405974394273,
+            "point_pass": true,
+            "inference_ready": false
+          },
+          "vix_rsi": {
+            "trades": 0,
+            "gross_return_pct": 0.0,
+            "trading_cost_pct": 0.0,
+            "net_return_pct": 0.0,
+            "gross_edge_per_trade_bps": null,
+            "cost_per_trade_bps": null,
+            "edge_cost_ratio": null,
+            "edge_cost_ci95_low": null,
+            "edge_cost_ci95_high": null,
+            "point_pass": false,
+            "inference_ready": false
+          },
+          "macd_momentum": {
+            "trades": 21,
+            "gross_return_pct": -3.380203232180715,
+            "trading_cost_pct": 0.6825,
+            "net_return_pct": -4.062703232180715,
+            "gross_edge_per_trade_bps": -16.096205867527214,
+            "cost_per_trade_bps": 3.25,
+            "edge_cost_ratio": -4.952678728469912,
+            "edge_cost_ci95_low": -13.001877088073671,
+            "edge_cost_ci95_high": 4.179241417982721,
+            "point_pass": false,
+            "inference_ready": true
+          },
+          "multi_factor": {
+            "trades": 16,
+            "gross_return_pct": 2.165124479192717,
+            "trading_cost_pct": 0.52,
+            "net_return_pct": 1.645124479192718,
+            "gross_edge_per_trade_bps": 13.532027994954483,
+            "cost_per_trade_bps": 3.25,
+            "edge_cost_ratio": 4.163700921524456,
+            "edge_cost_ci95_low": -3.675869400491823,
+            "edge_cost_ci95_high": 14.421856901507693,
+            "point_pass": true,
+            "inference_ready": false
+          },
+          "omnibus": {
+            "trades": 57,
+            "gross_return_pct": 1.5720000215447993,
+            "trading_cost_pct": 0.65325,
+            "net_return_pct": 0.9187500215447998,
+            "gross_edge_per_trade_bps": 2.7578947746399987,
+            "cost_per_trade_bps": 1.1460526315789474,
+            "edge_cost_ratio": 2.406429424484959,
+            "edge_cost_ci95_low": -2.2723522651602397,
+            "edge_cost_ci95_high": 6.647657956956715,
+            "point_pass": false,
+            "inference_ready": true
+          }
+        },
+        "portfolio": {
+          "trades": 97,
+          "gross_return_pct": 4.366178690709714,
+          "trading_cost_pct": 1.9857500000000001,
+          "net_return_pct": 2.380428690709714,
+          "gross_edge_per_trade_bps": 4.50121514506156,
+          "cost_per_trade_bps": 2.0471649484536085,
+          "edge_cost_ratio": 2.19875547813658,
+          "edge_cost_ci95_low": -2.712332794655155,
+          "edge_cost_ci95_high": 7.433968607225611,
+          "point_pass": false,
+          "inference_ready": true
+        }
+      },
+      "ETHUSDT": {
+        "frames": 362,
+        "start": "2023-08-04T23:59:59+00:00",
+        "end": "2024-07-30T23:59:59+00:00",
+        "buy_and_hold_pct": 78.62469427664082,
+        "algorithms": {
+          "regime_trend": {
+            "trades": 0,
+            "gross_return_pct": 0.0,
+            "trading_cost_pct": 0.0,
+            "net_return_pct": 0.0,
+            "gross_edge_per_trade_bps": null,
+            "cost_per_trade_bps": null,
+            "edge_cost_ratio": null,
+            "edge_cost_ci95_low": null,
+            "edge_cost_ci95_high": null,
+            "point_pass": false,
+            "inference_ready": false
+          },
+          "fng_contrarian": {
+            "trades": 3,
+            "gross_return_pct": 3.8514458835538954,
+            "trading_cost_pct": 0.12999999999999998,
+            "net_return_pct": 3.7214458835538955,
+            "gross_edge_per_trade_bps": 128.38152945179652,
+            "cost_per_trade_bps": 4.333333333333333,
+            "edge_cost_ratio": 29.62650679656843,
+            "edge_cost_ci95_low": 8.257569961709686,
+            "edge_cost_ci95_high": 53.75806800288998,
+            "point_pass": true,
+            "inference_ready": false
+          },
+          "vix_rsi": {
+            "trades": 0,
+            "gross_return_pct": 0.0,
+            "trading_cost_pct": 0.0,
+            "net_return_pct": 0.0,
+            "gross_edge_per_trade_bps": null,
+            "cost_per_trade_bps": null,
+            "edge_cost_ratio": null,
+            "edge_cost_ci95_low": null,
+            "edge_cost_ci95_high": null,
+            "point_pass": false,
+            "inference_ready": false
+          },
+          "macd_momentum": {
+            "trades": 19,
+            "gross_return_pct": -0.4188250972584018,
+            "trading_cost_pct": 0.6175,
+            "net_return_pct": -1.0363250972584017,
+            "gross_edge_per_trade_bps": -2.204342617149483,
+            "cost_per_trade_bps": 3.25,
+            "edge_cost_ratio": -0.6782592668152256,
+            "edge_cost_ci95_low": -8.900841146868215,
+            "edge_cost_ci95_high": 7.956715786215346,
+            "point_pass": false,
+            "inference_ready": false
+          },
+          "multi_factor": {
+            "trades": 13,
+            "gross_return_pct": -0.022872990977107294,
+            "trading_cost_pct": 0.4225,
+            "net_return_pct": -0.44537299097710725,
+            "gross_edge_per_trade_bps": -0.17594608443928686,
+            "cost_per_trade_bps": 3.25,
+            "edge_cost_ratio": -0.054137256750549805,
+            "edge_cost_ci95_low": -11.524268845208384,
+            "edge_cost_ci95_high": 14.36323331426861,
+            "point_pass": false,
+            "inference_ready": false
+          },
+          "omnibus": {
+            "trades": 60,
+            "gross_return_pct": -0.8704537571154083,
+            "trading_cost_pct": 0.755625,
+            "net_return_pct": -1.6260787571154085,
+            "gross_edge_per_trade_bps": -1.4507562618590137,
+            "cost_per_trade_bps": 1.259375,
+            "edge_cost_ratio": -1.1519652699624923,
+            "edge_cost_ci95_low": -9.178975598853453,
+            "edge_cost_ci95_high": 6.010463025442381,
+            "point_pass": false,
+            "inference_ready": true
+          }
+        },
+        "portfolio": {
+          "trades": 95,
+          "gross_return_pct": 2.539294038202979,
+          "trading_cost_pct": 1.925625,
+          "net_return_pct": 0.6136690382029778,
+          "gross_edge_per_trade_bps": 2.672941092845241,
+          "cost_per_trade_bps": 2.0269736842105264,
+          "edge_cost_ratio": 1.3186856413907064,
+          "edge_cost_ci95_low": -4.511837661112442,
+          "edge_cost_ci95_high": 6.969044282031628,
+          "point_pass": false,
+          "inference_ready": true
+        }
+      },
+      "SOLUSDT": {
+        "frames": 362,
+        "start": "2023-08-04T23:59:59+00:00",
+        "end": "2024-07-30T23:59:59+00:00",
+        "buy_and_hold_pct": 690.9933774834437,
+        "algorithms": {
+          "regime_trend": {
+            "trades": 0,
+            "gross_return_pct": 0.0,
+            "trading_cost_pct": 0.0,
+            "net_return_pct": 0.0,
+            "gross_edge_per_trade_bps": null,
+            "cost_per_trade_bps": null,
+            "edge_cost_ratio": null,
+            "edge_cost_ci95_low": null,
+            "edge_cost_ci95_high": null,
+            "point_pass": false,
+            "inference_ready": false
+          },
+          "fng_contrarian": {
+            "trades": 2,
+            "gross_return_pct": 3.96117660147131,
+            "trading_cost_pct": 0.11049999999999999,
+            "net_return_pct": 3.8506766014713105,
+            "gross_edge_per_trade_bps": 198.0588300735655,
+            "cost_per_trade_bps": 5.5249999999999995,
+            "edge_cost_ratio": 35.84775204951412,
+            "edge_cost_ci95_low": 19.984909520803868,
+            "edge_cost_ci95_high": 109.87435051682861,
+            "point_pass": true,
+            "inference_ready": false
+          },
+          "vix_rsi": {
+            "trades": 0,
+            "gross_return_pct": 0.0,
+            "trading_cost_pct": 0.0,
+            "net_return_pct": 0.0,
+            "gross_edge_per_trade_bps": null,
+            "cost_per_trade_bps": null,
+            "edge_cost_ratio": null,
+            "edge_cost_ci95_low": null,
+            "edge_cost_ci95_high": null,
+            "point_pass": false,
+            "inference_ready": false
+          },
+          "macd_momentum": {
+            "trades": 32,
+            "gross_return_pct": -9.020865615597218,
+            "trading_cost_pct": 1.04,
+            "net_return_pct": -10.060865615597217,
+            "gross_edge_per_trade_bps": -28.19020504874131,
+            "cost_per_trade_bps": 3.25,
+            "edge_cost_ratio": -8.673909245766556,
+            "edge_cost_ci95_low": -18.893706570494054,
+            "edge_cost_ci95_high": 1.6437004624834668,
+            "point_pass": false,
+            "inference_ready": true
+          },
+          "multi_factor": {
+            "trades": 24,
+            "gross_return_pct": 8.71926202287424,
+            "trading_cost_pct": 0.78,
+            "net_return_pct": 7.939262022874241,
+            "gross_edge_per_trade_bps": 36.33025842864267,
+            "cost_per_trade_bps": 3.25,
+            "edge_cost_ratio": 11.178541054966976,
+            "edge_cost_ci95_low": -6.311811411040221,
+            "edge_cost_ci95_high": 30.28256898386587,
+            "point_pass": true,
+            "inference_ready": true
+          },
+          "omnibus": {
+            "trades": 75,
+            "gross_return_pct": 1.655510754189455,
+            "trading_cost_pct": 1.1407500000000002,
+            "net_return_pct": 0.514760754189457,
+            "gross_edge_per_trade_bps": 2.2073476722526064,
+            "cost_per_trade_bps": 1.5210000000000001,
+            "edge_cost_ratio": 1.451247647766342,
+            "edge_cost_ci95_low": -8.338092961924081,
+            "edge_cost_ci95_high": 10.921540406931582,
+            "point_pass": false,
+            "inference_ready": true
+          }
+        },
+        "portfolio": {
+          "trades": 133,
+          "gross_return_pct": 5.315083762937788,
+          "trading_cost_pct": 3.07125,
+          "net_return_pct": 2.2438337629377916,
+          "gross_edge_per_trade_bps": 3.9963035811562317,
+          "cost_per_trade_bps": 2.3092105263157894,
+          "edge_cost_ratio": 1.7305930038055477,
+          "edge_cost_ci95_low": -5.39138755185715,
+          "edge_cost_ci95_high": 9.156436171359816,
+          "point_pass": false,
+          "inference_ready": true
+        }
+      }
+    },
+    "bear": {
+      "BTCUSDT": {
+        "frames": 594,
+        "start": "2024-12-08T23:59:59+00:00",
+        "end": "2026-07-24T23:59:59+00:00",
+        "buy_and_hold_pct": -35.75206704784709,
+        "algorithms": {
+          "regime_trend": {
+            "trades": 0,
+            "gross_return_pct": 0.0,
+            "trading_cost_pct": 0.0,
+            "net_return_pct": 0.0,
+            "gross_edge_per_trade_bps": null,
+            "cost_per_trade_bps": null,
+            "edge_cost_ratio": null,
+            "edge_cost_ci95_low": null,
+            "edge_cost_ci95_high": null,
+            "point_pass": false,
+            "inference_ready": false
+          },
+          "fng_contrarian": {
+            "trades": 24,
+            "gross_return_pct": -0.30241648069485305,
+            "trading_cost_pct": 0.46799999999999997,
+            "net_return_pct": -0.7704164806948531,
+            "gross_edge_per_trade_bps": -1.260068669561888,
+            "cost_per_trade_bps": 1.95,
+            "edge_cost_ratio": -0.6461890613137886,
+            "edge_cost_ci95_low": -9.040935025148151,
+            "edge_cost_ci95_high": 7.112259405560522,
+            "point_pass": false,
+            "inference_ready": true
+          },
+          "vix_rsi": {
+            "trades": 18,
+            "gross_return_pct": -0.7526648172382271,
+            "trading_cost_pct": 0.585,
+            "net_return_pct": -1.337664817238227,
+            "gross_edge_per_trade_bps": -4.181471206879039,
+            "cost_per_trade_bps": 3.25,
+            "edge_cost_ratio": -1.2866065251935506,
+            "edge_cost_ci95_low": -7.236467689910643,
+            "edge_cost_ci95_high": 3.96644692789259,
+            "point_pass": false,
+            "inference_ready": false
+          },
+          "macd_momentum": {
+            "trades": 12,
+            "gross_return_pct": -0.5397839664249116,
+            "trading_cost_pct": 0.39,
+            "net_return_pct": -0.9297839664249115,
+            "gross_edge_per_trade_bps": -4.498199720207596,
+            "cost_per_trade_bps": 3.25,
+            "edge_cost_ratio": -1.3840614523715682,
+            "edge_cost_ci95_low": -5.255722865930225,
+            "edge_cost_ci95_high": 2.4923475771075463,
+            "point_pass": false,
+            "inference_ready": false
+          },
+          "multi_factor": {
+            "trades": 16,
+            "gross_return_pct": 1.2968079739104912,
+            "trading_cost_pct": 0.52,
+            "net_return_pct": 0.7768079739104912,
+            "gross_edge_per_trade_bps": 8.10504983694057,
+            "cost_per_trade_bps": 3.25,
+            "edge_cost_ratio": 2.493861488289406,
+            "edge_cost_ci95_low": -2.022925384441347,
+            "edge_cost_ci95_high": 6.818493124558394,
+            "point_pass": false,
+            "inference_ready": false
+          },
+          "omnibus": {
+            "trades": 104,
+            "gross_return_pct": 0.8264646915082193,
+            "trading_cost_pct": 1.1179999999999999,
+            "net_return_pct": -0.291535308491781,
+            "gross_edge_per_trade_bps": 0.7946775879886724,
+            "cost_per_trade_bps": 1.075,
+            "edge_cost_ratio": 0.7392349655708581,
+            "edge_cost_ci95_low": -2.981805814927109,
+            "edge_cost_ci95_high": 4.6391370260575835,
+            "point_pass": false,
+            "inference_ready": true
+          }
+        },
+        "portfolio": {
+          "trades": 174,
+          "gross_return_pct": 0.5284074010607184,
+          "trading_cost_pct": 3.0810000000000004,
+          "net_return_pct": -2.5525925989392815,
+          "gross_edge_per_trade_bps": 0.3036824144027117,
+          "cost_per_trade_bps": 1.7706896551724138,
+          "edge_cost_ratio": 0.17150516100639998,
+          "edge_cost_ci95_low": -2.1289569278103877,
+          "edge_cost_ci95_high": 2.4022516668118468,
+          "point_pass": false,
+          "inference_ready": true
+        }
+      },
+      "ETHUSDT": {
+        "frames": 597,
+        "start": "2024-12-05T23:59:59+00:00",
+        "end": "2026-07-24T23:59:59+00:00",
+        "buy_and_hold_pct": -51.497211944343114,
+        "algorithms": {
+          "regime_trend": {
+            "trades": 0,
+            "gross_return_pct": 0.0,
+            "trading_cost_pct": 0.0,
+            "net_return_pct": 0.0,
+            "gross_edge_per_trade_bps": null,
+            "cost_per_trade_bps": null,
+            "edge_cost_ratio": null,
+            "edge_cost_ci95_low": null,
+            "edge_cost_ci95_high": null,
+            "point_pass": false,
+            "inference_ready": false
+          },
+          "fng_contrarian": {
+            "trades": 27,
+            "gross_return_pct": 6.396882232327366,
+            "trading_cost_pct": 0.5980000000000001,
+            "net_return_pct": 5.798882232327368,
+            "gross_edge_per_trade_bps": 23.69215641602728,
+            "cost_per_trade_bps": 2.214814814814815,
+            "edge_cost_ratio": 10.697127478808303,
+            "edge_cost_ci95_low": -11.218237436364129,
+            "edge_cost_ci95_high": 33.28623222794487,
+            "point_pass": true,
+            "inference_ready": true
+          },
+          "vix_rsi": {
+            "trades": 14,
+            "gross_return_pct": -1.8541826459824329,
+            "trading_cost_pct": 0.455,
+            "net_return_pct": -2.3091826459824327,
+            "gross_edge_per_trade_bps": -13.244161757017379,
+            "cost_per_trade_bps": 3.25,
+            "edge_cost_ratio": -4.075126694466886,
+            "edge_cost_ci95_low": -15.947347223861968,
+            "edge_cost_ci95_high": 6.24757771149168,
+            "point_pass": false,
+            "inference_ready": false
+          },
+          "macd_momentum": {
+            "trades": 29,
+            "gross_return_pct": -3.2461768174617434,
+            "trading_cost_pct": 0.9425,
+            "net_return_pct": -4.188676817461743,
+            "gross_edge_per_trade_bps": -11.193713163661185,
+            "cost_per_trade_bps": 3.25,
+            "edge_cost_ratio": -3.444219434972672,
+            "edge_cost_ci95_low": -13.044203086418657,
+            "edge_cost_ci95_high": 5.9667434190240805,
+            "point_pass": false,
+            "inference_ready": true
+          },
+          "multi_factor": {
+            "trades": 15,
+            "gross_return_pct": 0.34687597795960684,
+            "trading_cost_pct": 0.4875,
+            "net_return_pct": -0.14062402204039298,
+            "gross_edge_per_trade_bps": 2.312506519730712,
+            "cost_per_trade_bps": 3.25,
+            "edge_cost_ratio": 0.7115404676094499,
+            "edge_cost_ci95_low": -10.407014799098988,
+            "edge_cost_ci95_high": 12.610382125705685,
+            "point_pass": false,
+            "inference_ready": false
+          },
+          "omnibus": {
+            "trades": 109,
+            "gross_return_pct": -4.2061461508866165,
+            "trading_cost_pct": 1.17325,
+            "net_return_pct": -5.379396150886618,
+            "gross_edge_per_trade_bps": -3.8588496797124923,
+            "cost_per_trade_bps": 1.0763761467889907,
+            "edge_cost_ratio": -3.5850382705191706,
+            "edge_cost_ci95_low": -10.002340508530208,
+            "edge_cost_ci95_high": 2.8265192289020225,
+            "point_pass": false,
+            "inference_ready": true
+          }
+        },
+        "portfolio": {
+          "trades": 194,
+          "gross_return_pct": -2.562747404043819,
+          "trading_cost_pct": 3.65625,
+          "net_return_pct": -6.218997404043819,
+          "gross_edge_per_trade_bps": -1.3210038165174327,
+          "cost_per_trade_bps": 1.8846649484536082,
+          "edge_cost_ratio": -0.7009223669179677,
+          "edge_cost_ci95_low": -6.055192199968165,
+          "edge_cost_ci95_high": 5.495642803228811,
+          "point_pass": false,
+          "inference_ready": true
+        }
+      },
+      "SOLUSDT": {
+        "frames": 597,
+        "start": "2024-12-05T23:59:59+00:00",
+        "end": "2026-07-24T23:59:59+00:00",
+        "buy_and_hold_pct": -67.7241981234999,
+        "algorithms": {
+          "regime_trend": {
+            "trades": 0,
+            "gross_return_pct": 0.0,
+            "trading_cost_pct": 0.0,
+            "net_return_pct": 0.0,
+            "gross_edge_per_trade_bps": null,
+            "cost_per_trade_bps": null,
+            "edge_cost_ratio": null,
+            "edge_cost_ci95_low": null,
+            "edge_cost_ci95_high": null,
+            "point_pass": false,
+            "inference_ready": false
+          },
+          "fng_contrarian": {
+            "trades": 20,
+            "gross_return_pct": 5.267395777688464,
+            "trading_cost_pct": 0.45500000000000007,
+            "net_return_pct": 4.812395777688465,
+            "gross_edge_per_trade_bps": 26.33697888844232,
+            "cost_per_trade_bps": 2.2750000000000004,
+            "edge_cost_ratio": 11.576694016897722,
+            "edge_cost_ci95_low": -1.2097358243573018,
+            "edge_cost_ci95_high": 22.329188307949174,
+            "point_pass": true,
+            "inference_ready": true
+          },
+          "vix_rsi": {
+            "trades": 11,
+            "gross_return_pct": 0.47462625660698604,
+            "trading_cost_pct": 0.3575,
+            "net_return_pct": 0.11712625660698592,
+            "gross_edge_per_trade_bps": 4.3147841509726,
+            "cost_per_trade_bps": 3.25,
+            "edge_cost_ratio": 1.327625892606954,
+            "edge_cost_ci95_low": -15.736929453256291,
+            "edge_cost_ci95_high": 16.854501550556833,
+            "point_pass": false,
+            "inference_ready": false
+          },
+          "macd_momentum": {
+            "trades": 28,
+            "gross_return_pct": -5.6998014462711915,
+            "trading_cost_pct": 0.91,
+            "net_return_pct": -6.609801446271191,
+            "gross_edge_per_trade_bps": -20.356433736682824,
+            "cost_per_trade_bps": 3.25,
+            "edge_cost_ratio": -6.263518072825485,
+            "edge_cost_ci95_low": -19.136921685445298,
+            "edge_cost_ci95_high": 6.894459051926497,
+            "point_pass": false,
+            "inference_ready": true
+          },
+          "multi_factor": {
+            "trades": 18,
+            "gross_return_pct": 7.500785772012403,
+            "trading_cost_pct": 0.585,
+            "net_return_pct": 6.915785772012402,
+            "gross_edge_per_trade_bps": 41.67103206673557,
+            "cost_per_trade_bps": 3.25,
+            "edge_cost_ratio": 12.821856020534021,
+            "edge_cost_ci95_low": -1.591071436686943,
+            "edge_cost_ci95_high": 30.352953376346274,
+            "point_pass": true,
+            "inference_ready": false
+          },
+          "omnibus": {
+            "trades": 125,
+            "gross_return_pct": -3.4058857502825206,
+            "trading_cost_pct": 1.3178750000000001,
+            "net_return_pct": -4.72376075028252,
+            "gross_edge_per_trade_bps": -2.7247086002260166,
+            "cost_per_trade_bps": 1.0543000000000002,
+            "edge_cost_ratio": -2.584376932776265,
+            "edge_cost_ci95_low": -9.416425488863672,
+            "edge_cost_ci95_high": 4.3485662685568185,
+            "point_pass": false,
+            "inference_ready": true
+          }
+        },
+        "portfolio": {
+          "trades": 202,
+          "gross_return_pct": 4.137120609754142,
+          "trading_cost_pct": 3.625375,
+          "net_return_pct": 0.5117456097541433,
+          "gross_edge_per_trade_bps": 2.048079509779278,
+          "cost_per_trade_bps": 1.7947400990099012,
+          "edge_cost_ratio": 1.1411566002838716,
+          "edge_cost_ci95_low": -4.4798029475021535,
+          "edge_cost_ci95_high": 6.516237456747373,
+          "point_pass": false,
+          "inference_ready": true
+        }
+      }
+    }
+  },
+  "cross_window_portfolio_verdict": {
+    "BTCUSDT": {
+      "bull_point_pass": false,
+      "bear_point_pass": false,
+      "both_windows_pass": false,
+      "inference_ready_both": true
+    },
+    "ETHUSDT": {
+      "bull_point_pass": false,
+      "bear_point_pass": false,
+      "both_windows_pass": false,
+      "inference_ready_both": true
+    },
+    "SOLUSDT": {
+      "bull_point_pass": false,
+      "bear_point_pass": false,
+      "both_windows_pass": false,
+      "inference_ready_both": true
+    }
+  },
+  "cross_window_algorithm_verdict": {
+    "BTCUSDT": {
+      "regime_trend": {
+        "both_windows_point_pass": false,
+        "inference_ready_both": false,
+        "both_windows_ci95_low_pass": false,
+        "status": "fail"
+      },
+      "fng_contrarian": {
+        "both_windows_point_pass": false,
+        "inference_ready_both": false,
+        "both_windows_ci95_low_pass": false,
+        "status": "fail"
+      },
+      "vix_rsi": {
+        "both_windows_point_pass": false,
+        "inference_ready_both": false,
+        "both_windows_ci95_low_pass": false,
+        "status": "fail"
+      },
+      "macd_momentum": {
+        "both_windows_point_pass": false,
+        "inference_ready_both": false,
+        "both_windows_ci95_low_pass": false,
+        "status": "fail"
+      },
+      "multi_factor": {
+        "both_windows_point_pass": false,
+        "inference_ready_both": false,
+        "both_windows_ci95_low_pass": false,
+        "status": "fail"
+      },
+      "omnibus": {
+        "both_windows_point_pass": false,
+        "inference_ready_both": true,
+        "both_windows_ci95_low_pass": false,
+        "status": "fail"
+      }
+    },
+    "ETHUSDT": {
+      "regime_trend": {
+        "both_windows_point_pass": false,
+        "inference_ready_both": false,
+        "both_windows_ci95_low_pass": false,
+        "status": "fail"
+      },
+      "fng_contrarian": {
+        "both_windows_point_pass": true,
+        "inference_ready_both": false,
+        "both_windows_ci95_low_pass": false,
+        "status": "point_pass_unconfirmed"
+      },
+      "vix_rsi": {
+        "both_windows_point_pass": false,
+        "inference_ready_both": false,
+        "both_windows_ci95_low_pass": false,
+        "status": "fail"
+      },
+      "macd_momentum": {
+        "both_windows_point_pass": false,
+        "inference_ready_both": false,
+        "both_windows_ci95_low_pass": false,
+        "status": "fail"
+      },
+      "multi_factor": {
+        "both_windows_point_pass": false,
+        "inference_ready_both": false,
+        "both_windows_ci95_low_pass": false,
+        "status": "fail"
+      },
+      "omnibus": {
+        "both_windows_point_pass": false,
+        "inference_ready_both": true,
+        "both_windows_ci95_low_pass": false,
+        "status": "fail"
+      }
+    },
+    "SOLUSDT": {
+      "regime_trend": {
+        "both_windows_point_pass": false,
+        "inference_ready_both": false,
+        "both_windows_ci95_low_pass": false,
+        "status": "fail"
+      },
+      "fng_contrarian": {
+        "both_windows_point_pass": true,
+        "inference_ready_both": false,
+        "both_windows_ci95_low_pass": false,
+        "status": "point_pass_unconfirmed"
+      },
+      "vix_rsi": {
+        "both_windows_point_pass": false,
+        "inference_ready_both": false,
+        "both_windows_ci95_low_pass": false,
+        "status": "fail"
+      },
+      "macd_momentum": {
+        "both_windows_point_pass": false,
+        "inference_ready_both": true,
+        "both_windows_ci95_low_pass": false,
+        "status": "fail"
+      },
+      "multi_factor": {
+        "both_windows_point_pass": true,
+        "inference_ready_both": false,
+        "both_windows_ci95_low_pass": false,
+        "status": "point_pass_unconfirmed"
+      },
+      "omnibus": {
+        "both_windows_point_pass": false,
+        "inference_ready_both": true,
+        "both_windows_ci95_low_pass": false,
+        "status": "fail"
+      }
+    }
+  }
+}

@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import numpy as np  # noqa: E402
 from backtest_with_macro_backfill import build_macro_rows  # noqa: E402
-from validation_stats import deflated_sharpe_ratio  # noqa: E402
+from validation_stats import deflated_sharpe_ratio, effective_trial_count  # noqa: E402
 from wi_tuning import _algo_stats, _line, _params  # noqa: E402
 
 from arena import backtest, frequency, parameters, positions  # noqa: E402
@@ -70,8 +70,12 @@ def grid(frames, b: dict, name: str, target: str, configs: dict[str, dict]) -> N
     if usable:
         best = max(results, key=lambda k: results[k]["sum_w_ret"])
         if len(usable) >= 2 and best in usable:
-            dsr = deflated_sharpe_ratio(np.asarray(usable[best]), len(usable))
-            print(f"      best={best}  DSR sharpe={dsr['sharpe']:.3f} dsr={dsr['dsr']:.3f}")
+            n_trials = effective_trial_count(len(usable), algo_id=target)
+            dsr = deflated_sharpe_ratio(np.asarray(usable[best]), n_trials)
+            print(
+                f"      best={best}  DSR sharpe={dsr['sharpe']:.3f} "
+                f"dsr={dsr['dsr']:.3f} n_trials={n_trials}"
+            )
 
 
 async def main() -> int:

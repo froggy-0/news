@@ -308,6 +308,60 @@ def _register_multi_asset_shadow_profiles() -> None:
 
 _register_multi_asset_shadow_profiles()
 
+DAILY_RESEARCH_PROFILE_PREFIX = "research_1d_"
+
+
+def daily_research_profile_id(symbol: str) -> str:
+    """1d 고정사양 감사 전용 frequency_profile_id (예: BTCUSDT -> research_1d_btcusdt).
+
+    P2 문서(docs/arena/research/p2-edge-cost-audit-20260804.md §4)가 정한 다음 단계 —
+    "고정된 1d 주기 비교". research 전용(live_enabled=False)이라 BTC도 포함한다
+    (LIVE_4H_PROFILE_ID와 별개 경로, 라이브 무영향).
+    """
+    return f"{DAILY_RESEARCH_PROFILE_PREFIX}{symbol.lower()}"
+
+
+def _register_daily_research_profiles() -> None:
+    """2026-08-06 — 1d 고정사양 edge/cost 감사용 research 프로파일.
+
+    거래비용(fee/slippage/spread)은 봉 주기와 무관한 거래당 산식이라 LIVE_4H와 동일 행을
+    재사용한다(자산별 재튜닝 금지 원칙, _register_multi_asset_shadow_profiles와 동일
+    근거). min_hold_hours도 시간 단위 그대로 재사용(research_1h/research_15m 선례) —
+    1d 봉 1개(24h)가 대부분의 알고 MIN_HOLD(8~60h)보다 짧거나 비슷해, 사실상 "1봉 지나면
+    보유조건 충족"으로 완화되지만 이것도 고정사양 그대로이므로 새 튜닝이 아니다.
+    """
+    base = FREQUENCY_PROFILES[LIVE_4H_PROFILE_ID]
+    for symbol in parameters.MULTI_ASSET_SYMBOLS:
+        profile_id = daily_research_profile_id(symbol)
+        FREQUENCY_PROFILES[profile_id] = FrequencyProfile(
+            frequency_profile_id=profile_id,
+            symbol=symbol,
+            interval="1d",
+            decision_cadence_minutes=1440,
+            live_enabled=False,
+            shadow_candidate=False,
+            train_days=base.train_days,
+            test_days=base.test_days,
+            embargo_hours=base.embargo_hours,
+            ecr_threshold=base.ecr_threshold,
+            max_trades_per_day_per_algo=base.max_trades_per_day_per_algo,
+            min_hold_hours=dict(base.min_hold_hours),
+            min_hold_fallback_hours=base.min_hold_fallback_hours,
+            default_indicator_profile_id=base.default_indicator_profile_id,
+            default_cost_scenario_id=base.default_cost_scenario_id,
+        )
+        _add_costs(
+            profile_id,
+            [
+                ("low", parameters.FEE_BPS, 0.0, 0.0, 0.0),
+                ("base", parameters.FEE_BPS, 1.0, 1.0, 0.0),
+                ("high", parameters.FEE_BPS, 2.0, 3.0, 0.0),
+            ],
+        )
+
+
+_register_daily_research_profiles()
+
 
 def get_frequency_profile(profile_id: str = LIVE_4H_PROFILE_ID) -> FrequencyProfile:
     try:

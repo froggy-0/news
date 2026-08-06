@@ -1206,6 +1206,32 @@ async def load_frames_from_supabase(
         )
         macro_rows = macros_res.data
 
+    return build_frames_from_bar_rows(
+        bar_rows,
+        interval=interval,
+        warmup_bars=warmup_bars,
+        indicator_profile_id=indicator_profile_id,
+        macro_rows=macro_rows,
+        from_date=from_date,
+        to_date=to_date,
+    )
+
+
+def build_frames_from_bar_rows(
+    bar_rows: list[dict[str, Any]],
+    *,
+    interval: str,
+    warmup_bars: int,
+    indicator_profile_id: str,
+    macro_rows: list[dict[str, Any]],
+    from_date: datetime | None = None,
+    to_date: datetime | None = None,
+) -> list[ReplayFrame]:
+    """bar_rows(open_time/close_time/OHLCV dict, open_time 오름차순)를 지표·macro가
+    채워진 ReplayFrame으로 변환하는 공용 경로. load_frames_from_supabase의 4h 조회와
+    다른 소스(예: 1d로 재표본화한 bar_rows)가 동일 지표·macro 주입 로직을 공유해
+    패리티를 보장한다 — 파이프라인 로직 중복 금지 원칙.
+    """
     highs: list[float] = []
     lows: list[float] = []
     closes: list[float] = []

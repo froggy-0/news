@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import numpy as np  # noqa: E402
 from backtest_with_macro_backfill import build_macro_rows  # noqa: E402
-from validation_stats import deflated_sharpe_ratio  # noqa: E402
+from validation_stats import deflated_sharpe_ratio, effective_trial_count  # noqa: E402
 
 from arena import backtest, frequency, parameters, positions  # noqa: E402
 
@@ -144,9 +144,14 @@ async def main() -> int:
             },
         }
         if len(usable) >= 2 and best in usable:
-            dsr = deflated_sharpe_ratio(np.asarray(usable[best]), len(usable))
-            print(f"      best={best}  DSR sharpe={dsr['sharpe']:.3f} dsr={dsr['dsr']:.3f}")
+            n_trials = effective_trial_count(len(usable), algo_id=target)
+            dsr = deflated_sharpe_ratio(np.asarray(usable[best]), n_trials)
+            print(
+                f"      best={best}  DSR sharpe={dsr['sharpe']:.3f} "
+                f"dsr={dsr['dsr']:.3f} n_trials={n_trials}"
+            )
             decisions[name]["dsr"] = round(dsr["dsr"], 3)
+            decisions[name]["n_trials"] = n_trials
         return results
 
     # §7.2 momentum 매그니튜드 게이트 — fng·vix_rsi 독립. ATR 배수 그리드.

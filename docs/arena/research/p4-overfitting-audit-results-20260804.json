@@ -1,0 +1,30 @@
+{
+  "data": {
+    "frames": 3766,
+    "start": "2024-11-14T23:59:59+00:00",
+    "end": "2026-08-04T11:59:59+00:00",
+    "returns": "trade_ret_pct_times_position_weight"
+  },
+  "algorithms": {
+    "fng_contrarian": {
+      "trades": 52,
+      "sum_weighted_return_pct": 2.500744,
+      "documented_n_trials_lower_bound": 34,
+      "naive_dsr_n1": 0.798206,
+      "audited_dsr": 0.098651,
+      "sharpe_per_trade": 0.12505,
+      "threshold": 0.95,
+      "verdict": "fail"
+    },
+    "vix_rsi": {
+      "trades": 35,
+      "sum_weighted_return_pct": 5.700625,
+      "documented_n_trials_lower_bound": 26,
+      "naive_dsr_n1": 0.817498,
+      "audited_dsr": 0.13396,
+      "sharpe_per_trade": 0.153636,
+      "threshold": 0.95,
+      "verdict": "fail"
+    }
+  }
+}
