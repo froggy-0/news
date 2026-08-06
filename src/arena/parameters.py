@@ -24,7 +24,11 @@ STRATEGY_VERSION = "arena-spot-v4"
 #   72→60h·min_hold 48→36h 재튜닝(fng_optimize 재그리드, P-A익절과의 상호작용 반영).
 #   ⚠️ 커밋(b9e3c7e·21bcdd8) 메시지엔 v30 명시했으나 이 상수 bump가 누락돼 v29로 오기록되던
 #   버그를 2026-07-14 발견·수정(v25 때와 동일 클래스 재발 — 위 주석 참조).
-PARAMS_VERSION = "arena-params-v32"
+# v33(2026-08-06): regime_trend(12-AND→핵심4+부차8중5)·macd_momentum(7veto→핵심+
+#   부차6중4) 진입완화 활성화 — P1~P4·P2(4h/1d) 감사 종결로 "엣지 정밀화" 레버 소진,
+#   로드맵 거래량 마일스톤 미달(45/500건)이 계기. 그리드 미검증(사용자 결정: 검증보다
+#   표본 확보 우선). risk-off는 여전히 hard veto.
+PARAMS_VERSION = "arena-params-v33"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v2"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
@@ -365,6 +369,27 @@ OMNIBUS_REBOUND_TARGET_ATR_MULT = 1.0  # REBOUND: 진입가 + ATR×mult (그리�
 #   기존 일간 z 폴백(검증된 경로). 4h 캐시는 daily lag1보다 훨씬 신선.
 TAKER_CONFIRM_4H_ENABLED = False
 TAKER_CONFIRM_RATIO_4H_MIN = 0.95
+
+# ── 볼륨우선 진입완화 (arena-params-v33, 2026-08-06) ─────────────────────────
+# 배경: P1(청산정책 0/4)·P4(과최적화, fng_contrarian/vix_rsi 둘 다 DSR<0.95)·P2
+#   (엣지/비용, 4h·1d 감사 둘 다 3자산 전부 실패)로 "이 신호 세트에서 엣지를 더 짜낼
+#   레버가 소진됐다"는 결론(2026-08-04~06, docs/arena/research/p2-1d-frequency-audit-
+#   20260806.md). 동시에 로드맵(docs/arena/product/roadmap.md) 자체 마일스톤(2026-08
+#   500건)에 실거래가 크게 못 미침(2026-08-06 확인: 45건, 목표의 9%) — regime_trend는
+#   12-AND·macd_momentum은 7veto로 과잉필터돼 진입 자체가 거의 안 남(1d 감사에서
+#   regime_trend 거래 0건 확인). 사업 비전(docs/arena/product/vision.md — "손실도
+#   숨기지 않는" 투명 트랙레코드가 핵심가치, 텔레그램 승률자랑 채널과의 차별화)상 지금
+#   단계는 "엣지 정밀화"보다 "정직한 표본 확보"가 우선이라는 사용자 판단(2026-08-06).
+# 설계: 각 알고의 핵심조건(그 알고를 그 알고답게 만드는 정의)은 그대로 hard 유지하고,
+#   품질필터 성격의 부차조건만 unanimous AND에서 N-of-M 투표로 완화. risk-off류
+#   안전장치(레짐 stress/BearPanic)는 완화 대상이 아니다 — 목적이 "손실 포함 정직한
+#   기록"이지 "무모한 진입"이 아니기 때문. 그리드 탐색 없이 설계값(과반+1)으로
+#   즉시 활성화 — 이번 결정 자체가 "검증보다 표본"이라 재현 그리드를 또 돌리지 않는다.
+# 롤백: 각 ENABLED를 False로 되돌리면 기존(2026-08-04 이전) 동작과 100% 동일.
+REGIME_TREND_ENTRY_RELAXED_ENABLED = True
+REGIME_TREND_ENTRY_MIN_SECONDARY_VOTES = 5  # 8개 부차조건 중 최소 충족 개수
+MACD_MOMENTUM_ENTRY_RELAXED_ENABLED = True
+MACD_MOMENTUM_ENTRY_MIN_SECONDARY_VOTES = 4  # 6개 부차조건 중 최소 충족 개수
 
 # ── Tier 2: 범용 목표가 익절 (vix_rsi·multi_factor, 2026-07-15) ──────────────
 # 근거: /arena-status(2026-07-14) — 거래 있는 4개 알고 전부 MFE 포착률<0%(청산이 이익

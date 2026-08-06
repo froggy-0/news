@@ -351,3 +351,139 @@ def test_scheduler_uses_primary_veto_as_flat_skip_reason() -> None:
     reason = algorithms.primary_flat_skip_reason("multi_factor", macro, ind)
 
     assert reason == "veto:direction_regime_ok"
+
+
+def _regime_trend_core_ind() -> dict:
+    return {
+        "close": 110.0,
+        "donchian_upper": 100.0,
+        "adx": 25.0,
+        "ema_fast": 105.0,
+        "ema_slow": 100.0,
+        "ema_fast_slope": 1.0,
+        "rsi": 50.0,
+    }
+
+
+def test_regime_trend_relaxed_mode_defaults_on_with_v33() -> None:
+    # arena-params-v33(2026-08-06): 볼륨우선 진입완화가 기본 활성화 상태여야 한다.
+    assert parameters.REGIME_TREND_ENTRY_RELAXED_ENABLED is True
+    assert parameters.REGIME_TREND_ENTRY_MIN_SECONDARY_VOTES == 5
+
+
+def test_regime_trend_strict_mode_requires_all_eight_secondary_conditions(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "REGIME_TREND_ENTRY_RELAXED_ENABLED", False)
+    macro = {"arena_regime_state": "bull_trend"}
+    ind = _regime_trend_core_ind()
+    assert algorithms.regime_trend(macro, ind) == "long"
+    # 부차조건 1개만 깨져도(RSI 과열) strict 모드에서는 즉시 차단.
+    ind_hot_rsi = dict(ind, rsi=80.0)
+    assert algorithms.regime_trend(macro, ind_hot_rsi) is None
+
+
+def test_regime_trend_relaxed_mode_tolerates_up_to_three_secondary_failures(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "REGIME_TREND_ENTRY_RELAXED_ENABLED", True)
+    monkeypatch.setattr(parameters, "REGIME_TREND_ENTRY_MIN_SECONDARY_VOTES", 5)
+    ind = _regime_trend_core_ind()
+    # funding 과열 + LSR 과밀 + OI 발산 3개 실패 → 8개 중 5개 충족(경계값) → 진입 허용.
+    macro_three_fail = {
+        "arena_regime_state": "bull_trend",
+        "funding_zscore": 2.0,
+        "long_short_ratio_zscore": 3.0,
+        "oi_divergence_flag": 1.0,
+    }
+    assert algorithms.regime_trend(macro_three_fail, ind) == "long"
+    # 4개 실패(RSI 과열 추가) → 4개 충족 <5 → 차단.
+    ind_hot_rsi = dict(ind, rsi=80.0)
+    assert algorithms.regime_trend(macro_three_fail, ind_hot_rsi) is None
+
+
+def test_regime_trend_core_conditions_never_relaxed(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "REGIME_TREND_ENTRY_RELAXED_ENABLED", True)
+    monkeypatch.setattr(parameters, "REGIME_TREND_ENTRY_MIN_SECONDARY_VOTES", 0)
+    macro = {"arena_regime_state": "bull_trend"}
+    # 부차조건 임계를 0으로 낮춰도(전부 면제) ADX(핵심조건) 미달이면 여전히 차단.
+    ind_weak_adx = dict(_regime_trend_core_ind(), adx=5.0)
+    assert algorithms.regime_trend(macro, ind_weak_adx) is None
+
+
+def test_regime_trend_explain_signal_reports_relaxed_diagnostics(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "REGIME_TREND_ENTRY_RELAXED_ENABLED", True)
+    monkeypatch.setattr(parameters, "REGIME_TREND_ENTRY_MIN_SECONDARY_VOTES", 5)
+    macro = {
+        "arena_regime_state": "bull_trend",
+        "funding_zscore": 2.0,
+        "long_short_ratio_zscore": 3.0,
+        "oi_divergence_flag": 1.0,
+    }
+    diag = algorithms.explain_signal("regime_trend", macro, _regime_trend_core_ind())
+    assert diag["raw_signal"] == "long"
+    assert diag["thresholds"]["entry_relaxed_enabled"] is True
+    assert diag["secondary_votes"] == 5
+    assert diag["secondary_total"] == 8
+    # relaxed 모드에서는 개별 부차조건 실패가 vetoes에 안 들어간다(단독으로 안 막으므로).
+    assert "funding_not_hot" not in diag["vetoes"]
+    assert "funding_not_hot" in diag["failed_conditions"]
+
+
+def _macd_momentum_core_ind() -> dict:
+    return {
+        "macd_hist": 5.0,
+        "macd_hist_prev": 3.0,
+        "rsi": 50.0,
+        "bb_width": 10.0,
+        "adx": 25.0,
+    }
+
+
+def test_macd_momentum_relaxed_mode_defaults_on_with_v33() -> None:
+    assert parameters.MACD_MOMENTUM_ENTRY_RELAXED_ENABLED is True
+    assert parameters.MACD_MOMENTUM_ENTRY_MIN_SECONDARY_VOTES == 4
+
+
+def test_macd_momentum_strict_mode_requires_all_six_secondary_conditions(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "MACD_MOMENTUM_ENTRY_RELAXED_ENABLED", False)
+    macro = {"arena_regime_state": "bull_trend"}
+    ind = _macd_momentum_core_ind()
+    assert algorithms.macd_momentum(macro, ind) == "long"
+    macro_lsr_crowded = dict(macro, long_short_ratio_zscore=3.0)
+    assert algorithms.macd_momentum(macro_lsr_crowded, ind) is None
+
+
+def test_macd_momentum_relaxed_mode_tolerates_up_to_two_secondary_failures(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "MACD_MOMENTUM_ENTRY_RELAXED_ENABLED", True)
+    monkeypatch.setattr(parameters, "MACD_MOMENTUM_ENTRY_MIN_SECONDARY_VOTES", 4)
+    ind = _macd_momentum_core_ind()
+    # LSR 과밀 + OI 발산 2개 실패 → 6개 중 4개 충족(경계값) → 진입 허용.
+    macro_two_fail = {
+        "arena_regime_state": "bull_trend",
+        "long_short_ratio_zscore": 3.0,
+        "oi_divergence_flag": 1.0,
+    }
+    assert algorithms.macd_momentum(macro_two_fail, ind) == "long"
+    # 3개 실패(펀딩 과열 추가) → 3개 충족 <4 → 차단.
+    macro_three_fail = dict(macro_two_fail, funding_zscore=2.0)
+    assert algorithms.macd_momentum(macro_three_fail, ind) is None
+
+
+def test_macd_momentum_risk_off_never_relaxed(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "MACD_MOMENTUM_ENTRY_RELAXED_ENABLED", True)
+    monkeypatch.setattr(parameters, "MACD_MOMENTUM_ENTRY_MIN_SECONDARY_VOTES", 0)
+    macro = {"arena_regime_state": "bear_trend"}  # risk-off
+    assert algorithms.macd_momentum(macro, _macd_momentum_core_ind()) is None
+
+
+def test_macd_momentum_explain_signal_reports_relaxed_diagnostics(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "MACD_MOMENTUM_ENTRY_RELAXED_ENABLED", True)
+    monkeypatch.setattr(parameters, "MACD_MOMENTUM_ENTRY_MIN_SECONDARY_VOTES", 4)
+    macro = {
+        "arena_regime_state": "bull_trend",
+        "long_short_ratio_zscore": 3.0,
+        "oi_divergence_flag": 1.0,
+    }
+    diag = algorithms.explain_signal("macd_momentum", macro, _macd_momentum_core_ind())
+    assert diag["raw_signal"] == "long"
+    assert diag["secondary_votes"] == 4
+    assert diag["secondary_total"] == 6
+    assert "lsr_not_crowded" not in diag["vetoes"]
+    assert "lsr_not_crowded" in diag["failed_conditions"]

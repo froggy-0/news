@@ -315,21 +315,40 @@ def _momentum_magnitude_threshold(algo_id: str, ind: dict) -> float | None:
     return float(atr) * mult
 
 
+def _regime_trend_secondary_votes(macro: dict, ind: dict) -> dict[str, bool]:
+    """regime_trend 부차조건 8개 — 핵심 4조건(레짐·돌파·ADX·EMA정배열)과 별도로
+    N-of-M 투표 풀로 평가된다(REGIME_TREND_ENTRY_RELAXED_ENABLED=True일 때만).
+    """
+    rsi = ind.get("rsi", 50.0)
+    return {
+        "rsi_below_long_max": rsi < parameters.TREND_CORE_RSI_LONG_MAX,
+        "funding_not_hot": not _funding_hot(macro),
+        "etf_outflow_not_heavy": not _etf_outflow_heavy(macro),
+        "above_ema200_4h": not _below_ema_trend_strict(ind, macro),
+        "taker_confirms": _taker_confirms(macro),
+        "volume_confirms": _volume_confirms(ind),  # WI-4: 돌파봉 거래량 확인(진성 돌파)
+        "lsr_not_crowded": not _lsr_crowded(macro),
+        "oi_not_diverged": not _oi_diverged(macro),
+    }
+
+
 def regime_trend(macro: dict, ind: dict) -> str | None:
     """추세추종 코어 — Donchian 돌파 + 레짐/ADX/EMA 필터 (Zarattini 2025 근거).
 
-    롱 진입 조건(전부 충족):
+    핵심조건(항상 전부 충족, 이 알고의 정의 자체):
       ① 강세 레짐 (bull_trend / BullQuiet 등)
       ② Donchian(20) 상단 돌파 — 직전 20봉 고점 초과 (신고가 추세)
       ③ ADX > 20 — 추세 강도 확인 (횡보 whipsaw 차단)
       ④ EMA 정배열 + 단기 EMA 상승
-      ⑤ RSI 과열 미도달
-      ⑥ 펀딩 과열 아님
-      ⑦ 4H EMA200(≈33일) 상회 — 로컬 중기 추세 게이트
-      ⑧ 테이커 매수 우위로 돌파 확인 (주문흐름 동의 — 일간)
-      ⑨ 롱숏비 군중 과밀 아님 (일간)
-      ⑩ OI-가격 7일 방향 불일치 아님 (추세 확인 — 일간)
-    그 외 모든 경우 flat.
+
+    부차조건(품질필터, 8개 — RSI/funding/ETF유출/EMA200/taker/volume/LSR/OI):
+    REGIME_TREND_ENTRY_RELAXED_ENABLED=False(기본)면 기존과 동일하게 8개 전부
+    충족해야 하고, True면 REGIME_TREND_ENTRY_MIN_SECONDARY_VOTES개 이상만 충족하면
+    된다. 근거: entry-exit-separation 진단(12-AND 전부충족 요구가 1d 봉에서 거래
+    0건까지 만들 정도로 과잉필터) + P1~P4·P2(4h/1d) 감사 전부 종결 후 "엣지 정밀화"
+    보다 "정직한 표본 확보"가 우선이라는 판단(2026-08-06, docs/arena/product/
+    vision.md·roadmap.md — 손실 포함 투명 공개가 핵심가치, 로드맵 자체 거래량
+    마일스톤 미달). risk-off류 안전장치가 아니라 전부 품질필터라 완화 대상.
     """
     state = _regime_state(macro)
     close = ind.get("close", 0.0)
@@ -338,28 +357,20 @@ def regime_trend(macro: dict, ind: dict) -> str | None:
     ema_fast = ind.get("ema_fast", 0.0)
     ema_slow = ind.get("ema_slow", 0.0)
     ema_fast_slope = ind.get("ema_fast_slope", 0.0)
-    rsi = ind.get("rsi", 50.0)
 
     breakout = dc_upper > 0 and close > dc_upper
     trending = adx >= parameters.ADX_TREND_MIN
     ema_aligned = ema_fast > ema_slow and ema_fast_slope > 0
 
-    if (
-        _is_bullish(state)
-        and breakout
-        and trending
-        and ema_aligned
-        and rsi < parameters.TREND_CORE_RSI_LONG_MAX
-        and not _funding_hot(macro)
-        and not _etf_outflow_heavy(macro)
-        and not _below_ema_trend_strict(ind, macro)
-        and _taker_confirms(macro)
-        and _volume_confirms(ind)  # WI-4: 돌파봉 거래량 확인(진성 돌파)
-        and not _lsr_crowded(macro)
-        and not _oi_diverged(macro)
-    ):
-        return "long"
-    return None
+    if not (_is_bullish(state) and breakout and trending and ema_aligned):
+        return None
+
+    secondary = _regime_trend_secondary_votes(macro, ind)
+    if parameters.REGIME_TREND_ENTRY_RELAXED_ENABLED:
+        ok = sum(secondary.values()) >= parameters.REGIME_TREND_ENTRY_MIN_SECONDARY_VOTES
+    else:
+        ok = all(secondary.values())
+    return "long" if ok else None
 
 
 def fng_contrarian(macro: dict, ind: dict) -> str | None:
@@ -476,14 +487,34 @@ def vix_rsi(macro: dict, ind: dict) -> str | None:
     return None
 
 
+def _macd_momentum_secondary_votes(macro: dict, ind: dict) -> dict[str, bool]:
+    """macd_momentum 부차조건 6개(품질필터) — risk-off는 별도 hard veto(항상 즉시
+    보류, 완화 대상 아님). N-of-M 투표는 REGIME_TREND_ENTRY_RELAXED_ENABLED와 같은
+    설계 원칙의 macd_momentum 버전(MACD_MOMENTUM_ENTRY_RELAXED_ENABLED).
+    """
+    return {
+        "funding_not_hot": not _funding_hot(macro),
+        "etf_outflow_not_heavy": not _etf_outflow_heavy(macro),
+        "above_ema200_4h": not _below_ema_trend_strict(ind, macro),
+        # v24: 구조적 하락추세(일간 MA200 하회) 시 모멘텀 롱 보류
+        "above_ma200_daily": not _below_ma200(macro),
+        "lsr_not_crowded": not _lsr_crowded(macro),
+        "oi_not_diverged": not _oi_diverged(macro),
+    }
+
+
 def macd_momentum(macro: dict, ind: dict) -> str | None:
     """MACD 히스토그램 모멘텀 — 신호선 위에서 증가 중인 모멘텀 매수.
 
-    h > 0(시그널선 상회) + h > h_prev(모멘텀 강화 중) + RSI 과열 미도달 + BB 확장 + ADX 추세.
-    이전 ATR 임계값(h > ATR×0.10)은 제거: 히스토그램이 양수면 이미 MACD>시그널(강세).
-    ATR 임계는 이미 강한 모멘텀만 걸러 초기 형성 구간(0~ATR×0.10)을 전부 차단했음.
+    h > 0(시그널선 상회) + h > h_prev(모멘텀 강화 중) + RSI 과열 미도달 + BB 확장 + ADX 추세
+    가 핵심조건(모멘텀의 정의 자체, 항상 전부 요구). risk-off 레짐은 별도 hard veto(항상
+    즉시 보류 — 안전장치라 완화 대상 아님).
 
-    펀딩 과열·risk-off 레짐·4H EMA200 하회·롱숏 과밀·OI 방향불일치에서는 보류. 숏 없음.
+    펀딩 과열·4H EMA200 하회·일간 MA200 하회·롱숏 과밀·OI 방향불일치는 품질필터
+    부차조건 6개(`_macd_momentum_secondary_votes`) — MACD_MOMENTUM_ENTRY_RELAXED_ENABLED=
+    False(기본)면 기존과 동일하게 6개 전부 요구, True면 MIN_SECONDARY_VOTES개 이상만
+    요구한다(2026-08-06, regime_trend와 동일 근거 — P1~P4·P2 감사 종결 후 표본 확보
+    우선). 숏 없음.
 
     WI-6(v27, 2026-07-09): TRIGGER_MODE="zero_cross" 시 "h>0 상태+증가"(늦은 진입,
     regime_trend와 중복)를 "h가 0선을 상향 크로스한 봉"(모멘텀 전환 초기)으로 재정의.
@@ -502,25 +533,24 @@ def macd_momentum(macro: dict, ind: dict) -> str | None:
     apply_bb_gate = not (cross_mode and parameters.MACD_MOMENTUM_ZERO_CROSS_DROP_BB_GATE)
     if apply_bb_gate and bb_w < parameters.MACD_MOMENTUM_BB_WIDTH_MIN:
         return None
-    if (
-        _is_risk_off(_regime_state(macro))
-        or _funding_hot(macro)
-        or _etf_outflow_heavy(macro)
-        or _below_ema_trend_strict(ind, macro)
-        or _below_ma200(macro)  # v24: 구조적 하락추세(일간 MA200 하회) 시 모멘텀 롱 보류
-        or _lsr_crowded(macro)
-        or _oi_diverged(macro)
-    ):
+    if _is_risk_off(_regime_state(macro)):
         return None
+
     rsi_ok = rsi < parameters.MACD_MOMENTUM_RSI_LONG_MAX
     adx_ok = adx >= parameters.MACD_MOMENTUM_ADX_MIN
     if cross_mode:
-        if h_prev <= 0 < h and rsi_ok and adx_ok:
-            return "long"
+        core_trigger = h_prev <= 0 < h and rsi_ok and adx_ok
+    else:
+        core_trigger = h > 0 and h > h_prev and rsi_ok and adx_ok
+    if not core_trigger:
         return None
-    if h > 0 and h > h_prev and rsi_ok and adx_ok:
-        return "long"
-    return None
+
+    secondary = _macd_momentum_secondary_votes(macro, ind)
+    if parameters.MACD_MOMENTUM_ENTRY_RELAXED_ENABLED:
+        ok = sum(secondary.values()) >= parameters.MACD_MOMENTUM_ENTRY_MIN_SECONDARY_VOTES
+    else:
+        ok = all(secondary.values())
+    return "long" if ok else None
 
 
 def multi_factor(macro: dict, ind: dict) -> str | None:
@@ -1061,13 +1091,16 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
         ema_fast = ind.get("ema_fast", 0.0)
         ema_slow = ind.get("ema_slow", 0.0)
         ema_fast_slope = ind.get("ema_fast_slope", 0.0)
-        rsi = ind.get("rsi", 50.0)
+        relaxed = parameters.REGIME_TREND_ENTRY_RELAXED_ENABLED
         diag["thresholds"].update(
             {
                 "adx_trend_min": parameters.ADX_TREND_MIN,
                 "rsi_long_max": parameters.TREND_CORE_RSI_LONG_MAX,
+                "entry_relaxed_enabled": relaxed,
+                "entry_min_secondary_votes": parameters.REGIME_TREND_ENTRY_MIN_SECONDARY_VOTES,
             }
         )
+        # 핵심조건(4) — 항상 hard veto, 완화모드와 무관.
         _record_condition(diag, "bullish_regime", _is_bullish(state), veto=True)
         _record_condition(
             diag,
@@ -1082,21 +1115,13 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
             ema_fast > ema_slow and ema_fast_slope > 0,
             veto=True,
         )
-        _record_condition(
-            diag,
-            "rsi_below_long_max",
-            rsi < parameters.TREND_CORE_RSI_LONG_MAX,
-            veto=True,
-        )
-        _record_condition(diag, "funding_not_hot", not _funding_hot(macro), veto=True)
-        _record_condition(diag, "etf_outflow_not_heavy", not _etf_outflow_heavy(macro), veto=True)
-        _record_condition(
-            diag, "above_ema200_4h", not _below_ema_trend_strict(ind, macro), veto=True
-        )
-        _record_condition(diag, "taker_confirms", _taker_confirms(macro), veto=True)
-        _record_condition(diag, "volume_confirms", _volume_confirms(ind), veto=True)
-        _record_condition(diag, "lsr_not_crowded", not _lsr_crowded(macro), veto=True)
-        _record_condition(diag, "oi_not_diverged", not _oi_diverged(macro), veto=True)
+        # 부차조건(8, 품질필터) — relaxed=False면 개별 hard veto(기존과 동일), True면
+        # N-of-M 투표라 개별 실패가 단독으로 진입을 막지 않는다(veto=False로 기록).
+        secondary = _regime_trend_secondary_votes(macro, ind)
+        for name, passed in secondary.items():
+            _record_condition(diag, name, passed, veto=not relaxed)
+        diag["secondary_votes"] = sum(secondary.values())
+        diag["secondary_total"] = len(secondary)
         return _finish_diag(diag)
 
     if algo_id == "fng_contrarian":
@@ -1160,15 +1185,19 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
         rsi = ind.get("rsi", 50.0)
         bb_w = ind.get("bb_width", 100.0)
         adx = ind.get("adx", 0.0)
+        relaxed = parameters.MACD_MOMENTUM_ENTRY_RELAXED_ENABLED
         diag["thresholds"].update(
             {
                 "bb_width_min": parameters.MACD_MOMENTUM_BB_WIDTH_MIN,
                 "rsi_long_max": parameters.MACD_MOMENTUM_RSI_LONG_MAX,
                 "adx_min": parameters.MACD_MOMENTUM_ADX_MIN,
+                "entry_relaxed_enabled": relaxed,
+                "entry_min_secondary_votes": parameters.MACD_MOMENTUM_ENTRY_MIN_SECONDARY_VOTES,
             }
         )
         diag["factors"]["macd_hist"] = h
         diag["factors"]["macd_hist_prev"] = h_prev
+        # 핵심조건 — 항상 hard veto(모멘텀의 정의 자체 + risk-off 안전장치).
         _record_condition(
             diag,
             "bb_width_sufficient",
@@ -1176,13 +1205,6 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
             veto=True,
         )
         _record_condition(diag, "not_risk_off", not _is_risk_off(state), veto=True)
-        _record_condition(diag, "funding_not_hot", not _funding_hot(macro), veto=True)
-        _record_condition(diag, "etf_outflow_not_heavy", not _etf_outflow_heavy(macro), veto=True)
-        _record_condition(
-            diag, "above_ema200_4h", not _below_ema_trend_strict(ind, macro), veto=True
-        )
-        _record_condition(diag, "lsr_not_crowded", not _lsr_crowded(macro), veto=True)
-        _record_condition(diag, "oi_not_diverged", not _oi_diverged(macro), veto=True)
         _record_condition(diag, "macd_hist_positive", h > 0, veto=True)
         _record_condition(diag, "macd_hist_increasing", h > h_prev, veto=True)
         _record_condition(
@@ -1194,6 +1216,13 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
         _record_condition(
             diag, "adx_sufficient", adx >= parameters.MACD_MOMENTUM_ADX_MIN, veto=True
         )
+        # 부차조건(6, 품질필터) — relaxed=False면 개별 hard veto(기존과 동일), True면
+        # N-of-M 투표.
+        secondary = _macd_momentum_secondary_votes(macro, ind)
+        for name, passed in secondary.items():
+            _record_condition(diag, name, passed, veto=not relaxed)
+        diag["secondary_votes"] = sum(secondary.values())
+        diag["secondary_total"] = len(secondary)
         return _finish_diag(diag)
 
     if algo_id == "multi_factor":
