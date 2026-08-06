@@ -33,23 +33,29 @@ def db() -> AsyncClient:
     return _db()
 
 
-async def refresh_open_positions(*, symbol: str | None = None) -> None:
-    """DB에서 오픈 포지션 로드 → state.open_positions 갱신.
+async def refresh_open_positions(*, symbol: str = parameters.BINANCE_SYMBOL) -> None:
+    """DB에서 symbol의 오픈 포지션 로드 → state.open_positions[symbol] 갱신.
 
-    symbol=None(기본)이면 기존과 동일하게 전체 조회 — BTC 라이브 경로 무회귀.
-    멀티자산 shadow는 paper_positions를 쓰지 않으므로 이 필터는 향후 live 전환
-    대비용(P1-3, 설계문서 §2.2 원칙2).
+    2026-08-06: ETH/SOL 실거래 승격으로 심볼별 네임스페이스 필수화(이전엔 symbol=None
+    이 전체 조회 후 단일 flat dict에 합쳐 심볼 간 포지션이 뒤섞일 여지가 있었음).
+    server.py가 라이브 심볼마다 한 번씩 호출한다.
     """
-    query = _db().table("paper_positions").select("*").eq("status", "open")
-    if symbol is not None:
-        query = query.eq("symbol", symbol)
-    res = await query.execute()
+    res = (
+        await _db()
+        .table("paper_positions")
+        .select("*")
+        .eq("status", "open")
+        .eq("symbol", symbol)
+        .execute()
+    )
     by_algo: dict[str, dict | None] = {k: None for k in ALGORITHMS}
     for row in res.data:
         by_algo[row["algo_id"]] = row
-    state.open_positions.update(by_algo)
+    state.open_positions[symbol] = by_algo
     logger.info(
-        "Open positions refreshed: %s", {k: v is not None for k, v in state.open_positions.items()}
+        "Open positions refreshed(%s): %s",
+        symbol,
+        {k: v is not None for k, v in by_algo.items()},
     )
 
 

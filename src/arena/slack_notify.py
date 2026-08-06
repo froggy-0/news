@@ -19,7 +19,21 @@ from . import config, parameters
 logger = logging.getLogger(__name__)
 
 DASHBOARD_URL = "https://arena.sovereignwon.com"
-VIRTUAL_CAPITAL = 1_000.0  # 알고당 가상 투자금 (USD)
+VIRTUAL_CAPITAL = (
+    1_000.0  # 알고당 가상 투자금 (USD) — 심볼별 독립(예: BTC 6×$1000 + ETH 6×$1000 + ...)
+)
+
+# ── 심볼 라벨 (2026-08-06, 멀티자산 승격) ────────────────────────────────────────
+_SYMBOL_LABEL: dict[str, str] = {
+    "BTCUSDT": "BTC",
+    "ETHUSDT": "ETH",
+    "SOLUSDT": "SOL",
+}
+
+
+def _symbol_label(symbol: str) -> str:
+    return _SYMBOL_LABEL.get(symbol, symbol.removesuffix("USDT") or symbol)
+
 
 # ── 알고리즘 한/영 라벨 ──────────────────────────────────────────────────────────
 
@@ -338,6 +352,7 @@ def _now_utc_str() -> str:
 
 async def notify_open(
     *,
+    symbol: str = "BTCUSDT",
     algo_id: str,
     direction: str,
     price: float,
@@ -347,16 +362,20 @@ async def notify_open(
     position_id: int | None,
     strategy_version: str,
 ) -> None:
-    """포지션 오픈 시 Block Kit 알림 전송."""
+    """포지션 오픈 시 Block Kit 알림 전송. symbol 기본값은 하위호환(BTC)용."""
     client = _get_client()
     if client is None:
         return
     if direction != "long":
         logger.warning(
-            "Spot execution skipped non-long open notification: %s %s", algo_id, direction
+            "Spot execution skipped non-long open notification: %s %s %s",
+            symbol,
+            algo_id,
+            direction,
         )
         return
 
+    sym_label = _symbol_label(symbol)
     dir_emoji = "🟢"
     dir_ko = "현물 매수 진입"
     algo_ko = _ALGO_KO.get(algo_id, algo_id)
@@ -377,7 +396,7 @@ async def notify_open(
 
     blocks: list[dict[str, Any]] = [
         # ① 헤더
-        _header(f"{dir_emoji} {dir_ko}  ─  {algo_ko} ({algo_en})"),
+        _header(f"{dir_emoji} [{sym_label}] {dir_ko}  ─  {algo_ko} ({algo_en})"),
         # ② 진입 정보 (2×2 필드)
         _section_fields(
             ("💰 진입가", f"${price:,.2f}"),
@@ -413,12 +432,13 @@ async def notify_open(
         ),
     ]
 
-    fallback = f"{dir_emoji} {algo_ko} {dir_ko} @ ${price:,.2f}  손절 ${stop_loss_price:,.2f}"
+    fallback = f"{dir_emoji} [{sym_label}] {algo_ko} {dir_ko} @ ${price:,.2f}  손절 ${stop_loss_price:,.2f}"
     await _post(client, fallback, blocks)
 
 
 async def notify_close(
     *,
+    symbol: str = "BTCUSDT",
     algo_id: str,
     direction: str,
     open_price: float,
@@ -434,6 +454,7 @@ async def notify_close(
     if client is None:
         return
 
+    sym_label = _symbol_label(symbol)
     hit = ret_pct >= 0
     result_emoji = "✅" if hit else "❌"
     result_ko = "수익" if hit else "손실"
@@ -451,7 +472,9 @@ async def notify_close(
 
     blocks: list[dict[str, Any]] = [
         # ① 헤더
-        _header(f"{result_emoji} {dir_ko} 청산  ─  {algo_ko}  ({ret_str} {result_ko})"),
+        _header(
+            f"{result_emoji} [{sym_label}] {dir_ko} 청산  ─  {algo_ko}  ({ret_str} {result_ko})"
+        ),
         # ② 손익 바 (시각적 강조)
         _section_text(
             f"{ret_bar}\n`{ret_str}`  /  가상 손익: *{pnl_str}*  (가상 자본 ${VIRTUAL_CAPITAL:,.0f} 기준)"
@@ -482,7 +505,9 @@ async def notify_close(
         ),
     ]
 
-    fallback = f"{result_emoji} {algo_ko} {dir_ko} 청산  {ret_str}  보유 {hold_hours:.1f}h"
+    fallback = (
+        f"{result_emoji} [{sym_label}] {algo_ko} {dir_ko} 청산  {ret_str}  보유 {hold_hours:.1f}h"
+    )
     await _post(client, fallback, blocks)
 
 

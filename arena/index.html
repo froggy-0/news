@@ -262,7 +262,7 @@
     .pos-unrl{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
     .pos-meta{font-size:10px;color:var(--muted2);line-height:1.7}
 
-    /* ── News panel (ETH/SOL shadow 전용) ────────────────────── */
+    /* ── News panel (ETH/SOL 전용) ─────────────────────────────── */
     .news-panel{background:var(--panel);border:1px solid var(--border);margin-bottom:12px}
     .news-body{padding:2px 0}
     .news-item{
@@ -441,9 +441,6 @@
 </header>
 
 <div class="asset-switcher" id="assetSwitcher" role="tablist" aria-label="자산 선택"></div>
-<div class="shadow-banner" id="shadowBanner" style="display:none">
-  <span>⚠ SHADOW MODE — <span class="shadow-symbol"></span>는 페이퍼 실거래가 아닌 신호 관측 전용입니다 (자본 무위험, portfolio 미반영)</span>
-</div>
 
 <main class="wrap">
 
@@ -609,8 +606,9 @@ let eqChart = null;
 let eqSeries = null;
 let bhSeries = null;
 
-// ── 멀티자산(shadow) — ETH/SOL은 signal-only 관측, paper_positions 미접촉 ──
-// (docs/arena/research/multi-asset-implementation-plan-20260731.md P1-4/P1-7)
+// ── 멀티자산 — BTC/ETH/SOL 전부 알고당 $1000 독립자본 실거래(paper_positions) ──
+// (2026-08-06: shadow signal-only에서 승격. docs/arena/research/
+// multi-asset-implementation-plan-20260731.md가 원래 설계, 이후 실거래로 확장)
 const ASSETS = {
   BTC: { symbol: 'BTCUSDT', label: 'BTC', color: '#F0B90B' },
   ETH: { symbol: 'ETHUSDT', label: 'ETH', color: '#8B9DC3' },
@@ -618,8 +616,6 @@ const ASSETS = {
 };
 let activeAsset = 'BTC';
 let supaClient = null;
-let shadowDecisionsCache = [];
-let latestShadowByAlgo = {};
 
 const TAB_DEFS = [
   { id: 'all', label: '전체', color: '#F0B90B' },
@@ -1293,15 +1289,10 @@ function activateTab(tabId) {
   if (activeTab === tabId) return;
   activeTab = tabId;
   renderTabs();
-  if (activeAsset === 'BTC') {
-    renderPositionStrip();
-    renderPriceChart();
-    renderLog(positions);
-  } else {
-    renderShadowPriceChart();
-    const view = activeTab === 'all' ? shadowDecisionsCache : shadowDecisionsCache.filter(d => d.algo_id === activeTab);
-    renderShadowLog(view);
-  }
+  // 2026-08-06: ETH/SOL도 실거래 승격 — 자산 구분 없이 동일 라이브 렌더 경로.
+  renderPositionStrip();
+  renderPriceChart();
+  renderLog(positions);
 }
 
 function setupCardNavigation() {
@@ -1334,8 +1325,8 @@ function setupPeriodToggle() {
 
 /* ── Freshness (정직한 LIVE 표시) ───────────────────────────── */
 function renderFreshness() {
-  const src = activeAsset === 'BTC' ? latestDecisions : latestShadowByAlgo;
-  const times = Object.values(src || {})
+  // 2026-08-06: ETH/SOL도 실거래 승격 — latestDecisions가 항상 현재 자산 기준.
+  const times = Object.values(latestDecisions || {})
     .map(d => new Date(d.created_at).getTime()).filter(Number.isFinite);
   if (!times.length) return;
   const last = Math.max(...times);
@@ -1413,119 +1404,24 @@ async function fetchKlinesData(symbol) {
 
 // 가격/캔들 갱신 후 현재 활성 자산에 맞는 렌더 경로로 분기
 function refreshAssetView() {
-  if (activeAsset === 'BTC') {
-    renderPriceChart();
-    if (positions.length) {
-      const stats = algoStats(positions);
-      renderPortfolio(stats);
-      renderCards(stats);
-      renderEquityChart(stats);
-      renderPositionStrip();
-    }
-  } else {
-    renderShadowPriceChart();
+  // 2026-08-06: ETH/SOL도 실거래 승격 — 자산 구분 없이 동일 라이브 렌더 경로 사용.
+  renderPriceChart();
+  if (positions.length) {
+    const stats = algoStats(positions);
+    renderPortfolio(stats);
+    renderCards(stats);
+    renderEquityChart(stats);
+    renderPositionStrip();
   }
 }
 
-/* ── Shadow (ETH/SOL 신호관측) ──────────────────────────────── */
-// arena_shadow_decisions는 run_id로만 arena_runs와 연결(symbol은 join 필요).
-// sleeve_id='multi_asset_shadow'가 P1-4 경량 경로의 마커.
-async function fetchShadowData(client, symbol) {
-  try {
-    const { data, error } = await client
-      .from('arena_shadow_decisions')
-      .select('algo_id, signal, action, reason, created_at, arena_runs!inner(symbol)')
-      .eq('sleeve_id', 'multi_asset_shadow')
-      .eq('arena_runs.symbol', symbol)
-      .order('created_at', { ascending: false })
-      .limit(120);
-    if (error) { console.error('[Arena] shadow fetch error:', error.message); return { list: [], byAlgo: {} }; }
-    const list = data || [];
-    const byAlgo = {};
-    for (const d of list) if (!byAlgo[d.algo_id]) byAlgo[d.algo_id] = d; // 최신순 정렬이라 첫 값이 latest
-    return { list, byAlgo };
-  } catch(_) { return { list: [], byAlgo: {} }; }
-}
-
-// explain_signal() 진단(diag) — dec.reason.diagnostics: raw_signal/vetoes/failed_conditions/factor_score
-function shadowHint(dec) {
-  const diag = dec && dec.reason && dec.reason.diagnostics;
-  if (!diag) return null;
-  if (diag.raw_signal === 'long') {
-    return `레짐 ${diag.effective_regime_state || '—'} · 팩터 ${diag.factor_score ?? '—'}`;
-  }
-  const blocker = (diag.vetoes && diag.vetoes[0]) || (diag.failed_conditions && diag.failed_conditions[0]);
-  return blocker ? `대기: ${blocker}` : (ALGO_NEEDS[dec.algo_id] || null);
-}
-
-function renderShadowCards(byAlgo) {
-  document.getElementById('algoGrid').innerHTML = ALGO_IDS.map(algo => {
-    const dec = byAlgo[algo];
-    const cfg = ALGOS[algo];
-    const isLong = dec && dec.action === 'shadow_open';
-    const label  = !dec ? '대기' : isLong ? 'LONG' : dec.action === 'shadow_blocked' ? 'BLOCKED' : 'FLAT';
-    const hint   = dec ? shadowHint(dec) : '데이터 수집 중';
-    const ts     = dec ? fmtKST(dec.created_at) : '—';
-    return `<div class="ac" style="--ac:${cfg.color}" data-algo="${algo}" tabindex="0" role="button" aria-label="${algo} shadow — 클릭 시 신호로그 필터">
-      <div class="ac-head">
-        <span class="ac-name">${algo.replace(/_/g, ' ')}</span>
-        <span class="pos-badge ${isLong ? 'long' : 'flat'}">${label}</span>
-      </div>
-      <div class="ac-equity" style="color:var(--muted2);font-size:12px">SHADOW · 실거래 아님</div>
-      <div class="ac-metrics">
-        <div class="ac-metric"><span>최근 판단</span><span class="ac-metric-val">${ts}</span></div>
-      </div>
-      ${hint ? `<div class="ac-hint">${esc(hint)}</div>` : ''}
-    </div>`;
-  }).join('');
-}
-
-function renderShadowPriceChart() {
-  if (!lwChart || !candleSeries || !ohlcv.length) return;
-  candleSeries.setData(ohlcv);
-  clearPriceLines();
-  candleSeries.setMarkers([]); // shadow엔 실체결 진입/청산이 없음 — 캔들만 표시
-  const lastT = ohlcv[ohlcv.length - 1].time;
-  try { lwChart.timeScale().setVisibleRange({ from: lastT - 14 * 24 * 3600, to: lastT + 3600 }); } catch(_) {}
-  const view = activeTab === 'all' ? shadowDecisionsCache : shadowDecisionsCache.filter(d => d.algo_id === activeTab);
-  document.getElementById('tradeCountLabel').textContent = `SHADOW ${view.length}건 신호 기록`;
-}
-
-function renderLogHeader(mode) {
+function renderLogHeader() {
   const tr = document.getElementById('tradeLogHead');
   if (!tr) return;
-  tr.innerHTML = mode === 'shadow'
-    ? `<th scope="col">시각 (KST)</th><th scope="col">알고리즘</th><th scope="col">신호</th><th scope="col">액션</th><th scope="col">사유</th>`
-    : `<th scope="col">시각 (KST)</th><th scope="col">알고리즘</th><th scope="col">진입가</th><th scope="col">청산가</th><th scope="col">수익률</th><th scope="col">비중</th><th scope="col">청산사유</th><th scope="col">보유</th>`;
+  tr.innerHTML = `<th scope="col">시각 (KST)</th><th scope="col">알고리즘</th><th scope="col">진입가</th><th scope="col">청산가</th><th scope="col">수익률</th><th scope="col">비중</th><th scope="col">청산사유</th><th scope="col">보유</th>`;
 }
 
-function renderShadowLog(list) {
-  const body = document.getElementById('tradeLogBody');
-  document.getElementById('tradeCountLabel').textContent = `SHADOW 신호 ${list.length}건`;
-  if (!list.length) {
-    body.innerHTML = `<tr><td colspan="5" style="color:var(--muted);font-size:11px;padding:20px 18px">아직 shadow 신호 기록 없음</td></tr>`;
-    return;
-  }
-  body.innerHTML = list.map(d => {
-    const cfg = ALGOS[d.algo_id] || { color: '#848E9C' };
-    const sig = d.signal ? d.signal.toUpperCase() : 'FLAT';
-    const sigColor = d.signal === 'long' ? 'var(--green)' : 'var(--muted)';
-    const diag = d.reason && d.reason.diagnostics;
-    const reasonTxt = diag
-      ? ((diag.vetoes && diag.vetoes[0]) || (diag.failed_conditions && diag.failed_conditions[0]) ||
-         (diag.raw_signal === 'long' ? '진입조건 충족' : '—'))
-      : '—';
-    return `<tr>
-      <td style="color:var(--muted)">${fmtKST(d.created_at)}</td>
-      <td><span class="algo-chip" style="color:${cfg.color};border-color:${cfg.color}40">${d.algo_id}</span></td>
-      <td style="color:${sigColor}">${sig}</td>
-      <td style="color:var(--muted2)">${esc(d.action)}</td>
-      <td style="color:var(--muted2);white-space:normal">${esc(reasonTxt)}</td>
-    </tr>`;
-  }).join('');
-}
-
-/* ── 관련 뉴스 (ETH/SOL shadow 전용, arena_asset_news) ──────── */
+/* ── 관련 뉴스 (ETH/SOL 전용, arena_asset_news) ─────────────── */
 async function fetchAssetNews(client, symbol, limit = 8) {
   try {
     const { data, error } = await client
@@ -1557,8 +1453,7 @@ function renderAssetSwitcher() {
   const el = document.getElementById('assetSwitcher');
   if (!el) return;
   el.innerHTML = Object.keys(ASSETS).map(k => {
-    const shadowTag = k !== 'BTC' ? ' <span class="atab-shadow">SHADOW</span>' : '';
-    return `<button class="atab${activeAsset === k ? ' active' : ''}" style="--ac:${ASSETS[k].color}" data-asset="${k}" role="tab" aria-selected="${activeAsset === k}">${ASSETS[k].label}${shadowTag}</button>`;
+    return `<button class="atab${activeAsset === k ? ' active' : ''}" style="--ac:${ASSETS[k].color}" data-asset="${k}" role="tab" aria-selected="${activeAsset === k}">${ASSETS[k].label}</button>`;
   }).join('');
   el.querySelectorAll('.atab').forEach(b => {
     b.addEventListener('click', () => switchAsset(b.dataset.asset));
@@ -1577,22 +1472,16 @@ async function switchAsset(assetKey) {
   renderAssetSwitcher();
   renderTabs();
 
+  // 2026-08-06: ETH/SOL도 BTC와 동일하게 알고당 $1000 독립자본 실거래로 승격
+  // (paper_positions 실체결) — SHADOW 배너·서로 다른 렌더 경로 구분을 없앤다.
   const hdSub = document.getElementById('hdSub');
-  if (hdSub) hdSub.textContent = assetKey === 'BTC'
-    ? 'BTCUSDT · 4H · 현물 LONG/FLAT'
-    : `${meta.symbol} · 4H · SHADOW 신호 관측`;
+  if (hdSub) hdSub.textContent = `${meta.symbol} · 4H · 현물 LONG/FLAT`;
 
-  const banner = document.getElementById('shadowBanner');
-  if (banner) {
-    banner.style.display = assetKey === 'BTC' ? 'none' : 'flex';
-    const symEl = banner.querySelector('.shadow-symbol');
-    if (symEl) symEl.textContent = meta.symbol;
-  }
-  setBtcOnlyVisible(assetKey === 'BTC');
+  setBtcOnlyVisible(true);
 
   const logTitle = document.getElementById('logPanelTitle');
-  if (logTitle) logTitle.textContent = assetKey === 'BTC' ? 'TRADE LOG' : 'SHADOW SIGNAL LOG';
-  renderLogHeader(assetKey === 'BTC' ? 'live' : 'shadow');
+  if (logTitle) logTitle.textContent = 'TRADE LOG';
+  renderLogHeader();
 
   ohlcv = [];
   await Promise.all([fetchKlinesData(meta.symbol), fetchPrice(meta.symbol)]);
@@ -1600,30 +1489,25 @@ async function switchAsset(assetKey) {
   const newsPanel = document.getElementById('assetNewsPanel');
   if (newsPanel) newsPanel.style.display = assetKey === 'BTC' ? 'none' : '';
 
-  if (assetKey === 'BTC') {
-    latestDecisions = await fetchDecisions(supaClient);
-    renderAll(positions);
-  } else {
-    const [{ list, byAlgo }, news] = await Promise.all([
-      fetchShadowData(supaClient, meta.symbol),
-      fetchAssetNews(supaClient, meta.symbol),
-    ]);
-    shadowDecisionsCache = list;
-    latestShadowByAlgo = byAlgo;
-    renderShadowCards(byAlgo);
-    renderShadowPriceChart();
-    renderShadowLog(list);
-    renderAssetNews(news);
-    renderFreshness();
-  }
+  const [data, decisions, news] = await Promise.all([
+    fetchPositions(supaClient, meta.symbol),
+    fetchDecisions(supaClient, meta.symbol),
+    assetKey === 'BTC' ? Promise.resolve([]) : fetchAssetNews(supaClient, meta.symbol),
+  ]);
+  latestDecisions = decisions;
+  if (data) renderAll(data);
+  if (assetKey !== 'BTC') renderAssetNews(news);
 }
 
 /* ── Supabase ───────────────────────────────────────────────── */
-async function fetchDecisions(client) {
+async function fetchDecisions(client, symbol) {
+  // arena_decisions엔 symbol이 없어 run_id로만 arena_runs와 연결(2026-08-06 멀티자산
+  // 실거래 승격 — fetchAssetNews처럼 symbol 필터가 필요해졌다).
   try {
     const { data } = await client
       .from('arena_decisions')
-      .select('algo_id, signal, raw_signal, executable_signal, action, skipped_reason, reason, created_at')
+      .select('algo_id, signal, raw_signal, executable_signal, action, skipped_reason, reason, created_at, arena_runs!inner(symbol)')
+      .eq('arena_runs.symbol', symbol)
       .order('created_at', { ascending: false })
       .limit(25);
     if (!data) return {};
@@ -1633,9 +1517,12 @@ async function fetchDecisions(client) {
   } catch(_) { return {}; }
 }
 
-async function fetchPositions(client) {
+async function fetchPositions(client, symbol) {
+  // arena_spot_position_mart_v1엔 symbol 컬럼이 없어(BTC 단일자산 시절 뷰) 멀티자산
+  // 승격(2026-08-06) 이후 base table을 직접 심볼 필터링해서 읽는다. anon RLS는
+  // paper_positions 실시간 구독이 기존에도 이 테이블을 직접 썼으므로 이미 허용됨.
   const { data, error } = await client
-    .from('arena_spot_position_mart_v1')
+    .from('paper_positions')
     .select(`
       id, algo_id, direction, status,
       open_time, close_time,
@@ -1643,6 +1530,7 @@ async function fetchPositions(client) {
       ret_pct, hit, hold_hours,
       is_stop_loss, close_reason, strategy_version, product_type, position_semantics
     `)
+    .eq('symbol', symbol)
     .order('open_time', { ascending: false })
     .limit(500);
   if (error) { console.error('[Arena] fetch error:', error.message); return null; }
@@ -1665,7 +1553,8 @@ function setupRealtime(client) {
   client
     .channel('paper_positions_live')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'paper_positions' }, async () => {
-      const fresh = await fetchPositions(client);
+      // 2026-08-06: paper_positions에 3개 심볼이 섞여 쓰이므로 현재 선택 자산만 재조회.
+      const fresh = await fetchPositions(client, ASSETS[activeAsset].symbol);
       if (fresh) renderAll(fresh);
     })
     .subscribe(status => {
@@ -1705,8 +1594,8 @@ async function init() {
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   supaClient = client;
   const [data, decisions] = await Promise.all([
-    fetchPositions(client),
-    fetchDecisions(client),
+    fetchPositions(client, ASSETS[activeAsset].symbol),
+    fetchDecisions(client, ASSETS[activeAsset].symbol),
   ]);
   latestDecisions = decisions;
   if (data) {
@@ -1717,15 +1606,9 @@ async function init() {
   }
 
   setInterval(async () => {
-    if (activeAsset === 'BTC') {
-      latestDecisions = await fetchDecisions(client);
-      if (positions.length) renderCards(algoStats(positions));
-    } else {
-      const { list, byAlgo } = await fetchShadowData(client, ASSETS[activeAsset].symbol);
-      shadowDecisionsCache = list;
-      latestShadowByAlgo = byAlgo;
-      renderShadowCards(byAlgo);
-    }
+    // 2026-08-06: ETH/SOL도 실거래 승격 — 자산 구분 없이 동일 라이브 갱신 경로.
+    latestDecisions = await fetchDecisions(client, ASSETS[activeAsset].symbol);
+    if (positions.length) renderCards(algoStats(positions));
     renderFreshness();
   }, 60_000);
 }

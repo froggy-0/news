@@ -197,6 +197,16 @@ ARENA_MULTI_ASSET_SHADOW_SYMBOLS: tuple[str, ...] = tuple(
     ).split(",")
     if symbol.strip()
 )
+# 2026-08-06: ETH/SOL을 signal-only shadow에서 BTC와 동일한 실거래(알고당 $1000
+# 독립자본, Slack 알림)로 승격 — ENABLE_ARENA_MULTI_ASSET_SHADOW 플래그·
+# ARENA_MULTI_ASSET_SHADOW_SYMBOLS 값은 그대로 재사용(EC2 .env 변경 불필요),
+# 의미만 "shadow 기록"에서 "추가 라이브 심볼"로 바뀐다. BTC(BINANCE_SYMBOL)는
+# 항상 포함 — 라이브 주 경로라 플래그와 무관.
+ARENA_LIVE_SYMBOLS: tuple[str, ...] = (
+    (parameters.BINANCE_SYMBOL, *ARENA_MULTI_ASSET_SHADOW_SYMBOLS)
+    if ENABLE_ARENA_MULTI_ASSET_SHADOW
+    else (parameters.BINANCE_SYMBOL,)
+)
 
 
 def require_supabase_config() -> tuple[str, str]:

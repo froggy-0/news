@@ -302,8 +302,10 @@ def _execution_gate_policy() -> execution_gate.ExecutionGatePolicy:
     )
 
 
-async def _risk_state(now: datetime) -> risk.PortfolioRiskState:
-    metrics = await positions.risk_metrics(now)
+async def _risk_state(now: datetime, *, symbol: str) -> risk.PortfolioRiskState:
+    """symbol 전용 리스크 상태 — 2026-08-06 멀티자산 승격으로 자산 간 일간손실·drawdown이
+    섞이지 않도록 심볼별로 독립 평가한다(각 자산×알고 독립자본 원칙과 동일선상)."""
+    metrics = await positions.risk_metrics(now, symbol=symbol)
     return risk.PortfolioRiskState(
         daily_realized_ret_pct=metrics["daily_realized_ret_pct"],
         algo_drawdown_pct=metrics["algo_drawdown_pct"],
@@ -573,11 +575,18 @@ async def _run_shadow_vnext(
     return results
 
 
-async def _run_cycle() -> None:
+async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
+    """4H 라이브 사이클 — 심볼은 profile_id가 결정한다(기본 BTC).
+
+    2026-08-06: ETH/SOL을 signal-only shadow에서 이 함수(포지션 오픈/청산·사이징·
+    손절·실행게이트·리스크상태·Slack 전부 포함)로 승격 — BTC와 완전히 동일한 코드
+    경로를 심볼만 바꿔 재사용한다(자산별 재튜닝 금지 원칙, frequency.py 멀티자산
+    프로파일과 동일 근거). scheduler.run()이 프로파일별로 별도 호출한다.
+    """
     run_id = data_lake.new_run_id()
     started_at = datetime.now(timezone.utc)
     capture_results: list[data_lake.CaptureWriteResult] = []
-    profile = frequency.get_frequency_profile(frequency.LIVE_4H_PROFILE_ID)
+    profile = frequency.get_frequency_profile(profile_id)
     indicator_profile_id = profile.default_indicator_profile_id
     cost_scenario = frequency.get_cost_scenario(
         profile.frequency_profile_id,
@@ -619,10 +628,10 @@ async def _run_cycle() -> None:
     )
 
     if isinstance(ohlcv_res, BaseException):
-        logger.error("Binance OHLCV 수집 실패 (사이클 중단): %s", ohlcv_res)
+        logger.error("Binance OHLCV 수집 실패 (사이클 중단, %s): %s", profile.symbol, ohlcv_res)
         asyncio.ensure_future(
             slack_notify.notify_error(
-                "Binance OHLCV",
+                f"Binance OHLCV — {profile.symbol}",
                 ohlcv_res,
                 url=config.BINANCE_REST_URL,
                 run_id=run_id,
@@ -755,7 +764,7 @@ async def _run_cycle() -> None:
     had_algo_error = False
     policy = _risk_policy()
     gate_policy = _execution_gate_policy()
-    portfolio_risk_state = await _risk_state(now)
+    portfolio_risk_state = await _risk_state(now, symbol=profile.symbol)
     for algo_id, fn in ALGORITHMS.items():
         signal: str | None = None
         raw_signal: str | None = None
@@ -765,7 +774,7 @@ async def _run_cycle() -> None:
         risk_decision: risk.RiskDecision | None = None
         gate_decision: execution_gate.ExecutionGateDecision | None = None
         product_decision: spot_policy.SpotExecutionDecision | None = None
-        current = state.open_positions.get(algo_id)
+        current = state.get_position(profile.symbol, algo_id)
         current_position_id = current["id"] if current else None
         try:
             # 시간 손절(가격 손절 제거 알고 보완): 최대 보유시간 초과 시 청산.
@@ -788,9 +797,10 @@ async def _run_cycle() -> None:
                     current["id"], now, price, close_reason="time_stop"
                 )
                 hold_h = execution_rules.hold_hours(current["open_time"], now)
-                state.open_positions[algo_id] = None
-                portfolio_risk_state = await _risk_state(now)
+                state.set_position(profile.symbol, algo_id, None)
+                portfolio_risk_state = await _risk_state(now, symbol=profile.symbol)
                 await slack_notify.notify_close(
+                    symbol=profile.symbol,
                     algo_id=algo_id,
                     direction=current["direction"],
                     open_price=current["open_price"],
@@ -841,9 +851,10 @@ async def _run_cycle() -> None:
                         close_reason=product_decision.close_reason,
                     )
                     hold_h = execution_rules.hold_hours(current["open_time"], now)
-                    state.open_positions[algo_id] = None
-                    portfolio_risk_state = await _risk_state(now)
+                    state.set_position(profile.symbol, algo_id, None)
+                    portfolio_risk_state = await _risk_state(now, symbol=profile.symbol)
                     await slack_notify.notify_close(
+                        symbol=profile.symbol,
                         algo_id=algo_id,
                         direction=current["direction"],
                         open_price=current["open_price"],
@@ -867,13 +878,13 @@ async def _run_cycle() -> None:
                 ):
                     updated = await positions.maybe_scale_in_fng_price(current, price)
                     if updated:
-                        state.open_positions[algo_id] = updated
+                        state.set_position(profile.symbol, algo_id, updated)
                 continue
 
             risk_decision = risk.evaluate_open(
                 algo_id=algo_id,
                 direction=signal,
-                open_positions=state.open_positions,
+                open_positions=state.positions_for(profile.symbol),
                 state=portfolio_risk_state,
                 evaluated_at=now,
                 policy=policy,
@@ -998,6 +1009,7 @@ async def _run_cycle() -> None:
                 position_weight=position_weight,
                 slippage_bps=cost_scenario.slippage_bps,
                 spread_bps_round_trip=cost_scenario.spread_bps_round_trip,
+                symbol=profile.symbol,
                 params_snapshot=_params_snapshot(
                     algo_id,
                     profile=profile,
@@ -1018,9 +1030,10 @@ async def _run_cycle() -> None:
                 signal_reason=open_signal_reason,
                 risk_snapshot=risk_decision.as_dict(),
             )
-            state.open_positions[algo_id] = new_pos
+            state.set_position(profile.symbol, algo_id, new_pos)
             resulting_position_id = new_pos.get("id")
             await slack_notify.notify_open(
+                symbol=profile.symbol,
                 algo_id=algo_id,
                 direction=signal,
                 price=price,
@@ -1035,10 +1048,10 @@ async def _run_cycle() -> None:
             had_algo_error = True
             action = "error"
             skipped_reason = str(exc)
-            logger.error("알고 %s 오류: %s", algo_id, exc, exc_info=True)
+            logger.error("알고 %s(%s) 오류: %s", algo_id, profile.symbol, exc, exc_info=True)
             asyncio.ensure_future(
                 slack_notify.notify_error(
-                    f"알고리즘 — {algo_id}",
+                    f"알고리즘 — {profile.symbol} {algo_id}",
                     exc,
                     run_id=run_id,
                     severity="error",
@@ -1252,7 +1265,7 @@ async def _run_frequency_shadow_cycle(profile_id: str) -> None:
         )
     )
     policy = _risk_policy()
-    portfolio_risk_state = await _risk_state(now)
+    portfolio_risk_state = await _risk_state(now, symbol=profile.symbol)
     capture_results.extend(
         await _run_shadow_vnext(
             run_id=run_id,
@@ -1446,15 +1459,16 @@ def _frequency_shadow_cron(profile: frequency.FrequencyProfile) -> dict[str, obj
     return {"hour": "*" if cadence_hours == 1 else f"*/{cadence_hours}", "minute": 10}
 
 
-async def _run_cycle_safe() -> None:
+async def _run_cycle_safe(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
     """_run_cycle 래퍼 — APScheduler가 삼키는 예상치 못한 최상위 예외를 Slack으로 전달."""
     try:
-        await _run_cycle()
+        await _run_cycle(profile_id)
     except Exception as exc:
-        logger.exception("4H 사이클 예상치 못한 오류: %s", exc)
+        symbol = frequency.get_frequency_profile(profile_id).symbol
+        logger.exception("4H 사이클 예상치 못한 오류(%s): %s", symbol, exc)
         try:
             await slack_notify.notify_error(
-                "Arena 4H 사이클",
+                f"Arena 4H 사이클 — {symbol}",
                 exc,
                 severity="critical",
             )
@@ -1496,15 +1510,20 @@ async def run() -> None:
                 **cron,
             )
     if config.ENABLE_ARENA_MULTI_ASSET_SHADOW:
-        # 메인 BTC 사이클(:05)과 겹치지 않게 :20에 실행 — 자원 분산 목적일 뿐, 4H
-        # 주기 자체는 실험원칙5(동일 워크포워드 구간)에 따라 라이브와 동일.
-        for symbol in config.ARENA_MULTI_ASSET_SHADOW_SYMBOLS:
+        # 2026-08-06: signal-only shadow(_run_multi_asset_shadow_cycle_safe)에서
+        # BTC와 동일한 전체 라이브 사이클(_run_cycle_safe)로 승격 — 알고당 $1000
+        # 독립자본·실제 포지션·Slack 알림까지 BTC와 완전히 동일. 메인 BTC 사이클(:05)과
+        # 겹치지 않게 심볼마다 2분씩 스태거(REST 호출 부하 분산 목적일 뿐, 4H 주기 자체는
+        # 실험원칙5에 따라 라이브와 동일). 자산별 재튜닝 없이 frequency.py의
+        # multi_asset_shadow_profile_id 프로파일(비용·min_hold 등 BTC와 완전 동일)을
+        # 그대로 재사용한다.
+        for offset, symbol in enumerate(config.ARENA_MULTI_ASSET_SHADOW_SYMBOLS, start=1):
             scheduler.add_job(
-                _run_multi_asset_shadow_cycle_safe,
+                _run_cycle_safe,
                 "cron",
-                args=[symbol],
+                args=[frequency.multi_asset_shadow_profile_id(symbol)],
                 hour=parameters.SCHEDULER_CRON_HOUR,
-                minute=20,
+                minute=(parameters.SCHEDULER_CRON_MINUTE + offset * 2) % 60,
             )
     # 주간 백테스트 리포트: 매주 월요일 00:10 UTC = 09:10 KST
     scheduler.add_job(
@@ -1528,7 +1547,7 @@ async def run() -> None:
     if config.ENABLE_ARENA_MULTI_ASSET_SHADOW:
         await asyncio.gather(
             *[
-                _run_multi_asset_shadow_cycle_safe(symbol)
+                _run_cycle_safe(frequency.multi_asset_shadow_profile_id(symbol))
                 for symbol in config.ARENA_MULTI_ASSET_SHADOW_SYMBOLS
             ]
         )

@@ -6,7 +6,7 @@ import asyncio
 import logging
 import signal
 
-from . import liquidation_stream, positions, realtime_market, scheduler, stream
+from . import config, liquidation_stream, positions, realtime_market, scheduler, stream
 
 logging.basicConfig(
     level=logging.INFO,
@@ -18,7 +18,10 @@ logger = logging.getLogger(__name__)
 
 async def _main() -> None:
     await positions.init()
-    await positions.refresh_open_positions()
+    # 2026-08-06: ETH/SOL 실거래 승격 — 라이브 심볼마다 독립적으로 오픈 포지션을
+    # state.open_positions[symbol]에 적재(단일 flat dict였다면 심볼 간 포지션이 뒤섞임).
+    for symbol in config.ARENA_LIVE_SYMBOLS:
+        await positions.refresh_open_positions(symbol=symbol)
 
     loop = asyncio.get_running_loop()
     stop_event = asyncio.Event()
