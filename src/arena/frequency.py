@@ -62,6 +62,9 @@ class FrequencyProfile:
     symbol: str
     interval: str
     decision_cadence_minutes: int
+    # 설명용 메타데이터일 뿐 런타임 게이트가 아니다 — 실제 실거래 여부는
+    # config.ENABLE_ARENA_MULTI_ASSET_SHADOW 등 config.py 플래그가 결정한다
+    # (2026-08-07 감사: 이 필드를 읽는 코드가 저장소 전체에 0건, `as_dict()` 직렬화 전용).
     live_enabled: bool
     shadow_candidate: bool
     train_days: int
@@ -256,21 +259,26 @@ _add_costs(
 
 
 def multi_asset_shadow_profile_id(symbol: str) -> str:
-    """멀티자산 shadow 전용 frequency_profile_id (예: ETHUSDT -> shadow_4h_ethusdt).
+    """ETH/SOL frequency_profile_id (예: ETHUSDT -> shadow_4h_ethusdt).
 
     LIVE_4H_PROFILE_ID는 BTC 라이브 경로 전용이라 값·의미를 바꾸지 않는다. 신규 자산은
-    전부 이 접두사의 별도 프로파일로 등록되며 live_enabled=False(shadow만).
+    전부 이 접두사의 별도 프로파일로 등록된다. "shadow_4h_" 접두사는 2026-07-31
+    signal-only shadow로 도입됐던 이름 잔재 — 2026-08-06부로 BTC와 동일한 전체 라이브
+    사이클(알고당 독립자본·실제 포지션)로 승격됐지만, DB에 이미 이 문자열로 기록된
+    과거 행(paper_positions.frequency_profile_id 등)과의 연속성 때문에 이름은 유지한다.
     """
     return f"{MULTI_ASSET_SHADOW_PROFILE_PREFIX}{symbol.lower()}"
 
 
 def _register_multi_asset_shadow_profiles() -> None:
-    """2026-07-31 멀티자산 확장 1차(BTC 제외 ETH/SOL) — shadow 전용 프로파일 등록.
+    """ETH/SOL 프로파일 등록 (2026-07-31 최초 등록, 2026-08-06 실거래 승격).
 
     설계문서(docs/arena/research/structural-priority-multi-asset-expansion-20260730.md
     §4 원칙2)에 따라 LIVE_4H_PROFILE_ID와 완전히 동일한 파라미터(train/test/embargo/
     ecr_threshold/max_trades/min_hold/비용산식)를 심볼만 바꿔 재사용한다. 자산별
-    재튜닝 금지.
+    재튜닝 금지. live_enabled=True(2026-08-07 정정: 2026-08-06 실거래 승격 후에도
+    False로 남아있던 stale 값 — 이 필드는 런타임 게이트가 아니라 설명용 메타데이터라
+    기능 영향은 없었음. 실제 게이팅은 config.ENABLE_ARENA_MULTI_ASSET_SHADOW).
     """
     base = FREQUENCY_PROFILES[LIVE_4H_PROFILE_ID]
     for symbol in parameters.MULTI_ASSET_SYMBOLS:
@@ -282,7 +290,7 @@ def _register_multi_asset_shadow_profiles() -> None:
             symbol=symbol,
             interval=base.interval,
             decision_cadence_minutes=base.decision_cadence_minutes,
-            live_enabled=False,
+            live_enabled=True,
             shadow_candidate=True,
             train_days=base.train_days,
             test_days=base.test_days,

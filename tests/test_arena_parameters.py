@@ -197,13 +197,18 @@ def test_multi_asset_shadow_defaults_off_and_symbols_include_btc_eth_sol() -> No
 
 
 def test_multi_asset_shadow_profiles_registered_for_eth_and_sol() -> None:
-    """ETH/SOL shadow 프로파일이 BTC 라이브와 동일 파라미터(자산별 재튜닝 없음)로 등록됨."""
+    """ETH/SOL shadow 프로파일이 BTC 라이브와 동일 파라미터(자산별 재튜닝 없음)로 등록됨.
+
+    live_enabled=True(2026-08-07 정정): 2026-08-06 실거래 승격 후 이 필드가 stale False로
+    남아있던 걸 발견·수정. 필드 자체는 런타임 게이트가 아니라 설명용 메타데이터(frequency.py
+    FrequencyProfile 주석 참조) — 실제 게이팅은 config.ENABLE_ARENA_MULTI_ASSET_SHADOW.
+    """
     live = frequency.get_frequency_profile(frequency.LIVE_4H_PROFILE_ID)
     for symbol in ("ETHUSDT", "SOLUSDT"):
         profile_id = frequency.multi_asset_shadow_profile_id(symbol)
         profile = frequency.get_frequency_profile(profile_id)
         assert profile.symbol == symbol
-        assert profile.live_enabled is False
+        assert profile.live_enabled is True
         assert profile.shadow_candidate is True
         assert profile.interval == live.interval
         assert profile.train_days == live.train_days
