@@ -169,6 +169,112 @@ def test_vix_rsi_stabilization_blocks_worsening_momentum() -> None:
     assert algorithms.vix_rsi(macro, {"rsi": 45.0}) == "long"
 
 
+def test_fng_contrarian_relaxed_mode_defaults_on_with_v34() -> None:
+    assert parameters.FNG_CONTRARIAN_ENTRY_RELAXED_ENABLED is True
+    assert parameters.FNG_CONTRARIAN_ENTRY_MIN_SECONDARY_VOTES == 2
+
+
+def test_fng_contrarian_strict_mode_requires_all_three_environment_conditions(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "FNG_CONTRARIAN_ENTRY_RELAXED_ENABLED", False)
+    macro = {"arena_regime_state": "bull_trend", "fng": 20.0, "btc_drawdown_90d": -0.15}
+    assert algorithms.fng_contrarian(macro, {}) == "long"
+    # 환경필터 1개만 깨져도(breadth 붕괴) strict 모드에서는 즉시 차단.
+    macro_breadth_collapsed = dict(macro, breadth_up_ratio=0.10)
+    assert algorithms.fng_contrarian(macro_breadth_collapsed, {}) is None
+
+
+def test_fng_contrarian_relaxed_mode_tolerates_one_environment_failure(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "FNG_CONTRARIAN_ENTRY_RELAXED_ENABLED", True)
+    monkeypatch.setattr(parameters, "FNG_CONTRARIAN_ENTRY_MIN_SECONDARY_VOTES", 2)
+    # breadth 붕괴 1개 실패 → 3개 중 2개 충족(경계값) → 진입 허용.
+    macro_one_fail = {
+        "arena_regime_state": "bull_trend",
+        "fng": 20.0,
+        "btc_drawdown_90d": -0.15,
+        "breadth_up_ratio": 0.10,
+    }
+    assert algorithms.fng_contrarian(macro_one_fail, {}) == "long"
+    # 2개 실패(stablecoin 수축 추가) → 1개 충족 <2 → 차단.
+    macro_two_fail = dict(macro_one_fail, stablecoin_supply_zscore=-3.0)
+    assert algorithms.fng_contrarian(macro_two_fail, {}) is None
+
+
+def test_fng_contrarian_momentum_and_risk_off_never_relaxed(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "FNG_CONTRARIAN_ENTRY_RELAXED_ENABLED", True)
+    monkeypatch.setattr(parameters, "FNG_CONTRARIAN_ENTRY_MIN_SECONDARY_VOTES", 0)
+    macro = {"arena_regime_state": "bull_trend", "fng": 20.0}
+    # 환경필터 임계를 0으로 낮춰도(전부 면제) 하락 모멘텀 악화 중이면 여전히 차단.
+    ind_worsening = {"macd_hist": -2.0, "macd_hist_prev": -1.0}
+    assert algorithms.fng_contrarian(macro, ind_worsening) is None
+    # risk-off 레짐이면 여전히 차단.
+    macro_risk_off = dict(macro, arena_regime_state="bear_trend")
+    assert algorithms.fng_contrarian(macro_risk_off, {}) is None
+
+
+def test_fng_contrarian_explain_signal_reports_relaxed_diagnostics(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "FNG_CONTRARIAN_ENTRY_RELAXED_ENABLED", True)
+    monkeypatch.setattr(parameters, "FNG_CONTRARIAN_ENTRY_MIN_SECONDARY_VOTES", 2)
+    macro = {
+        "arena_regime_state": "bull_trend",
+        "fng": 20.0,
+        "btc_drawdown_90d": -0.15,
+        "breadth_up_ratio": 0.10,
+    }
+    diag = algorithms.explain_signal("fng_contrarian", macro, {})
+    assert diag["raw_signal"] == "long"
+    assert diag["thresholds"]["entry_relaxed_enabled"] is True
+    assert diag["secondary_votes"] == 2
+    assert diag["secondary_total"] == 3
+    assert "breadth_not_collapsed" not in diag["vetoes"]
+    assert "breadth_not_collapsed" in diag["failed_conditions"]
+
+
+def test_vix_rsi_relaxed_mode_defaults_on_with_v34() -> None:
+    assert parameters.VIX_RSI_ENTRY_RELAXED_ENABLED is True
+    assert parameters.VIX_RSI_ENTRY_MIN_SECONDARY_VOTES == 1
+
+
+def test_vix_rsi_strict_mode_requires_both_environment_conditions(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "VIX_RSI_ENTRY_RELAXED_ENABLED", False)
+    macro = {"arena_regime_state": "bull_trend", "vix_now": 15.0, "vix_q40": 18.0}
+    assert algorithms.vix_rsi(macro, {"rsi": 45.0}) == "long"
+    macro_breadth_collapsed = dict(macro, breadth_up_ratio=0.10)
+    assert algorithms.vix_rsi(macro_breadth_collapsed, {"rsi": 45.0}) is None
+
+
+def test_vix_rsi_relaxed_mode_tolerates_one_environment_failure(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "VIX_RSI_ENTRY_RELAXED_ENABLED", True)
+    monkeypatch.setattr(parameters, "VIX_RSI_ENTRY_MIN_SECONDARY_VOTES", 1)
+    # breadth 붕괴 1개 실패 → 2개 중 1개 충족(경계값) → 진입 허용.
+    macro_one_fail = {
+        "arena_regime_state": "bull_trend",
+        "vix_now": 15.0,
+        "vix_q40": 18.0,
+        "breadth_up_ratio": 0.10,
+    }
+    assert algorithms.vix_rsi(macro_one_fail, {"rsi": 45.0}) == "long"
+    # 2개 실패(stablecoin 수축 추가) → 0개 충족 <1 → 차단.
+    macro_two_fail = dict(macro_one_fail, stablecoin_supply_zscore=-3.0)
+    assert algorithms.vix_rsi(macro_two_fail, {"rsi": 45.0}) is None
+
+
+def test_vix_rsi_explain_signal_reports_relaxed_diagnostics(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "VIX_RSI_ENTRY_RELAXED_ENABLED", True)
+    monkeypatch.setattr(parameters, "VIX_RSI_ENTRY_MIN_SECONDARY_VOTES", 1)
+    macro = {
+        "arena_regime_state": "bull_trend",
+        "vix_now": 15.0,
+        "vix_q40": 18.0,
+        "breadth_up_ratio": 0.10,
+    }
+    diag = algorithms.explain_signal("vix_rsi", macro, {"rsi": 45.0})
+    assert diag["raw_signal"] == "long"
+    assert diag["secondary_votes"] == 1
+    assert diag["secondary_total"] == 2
+    assert "breadth_not_collapsed" not in diag["vetoes"]
+    assert "breadth_not_collapsed" in diag["failed_conditions"]
+
+
 def test_vix_rsi_exit_hold_override_hysteresis() -> None:
     macro = {"arena_regime_state": "bull_trend", "vix_now": 18.5, "vix_q40": 18.0}
     # 진입 조건(RSI<50·VIX<q40×1.05)은 깨졌지만 청산 임계(RSI<60·VIX<q40×1.15) 이내 → hold.
@@ -365,10 +471,10 @@ def _regime_trend_core_ind() -> dict:
     }
 
 
-def test_regime_trend_relaxed_mode_defaults_on_with_v33() -> None:
-    # arena-params-v33(2026-08-06): 볼륨우선 진입완화가 기본 활성화 상태여야 한다.
+def test_regime_trend_relaxed_mode_defaults_on_with_v34() -> None:
+    # arena-params-v34(2026-08-07): v33(5)에서 한 단계 더 완화된 기본값이어야 한다.
     assert parameters.REGIME_TREND_ENTRY_RELAXED_ENABLED is True
-    assert parameters.REGIME_TREND_ENTRY_MIN_SECONDARY_VOTES == 5
+    assert parameters.REGIME_TREND_ENTRY_MIN_SECONDARY_VOTES == 4
 
 
 def test_regime_trend_strict_mode_requires_all_eight_secondary_conditions(monkeypatch) -> None:
@@ -436,9 +542,10 @@ def _macd_momentum_core_ind() -> dict:
     }
 
 
-def test_macd_momentum_relaxed_mode_defaults_on_with_v33() -> None:
+def test_macd_momentum_relaxed_mode_defaults_on_with_v34() -> None:
+    # arena-params-v34(2026-08-07): v33(4)에서 한 단계 더 완화된 기본값이어야 한다.
     assert parameters.MACD_MOMENTUM_ENTRY_RELAXED_ENABLED is True
-    assert parameters.MACD_MOMENTUM_ENTRY_MIN_SECONDARY_VOTES == 4
+    assert parameters.MACD_MOMENTUM_ENTRY_MIN_SECONDARY_VOTES == 3
 
 
 def test_macd_momentum_strict_mode_requires_all_six_secondary_conditions(monkeypatch) -> None:

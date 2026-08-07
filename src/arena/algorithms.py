@@ -373,6 +373,18 @@ def regime_trend(macro: dict, ind: dict) -> str | None:
     return "long" if ok else None
 
 
+def _fng_contrarian_secondary_votes(macro: dict) -> dict[str, bool]:
+    """fng_contrarian 환경필터 3개(품질필터) — FNG_CONTRARIAN_ENTRY_RELAXED_ENABLED로
+    N-of-M 투표 전환 대상(arena-params-v34). momentum_not_worsening(칼받기 방지,
+    v23 정량검증 완료)·risk-off·fng<30 핵심조건은 별도 hard veto로 완화 대상이 아니다.
+    """
+    return {
+        "drawdown_sufficient": _drawdown_sufficient(macro),
+        "breadth_not_collapsed": not _breadth_collapsed(macro),
+        "stablecoin_not_contracting": not _stablecoin_contracting(macro),
+    }
+
+
 def fng_contrarian(macro: dict, ind: dict) -> str | None:
     """공포탐욕 역발산 — 극도의 공포 구간(FNG < 30) 매수만.
 
@@ -383,20 +395,22 @@ def fng_contrarian(macro: dict, ind: dict) -> str | None:
     90일 고점 대비 충분한 낙폭(<= -10%)이 동반될 때만 진입 — 역발산 진입 품질 향상.
     역추세 전략이므로 200일 MA 게이트는 적용하지 않는다.
 
-    시장 환경 veto(multi_factor와 동일 기준):
-    - breadth 붕괴(top10 상승비율 < 0.30): 전방위 하락장에서 역발산은 칼받기
-    - stablecoin 수축(z < -1.5): 온체인 유동성 이탈 시 평균회귀 에너지 없음
+    시장 환경 필터 3개(낙폭·breadth·stablecoin, multi_factor와 동일 기준)는
+    FNG_CONTRARIAN_ENTRY_RELAXED_ENABLED=False(기본 이전 동작)면 전부 hard veto,
+    True(arena-params-v34)면 MIN_SECONDARY_VOTES개 이상만 요구하는 N-of-M 투표로
+    완화된다(regime_trend/macd_momentum과 동일 설계 원칙). FNG<30 핵심조건과
+    momentum_not_worsening(칼받기 방지)·risk-off는 항상 hard.
     """
     fng = macro.get("fng")
     if fng is None:
         return None
     if _is_risk_off(_regime_state(macro)):
         return None
-    if not _drawdown_sufficient(macro):
-        return None
-    if _breadth_collapsed(macro):
-        return None
-    if _stablecoin_contracting(macro):
+    secondary = _fng_contrarian_secondary_votes(macro)
+    if parameters.FNG_CONTRARIAN_ENTRY_RELAXED_ENABLED:
+        if sum(secondary.values()) < parameters.FNG_CONTRARIAN_ENTRY_MIN_SECONDARY_VOTES:
+            return None
+    elif not all(secondary.values()):
         return None
     if fng < parameters.FNG_LONG_BELOW:
         if (
@@ -421,22 +435,32 @@ def fng_contrarian(macro: dict, ind: dict) -> str | None:
     return None
 
 
+def _vix_rsi_secondary_votes(macro: dict) -> dict[str, bool]:
+    """vix_rsi 환경필터 2개(품질필터) — VIX_RSI_ENTRY_RELAXED_ENABLED로 N-of-M 투표
+    전환 대상(arena-params-v34). momentum_not_worsening(칼받기 방지, v26 정량검증
+    완료)·risk-off·vix_calm+rsi 핵심조건은 별도 hard veto로 완화 대상이 아니다.
+    """
+    return {
+        "breadth_not_collapsed": not _breadth_collapsed(macro),
+        "stablecoin_not_contracting": not _stablecoin_contracting(macro),
+    }
+
+
 def vix_rsi(macro: dict, ind: dict) -> str | None:
     """VIX 수준 + RSI 필터 — 시장 공포 완화 + 과열 미도달 시 매수.
 
     VIX가 40th percentile 이하(calm) AND RSI < 50 → 롱.
     vix_q40 미수집 시 vix_now < 20 fallback. risk-off 레짐 시 보류.
 
-    시장 환경 veto:
-    - breadth 붕괴(top10 상승비율 < 0.30): 하락장에서 VIX가 낮아도 RSI<50은 구조적 패턴
-      → VIX/RSI 외생 신호가 노이즈가 되는 환경을 걸러낸다.
-    - stablecoin 수축(z < -1.5): 온체인 유동성 이탈 시 매수 에너지 부재.
+    시장 환경 필터 2개(breadth·stablecoin)는 VIX_RSI_ENTRY_RELAXED_ENABLED=False
+    (기본 이전 동작)면 둘 다 hard veto, True(arena-params-v34)면 MIN_SECONDARY_VOTES개
+    이상만 요구하는 N-of-M 투표로 완화된다(fng_contrarian과 동일 설계 원칙).
     MA200 게이트는 미적용 — VIX/RSI는 추세 방향성과 무관한 외생 신호.
 
     진입 안정화(v26): RSI<50 딥매수는 하락 가속 한복판에서 칼받기가 되기 쉬움
     (라이브 -5.43%·백테스트 11개월 -10.71%, 손실이 MACD 히스토그램 악화 중 진입에
     집중). fng v23에서 검증된 _momentum_not_worsening을 동일하게 적용 — 매도 소진
-    (히스토그램 반등) 확인 후 진입.
+    (히스토그램 반등) 확인 후 진입. 이 필터는 정량검증됐으므로 완화 대상이 아니다.
 
     WI-5(v27, 2026-07-09): 엣지 부재(수정 후에도 백테스트 -0.57%) 대응 2단계.
     - Step1 MA200 게이트(VIX_RSI_MA200_GATE_ENABLED): 손실이 하락 구간에 집중 →
@@ -452,9 +476,11 @@ def vix_rsi(macro: dict, ind: dict) -> str | None:
         return None
     if _is_risk_off(_regime_state(macro)):
         return None
-    if _breadth_collapsed(macro):
-        return None
-    if _stablecoin_contracting(macro):
+    secondary = _vix_rsi_secondary_votes(macro)
+    if parameters.VIX_RSI_ENTRY_RELAXED_ENABLED:
+        if sum(secondary.values()) < parameters.VIX_RSI_ENTRY_MIN_SECONDARY_VOTES:
+            return None
+    elif not all(secondary.values()):
         return None
     if parameters.VIX_RSI_MA200_GATE_ENABLED and _below_ma200(macro):
         return None
@@ -1126,16 +1152,16 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
 
     if algo_id == "fng_contrarian":
         fng = macro.get("fng")
-        diag["thresholds"]["fng_long_below"] = parameters.FNG_LONG_BELOW
+        relaxed = parameters.FNG_CONTRARIAN_ENTRY_RELAXED_ENABLED
+        diag["thresholds"].update(
+            {
+                "fng_long_below": parameters.FNG_LONG_BELOW,
+                "entry_relaxed_enabled": relaxed,
+                "entry_min_secondary_votes": parameters.FNG_CONTRARIAN_ENTRY_MIN_SECONDARY_VOTES,
+            }
+        )
         _record_condition(diag, "fng_present", fng is not None, veto=True)
         _record_condition(diag, "not_risk_off", not _is_risk_off(state), veto=True)
-        _record_condition(
-            diag, "drawdown_sufficient_or_missing", _drawdown_sufficient(macro), veto=True
-        )
-        _record_condition(diag, "breadth_not_collapsed", not _breadth_collapsed(macro), veto=True)
-        _record_condition(
-            diag, "stablecoin_not_contracting", not _stablecoin_contracting(macro), veto=True
-        )
         _record_condition(
             diag,
             "fng_extreme_fear",
@@ -1148,6 +1174,12 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
             _momentum_not_worsening(ind, enabled=parameters.FNG_CONTRARIAN_STABILIZATION_ENABLED),
             veto=True,
         )
+        # 환경필터 3개(품질필터) — relaxed=False면 개별 hard veto, True면 N-of-M 투표.
+        secondary = _fng_contrarian_secondary_votes(macro)
+        for name, passed in secondary.items():
+            _record_condition(diag, name, passed, veto=not relaxed)
+        diag["secondary_votes"] = sum(secondary.values())
+        diag["secondary_total"] = len(secondary)
         return _finish_diag(diag)
 
     if algo_id == "vix_rsi":
@@ -1161,14 +1193,17 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
                 if vix_q40
                 else (vix_now < 20.0)
             )
-        diag["thresholds"]["rsi_long_max"] = parameters.VIX_RSI_LONG_MAX
-        diag["thresholds"]["vix_calm_tolerance"] = parameters.VIX_CALM_TOLERANCE_BAND
+        relaxed = parameters.VIX_RSI_ENTRY_RELAXED_ENABLED
+        diag["thresholds"].update(
+            {
+                "rsi_long_max": parameters.VIX_RSI_LONG_MAX,
+                "vix_calm_tolerance": parameters.VIX_CALM_TOLERANCE_BAND,
+                "entry_relaxed_enabled": relaxed,
+                "entry_min_secondary_votes": parameters.VIX_RSI_ENTRY_MIN_SECONDARY_VOTES,
+            }
+        )
         _record_condition(diag, "vix_present", vix_now is not None, veto=True)
         _record_condition(diag, "not_risk_off", not _is_risk_off(state), veto=True)
-        _record_condition(diag, "breadth_not_collapsed", not _breadth_collapsed(macro), veto=True)
-        _record_condition(
-            diag, "stablecoin_not_contracting", not _stablecoin_contracting(macro), veto=True
-        )
         _record_condition(
             diag,
             "momentum_not_worsening",
@@ -1177,6 +1212,12 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
         )
         _record_condition(diag, "vix_calm", vix_calm, veto=True)
         _record_condition(diag, "rsi_below_long_max", rsi < parameters.VIX_RSI_LONG_MAX, veto=True)
+        # 환경필터 2개(품질필터) — relaxed=False면 개별 hard veto, True면 N-of-M 투표.
+        secondary = _vix_rsi_secondary_votes(macro)
+        for name, passed in secondary.items():
+            _record_condition(diag, name, passed, veto=not relaxed)
+        diag["secondary_votes"] = sum(secondary.values())
+        diag["secondary_total"] = len(secondary)
         return _finish_diag(diag)
 
     if algo_id == "macd_momentum":

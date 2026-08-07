@@ -28,7 +28,11 @@ STRATEGY_VERSION = "arena-spot-v4"
 #   부차6중4) 진입완화 활성화 — P1~P4·P2(4h/1d) 감사 종결로 "엣지 정밀화" 레버 소진,
 #   로드맵 거래량 마일스톤 미달(45/500건)이 계기. 그리드 미검증(사용자 결정: 검증보다
 #   표본 확보 우선). risk-off는 여전히 hard veto.
-PARAMS_VERSION = "arena-params-v33"
+# v34(2026-08-07): v33 배포 1일 후 재확인 — 실제 차단 1위는 core 조건(bullish_regime/
+#   bb_width_sufficient)이라 여지 자체가 제한적이나, 남은 N-of-M 레버 4개를 1단계씩
+#   추가 완화 + fng_contrarian/vix_rsi에 환경필터(낙폭/시장폭/스테이블코인) N-of-M
+#   최초 도입. momentum_not_worsening·risk-off·핵심 트리거는 여전히 hard veto.
+PARAMS_VERSION = "arena-params-v34"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v2"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
@@ -387,9 +391,35 @@ TAKER_CONFIRM_RATIO_4H_MIN = 0.95
 #   즉시 활성화 — 이번 결정 자체가 "검증보다 표본"이라 재현 그리드를 또 돌리지 않는다.
 # 롤백: 각 ENABLED를 False로 되돌리면 기존(2026-08-04 이전) 동작과 100% 동일.
 REGIME_TREND_ENTRY_RELAXED_ENABLED = True
-REGIME_TREND_ENTRY_MIN_SECONDARY_VOTES = 5  # 8개 부차조건 중 최소 충족 개수
+REGIME_TREND_ENTRY_MIN_SECONDARY_VOTES = 4  # v33=5 → v34=4 (아래 블록 참조). 8개 중 최소 충족 개수
 MACD_MOMENTUM_ENTRY_RELAXED_ENABLED = True
-MACD_MOMENTUM_ENTRY_MIN_SECONDARY_VOTES = 4  # 6개 부차조건 중 최소 충족 개수
+MACD_MOMENTUM_ENTRY_MIN_SECONDARY_VOTES = 3  # v33=4 → v34=3 (아래 블록 참조). 6개 중 최소 충족 개수
+
+# ── 볼륨우선 진입완화 2차 (arena-params-v34, 2026-08-07) ──────────────────────
+# 배경: v33 배포 1일 후 arena-status 재확인 — v33이 푼 것은 regime_trend/macd_momentum의
+#   "부차조건"뿐인데, 실제 최근 14일(BTC) 차단 1위는 손대지 않은 core 조건이었음
+#   (regime_trend: veto:bullish_regime 100/109 — 알고 정의 자체. macd_momentum:
+#   veto:bb_width_sufficient 53/109 — core_trigger 이전 hard gate). BTC/ETH/SOL 3자산
+#   교차확인(최근 24h arena_decisions)도 동일 패턴 — 현재 매크로(Transitional/MA200
+#   하회/90일 낙폭 -21.8%)가 추세·모멘텀 알고에 구조적으로 불리한 국면이라 완화 여지가
+#   본질적으로 제한적. 그럼에도 사용자 요청("더 완화 가능한 거 있으면")에 따라 남은
+#   레버 4개를 원칙에 맞게 한 단계씩 더 완화한다: (1)(2) 기존 N-of-M 문턱 1단계 하향,
+#   (3) multi_factor의 ex-regime 최소득표 1단계 하향(f1 방향성 필수는 그대로 — 2026-07-30
+#   20개월 재검증으로 확정된 수정이라 미변경), (4) omnibus REBOUND 문턱 1단계 하향,
+#   (5)(6) fng_contrarian/vix_rsi에 처음으로 환경필터(낙폭/시장폭/스테이블코인) N-of-M
+#   도입. momentum_not_worsening(칼받기 방지, v23/v26 정량검증 완료)·risk-off·핵심
+#   트리거(FNG<30, VIX calm+RSI<50)는 완화 대상에서 제외 — 개별 백테스트로 손실 방지
+#   효과가 입증된 필터를 표본확보 명목으로 되돌리지 않는다는 v33 원칙 계승.
+#   v33과 동일하게 그리드 탐색 없이 설계값(1단계 하향/과반)으로 즉시 배포.
+# 롤백: REGIME_TREND/MACD_MOMENTUM_ENTRY_MIN_SECONDARY_VOTES를 위 주석의 v33 값(5,4)으로,
+#   MULTI_FACTOR_MIN_VOTES_EX_REGIME을 3, OMNIBUS_REBOUND_MIN_VOTES를 3으로, 신규
+#   ENABLED 2개(FNG_CONTRARIAN/VIX_RSI)를 False로 되돌리면 v33 상태로 원복.
+MULTI_FACTOR_MIN_VOTES_EX_REGIME = 2  # f1 제외 4개 중 3→2 (f1 필수는 유지)
+OMNIBUS_REBOUND_MIN_VOTES = 2  # 4개 중 3→2
+FNG_CONTRARIAN_ENTRY_RELAXED_ENABLED = True
+FNG_CONTRARIAN_ENTRY_MIN_SECONDARY_VOTES = 2  # 환경필터 3개(낙폭/시장폭/스테이블코인) 중 최소 충족
+VIX_RSI_ENTRY_RELAXED_ENABLED = True
+VIX_RSI_ENTRY_MIN_SECONDARY_VOTES = 1  # 환경필터 2개(시장폭/스테이블코인) 중 최소 충족
 
 # ── Tier 2: 범용 목표가 익절 (vix_rsi·multi_factor, 2026-07-15) ──────────────
 # 근거: /arena-status(2026-07-14) — 거래 있는 4개 알고 전부 MFE 포착률<0%(청산이 이익
