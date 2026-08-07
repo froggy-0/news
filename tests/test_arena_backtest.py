@@ -58,7 +58,7 @@ def test_backtest_stop_loss_uses_intrabar_ohlc_and_live_cost_rule() -> None:
     trade = result.trades[0]
     assert trade.exit_reason == "stop_loss"
     assert trade.close_price == pytest.approx(97.5)
-    assert trade.ret_pct == pytest.approx(-0.0263)  # W1: 기본 왕복비용 10bps→13bps
+    assert trade.ret_pct == pytest.approx(-0.0273)  # arena-cost-v3: 기본 왕복비용 13bps→23bps
     assert result.equity_curve[-1].open_position["direction"] == "long"
 
 
@@ -129,10 +129,10 @@ def test_backtest_run_row_is_json_ready_and_versioned() -> None:
 
     assert row["backtest_run_id"] == "00000000-0000-0000-0000-000000000001"
     assert row["strategy_version"] == "arena-spot-v4"
-    assert row["rules_snapshot"]["fee_bps"] == 5.0
+    assert row["rules_snapshot"]["fee_bps"] == 10.0
     assert row["frequency_profile_id"] == "live_4h"
     assert row["indicator_profile_id"] == "time_normalized_v1"
-    assert row["cost_model_version"] == "arena-cost-v2"
+    assert row["cost_model_version"] == "arena-cost-v3"
     assert row["cost_scenario_id"] == "base"
     assert row["rules_snapshot"]["portfolio_risk"]["max_open_positions_total"] == 6
     assert row["rules_snapshot"]["regime_variant"] == "strict_v1"

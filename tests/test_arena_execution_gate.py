@@ -17,7 +17,9 @@ def test_execution_gate_allows_signal_when_edge_clears_cost_and_quality() -> Non
     decision = execution_gate.evaluate_execution_gate(
         algo_id="macd_momentum",
         signal="long",
-        indicators={"close": 100_000.0, "macd_hist": 200.0, "atr": 100.0},
+        # arena-cost-v3(FEE_BPS 10.0): cost floor = 2*(10+1)+1 = 23bps → macd_hist 300
+        # (edge=30bps)로 여유있게 통과시킨다(이전 200/13bps에서 상향).
+        indicators={"close": 100_000.0, "macd_hist": 300.0, "atr": 100.0},
         realtime_features={
             "spread_bps_avg": 1.0,
             "expected_slippage_bps": 1.0,

@@ -72,7 +72,14 @@ SCHEDULER_CRON_MINUTE = 5
 SERVER_IDLE_SLEEP_SECONDS = 3600
 
 STOP_LOSS_FALLBACK_PCT = 0.05
-FEE_BPS = 5.0
+# arena-cost-v3(2026-08-07): 5.0→10.0. 이전 5.0(0.05%)은 근거 문서·주석 없이 설정돼 있었음
+# (/arena-status 세션에서 "실제 수수료가 명확히 반영돼 있는지" 검증 요청 계기로 감사).
+# Binance 현물 표준(VIP0) taker 수수료는 0.10%(10bps) — BNB 25% 할인 적용해도 0.075%(7.5bps).
+# 코드에 maker/limit 주문 개념이 없어(전량 즉시체결 가정) taker 기준이 맞고, 무할인을
+# 보수적 기본값으로 채택(vision.md "손실도 숨기지 않는 정직한 트랙레코드" 원칙과 정합 —
+# 낙관적 비용 가정은 실성과를 부풀릴 위험). 왕복비용 13bps→23bps(2×(10+1)+1).
+# 근거: docs/arena/spot-deep-research-report.md:116 "실거래소 maker/taker 수수료" 요구.
+FEE_BPS = 10.0
 ATR_MULTIPLE = 2.5
 STOP_LOSS_MIN_PCT = 0.02
 STOP_LOSS_MAX_PCT = 0.08

@@ -12,7 +12,7 @@ LIVE_4H_PROFILE_ID = "live_4h"
 MULTI_ASSET_SHADOW_PROFILE_PREFIX = "shadow_4h_"
 DEFAULT_INDICATOR_PROFILE_ID = "time_normalized_v1"
 INTRADAY_INDICATOR_PROFILE_ID = "intraday_native_v1"
-COST_MODEL_VERSION = "arena-cost-v2"
+COST_MODEL_VERSION = "arena-cost-v3"
 DEFAULT_COST_SCENARIO_ID = "base"
 
 
@@ -230,8 +230,8 @@ _add_costs(
     LIVE_4H_PROFILE_ID,
     [
         # 현물 BTCUSDT 비용 현실화 (arena-cost-v2):
-        # base = fee 5bps/leg + slippage 1bps/leg + spread 1bps 왕복 = 왕복 ~13bps.
-        # 현물이므로 funding=0. low/high는 비용 민감도 하한/상한.
+        # base = fee 10bps/leg(arena-cost-v3, Binance VIP0 taker 무할인) + slippage 1bps/leg
+        # + spread 1bps 왕복 = 왕복 ~23bps. 현물이므로 funding=0. low/high는 비용 민감도 하한/상한.
         ("low", parameters.FEE_BPS, 0.0, 0.0, 0.0),
         ("base", parameters.FEE_BPS, 1.0, 1.0, 0.0),
         ("high", parameters.FEE_BPS, 2.0, 3.0, 0.0),

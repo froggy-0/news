@@ -55,7 +55,7 @@ def test_shadow_tca_builds_parent_order_and_quality_rows() -> None:
     assert quality["parent_order_id"] == parent["parent_order_id"]
     assert quality["fill_ratio"] == pytest.approx(1.0)
     assert quality["realized_slippage_bps"] == pytest.approx(1.0)
-    assert quality["realized_cost_bps"] == pytest.approx(13.0)
+    assert quality["realized_cost_bps"] == pytest.approx(23.0)
     assert quality["quality_snapshot"]["quality_status"] == "ok"
 
 

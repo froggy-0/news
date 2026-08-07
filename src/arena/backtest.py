@@ -70,9 +70,9 @@ class BacktestSettings:
     symbol: str = parameters.BINANCE_SYMBOL
     interval: str = parameters.BINANCE_KLINE_INTERVAL
     fee_bps: float = parameters.FEE_BPS
-    # base cost scenario(frequency.py _add_costs)와 일치 — live 왕복 13bps(fee5/leg+slip1/leg+spread1RT).
-    # W1(2026-07-15): 분석 하니스 다수가 cost scenario 미주입 bare BacktestSettings()로 호출돼
-    # 기본값 0이면 왕복 10bps로 과소계상 → 회전율 높은 config가 체계적으로 유리해지는 편향이 있었음.
+    # base cost scenario(frequency.py _add_costs)와 일치 — live 왕복 23bps(fee10/leg+slip1/leg+spread1RT,
+    # arena-cost-v3). W1(2026-07-15): 분석 하니스 다수가 cost scenario 미주입 bare BacktestSettings()로
+    # 호출돼 기본값 0이면 비용이 과소계상 → 회전율 높은 config가 체계적으로 유리해지는 편향이 있었음.
     slippage_bps: float = 1.0
     spread_bps_round_trip: float = 1.0
     funding_buffer_bps_per_8h: float = 0.0

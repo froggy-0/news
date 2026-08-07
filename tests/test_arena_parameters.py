@@ -61,10 +61,10 @@ def test_frequency_profiles_convert_time_to_bars_and_costs() -> None:
 
     base_1h = frequency.get_cost_scenario("research_1h", "base")
     base_15m = frequency.get_cost_scenario("research_15m", "base")
-    assert base_1h.trading_cost_bps_round_trip == 17.0
-    assert base_1h.all_in_round_trip_bps == 17.5
-    assert base_15m.trading_cost_bps_round_trip == 23.0
-    assert base_15m.all_in_round_trip_bps == 24.0
+    assert base_1h.trading_cost_bps_round_trip == 27.0
+    assert base_1h.all_in_round_trip_bps == 27.5
+    assert base_15m.trading_cost_bps_round_trip == 33.0
+    assert base_15m.all_in_round_trip_bps == 34.0
 
 
 def test_time_normalized_indicator_profile_preserves_4h_and_scales_intraday() -> None:
