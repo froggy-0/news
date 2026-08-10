@@ -1,0 +1,54 @@
+{
+  "regime_trend": {
+    "baseline": {
+      "n": 27,
+      "win": 22.2,
+      "sum_w_ret": -11.642
+    },
+    "variant": {
+      "n": 27,
+      "win": 22.2,
+      "sum_w_ret": -11.642
+    },
+    "dsr": 0.0
+  },
+  "macd_momentum": {
+    "baseline": {
+      "n": 76,
+      "win": 26.3,
+      "sum_w_ret": -5.61
+    },
+    "variant": {
+      "n": 76,
+      "win": 26.3,
+      "sum_w_ret": -5.61
+    },
+    "dsr": 0.004
+  },
+  "multi_factor": {
+    "baseline": {
+      "n": 47,
+      "win": 44.7,
+      "sum_w_ret": -1.755
+    },
+    "variant": {
+      "n": 47,
+      "win": 42.6,
+      "sum_w_ret": -3.06
+    },
+    "dsr": 0.167
+  },
+  "omnibus": {
+    "baseline": {
+      "n": 143,
+      "win": 58.0,
+      "sum_w_ret": -4.585
+    },
+    "variant": {
+      "n": 143,
+      "win": 58.0,
+      "sum_w_ret": -4.585
+    },
+    "dsr": 0.051
+  }
+}
