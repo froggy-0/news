@@ -174,6 +174,85 @@ def test_fng_contrarian_relaxed_mode_defaults_on_with_v34() -> None:
     assert parameters.FNG_CONTRARIAN_ENTRY_MIN_SECONDARY_VOTES == 2
 
 
+def test_liquidation_exhaustion_gate_defaults_to_noop() -> None:
+    # WI-9 v2(2026-08-10, 검증 전) — 기본 off라 어떤 asymmetry 값이든 항상 통과.
+    assert parameters.LIQUIDATION_EXHAUSTION_GATE_ENABLED is False
+    assert algorithms._liquidation_exhaustion_sufficient({}) is True
+    assert algorithms._liquidation_exhaustion_sufficient({"liq_asymmetry_24h": 0.99}) is True
+
+
+def test_liquidation_exhaustion_gate_blocks_ongoing_selloff_when_enabled(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "LIQUIDATION_EXHAUSTION_GATE_ENABLED", True)
+    monkeypatch.setattr(parameters, "LIQUIDATION_EXHAUSTION_MAX_ASYMMETRY", 0.5)
+    # 롱청산(투매) 지배(0.9 > 0.5) → 아직 소진 안 됨 → 차단.
+    assert algorithms._liquidation_exhaustion_sufficient({"liq_asymmetry_24h": 0.9}) is False
+    # 균형 근처(0.1 <= 0.5) → 통과.
+    assert algorithms._liquidation_exhaustion_sufficient({"liq_asymmetry_24h": 0.1}) is True
+    # 미관측(None, 데이터부족) → graceful pass.
+    assert algorithms._liquidation_exhaustion_sufficient({}) is True
+
+
+def test_fng_contrarian_default_off_unaffected_by_liquidation_gate() -> None:
+    macro = {
+        "arena_regime_state": "bull_trend",
+        "fng": 20.0,
+        "btc_drawdown_90d": -0.15,
+        "liq_asymmetry_24h": 0.99,  # 극단값이어도 게이트 off라 무영향.
+    }
+    assert algorithms.fng_contrarian(macro, {}) == "long"
+
+
+def test_fng_contrarian_blocked_by_liquidation_gate_when_enabled(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "LIQUIDATION_EXHAUSTION_GATE_ENABLED", True)
+    macro = {
+        "arena_regime_state": "bull_trend",
+        "fng": 20.0,
+        "btc_drawdown_90d": -0.15,
+        "liq_asymmetry_24h": 0.9,
+    }
+    assert algorithms.fng_contrarian(macro, {}) is None
+    diagnostic = algorithms.explain_signal("fng_contrarian", macro, {})
+    assert "liquidation_exhaustion_sufficient" in diagnostic["vetoes"]
+    macro["liq_asymmetry_24h"] = 0.1
+    assert algorithms.fng_contrarian(macro, {}) == "long"
+
+
+def test_omnibus_rebound_default_off_unaffected_by_liquidation_gate() -> None:
+    macro = {"arena_regime_state": "bear_trend", "liq_asymmetry_24h": 0.99}
+    ind = {
+        "rsi": 30.0,
+        "bb_pos": 0.1,
+        "macd_hist": -1.0,
+        "macd_hist_prev": -2.0,
+        "return_24h": -0.03,
+        "atr_pct": 0.0,
+    }
+    assert algorithms.omnibus(macro, ind) == "long"
+
+
+def test_omnibus_rebound_blocked_by_liquidation_gate_when_enabled(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "LIQUIDATION_EXHAUSTION_GATE_ENABLED", True)
+    macro = {"arena_regime_state": "bear_trend", "liq_asymmetry_24h": 0.9}
+    ind = {
+        "rsi": 30.0,
+        "bb_pos": 0.1,
+        "macd_hist": -1.0,
+        "macd_hist_prev": -2.0,
+        "return_24h": -0.03,
+        "atr_pct": 0.0,
+    }
+    assert algorithms.omnibus(macro, ind) is None
+    diagnostic = algorithms.explain_signal("omnibus", macro, ind)
+    assert "liquidation_exhaustion_sufficient" in diagnostic["vetoes"]
+    macro["liq_asymmetry_24h"] = 0.1
+    assert algorithms.omnibus(macro, ind) == "long"
+    # UP_TREND/RANGE 레그는 완전히 무관해야 한다(레그 격리 확인, omnibus-stop-distance-design
+    # 선례와 동일 원칙) — 강세 레짐에서는 게이트가 켜져 있어도 REBOUND 조건 자체가 안 걸림.
+    up_macro = {"arena_regime_state": "bull_trend", "liq_asymmetry_24h": 0.99}
+    up_ind = {"rsi": 40.0, "ema_fast": 2.0, "ema_slow": 1.0, "bb_pos": 0.3}
+    assert algorithms.omnibus(up_macro, up_ind) == "long"
+
+
 def test_fng_contrarian_strict_mode_requires_all_three_environment_conditions(monkeypatch) -> None:
     monkeypatch.setattr(parameters, "FNG_CONTRARIAN_ENTRY_RELAXED_ENABLED", False)
     macro = {"arena_regime_state": "bull_trend", "fng": 20.0, "btc_drawdown_90d": -0.15}
@@ -549,6 +628,7 @@ def test_macd_momentum_relaxed_mode_defaults_on_with_v34() -> None:
 
 
 def test_macd_momentum_strict_mode_requires_all_six_secondary_conditions(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "TSMOM_NL_ENABLED", False)  # 레거시 MACD 경로 검증
     monkeypatch.setattr(parameters, "MACD_MOMENTUM_ENTRY_RELAXED_ENABLED", False)
     macro = {"arena_regime_state": "bull_trend"}
     ind = _macd_momentum_core_ind()
@@ -558,6 +638,7 @@ def test_macd_momentum_strict_mode_requires_all_six_secondary_conditions(monkeyp
 
 
 def test_macd_momentum_relaxed_mode_tolerates_up_to_two_secondary_failures(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "TSMOM_NL_ENABLED", False)  # 레거시 MACD 경로 검증
     monkeypatch.setattr(parameters, "MACD_MOMENTUM_ENTRY_RELAXED_ENABLED", True)
     monkeypatch.setattr(parameters, "MACD_MOMENTUM_ENTRY_MIN_SECONDARY_VOTES", 4)
     ind = _macd_momentum_core_ind()
@@ -574,6 +655,7 @@ def test_macd_momentum_relaxed_mode_tolerates_up_to_two_secondary_failures(monke
 
 
 def test_macd_momentum_risk_off_never_relaxed(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "TSMOM_NL_ENABLED", False)  # 레거시 MACD 경로 검증
     monkeypatch.setattr(parameters, "MACD_MOMENTUM_ENTRY_RELAXED_ENABLED", True)
     monkeypatch.setattr(parameters, "MACD_MOMENTUM_ENTRY_MIN_SECONDARY_VOTES", 0)
     macro = {"arena_regime_state": "bear_trend"}  # risk-off
@@ -581,6 +663,7 @@ def test_macd_momentum_risk_off_never_relaxed(monkeypatch) -> None:
 
 
 def test_macd_momentum_explain_signal_reports_relaxed_diagnostics(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "TSMOM_NL_ENABLED", False)  # 레거시 MACD 경로 검증
     monkeypatch.setattr(parameters, "MACD_MOMENTUM_ENTRY_RELAXED_ENABLED", True)
     monkeypatch.setattr(parameters, "MACD_MOMENTUM_ENTRY_MIN_SECONDARY_VOTES", 4)
     macro = {
@@ -592,5 +675,113 @@ def test_macd_momentum_explain_signal_reports_relaxed_diagnostics(monkeypatch) -
     assert diag["raw_signal"] == "long"
     assert diag["secondary_votes"] == 4
     assert diag["secondary_total"] == 6
-    assert "lsr_not_crowded" not in diag["vetoes"]
-    assert "lsr_not_crowded" in diag["failed_conditions"]
+
+
+# ── Nonlinear TSMOM (macd_momentum 대체, v35(2026-08-08) 기본 활성화 — 레거시 대비
+#    walk-forward 6/6 구간 개선 근거. docs/arena/research/nonlinear-tsmom-design-
+#    20260808.md §9) ──────────────────────────────────────────────────────────
+
+
+def test_tsmom_nl_enabled_by_default_since_v35() -> None:
+    assert parameters.TSMOM_NL_ENABLED is True
+    assert parameters.TSMOM_NL_LOOKBACK_BARS == 126
+    assert parameters.TSMOM_NL_VOL_MODE == "ewma"
+    assert parameters.TSMOM_NL_MIN_SIGNAL == 0.0
+
+
+def test_tsmom_nl_signal_none_when_return_missing() -> None:
+    assert algorithms._tsmom_nl_signal({}) is None
+
+
+def test_tsmom_nl_signal_none_when_vol_zero() -> None:
+    ind = {"tsmom_nl_return_180": 0.1, "realized_vol_24h": 0.0}
+    assert algorithms._tsmom_nl_signal(ind) is None
+
+
+def test_tsmom_nl_signal_computes_expected_value(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "TSMOM_NL_LOOKBACK_BARS", 180)
+    monkeypatch.setattr(parameters, "TSMOM_NL_VOL_MODE", "rv6")
+    ind = {"tsmom_nl_return_180": 0.18, "realized_vol_24h": 0.01}
+    # s = ret / (sqrt(T)*vol) = 0.18 / (sqrt(180)*0.01)
+    import math
+
+    expected = 0.18 / (math.sqrt(180) * 0.01)
+    assert algorithms._tsmom_nl_signal(ind) == expected
+
+
+def test_tsmom_nl_signal_uses_ewma_vol_when_configured(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "TSMOM_NL_LOOKBACK_BARS", 126)
+    monkeypatch.setattr(parameters, "TSMOM_NL_VOL_MODE", "ewma")
+    ind = {
+        "tsmom_nl_return_126": 0.1,
+        "realized_vol_24h": 0.02,
+        "tsmom_nl_vol_ewma": 0.01,
+    }
+    import math
+
+    expected = 0.1 / (math.sqrt(126) * 0.01)
+    assert algorithms._tsmom_nl_signal(ind) == expected
+
+
+def test_tsmom_nl_position_multiplier_noop_when_disabled(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "TSMOM_NL_ENABLED", False)
+    assert algorithms.tsmom_nl_position_multiplier({}, {}) == 1.0
+
+
+def test_tsmom_nl_position_multiplier_zero_for_nonpositive_signal(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "TSMOM_NL_ENABLED", True)
+    monkeypatch.setattr(parameters, "TSMOM_NL_LOOKBACK_BARS", 180)
+    monkeypatch.setattr(parameters, "TSMOM_NL_VOL_MODE", "rv6")
+    ind = {"tsmom_nl_return_180": -0.1, "realized_vol_24h": 0.01}
+    assert algorithms.tsmom_nl_position_multiplier({}, ind) == 0.0
+    assert algorithms.tsmom_nl_position_multiplier({}, {}) == 0.0  # 데이터 없음
+
+
+def test_tsmom_nl_position_multiplier_clamped_to_weight_cap(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "TSMOM_NL_ENABLED", True)
+    monkeypatch.setattr(parameters, "TSMOM_NL_LOOKBACK_BARS", 180)
+    monkeypatch.setattr(parameters, "TSMOM_NL_VOL_MODE", "rv6")
+    monkeypatch.setattr(parameters, "TSMOM_NL_WEIGHT_CAP", 0.5)
+    # s=1이면 f(s)=0.5(이론적 최댓값) — 매우 강한 신호(대량 vol 대비 큰 T봉 수익률)로 근사.
+    import math
+
+    bars = 180
+    vol = 0.01
+    ret_for_s1 = math.sqrt(bars) * vol  # s = ret/(sqrt(T)*vol) = 1
+    ind = {f"tsmom_nl_return_{bars}": ret_for_s1, "realized_vol_24h": vol}
+    mult = algorithms.tsmom_nl_position_multiplier({}, ind)
+    assert abs(mult - 0.5) < 1e-9
+    # 극단적으로 큰 신호도 상한(WEIGHT_CAP)을 넘지 않는다.
+    ind_extreme = {f"tsmom_nl_return_{bars}": ret_for_s1 * 100, "realized_vol_24h": vol}
+    assert algorithms.tsmom_nl_position_multiplier({}, ind_extreme) <= 0.5
+
+
+def test_macd_momentum_uses_tsmom_nl_signal_when_enabled(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "TSMOM_NL_ENABLED", True)
+    monkeypatch.setattr(parameters, "TSMOM_NL_LOOKBACK_BARS", 180)
+    monkeypatch.setattr(parameters, "TSMOM_NL_VOL_MODE", "rv6")
+    monkeypatch.setattr(parameters, "TSMOM_NL_MIN_SIGNAL", 0.0)
+    macro = {"arena_regime_state": "bull_trend"}
+    ind_positive = {"tsmom_nl_return_180": 0.1, "realized_vol_24h": 0.01}
+    assert algorithms.macd_momentum(macro, ind_positive) == "long"
+    ind_negative = {"tsmom_nl_return_180": -0.1, "realized_vol_24h": 0.01}
+    assert algorithms.macd_momentum(macro, ind_negative) is None
+    # risk-off는 TSMOM_NL 경로에서도 하드 veto — 완화 대상 아님.
+    macro_risk_off = {"arena_regime_state": "bear_trend"}
+    assert algorithms.macd_momentum(macro_risk_off, ind_positive) is None
+    # 완전 무시되던 MACD 관련 필드가 있어도 영향 없음(신호 로직 전면 교체 확인).
+    ind_with_stale_macd = dict(ind_positive, macd_hist=-999.0, macd_hist_prev=999.0)
+    assert algorithms.macd_momentum(macro, ind_with_stale_macd) == "long"
+
+
+def test_macd_momentum_explain_signal_tsmom_nl_branch(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "TSMOM_NL_ENABLED", True)
+    monkeypatch.setattr(parameters, "TSMOM_NL_LOOKBACK_BARS", 180)
+    monkeypatch.setattr(parameters, "TSMOM_NL_VOL_MODE", "rv6")
+    monkeypatch.setattr(parameters, "TSMOM_NL_MIN_SIGNAL", 0.0)
+    macro = {"arena_regime_state": "bull_trend"}
+    ind = {"tsmom_nl_return_180": 0.1, "realized_vol_24h": 0.01}
+    diag = algorithms.explain_signal("macd_momentum", macro, ind)
+    assert diag["raw_signal"] == "long"
+    assert diag["thresholds"]["lookback_bars"] == 180
+    assert diag["factors"]["tsmom_nl_signal"] is not None

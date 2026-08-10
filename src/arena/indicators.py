@@ -498,4 +498,9 @@ def compute(
     }
     # WI-4: 상대 볼륨(돌파 확인). volumes 미전달 시 None → 알고리즘 graceful 통과.
     result["rel_volume"] = relative_volume(volumes) if volumes else None
+    # Nonlinear TSMOM(macd_momentum 대체 후보, 2026-08-08): 그리드 lookback 후보 전부
+    # 사전계산해 단일 frame 빌드로 그리드 전체를 커버(wi_tuning.py 패턴과 동일 원칙).
+    for bars in parameters.TSMOM_NL_LOOKBACK_CANDIDATES:
+        result[f"tsmom_nl_return_{bars}"] = return_over_bars(closes, bars)
+    result["tsmom_nl_vol_ewma"] = realized_vol_ewma(closes)
     return result

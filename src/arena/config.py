@@ -120,7 +120,14 @@ BINANCE_WS_URL = "wss://stream.binance.com:9443/ws/btcusdt@kline_1m"
 BINANCE_COMBINED_WS_URL = "wss://stream.binance.com:9443/stream"
 # WI-9: 강제청산(forceOrder)은 선물 스트림 전용(현물 kline과 별도 커넥션·태스크).
 #   수집 전용 — 트레이딩 경로와 완전 분리(수집 실패 무영향).
-BINANCE_FUTURES_LIQUIDATION_WS_URL = "wss://fstream.binance.com/ws/btcusdt@forceOrder"
+# 2026-08-10: "/market" 라우팅 경로 누락이 근본원인이었음(2026-07-14 "서울 지역차단" 추정은
+#   오판정) — 로컬 실측(scripts/analysis/liquidation_ws_probe.py)으로 /market/ws/... 는 프레임
+#   수신, 기존 /ws/...(라우팅 없음)는 로컬에서도 0건 확인. 상세: docs/arena/research/
+#   liquidation-stream-market-routing-fix-20260810.md
+# 2026-08-10: 멀티자산(BTC/ETH/SOL) 콤바인드 스트림으로 확장(stream.py _combined_stream_url과
+#   동일 패턴, forceOrder는 /market 라우팅 필요라 별도 베이스). 로컬 실측으로 3심볼 동시
+#   구독·정상 프레임 수신 확인.
+BINANCE_FUTURES_LIQUIDATION_COMBINED_WS_URL = "wss://fstream.binance.com/market/stream"
 ARENA_LIQUIDATION_STREAM_ENABLED: bool = (
     os.environ.get("ARENA_LIQUIDATION_STREAM_ENABLED", "false").strip().lower() == "true"
 )

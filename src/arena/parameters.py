@@ -32,7 +32,18 @@ STRATEGY_VERSION = "arena-spot-v4"
 #   bb_width_sufficient)이라 여지 자체가 제한적이나, 남은 N-of-M 레버 4개를 1단계씩
 #   추가 완화 + fng_contrarian/vix_rsi에 환경필터(낙폭/시장폭/스테이블코인) N-of-M
 #   최초 도입. momentum_not_worsening·risk-off·핵심 트리거는 여전히 hard veto.
-PARAMS_VERSION = "arena-params-v34"
+# v35(2026-08-08): macd_momentum 레거시 MACD 신호를 Nonlinear TSMOM으로 전면 교체
+#   (TSMOM_NL_ENABLED=True, algo_id 슬롯 재사용). 레거시가 3년 백테스트 전 구간(상승장
+#   포함)에서 -31.79%·DSR 0.012로 완전 기각(macd_hard_gate_tuning.py)된 데 이어, 대체
+#   신호(Moskowitz·Sabbatucci·Tamoni·Uhl 2025 S자형 연속사이징 TSMOM)를 walk-forward
+#   6윈도로 검증 → 레거시 대비 6/6 구간 전부 개선(예외 없음)이나 절대수익은 2023-2024
+#   상승장 구간에 집중(윈도1 +8.7~+9.7%), 2024H2 이후는 손실축소는 확실해도 자체 절대
+#   수익 미증명(DSR 0.110, 부트스트랩95%CI [-7.27%,+21.75%]로 0 포함) — "증명된 엣지"가
+#   아니라 "확실히 죽은 레거시보다 우위" 근거로 활성화. 사용자 결정: 거래량 우선
+#   (LOOKBACK_BARS=126, VOL_MODE=ewma, MIN_SIGNAL=0.0 — n≈254/3년). 설계·grid·walk-forward
+#   전체: docs/arena/research/nonlinear-tsmom-design-20260808.md.
+# 롤백: TSMOM_NL_ENABLED을 False로 되돌리면 레거시 MACD 로직으로 100% 원복.
+PARAMS_VERSION = "arena-params-v35"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v2"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
@@ -442,6 +453,34 @@ VIX_RSI_ENTRY_MIN_SECONDARY_VOTES = 1  # 환경필터 2개(시장폭/스테이�
 GENERIC_TARGET_EXIT_ENABLED = True  # 스위치 자체는 on, 대상 알고는 아래 dict가 결정(빈 dict=무효과)
 TARGET_EXIT_ATR_MULT_BY_ALGO: dict[str, float] = {}
 
+# ── 트레일링 거리 분리 (vix_rsi·multi_factor, 2026-08-10) ──────────────────────
+# 근거: /arena-status MFE/MAE 진단 재확인 — vix_rsi 7건 중 5건, multi_factor 11건 중
+#   10건이 MFE(보유중 최대유리이동) < 초기손절거리(=현재 trail_distance). ratchet_trailing
+#   _stop()은 trail_distance=진입 시 손절거리를 그대로 재사용하므로, MFE가 그 거리에
+#   못 미치는 대다수 거래에서 래칫이 사실상 손실구간에 머물러 익절 보호를 전혀 못 함
+#   (예: risk 3.0%인데 MFE 0.5%면 래칫 최고점도 진입가 대비 -2.5% — 이익 잠금 0).
+#   Tier2(TARGET_EXIT_ATR_MULT_BY_ALGO, 전량 익절)는 PBO 0.877~0.921로 기각됐는데, 이는
+#   "어디서 전량 청산할지" 배수를 그리드 핏한 것이라 과최적화 위험이 컸던 것 — 이번 설계는
+#   손절과 독립적으로 트레일링 거리만 좁혀 래칫이 더 일찍 반응하게 하는 것이라 자유도가
+#   1개(배수)뿐이고, 손절폭(리스크 관리)은 그대로 유지돼 "승자를 일찍 자르는" 부작용도 없음
+#   (목표가처럼 상단을 캡하지 않고 그냥 더 촘촘히 따라감). ⚠️ 기본 빈 dict(off) — 그리드→
+#   walk-forward→DSR/PBO 검증 통과 후에만 항목 추가. execution_rules.trail_distance_from_stop
+#   의 mult 인자로 배선(기본 1.0=기존과 동일, 다른 알고 무영향).
+TRAIL_DISTANCE_MULT_BY_ALGO: dict[str, float] = {}
+
+# ── 청산 소진 게이트 (fng_contrarian·omnibus REBOUND, WI-9 v2, 2026-08-10 설계) ────────
+# 근거: WI-9 청산(forceOrder) 스트림이 2026-08-10 "/market" 라우팅 수정으로 실제 가동 시작
+#   (docs/arena/research/liquidation-stream-market-routing-fix-20260810.md), 동시에
+#   BTC/ETH/SOL 멀티자산 콤바인드 스트림으로 확장. "매도 소진(캐피출레이션) 사후확인"
+#   용도로 설계(docs/arena/research/liquidation-feature-design-20260810.md) — 문헌
+#   (arXiv:2607.27070, 2026, 바이낸스 BTCUSDT 7개 캐스케이드 분석)이 "캐스케이드 사전예측"
+#   류 단일변수 조기경보의 취약함을 반증했으므로, backward-looking veto 전용으로만 설계
+#   (방향예측·사이징 확대에는 안 씀). ⚠️ 기본 off — 청산 스파이크가 5건+ 관측되기 전엔
+#   그리드/튜닝 착수하지 않는다(design doc §4 go/no-go). 임계값(MAX_ASYMMETRY=0.5)은
+#   잠정 placeholder — 검증 착수 시 실측 분포로 재보정할 것, 지금 값 그대로 채택 근거 없음.
+LIQUIDATION_EXHAUSTION_GATE_ENABLED = False
+LIQUIDATION_EXHAUSTION_MAX_ASYMMETRY = 0.5
+
 # ── ❌ 모멘텀 매그니튜드 게이트 (fng_contrarian·vix_rsi) — 기각 (2026-07-21 실측) ────
 # 근거: /arena-status(2026-07-21) — fng·vix_rsi 라이브 손실의 다수가 진입 시 macd_hist
 #   음수(칼받기 유사 패턴, 승률 25~33%)인데 _momentum_not_worsening()은 방향(mh>=mh_prev)만
@@ -521,6 +560,26 @@ MACD_MOMENTUM_BB_WIDTH_MIN = 3.5  # BB 폭 최소값 (% of SMA): 미달 시 횡�
 # 이유: macd_momentum은 모멘텀 '초기 형성'을 포착 목적이라 강한 추세(ADX≥20)보다
 #       약한 추세(ADX≥18)에서도 모멘텀 신호가 유효하다.
 MACD_MOMENTUM_ADX_MIN = 18.0
+# ── Nonlinear TSMOM — macd_momentum 대체 후보 (2026-08-08) ────────────────────
+# 배경: macd_momentum이 3년 백테스트(2023-08~2026-08, n=251) 전 구간(상승장 포함)에서
+#   가중합 -31.79%·DSR 0.012로 완전 기각(hard gate 완화 6변형 전부 실패,
+#   docs/arena/research/macd-hard-gate-tuning-20260808.json). 대체 후보로 Moskowitz·
+#   Sabbatucci·Tamoni·Uhl(2025-12-10, "Nonlinear Time Series Momentum")의 연속
+#   비선형 사이징 TSMOM을 설계·루브릭검증(docs/arena/research/
+#   nonlinear-tsmom-design-20260808.md) 후 구현. algo_id "macd_momentum" 슬롯 재사용
+#   (자본캡·DB 연속성 유지) — 신호 로직은 완전 교체. s_t = T봉누적수익률/(√T·σ̂),
+#   포지션배수 f(s)=clamp(s/(s²+1), 0, WEIGHT_CAP) — 논문 식(3)+Ferson&Siegel(2001).
+# ✅ v35(2026-08-08) 활성화: DSR(0.110)·부트스트랩(95%CI가 0 포함)은 미달이나, 레거시
+#   대비 walk-forward 6/6 구간 전부 개선(예외 없음, tsmom_nl_walk_forward.py) — "증명된
+#   엣지"가 아니라 "확실히 죽은 레거시보다 확실한 우위"가 활성화 근거. 사용자 결정으로
+#   거래량 우선 변형(min_signal=0.0) 채택. 롤백: TSMOM_NL_ENABLED=False.
+TSMOM_NL_ENABLED = True
+TSMOM_NL_LOOKBACK_CANDIDATES: tuple[int, ...] = (126, 180, 372)  # indicators.py 사전계산용(고정)
+TSMOM_NL_LOOKBACK_BARS = 126  # walk-forward 6/6 구간 plateau(180/372는 혼조·약세)
+TSMOM_NL_VOL_MODE = "ewma"  # "rv6"(6봉 realized_vol_24h) | "ewma"(장기 EWMA, R2와 동일 추정기)
+TSMOM_NL_MIN_SIGNAL = 0.0  # 거래량 우선 채택값(3년 n≈254). 그리드 후보였던 {0.2,0.5}는 수익률 우선.
+TSMOM_NL_WEIGHT_CAP = 0.5  # f(s)=s/(s²+1) 이론적 최댓값(s=1에서 0.5) — 상한 클램프
+
 MULTI_FACTOR_LONG_RSI_MAX = 55.0
 MULTI_FACTOR_SHORT_RSI_MIN = 55.0
 # vix_rsi 진입 안정화(v26): RSI<50 딥매수 전 MACD 히스토그램 악화 중이면 보류.

@@ -383,6 +383,9 @@ def _open_position(
         # 이 배수 없이는 RANGE/REBOUND 백테스트 가중수익이 2.5~4배 과대계상됨.
         if algo_id == "omnibus":
             position_weight *= algorithms.omnibus_position_multiplier(macro, frame.indicators)
+        # Nonlinear TSMOM(v35, 2026-08-08 활성화): TSMOM_NL_ENABLED=False면 1.0(무효과).
+        if algo_id == "macd_momentum":
+            position_weight *= algorithms.tsmom_nl_position_multiplier(macro, frame.indicators)
     # P4(2026-07-21, 신규·미검증): unknown 레짐 진입 사이징 완화. dict에 없으면 1.0(무효과).
     # fng_contrarian은 최초 1차 트랜치에만 적용(이후 가격 기준 물타기는 정상 스케줄 유지 —
     # 진입 시점 레짐 불확실성은 초기 확신도만 낮출 뿐, 추가 하락이 주는 정보는 별개).
@@ -416,7 +419,11 @@ def _open_position(
         open_time=frame.bar.close_time,
         open_price=frame.bar.close,
         stop_loss_price=stop_loss_price,
-        trail_distance=execution_rules.trail_distance_from_stop(frame.bar.close, stop_loss_price),
+        trail_distance=execution_rules.trail_distance_from_stop(
+            frame.bar.close,
+            stop_loss_price,
+            mult=parameters.TRAIL_DISTANCE_MULT_BY_ALGO.get(algo_id, 1.0),
+        ),
         position_weight=position_weight,
         entry_data_timestamp=frame.data_timestamp,
         params_snapshot=_params_snapshot(algo_id, settings),

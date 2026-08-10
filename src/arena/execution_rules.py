@@ -68,13 +68,16 @@ def calc_stop_loss_price(
     raise ValueError(f"unsupported direction: {direction}")
 
 
-def trail_distance_from_stop(open_price: float, stop_loss_price: float) -> float:
-    """진입 시 트레일링 거리 = |진입가 − 초기 손절가| (절대 가격 단위).
+def trail_distance_from_stop(open_price: float, stop_loss_price: float, mult: float = 1.0) -> float:
+    """진입 시 트레일링 거리 = |진입가 − 초기 손절가| × mult (절대 가격 단위).
 
-    초기 손절가가 이미 ATR×multiple(클램핑 포함) 거리이므로 이를 그대로 재사용해
-    래칫 첫 시점에 손절가가 변하지 않도록(self-consistent) 한다.
+    mult=1.0(기본)이면 초기 손절가 거리를 그대로 재사용해 래칫 첫 시점에 손절가가
+    변하지 않는다(self-consistent, 기존 전 알고 동작 무변경). mult<1.0이면 손절폭(리스크
+    관리)은 그대로 두고 트레일링만 더 촘촘히 따라가게 분리 — 2026-08-10, MFE가 손절거리에
+    못 미쳐 래칫이 이익을 전혀 못 잠그던 vix_rsi·multi_factor 대상
+    (parameters.TRAIL_DISTANCE_MULT_BY_ALGO).
     """
-    return abs(open_price - stop_loss_price)
+    return abs(open_price - stop_loss_price) * mult
 
 
 def ratchet_trailing_stop(

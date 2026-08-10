@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sovereign Arena — BTC Spot Paper Trading</title>
-  <meta name="description" content="BTC 현물 long/flat 알고리즘 페이퍼트레이딩 아레나 — 실시간 퍼포먼스 대시보드">
+  <title>Sovereign Arena — BTC·ETH·SOL Spot Paper Trading</title>
+  <meta name="description" content="BTC·ETH·SOL 현물 long/flat 알고리즘 페이퍼트레이딩 아레나 — 실시간 퍼포먼스 대시보드">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="apple-touch-icon" href="/logo.png">
-  <meta property="og:title" content="Sovereign Arena — BTC Spot Paper Trading">
-  <meta property="og:description" content="BTC 현물 long/flat 알고리즘 페이퍼트레이딩 아레나 — 실시간 퍼포먼스 대시보드">
+  <meta property="og:title" content="Sovereign Arena — BTC·ETH·SOL Spot Paper Trading">
+  <meta property="og:description" content="BTC·ETH·SOL 현물 long/flat 알고리즘 페이퍼트레이딩 아레나 — 실시간 퍼포먼스 대시보드">
   <meta property="og:image" content="https://arena.sovereignwon.com/og-image.png">
   <meta property="og:url" content="https://arena.sovereignwon.com">
   <meta property="og:type" content="website">
@@ -76,6 +76,33 @@
       width:7px;height:7px;border-radius:50%;background:var(--green);
       box-shadow:0 0 5px var(--green);animation:pulse 2s ease-in-out infinite;
     }
+
+    /* ── Grand summary (3자산 합산 — 최상단, 항상 고정 표시) ──── */
+    .grand-summary{
+      border-bottom:1px solid var(--border);
+      background:linear-gradient(180deg,rgba(61,158,219,.06),transparent 65%),var(--surface);
+    }
+    .gs-inner{
+      max-width:1480px;margin:0 auto;padding:18px 20px;
+      display:flex;align-items:center;justify-content:space-between;
+      flex-wrap:wrap;gap:16px;
+    }
+    .gs-id{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+    .gs-id-dot{
+      width:6px;height:6px;border-radius:50%;background:var(--gold);
+      display:inline-block;box-shadow:0 0 6px var(--gold);flex-shrink:0;
+      animation:pulse 2.4s ease-in-out infinite;
+    }
+    .gs-id-txt{
+      font-family:'Barlow Condensed',sans-serif;font-weight:800;
+      font-size:13px;letter-spacing:2.5px;color:var(--text);white-space:nowrap;
+    }
+    .gs-id-sub{font-size:10px;color:var(--muted);letter-spacing:.3px}
+    .gs-figures{display:flex;align-items:baseline;gap:28px;flex-wrap:wrap}
+    .gs-fig{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+    .gs-fig-lbl{font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+    .gs-fig-val{font-size:19px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1;white-space:nowrap}
+    .gs-fig-main .gs-fig-val{font-size:25px;color:var(--text)}
 
     /* ── Layout ───────────────────────────────────────────── */
     .wrap{max-width:1480px;margin:0 auto;padding:16px 20px 32px}
@@ -305,6 +332,8 @@
     .tbl tr:hover td{background:rgba(255,255,255,.02)}
     .tbl tr.open-row td{background:rgba(240,185,11,.04)}
     .tbl tr.open-row td:first-child{box-shadow:inset 2px 0 0 var(--gold)}
+    @keyframes rowFlash{0%{background:rgba(61,158,219,.24)}100%{background:transparent}}
+    .tbl tr.row-flash td{animation:rowFlash 1.8s ease-out}
 
     .algo-chip{
       font-size:9px;font-weight:600;letter-spacing:.4px;
@@ -367,6 +396,11 @@
     @media(max-width:1080px){.algo-grid{grid-template-columns:repeat(3,1fr)}}
     @media(max-width:640px){
       .algo-grid{grid-template-columns:repeat(2,1fr)}
+      .gs-inner{padding:14px 14px;gap:12px}
+      .gs-id-sub{display:block;width:100%}
+      .gs-figures{gap:16px;width:100%;justify-content:space-between}
+      .gs-fig-val{font-size:15px}
+      .gs-fig-main .gs-fig-val{font-size:19px}
       .asset-switcher{padding:10px 14px 0}
       .atab{font-size:10px;padding:5px 11px}
       .shadow-banner{padding:7px 14px;font-size:10px;margin-top:8px}
@@ -440,12 +474,40 @@
   </div>
 </header>
 
+<section class="grand-summary" aria-label="전체 아레나 합산 요약 (BTC+ETH+SOL)">
+  <div class="gs-inner">
+    <div class="gs-id">
+      <span class="gs-id-dot" aria-hidden="true"></span>
+      <span class="gs-id-txt">TOTAL ARENA</span>
+      <span class="gs-id-sub">BTC + ETH + SOL · 18슬롯(자산×알고 독립자본) · 알고당 $1,000</span>
+    </div>
+    <div class="gs-figures" aria-live="polite">
+      <div class="gs-fig gs-fig-main">
+        <span class="gs-fig-lbl">총 자산</span>
+        <span class="gs-fig-val" id="gsEquity">—</span>
+      </div>
+      <div class="gs-fig">
+        <span class="gs-fig-lbl">총 수익률</span>
+        <span class="gs-fig-val" id="gsPct">—</span>
+      </div>
+      <div class="gs-fig">
+        <span class="gs-fig-lbl">총 손익</span>
+        <span class="gs-fig-val" id="gsPnl">—</span>
+      </div>
+      <div class="gs-fig">
+        <span class="gs-fig-lbl">진입 중</span>
+        <span class="gs-fig-val" id="gsOpen">—</span>
+      </div>
+    </div>
+  </div>
+</section>
+
 <div class="asset-switcher" id="assetSwitcher" role="tablist" aria-label="자산 선택"></div>
 
 <main class="wrap">
 
   <div class="port-bar btc-only" aria-label="포트폴리오 요약">
-    <div class="port-label" id="portLabel">현물 알고리즘당 $1,000 · LONG/FLAT · 왕복 ~13bps 반영</div>
+    <div class="port-label" id="portLabel">현물 알고리즘당 $1,000 · LONG/FLAT · 왕복 ~23bps 반영</div>
     <div class="port-stat">
       <div class="port-stat-lbl">총 자산</div>
       <div class="port-stat-val" id="portTotal">—</div>
@@ -569,9 +631,9 @@ const ALGOS = {
 };
 const ALGO_IDS = Object.keys(ALGOS);
 const STARTING_CAPITAL = 1000;
-// 현물 왕복 거래비용 = 2×(fee 5 + slip 1) + spread 1 = 13bps (arena-cost-v2).
+// 현물 왕복 거래비용 = 2×(fee 10 + slip 1) + spread 1 = 23bps (arena-cost-v3, 2026-08-07).
 // 미실현손익은 청산 시 이 비용이 차감되므로 표시에 미리 반영(낙관 편향 제거).
-const ROUND_TRIP_COST_PCT = 0.0013;
+const ROUND_TRIP_COST_PCT = 0.0023;
 // 아레나 실가동 시작 — 에쿼티 커브·벤치마크·D+N의 공통 기준점.
 const ARENA_START_MS = Date.parse('2026-06-20T00:00:00Z');
 
@@ -597,6 +659,10 @@ const ALGO_NEEDS = {
 let positions = [];
 let latestDecisions = {};
 let latestBtcPrice = null;
+// ── 최상단 합산 섹션(3자산×6알고=18슬롯) 전용 상태 — 현재 선택 자산과 독립적으로 유지 ──
+let allPositions = [];
+let assetPrices = { BTC: null, ETH: null, SOL: null };
+let seenTradeIds = new Set();
 let ohlcv = [];
 let lwChart = null;
 let candleSeries = null;
@@ -996,7 +1062,7 @@ function renderPortfolio(stats) {
   const days = Math.floor((Date.now() - ARENA_START_MS) / 86_400_000);
   const lbl = document.getElementById('portLabel');
   if (lbl) lbl.textContent =
-    `알고당 $1,000 · 현물 LONG/FLAT · 왕복 ~13bps 반영 · 2026-06-20 시작 D+${days}`;
+    `알고당 $1,000 · 현물 LONG/FLAT · 왕복 ~23bps 반영 · 2026-06-20 시작 D+${days}`;
 }
 
 /* ── Render: tabs ───────────────────────────────────────────── */
@@ -1123,12 +1189,6 @@ function clearPriceLines() {
   priceLinesOpen = [];
 }
 
-const ALGO_ABBR = {
-  regime_trend: 'REG', fng_contrarian: 'FNG',
-  vix_rsi: 'VIX', macd_momentum: 'MAC', multi_factor: 'MLT',
-  omnibus: 'OMN',
-};
-
 function renderPriceChart() {
   if (!lwChart || !candleSeries) return;
   if (!ohlcv.length) return;
@@ -1142,13 +1202,14 @@ function renderPriceChart() {
   const markers = [];
   for (const p of trades) {
     const color = (ALGOS[p.algo_id] || {}).color || '#848E9C';
-    const abbr  = ALGO_ABBR[p.algo_id] || '?';
 
     if (p.open_price) {
       const ot = snapToBar(Math.floor(new Date(p.open_time).getTime() / 1000));
+      // 그래프 내부 표현 간결화: 알고 구분은 이미 색상으로 되므로 텍스트 라벨은 생략
+      // ("전체" 탭에서 6개 텍스트가 겹쳐 어지러웠던 문제 해소), 크로스헤어 툴팁이 상세를 대체.
       markers.push({
         time: ot, position: 'belowBar', color,
-        shape: 'arrowUp', text: abbr, size: 1.2,
+        shape: 'arrowUp', size: 1,
       });
     }
     if (p.status === 'closed' && p.close_time) {
@@ -1241,9 +1302,11 @@ function renderLog(ps) {
     return;
   }
 
+  const isFirstRender = seenTradeIds.size === 0;
   body.innerHTML = sorted.map(p => {
     const cfg = ALGOS[p.algo_id] || { color: '#848E9C' };
     const ts  = fmtKST(p.open_time);
+    const isNew = !isFirstRender && !seenTradeIds.has(p.id);
 
     let retHtml;
     if (p.status === 'open') {
@@ -1271,7 +1334,7 @@ function renderLog(ps) {
       ? `${p.position_weight.toFixed(2)}x`
       : `<span style="color:var(--muted)">—</span>`;
 
-    return `<tr class="${p.status === 'open' ? 'open-row' : ''}">
+    return `<tr class="${p.status === 'open' ? 'open-row' : ''}${isNew ? ' row-flash' : ''}" data-pid="${p.id}">
       <td style="color:var(--muted)">${ts}</td>
       <td><span class="algo-chip" style="color:${cfg.color};border-color:${cfg.color}40">${p.algo_id}</span></td>
       <td>$${p.open_price.toLocaleString()}</td>
@@ -1282,6 +1345,7 @@ function renderLog(ps) {
       <td style="color:var(--muted)">${holdTd}</td>
     </tr>`;
   }).join('');
+  for (const p of sorted) seenTradeIds.add(p.id);
 }
 
 /* ── Card → chart/log 연동 (점진 공개: 카드가 상세로 가는 입구) ── */
@@ -1540,6 +1604,87 @@ async function fetchPositions(client, symbol) {
     p.position_semantics === 'spot_long_flat');
 }
 
+/* ── Grand total (3자산 합산, 최상단 섹션 전용) ─────────────── */
+// 자산 탭 선택과 무관하게 항상 BTC+ETH+SOL 전체를 집계 — 섹션1은 "지금 뭘 보고 있나"가
+// 아니라 "아레나 전체가 지금 어떤가"를 보여줘야 하므로 activeAsset에 종속되지 않는다.
+async function fetchAllAssetPrices() {
+  await Promise.all(Object.keys(ASSETS).map(async k => {
+    try {
+      const r = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${ASSETS[k].symbol}`);
+      if (!r.ok) return;
+      const d = await r.json();
+      assetPrices[k] = parseFloat(d.price);
+    } catch (_) {}
+  }));
+}
+
+async function fetchAllPositions(client) {
+  const { data, error } = await client
+    .from('paper_positions')
+    .select(`
+      id, algo_id, symbol, direction, status,
+      open_time, close_time,
+      open_price, close_price, position_weight,
+      ret_pct, hold_hours, product_type, position_semantics
+    `)
+    .order('open_time', { ascending: false })
+    .limit(1500);
+  if (error) { console.error('[Arena] fetch-all error:', error.message); return null; }
+  return (data || []).filter(p =>
+    p.direction === 'long' &&
+    p.product_type === 'spot' &&
+    p.position_semantics === 'spot_long_flat');
+}
+
+function computeGrandTotal(ps) {
+  let totalEquity = 0, totalStart = 0, totalSlots = 0, openCount = 0;
+  for (const assetKey of Object.keys(ASSETS)) {
+    const symbol = ASSETS[assetKey].symbol;
+    const price  = assetPrices[assetKey];
+    const assetPs = ps.filter(p => p.symbol === symbol);
+    for (const algo of ALGO_IDS) {
+      totalSlots++;
+      totalStart += STARTING_CAPITAL;
+      const algoPs = assetPs.filter(p => p.algo_id === algo);
+      const done = algoPs.filter(p => p.status === 'closed' && p.ret_pct != null)
+        .sort((a, b) => new Date(a.close_time) - new Date(b.close_time));
+      const open = algoPs.find(p => p.status === 'open');
+      let equity = STARTING_CAPITAL;
+      for (const p of done) {
+        const w = p.position_weight != null ? p.position_weight : 1;
+        equity *= (1 + w * (p.ret_pct || 0));
+      }
+      let equityTotal = equity;
+      if (open && price && open.open_price) {
+        const w = open.position_weight != null ? open.position_weight : 1;
+        const net = (price - open.open_price) / open.open_price - ROUND_TRIP_COST_PCT;
+        equityTotal = equity * (1 + w * net);
+        openCount++;
+      }
+      totalEquity += equityTotal;
+    }
+  }
+  return { totalEquity, totalStart, totalSlots, openCount };
+}
+
+function renderGrandTotal(ps) {
+  if (!ps || !ps.length) return;
+  const { totalEquity, totalStart, totalSlots, openCount } = computeGrandTotal(ps);
+  const pnl = totalEquity - totalStart;
+  const pct = (pnl / totalStart) * 100;
+  const color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+  const sign  = pnl >= 0 ? '+' : '-';
+
+  const eqEl  = document.getElementById('gsEquity');
+  const pctEl = document.getElementById('gsPct');
+  const pnlEl = document.getElementById('gsPnl');
+  const openEl = document.getElementById('gsOpen');
+  if (eqEl)  eqEl.innerHTML  = `<span style="color:${color}">$${totalEquity.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>`;
+  if (pctEl) pctEl.innerHTML = `<span style="color:${color}">${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%</span>`;
+  if (pnlEl) pnlEl.innerHTML = `<span style="color:${color}">${sign}$${Math.abs(pnl).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>`;
+  if (openEl) openEl.textContent = `${openCount} / ${totalSlots}`;
+}
+
 function renderConnectionError() {
   document.getElementById('algoGrid').innerHTML =
     `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--red);font-size:13px">
@@ -1556,6 +1701,9 @@ function setupRealtime(client) {
       // 2026-08-06: paper_positions에 3개 심볼이 섞여 쓰이므로 현재 선택 자산만 재조회.
       const fresh = await fetchPositions(client, ASSETS[activeAsset].symbol);
       if (fresh) renderAll(fresh);
+      // 최상단 합산 섹션은 자산 무관 — 어느 자산이든 체결이 나면 즉시 반영.
+      const all = await fetchAllPositions(client);
+      if (all) { allPositions = all; renderGrandTotal(allPositions); }
     })
     .subscribe(status => {
       const dot = document.getElementById('liveDot');
@@ -1605,11 +1753,22 @@ async function init() {
     renderConnectionError();
   }
 
+  // 최상단 합산 섹션 — 자산 선택과 독립적으로 최초 1회 로드 후 60초마다 갱신.
+  fetchAllAssetPrices().then(() => renderGrandTotal(allPositions));
+  fetchAllPositions(client).then(all => { if (all) { allPositions = all; renderGrandTotal(allPositions); } });
+
   setInterval(async () => {
     // 2026-08-06: ETH/SOL도 실거래 승격 — 자산 구분 없이 동일 라이브 갱신 경로.
     latestDecisions = await fetchDecisions(client, ASSETS[activeAsset].symbol);
     if (positions.length) renderCards(algoStats(positions));
     renderFreshness();
+  }, 60_000);
+
+  setInterval(async () => {
+    await fetchAllAssetPrices();
+    const all = await fetchAllPositions(client);
+    if (all) allPositions = all;
+    renderGrandTotal(allPositions);
   }, 60_000);
 }
 

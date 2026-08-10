@@ -131,8 +131,12 @@ async def open_position(
     """포지션 오픈. stop_loss_price는 ATR 기반으로 계산된 절대 가격."""
     if direction == "short" and config.TARGET_PRODUCT == "spot" and not config.ALLOW_LIVE_SHORT:
         raise ValueError("spot paper/live execution cannot open short positions")
-    # 래칫 트레일링 거리 = |진입가 − 초기 손절가| (ATR×multiple 클램핑 거리 재사용).
-    trail_distance = execution_rules.trail_distance_from_stop(open_price, stop_loss_price)
+    # 래칫 트레일링 거리 = |진입가 − 초기 손절가| (ATR×multiple 클램핑 거리 재사용) × mult.
+    trail_distance = execution_rules.trail_distance_from_stop(
+        open_price,
+        stop_loss_price,
+        mult=parameters.TRAIL_DISTANCE_MULT_BY_ALGO.get(algo_id, 1.0),
+    )
     payload = {
         "algo_id": algo_id,
         "symbol": symbol,

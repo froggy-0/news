@@ -10,7 +10,7 @@ def test_arena_parameter_snapshot_is_json_serializable() -> None:
 
     assert snapshot["params_version"] == parameters.PARAMS_VERSION
     assert snapshot["feature_set_version"] == parameters.FEATURE_SET_VERSION
-    assert snapshot["params_version"] == "arena-params-v34"
+    assert snapshot["params_version"] == "arena-params-v35"
     assert snapshot["feature_set_version"] == "arena-features-v8"
     assert snapshot["position_sizing"]["vol_weight_max"] == 0.7
     assert snapshot["position_sizing"]["risk_per_trade_pct"] == 0.015
@@ -115,7 +115,10 @@ def test_arena_indicators_keep_default_contracts() -> None:
     assert 0.0 <= computed["bb_pos"] <= 1.0
 
 
-def test_macd_momentum_signal_conditions() -> None:
+def test_macd_momentum_signal_conditions(monkeypatch) -> None:
+    # v35부터 기본은 Nonlinear TSMOM — 이 테스트는 레거시 MACD 조건 로직 자체(코드는
+    # TSMOM_NL_ENABLED=False로 되돌리면 100% 원복되므로 계속 회귀 보호 대상) 검증.
+    monkeypatch.setattr(parameters, "TSMOM_NL_ENABLED", False)
     # trending + momentum building (hist > hist_prev)
     trending_up = {"rsi": 50.0, "bb_width": 5.0, "adx": 25.0, "macd_hist_prev": 0.05}
     trending_dn = {"rsi": 50.0, "bb_width": 5.0, "macd_hist_prev": -0.05}

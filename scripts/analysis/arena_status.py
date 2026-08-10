@@ -86,9 +86,10 @@ async def _open_positions() -> list[dict]:
         .table("paper_positions")
         .select(
             "id,algo_id,direction,open_time,open_price,stop_loss_price,position_weight,"
-            "trail_distance,signal_reason,params_version"
+            "trail_distance,signal_reason,params_version,symbol"
         )
         .eq("status", "open")
+        .eq("symbol", "BTCUSDT")
         .order("open_time")
         .execute()
     )
@@ -101,9 +102,10 @@ async def _closed_trades() -> list[dict]:
         .table("paper_positions")
         .select(
             "algo_id,direction,open_time,close_time,open_price,close_price,ret_pct,"
-            "position_weight,hold_hours,close_reason,params_version,macro_snapshot,signal_reason"
+            "position_weight,hold_hours,close_reason,params_version,macro_snapshot,signal_reason,symbol"
         )
         .eq("status", "closed")
+        .eq("symbol", "BTCUSDT")
         .not_.is_("ret_pct", "null")
         .order("close_time")
         .limit(5000)
@@ -149,13 +151,30 @@ async def _latest_backtest() -> tuple[dict | None, list[dict]]:
 
 
 async def _decisions(days: int) -> list[dict]:
-    """arena_decisions — 사이클마다 알고별 행동·차단사유 로그(라이브 near-miss)."""
+    """arena_decisions — 사이클마다 알고별 행동·차단사유 로그(라이브 near-miss).
+
+    arena_decisions 자체엔 symbol 컬럼이 없음(run_id,algo_id로만 upsert) — 2026-08-06
+    ETH/SOL 실거래 승격 이후 심볼마다 별도 run_id로 사이클이 돌아 3개 심볼 결정이 섞여
+    집계됨. arena_runs(run_id→symbol)로 BTCUSDT run_id만 먼저 걸러 조인.
+    """
     since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    runs = (
+        await positions.db()
+        .table("arena_runs")
+        .select("run_id")
+        .eq("symbol", "BTCUSDT")
+        .gte("started_at", since)
+        .limit(10000)
+        .execute()
+    )
+    run_ids = [r["run_id"] for r in (runs.data or [])]
+    if not run_ids:
+        return []
     res = (
         await positions.db()
         .table("arena_decisions")
-        .select("algo_id,action,skipped_reason,created_at")
-        .gte("created_at", since)
+        .select("algo_id,action,skipped_reason,created_at,run_id")
+        .in_("run_id", run_ids)
         .limit(10000)
         .execute()
     )

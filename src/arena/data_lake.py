@@ -841,6 +841,33 @@ async def fetch_latest_realtime_risk_state(
     return {**row, "fresh": True, "age_seconds": age}
 
 
+async def fetch_liquidation_bars(*, symbol: str, since: datetime) -> list[dict[str, Any]]:
+    """WI-9 v2(2026-08-10): symbol의 since 이후 청산(forceOrder) 4h 버킷 행 전체.
+
+    liquidation_features.py의 순수함수(recent_liquidation_totals 등)에 그대로 넘길 원본
+    dict 리스트. 테이블 부재·조회 실패 시 빈 리스트(그래이스풀 — 피처가 전부 None으로
+    처리돼 게이트 무영향).
+    """
+    try:
+        res = (
+            await positions.db()
+            .table("arena_liquidation_bars")
+            .select("bar_start,symbol,long_liq_usd,short_liq_usd,long_liq_count,short_liq_count")
+            .eq("symbol", symbol)
+            .gte("bar_start", _ts(since))
+            .order("bar_start")
+            .limit(500)
+            .execute()
+        )
+    except Exception as exc:
+        if "arena_liquidation_bars" in str(exc):
+            logger.info("Arena liquidation bars read skipped: %s", exc)
+            return []
+        logger.warning("Arena liquidation bars read failed: %s", exc)
+        return []
+    return res.data or []
+
+
 def _risk_event_severity(risk_state: str) -> str:
     if risk_state in {"FORCE_EXIT_CANDIDATE", "EXIT_CANDIDATE"}:
         return "high"

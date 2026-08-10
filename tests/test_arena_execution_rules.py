@@ -177,6 +177,14 @@ def test_trail_distance_from_stop_is_absolute_atr_distance() -> None:
     assert execution_rules.trail_distance_from_stop(100.0, 103.0) == pytest.approx(3.0)
 
 
+def test_trail_distance_from_stop_mult_scales_distance_default_unchanged() -> None:
+    # mult 기본값 1.0 = 기존 동작과 완전히 동일(하위호환).
+    assert execution_rules.trail_distance_from_stop(100.0, 97.0, mult=1.0) == pytest.approx(3.0)
+    # mult<1.0이면 손절폭은 그대로 두고 트레일링 거리만 좁힘 (2026-08-10, vix_rsi/multi_factor
+    # 실험용 TRAIL_DISTANCE_MULT_BY_ALGO 배선).
+    assert execution_rules.trail_distance_from_stop(100.0, 97.0, mult=0.5) == pytest.approx(1.5)
+
+
 def test_ratchet_trailing_stop_is_monotonic_in_profit_direction() -> None:
     # long: 가격 상승 → 손절가 끌어올림(price − distance), 하락해도 안 내려감
     stop = 97.0  # 진입 100, 거리 3

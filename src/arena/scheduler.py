@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import NamedTuple
 
 import httpx
@@ -20,6 +20,7 @@ from . import (
     frequency,
     futures_baseline,
     indicators,
+    liquidation_features,
     market_structure,
     parameters,
     positions,
@@ -43,6 +44,7 @@ from .algorithms import (
     omnibus_position_multiplier,
     omnibus_target_price,
     primary_flat_skip_reason,
+    tsmom_nl_position_multiplier,
 )
 from .algorithms import (
     fng_duration_scale as fng_duration_scale_fn,
@@ -696,6 +698,16 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
     _taker_4h = market_structure.get_latest_market_features().get("taker_buy_sell_ratio")
     if _taker_4h is not None:
         macro["taker_ratio_4h"] = _taker_4h
+    # WI-9 v2(2026-08-10): 청산(forceOrder) 소진·비대칭 피처 주입 — 전부 None-graceful, 게이트는
+    # parameters.LIQUIDATION_EXHAUSTION_GATE_ENABLED(기본 False)로 별도 차단(설계 근거:
+    # docs/arena/research/liquidation-feature-design-20260810.md). 조회 실패해도 사이클 무영향.
+    try:
+        _liq_bars = await data_lake.fetch_liquidation_bars(
+            symbol=profile.symbol, since=now - timedelta(days=32)
+        )
+        macro.update(liquidation_features.liquidation_snapshot(_liq_bars, now=now))
+    except Exception as exc:
+        logger.warning("Liquidation feature snapshot skipped (%s): %s", profile.symbol, exc)
     price = ohlcv.closes[-1]
     capture_results.extend(
         await data_lake.record_ohlcv_bars(
@@ -964,6 +976,9 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
                 # omnibus: 레짐별 추가 배수 적용 (UP_TREND=1.0, RANGE=0.4, REBOUND=0.25)
                 if algo_id == "omnibus":
                     position_weight *= omnibus_position_multiplier(macro, ind)
+                # Nonlinear TSMOM(v35, 2026-08-08 활성화): TSMOM_NL_ENABLED=False면 1.0(무효과).
+                if algo_id == "macd_momentum":
+                    position_weight *= tsmom_nl_position_multiplier(macro, ind)
             # P4(2026-07-21, 신규·미검증): unknown 레짐 진입 사이징 완화. dict에 없으면
             # 1.0(무효과). fng는 최초 1차 트랜치에만 적용(이후 물타기는 정상 스케줄 유지).
             if algo_id in ("fng_contrarian", "vix_rsi"):

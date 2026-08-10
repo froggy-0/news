@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any, Callable
 
 from . import parameters, regime
@@ -256,6 +257,26 @@ def _stablecoin_contracting(macro: dict) -> bool:
         return False
 
 
+def _liquidation_exhaustion_sufficient(macro: dict) -> bool:
+    """청산(강제청산) 데이터 기반 매도소진 확인 — WI-9 v2(2026-08-10, 검증 전).
+
+    LIQUIDATION_EXHAUSTION_GATE_ENABLED=False(기본)면 항상 True(무효과). True로 켜지면
+    liq_asymmetry_24h(+1=롱청산/투매 지배, −1=숏청산 지배)가 여전히 임계 이상으로 롱청산
+    우세면 False(아직 캐피출레이션 안 끝남 — 진입 보류). 미관측(None, 데이터부족) 시
+    True(게이트 미적용, graceful). backward-looking 관측 전용 — 방향예측·사이징에는 안 씀
+    (문헌 가드레일: docs/arena/research/liquidation-feature-design-20260810.md).
+    """
+    if not parameters.LIQUIDATION_EXHAUSTION_GATE_ENABLED:
+        return True
+    asymmetry = macro.get("liq_asymmetry_24h")
+    if asymmetry is None:
+        return True
+    try:
+        return float(asymmetry) <= parameters.LIQUIDATION_EXHAUSTION_MAX_ASYMMETRY
+    except (TypeError, ValueError):
+        return True
+
+
 def _drawdown_sufficient(macro: dict) -> bool:
     """90일 고점 대비 낙폭이 역발산 진입 품질 기준을 만족하는지.
 
@@ -426,6 +447,9 @@ def fng_contrarian(macro: dict, ind: dict) -> str | None:
             max_abs_hist=_momentum_magnitude_threshold("fng_contrarian", ind),
         ):
             return None
+        # WI-9 v2(2026-08-10, 검증 전): 청산 데이터 기반 매도소진 확인. 기본 off(무효과).
+        if not _liquidation_exhaustion_sufficient(macro):
+            return None
         # P3 게이트형(2026-07-21, 미검증): 공포 지속일수 부족(뉴스 쇼크 1일차 등) 시 보류.
         if parameters.FNG_DURATION_FEATURE_ENABLED and parameters.FNG_DURATION_MODE == "gate":
             days = macro.get("fng_days_below_30")
@@ -529,8 +553,58 @@ def _macd_momentum_secondary_votes(macro: dict, ind: dict) -> dict[str, bool]:
     }
 
 
+def _tsmom_nl_signal(ind: dict) -> float | None:
+    """Nonlinear TSMOM 신호 s_t = T봉누적수익률 / (√T·σ̂_t). 데이터 부족 시 None.
+
+    Moskowitz·Sabbatucci·Tamoni·Uhl(2025-12-10, "Nonlinear Time Series Momentum")
+    식(3)의 단순이동평균 가중(w_τ=1/T) 특수형 — 이 경우 k1=√T이므로
+    s_t=(T봉 합산 로그수익률)/(√T·σ̂_t). σ̂_t는 TSMOM_NL_VOL_MODE로 선택
+    (rv6=6봉 realized_vol_24h, ewma=장기 EWMA). 설계:
+    docs/arena/research/nonlinear-tsmom-design-20260808.md
+    """
+    bars = parameters.TSMOM_NL_LOOKBACK_BARS
+    ret = ind.get(f"tsmom_nl_return_{bars}")
+    if ret is None:
+        return None
+    if parameters.TSMOM_NL_VOL_MODE == "ewma":
+        vol = ind.get("tsmom_nl_vol_ewma", 0.0)
+    else:
+        vol = ind.get("realized_vol_24h", 0.0)
+    if not vol or vol <= 0:
+        return None
+    return ret / (math.sqrt(bars) * vol)
+
+
+def tsmom_nl_position_multiplier(macro: dict, ind: dict) -> float:
+    """Nonlinear TSMOM 포지션 배수 f(s) = clamp(s/(s²+1), 0, TSMOM_NL_WEIGHT_CAP).
+
+    combined_position_weight에 추가로 곱한다(omnibus_position_multiplier와 동일
+    배선 패턴 — backtest._open_position·scheduler._run_cycle). 음수 신호(하락
+    추세)는 0으로 클립 — 아레나는 스팟 롱온리라 숏을 실행하지 않는다.
+    v35부터 기본 True. TSMOM_NL_ENABLED=False로 되돌리면 macd_momentum()이 이 신호를
+    아예 내지 않으므로 이 함수가 호출돼도 무해(방어적 1.0 no-op 반환).
+    """
+    if not parameters.TSMOM_NL_ENABLED:
+        return 1.0
+    s = _tsmom_nl_signal(ind)
+    if s is None or s <= 0:
+        return 0.0
+    f = s / (s * s + 1.0)
+    return max(0.0, min(parameters.TSMOM_NL_WEIGHT_CAP, f))
+
+
 def macd_momentum(macro: dict, ind: dict) -> str | None:
     """MACD 히스토그램 모멘텀 — 신호선 위에서 증가 중인 모멘텀 매수.
+
+    ⚠️ 2026-08-08: 3년 백테스트(2023-08~2026-08, n=251) 전 구간(상승장 포함)에서
+    가중합 -31.79%·DSR 0.012로 완전 기각(hard gate 완화 6변형 전부 실패,
+    docs/arena/research/macd-hard-gate-tuning-20260808.json). TSMOM_NL_ENABLED=True 시
+    아래 MACD 로직 전체를 대체하는 Nonlinear TSMOM 신호(_tsmom_nl_signal)를 대신
+    쓴다 — algo_id "macd_momentum" 슬롯(자본캡·DB 연속성)은 유지, 신호만 교체.
+    ✅ v35(2026-08-08) 기본 True로 활성화 — 레거시 대비 walk-forward 6/6 구간 전부
+    개선(macd_hard_gate_tuning.py·tsmom_nl_walk_forward.py). DSR·부트스트랩은 미달이라
+    "증명된 엣지"는 아니지만 "확실히 죽은 레거시보다 확실한 우위"로 판단. False로
+    되돌리면 아래 레거시 MACD 로직으로 100% 원복.
 
     h > 0(시그널선 상회) + h > h_prev(모멘텀 강화 중) + RSI 과열 미도달 + BB 확장 + ADX 추세
     가 핵심조건(모멘텀의 정의 자체, 항상 전부 요구). risk-off 레짐은 별도 hard veto(항상
@@ -548,6 +622,14 @@ def macd_momentum(macro: dict, ind: dict) -> str | None:
     해소). 보유는 exit_hold_override가 h>0 동안 flat 청산 보류(v26 vix_rsi 히스테리시스와
     동일 구조 — 크로스 봉 단발 진입 후 모멘텀 지속 시 유지). 청산=h≤0 또는 risk-off/트레일.
     """
+    if parameters.TSMOM_NL_ENABLED:
+        if _is_risk_off(_regime_state(macro)):
+            return None
+        s = _tsmom_nl_signal(ind)
+        if s is None:
+            return None
+        return "long" if s > parameters.TSMOM_NL_MIN_SIGNAL else None
+
     h = ind["macd_hist"]
     h_prev = ind.get("macd_hist_prev", h)
     rsi = ind.get("rsi", 50.0)
@@ -821,6 +903,8 @@ def omnibus(macro: dict, ind: dict) -> str | None:
             sub_state == _OMNIBUS_OVERSOLD_REBOUND
             and not _funding_hot(macro)
             and not _etf_outflow_heavy(macro)
+            # WI-9 v2(2026-08-10, 검증 전): 청산 데이터 기반 매도소진 확인. 기본 off(무효과).
+            and _liquidation_exhaustion_sufficient(macro)
         ):
             return "long"
         return None
@@ -1174,6 +1258,12 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
             _momentum_not_worsening(ind, enabled=parameters.FNG_CONTRARIAN_STABILIZATION_ENABLED),
             veto=True,
         )
+        _record_condition(
+            diag,
+            "liquidation_exhaustion_sufficient",
+            _liquidation_exhaustion_sufficient(macro),
+            veto=True,
+        )
         # 환경필터 3개(품질필터) — relaxed=False면 개별 hard veto, True면 N-of-M 투표.
         secondary = _fng_contrarian_secondary_votes(macro)
         for name, passed in secondary.items():
@@ -1218,6 +1308,28 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
             _record_condition(diag, name, passed, veto=not relaxed)
         diag["secondary_votes"] = sum(secondary.values())
         diag["secondary_total"] = len(secondary)
+        return _finish_diag(diag)
+
+    if algo_id == "macd_momentum" and parameters.TSMOM_NL_ENABLED:
+        s = _tsmom_nl_signal(ind)
+        diag["thresholds"].update(
+            {
+                "lookback_bars": parameters.TSMOM_NL_LOOKBACK_BARS,
+                "vol_mode": parameters.TSMOM_NL_VOL_MODE,
+                "min_signal": parameters.TSMOM_NL_MIN_SIGNAL,
+                "weight_cap": parameters.TSMOM_NL_WEIGHT_CAP,
+            }
+        )
+        diag["factors"]["tsmom_nl_signal"] = s
+        diag["factors"]["tsmom_nl_weight_mult"] = tsmom_nl_position_multiplier(macro, ind)
+        _record_condition(diag, "not_risk_off", not _is_risk_off(state), veto=True)
+        _record_condition(diag, "signal_available", s is not None, veto=True)
+        _record_condition(
+            diag,
+            "signal_above_min",
+            s is not None and s > parameters.TSMOM_NL_MIN_SIGNAL,
+            veto=True,
+        )
         return _finish_diag(diag)
 
     if algo_id == "macd_momentum":
@@ -1379,6 +1491,12 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
             _record_condition(diag, "funding_not_hot", not _funding_hot(macro), veto=True)
             _record_condition(
                 diag, "etf_outflow_not_heavy", not _etf_outflow_heavy(macro), veto=True
+            )
+            _record_condition(
+                diag,
+                "liquidation_exhaustion_sufficient",
+                _liquidation_exhaustion_sufficient(macro),
+                veto=True,
             )
         return _finish_diag(diag)
 

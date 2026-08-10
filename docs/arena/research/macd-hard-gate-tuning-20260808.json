@@ -1,0 +1,37 @@
+{
+  "dsr": 0.012,
+  "n_trials": 6,
+  "best": "C_zero_cross_noBB",
+  "results": {
+    "A_baseline": {
+      "n": 251,
+      "win": 35.9,
+      "sum_w_ret": -31.793
+    },
+    "B_zero_cross": {
+      "n": 99,
+      "win": 31.3,
+      "sum_w_ret": -13.897
+    },
+    "C_zero_cross_noBB": {
+      "n": 126,
+      "win": 31.0,
+      "sum_w_ret": -11.607
+    },
+    "D_adx15": {
+      "n": 282,
+      "win": 35.1,
+      "sum_w_ret": -33.639
+    },
+    "E_adx20": {
+      "n": 227,
+      "win": 34.4,
+      "sum_w_ret": -29.853
+    },
+    "F_adx15_zero_cross": {
+      "n": 107,
+      "win": 31.8,
+      "sum_w_ret": -13.648
+    }
+  }
+}
