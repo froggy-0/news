@@ -43,7 +43,16 @@ STRATEGY_VERSION = "arena-spot-v4"
 #   (LOOKBACK_BARS=126, VOL_MODE=ewma, MIN_SIGNAL=0.0 — n≈254/3년). 설계·grid·walk-forward
 #   전체: docs/arena/research/nonlinear-tsmom-design-20260808.md.
 # 롤백: TSMOM_NL_ENABLED을 False로 되돌리면 레거시 MACD 로직으로 100% 원복.
-PARAMS_VERSION = "arena-params-v35"
+# v36(2026-08-15): 신규 7번째 알고 `meridian` 추가 — 기존 6알고와 다른 채택 경로
+#   (D019): 사전 DSR≥0.95 게이트(D017) 대신, 지금까지의 전체 리서치(6알고 진단 +
+#   Phase B 롱/숏 검증 + GJR-GARCH·모멘텀크래시 문헌)를 종합한 설계를 라이브
+#   페이퍼트레이딩 표본으로 검증한다(vision.md "증명보다 표본" 원칙을 신규 알고
+#   설계 단계부터 적용). 롱: 추세(TSMOM_NL, bull_trend 한정) + 역발산(fng_contrarian/
+#   vix_rsi 핵심조건, 레짐 무관) 재사용. 숏: 역발산-fade(FNG>70·RSI과열)만 —
+#   추세미러 숏은 Phase B 6알고 전부 기각 근거로 의도적 배제. perp 트랙 전용
+#   (ALGORITHM_TRACK_SCOPE), 독립자본 3트랙×$1,000. 설계:
+#   docs/arena/research/meridian-combined-long-short-design-20260815.md.
+PARAMS_VERSION = "arena-params-v36"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v2"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
@@ -74,11 +83,43 @@ RESEARCH_PERP_SHADOW_ENABLED = True
 
 # Spot→perp Phase B(2026-08-15): 숏 승격 단위는 알고가 아니라
 # (선물 트랙 심볼, 알고) 쌍이다. 자산별 백테스트 결과가 다른데 algo_id만
-# 허용하면 미통과 자산에도 숏이 열리는 문제가 있었다. 기본 빈 집합이며,
-# 검증을 통과한 쌍만 ("ETHUSDT-PERP", "omnibus") 형태로 추가한다.
-PERP_SHORT_ENABLED_TRACKS: frozenset[tuple[str, str]] = frozenset()
+# 허용하면 미통과 자산에도 숏이 열리는 문제가 있었다. 기존 6알고는 기본 빈
+# 집합이며, D017 기준(사전 DSR≥0.95 게이트) 통과 쌍만 추가한다.
+# v36(2026-08-15, D019): `meridian`은 리서치종합 설계 자체가 검증 절차이므로
+# 3자산 perp 트랙 전부 처음부터 등록 — D017 기준 사전클리어를 요구하지 않는다
+# (설계: meridian-combined-long-short-design-20260815.md §3-3).
+PERP_SHORT_ENABLED_TRACKS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("BTCUSDT-PERP", "meridian"),
+        ("ETHUSDT-PERP", "meridian"),
+        ("SOLUSDT-PERP", "meridian"),
+    }
+)
 PERP_TARGET_PRODUCT = "usdm_perp"
 PERP_POSITION_SEMANTICS = "usdm_perp_long_short"
+
+# meridian 숏 leg 임계값(설계 §2-3, 그리드 아닌 단일 사전값 — 롱 임계값 30/50과
+# 대칭은 아니고 "명백한 극단"만 잡도록 보수적으로 설정).
+MERIDIAN_SHORT_FNG_ABOVE = 70.0
+MERIDIAN_SHORT_RSI_ABOVE = 70.0
+# 숏 leg 사이징 감쇠 — 문헌·자체검증 둘 다 롱보다 근거가 약해 명시적으로 절반만
+# 배분한다(백테스트로 최적화된 값이 아니라 증거 비대칭을 자본배분에 반영한 설계
+# 판단, 설계 §2-3). combined_position_weight() 결과에 곱셈으로 적용.
+MERIDIAN_SHORT_SIZE_DAMPENER = 0.5
+
+# 알고별 실행 트랙 범위 — 미등록 알고는 제한 없음(기존 6알고는 spot+perp 전부,
+# 무변화). `meridian`은 롱/숏 판단이 핵심이라 spot(롱only)에서 중복 자본을 만들지
+# 않도록 perp 트랙에만 한정한다(scheduler._run_cycle이 이 스코프로 필터링).
+# 설계 §3-1(신규 스코핑 메커니즘).
+ALGORITHM_TRACK_SCOPE: dict[str, frozenset[str]] = {
+    "meridian": frozenset({"BTCUSDT-PERP", "ETHUSDT-PERP", "SOLUSDT-PERP"}),
+}
+
+
+def algorithm_in_track_scope(algo_id: str, track_symbol: str) -> bool:
+    """algo_id가 이 트랙에서 실행 대상인지. ALGORITHM_TRACK_SCOPE에 없으면 무제한(True)."""
+    scope = ALGORITHM_TRACK_SCOPE.get(algo_id)
+    return scope is None or track_symbol in scope
 
 
 # Phase A2(2026-08-15) — 자산×시장 루트 트랙 분리. product_type은 알고가 아니라
@@ -176,11 +217,13 @@ POSITION_UNIT = 1.0
 #   vix_rsi 진짜 성과 -1.26→+0.48%(캡이 좋은 거래를 차단하던 것) 등 왜곡 해소.
 #   per-trade 사이징(combined_position_weight≤0.7)이 알고별 노출을 이미 통제하므로
 #   count 캡 해제로 인한 개별 계정 리스크 증가는 없음(독립 $1,000 계정 6개).
-MAX_OPEN_POSITIONS_TOTAL = 6
-MAX_LONG_POSITIONS = 6
-MAX_SHORT_POSITIONS = 6
-MAX_NET_LONG_EXPOSURE = 6.0
-MAX_NET_SHORT_EXPOSURE = 6.0
+#   v36(2026-08-15): 7개 알고(meridian 추가)로 캡도 함께 상향 — "알고 추가 시 캡도
+#   함께 올릴 것"(CLAUDE.md) 원칙 그대로.
+MAX_OPEN_POSITIONS_TOTAL = 7
+MAX_LONG_POSITIONS = 7
+MAX_SHORT_POSITIONS = 7
+MAX_NET_LONG_EXPOSURE = 7.0
+MAX_NET_SHORT_EXPOSURE = 7.0
 DAILY_LOSS_LIMIT_PCT = 0.05
 ALGO_MAX_DRAWDOWN_KILL_PCT = 0.10
 COOLDOWN_AFTER_KILL_HOURS = 24.0
@@ -727,6 +770,7 @@ MIN_HOLD_HOURS: dict[str, float] = {
     "macd_momentum": 8.0,
     "multi_factor": 12.0,
     "omnibus": 8.0,
+    "meridian": 12.0,  # 추세/역발산 혼합 — regime_trend·multi_factor와 동일 중간값(v36)
 }
 MIN_HOLD_FALLBACK_HOURS = 4.0
 

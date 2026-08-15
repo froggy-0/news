@@ -1133,6 +1133,85 @@ def exit_hold_override(algo_id: str, macro: dict, ind: dict) -> bool:
     return False
 
 
+def _meridian_active_leg(macro: dict, ind: dict) -> str | None:
+    """Meridian 롱 leg 판정 — 추세/역발산 중 어느 leg가 발화했는지, 신호·사이징 공유.
+
+    리서치 종합 설계: docs/arena/research/meridian-combined-long-short-design-20260815.md
+    §1(채택/미채택 근거)·§2(신호 로직). "검증된 엣지"가 아니라 6알고 리서치 중
+    상대적으로 반증되지 않은 두 계열(추세: TSMOM_NL, 역발산: fng_contrarian/vix_rsi
+    핵심조건)만 재사용한 배선(wiring) — 새 조건 발명 없음.
+    """
+    state = _regime_state(macro)
+    if _is_risk_off(state):
+        return None
+
+    # 추세 leg — 로컬 4h 레짐이 명시적으로 bull_trend일 때만(오버레이 폴백 라벨
+    # 제외, _below_ema_trend_strict:151-160과 동일 원칙 — 레짐분류기가 이미 구조적
+    # 추세를 확인한 경우로 한정). TSMOM_NL 핵심신호 재사용(algorithms.py:556-575).
+    if macro.get("arena_regime_state") == regime.REGIME_BULL_TREND:
+        s = _tsmom_nl_signal(ind)
+        if s is not None and s > parameters.TSMOM_NL_MIN_SIGNAL:
+            return "trend"
+
+    # 역발산 leg 1 — fng_contrarian 핵심조건(FNG<30)만 재사용, 레짐 무관(risk-off는
+    # 위에서 이미 배제). 물타기·시간손절 등 v22 부가 메커니즘은 재사용 안 함(설계 §1-3
+    # — 신규 leg 혼재 알고에 검증 안 된 채로 얹지 않는다는 원칙).
+    fng = macro.get("fng")
+    if fng is not None and fng < parameters.FNG_LONG_BELOW:
+        return "reversion"
+
+    # 역발산 leg 2 — vix_rsi 핵심조건(VIX calm ∧ RSI<50)만 재사용.
+    vix_now = macro.get("vix_now")
+    vix_q40 = macro.get("vix_q40")
+    if vix_now is not None:
+        calm = vix_now < vix_q40 * parameters.VIX_CALM_TOLERANCE_BAND if vix_q40 else vix_now < 20.0
+        if calm and ind.get("rsi", 50.0) < parameters.VIX_RSI_LONG_MAX:
+            return "reversion"
+
+    return None
+
+
+def meridian_active_leg(macro: dict, ind: dict) -> str | None:
+    """`_meridian_active_leg`의 공개 래퍼 — scheduler/backtest가 사이징 분기에 재사용
+    (omnibus_regime_for와 동일한 공개래퍼 관행)."""
+    return _meridian_active_leg(macro, ind)
+
+
+def meridian_long(macro: dict, ind: dict) -> str | None:
+    """Meridian — 리서치 종합 롱(추세+역발산 혼합).
+
+    설계: docs/arena/research/meridian-combined-long-short-design-20260815.md.
+    "검증된 엣지"가 아니라 이 프로젝트가 시도한 것 중 상대적으로 반증되지 않은 두
+    계열의 배선이다(vision.md "정직한 트랙레코드" 원칙 — 사전 DSR 게이트 대신 라이브
+    표본으로 개선). 사이징은 leg별로 다르므로 scheduler/backtest가 `_meridian_active_leg()`를
+    별도로 재평가해 추세 leg에만 TSMOM_NL f(s) 사이징을 곱한다(algorithms.py 호출부 참조).
+    """
+    return "long" if _meridian_active_leg(macro, ind) is not None else None
+
+
+def meridian_short(macro: dict, ind: dict) -> str | None:
+    """Meridian — 리서치 종합 숏(역발산-fade 전용, 추세미러 없음).
+
+    Phase B(2026-08-15) 결론 반영: 추세미러 숏은 6개 알고 거울반전 전부·모멘텀크래시
+    문헌(Daniel & Moskowitz 2016, "Momentum Crashes")·Man Group/AIMA 독립실증까지
+    삼중으로 반증돼 의도적으로 배제한다(설계 문서 §1-2). 유일하게 채택하는 건 극단적
+    탐욕(FNG>70) 또는 RSI 과열 fade — `vix_rsi`(ETH) 숏 미러가 Phase B 6개 알고 중
+    유일하게 채택선에 근접(DSR 0.934)했던 패턴, Chen·Hong·Stein(2001, "Forecasting
+    Crashes") 문헌(직전 수익률 양(+)일수록 음의 왜도 증가 — "정점은 천천히, 붕괴는
+    빠르게")과도 방향이 일치한다. 강세추세 중엔 fade하지 않는다(추세지속과 국소천장
+    구분 — 문헌상 강세 지속 중 일시 과열을 매도하는 건 다른 리스크).
+    """
+    state = _regime_state(macro)
+    if _is_risk_off(state):
+        return None
+    fng = macro.get("fng")
+    if fng is not None and fng > parameters.MERIDIAN_SHORT_FNG_ABOVE:
+        return "short"
+    if ind.get("rsi", 50.0) > parameters.MERIDIAN_SHORT_RSI_ABOVE and not _is_bullish(state):
+        return "short"
+    return None
+
+
 ALGORITHMS: dict[str, Callable[[dict, dict], str | None]] = {
     "regime_trend": regime_trend,
     "fng_contrarian": fng_contrarian,
@@ -1140,6 +1219,7 @@ ALGORITHMS: dict[str, Callable[[dict, dict], str | None]] = {
     "macd_momentum": macd_momentum,
     "multi_factor": multi_factor,
     "omnibus": omnibus,
+    "meridian": meridian_long,
 }
 
 
@@ -1498,6 +1578,21 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
                 _liquidation_exhaustion_sufficient(macro),
                 veto=True,
             )
+        return _finish_diag(diag)
+
+    if algo_id == "meridian":
+        leg = _meridian_active_leg(macro, ind)
+        diag["thresholds"].update(
+            {
+                "tsmom_nl_min_signal": parameters.TSMOM_NL_MIN_SIGNAL,
+                "fng_long_below": parameters.FNG_LONG_BELOW,
+                "vix_rsi_long_max": parameters.VIX_RSI_LONG_MAX,
+                "short_fng_above": parameters.MERIDIAN_SHORT_FNG_ABOVE,
+                "short_rsi_above": parameters.MERIDIAN_SHORT_RSI_ABOVE,
+            }
+        )
+        _record_condition(diag, "not_risk_off", not _is_risk_off(state), veto=True)
+        diag["factors"]["active_leg"] = leg
         return _finish_diag(diag)
 
     diag["failed_conditions"].append("unknown_algo")

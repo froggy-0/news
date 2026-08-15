@@ -10,10 +10,34 @@ Supabase 용량 최적화 결과를 가장 먼저 복원하기 위한 기준 문
 
 - EC2 `arena.service`는 BTC/ETH/SOL의 현물 트랙과 USDM perp 트랙을 함께 실행한다.
 - 현물은 `spot_long_flat`, 선물은 `usdm_perp_long_short` 원장 의미론으로 분리된다.
-- 선물 롱 트랙은 운영 중이지만 **신규 숏 진입은 아직 비활성**이다.
-- 숏 승격 게이트는 `(track_symbol, algo_id)` 단위이며
-  `PERP_SHORT_ENABLED_TRACKS`는 현재 빈 집합이다.
-- `macd_momentum`과 omnibus 숏 후보는 검증 기준을 통과하지 못해 기각했다.
+- 선물 롱 트랙은 운영 중이다. **기존 6알고(`regime_trend`·`fng_contrarian`·
+  `vix_rsi`·`macd_momentum`·`multi_factor`·`omnibus`)는 여전히 신규 숏 진입
+  비활성**(D017 사전 DSR≥0.95 게이트 미통과) — 숏 승격 게이트는
+  `(track_symbol, algo_id)` 단위, 이 6알고 조합은 `PERP_SHORT_ENABLED_TRACKS`에
+  없다.
+- **신규 7번째 알고 `meridian`(arena-params-v36, 2026-08-15)만 예외** — D017과
+  다른 경로(D019, "리서치 종합 설계로 승격")로 처음부터 BTC/ETH/SOL 3개 perp
+  트랙 전부 `PERP_SHORT_ENABLED_TRACKS`에 등록돼 롱/숏 양방향 실거래 중이다.
+  perp 트랙 전용(`ALGORITHM_TRACK_SCOPE`, spot 미실행). 상세:
+  [meridian-combined-long-short-design-20260815.md](../research/meridian-combined-long-short-design-20260815.md),
+  decision-log.md D019.
+- §1원칙3 순서대로 기존 6개 알고(`macd_momentum`·omnibus·`regime_trend`·
+  `multi_factor`·`vix_rsi`·`fng_contrarian`) 전부 검증했고 전부 검증 기준을
+  통과하지 못해 기각했다(Phase B 1순환 완료, 2026-08-15).
+- Phase B 1순환 직후 "왜 하락장에서도 숏 엣지가 하나도 안 나왔는가"를 학술
+  문헌으로 조사·정리했다
+  ([short-entry-asymmetry-literature-review-20260815.md](../research/short-entry-asymmetry-literature-review-20260815.md)),
+  이어서 2순환으로 그 문헌이 제시한 두 가설을 이 프로젝트 데이터로 직접
+  검정했다(같은 날, 설계 문서 §15~§17): (a) GJR-GARCH(1,1) 진단 — BTC/ETH/SOL
+  daily·4H 6개 테스트 전부 비대칭 계수 유의수준 미달(null, 역방향·정방향
+  레버리지 효과 둘 다 미확인). (b) macd_momentum 숏에 모멘텀 고유 변동성
+  사이징(Barroso & Santa-Clara 2015) 추가 — DSR이 사이징과 무관하게 baseline과
+  완전 동일(0.45~0.53, 사이징이 거래 분포 자체를 못 바꾸므로 원리적으로 불변),
+  채택 기준 전부 미달로 기각.
+- **Phase B 숏 연구 종결(2026-08-15)** — 거울반전(1순환)·문헌기반 재해석·
+  모멘텀크래시 사이징 처방까지 전부 시도했으나 숏 엣지를 만들지 못했다.
+  선물 트랙은 무기한 롱온리로 확정한다. `vix_rsi`(ETH, DSR 0.934로 근접미달)만
+  별개 트랙으로 표본 축적 대기(그리드 재탐색 없이 관찰만).
 - 운영 Supabase 최적화와 EC2 코드 배포는 완료됐다.
 - 500 MiB 제한 대비 DB 사용량은 약 316 MiB에서 206 MiB로 감소했다.
 
@@ -138,10 +162,43 @@ PERP_SHORT_ALGORITHMS: dict[str, SignalFn] = {}
   - BTC `-9.32%`, PF `0.61`
   - ETH `-13.41%`, PF `0.49`
   - SOL `-1.27%`, PF `0.96`, CI가 0을 포함
+- `regime_trend`(strict_8of8 / relaxed_4of8 두 변형, `scripts/analysis/regime_trend_short_backtest.py`):
+  - BTC strict `-1.18%`(PF 0.56) / relaxed `-2.01%`(PF 1.01, DSR 최댓값 0.312)
+  - ETH strict `-0.05%`(PF 0.71) / relaxed `-0.16%`(PF 0.95)
+  - SOL strict `+0.14%`(PF 0.98, CI [-5.15%,+6.47%]) / relaxed `-5.78%`(PF 0.76, 전후반 둘 다 손실)
+  - 6셀 전부 DSR(n_trials=2) 0.95 미달, CI 전부 0 포함 — 기각(상세: 설계 문서 §10).
+- `multi_factor`(direction_soft / direction_hard_reinterpreted 두 변형,
+  `scripts/analysis/multi_factor_short_backtest.py`):
+  - direction_soft(레짐 소프트투표, veto 유지): BTC `+2.12%`(DSR 0.443) / ETH `+1.11%`
+    (DSR 0.377) / SOL `+0.94%`(DSR 0.386) — 3자산 전부 방향은 양이나 기준 미달.
+  - direction_hard_reinterpreted(레짐 hard+ETF유출·LSR과밀 veto→팩터 편입): ETH
+    `-24.59%`(CI 전부 음수, DSR 0.000)로 명확히 악화.
+  - 6셀 전부 기각(상세: 설계 문서 §11).
+- `vix_rsi`(veto유지 / veto제거, `scripts/analysis/vix_rsi_short_backtest.py`, VIX
+  고조+RSI과열 별개 가설로 설계): ETH veto유지가 `+11.09%`(PF 2.16, DSR **0.934**,
+  CI [-0.37%,+22.07%])로 6개 알고 전체 중 채택선(DSR≥0.95, CI 하한>0)에 가장 근접했으나
+  **문자 그대로는 미달**. BTC는 두 변형 다 음수라 3자산 동시 통과는 아니다(상세:
+  설계 문서 §12).
+- `fng_contrarian`(veto유지 / veto제거, `scripts/analysis/fng_contrarian_short_backtest.py`,
+  FNG>70 탐욕 별개 가설로 설계): SOL veto유지가 `+6.39%`(DSR 0.760)로 가장 좋지만
+  기준 미달, BTC/ETH는 음수. **구현 중 `backtest.py`의 fng 전용 이익포착 로직
+  (`FNG_TARGET_EXIT_ENABLED`)이 direction을 확인하지 않아 숏에 적용 시 항상 손실
+  확정으로 청산되는 결함을 발견**(현재 fng_contrarian은 롱만 반환해 라이브·기존
+  테스트엔 영향 없는 도달 불가능 경로) — 스크립트에서 해당 플래그를 프로세스 로컬로
+  비활성화하고 재실행해 정상 결과를 얻었다(상세: 설계 문서 §13).
 
-따라서 현재 어떤 자산에도 신규 숏을 열지 않는다. 다음 후보를 연구한다면
-`regime_trend`를 별도 사양으로 사전 선언하고, 자산별 walk-forward/DSR/bootstrap CI를
-통과한 트랙만 제한적으로 승격한다.
+**Phase B 1순환 완료(2026-08-15)** — 6개 알고 전부 §4 채택 기준(DSR≥0.95, CI 하한>0,
+전/후반 부호일관)을 문자 그대로 충족하지 못해 `PERP_SHORT_ENABLED_TRACKS`는 여전히
+빈 집합이다. `vix_rsi`(ETH)만 근접 미달이라, 최종 판단(ETH 단일자산 승격 여부·
+`backtest.py`의 fng 결함 정식 수정 여부)은 사용자에게 남긴다(상세: 설계 문서 §14).
+
+**Phase B 2순환 완료(2026-08-15, 같은 날 후속)** — 1순환 직후 문헌 조사가 제시한
+두 가설(역방향 레버리지 효과 진단, macd_momentum 모멘텀 고유 변동성 사이징)을
+검증했으나 둘 다 기각(설계 문서 §15~§17). GJR-GARCH는 null(레버리지 효과 방향
+자체가 안 나타남), 모멘텀 vol 사이징은 DSR이 baseline과 완전 동일해 채택 기준에
+못 미쳤다. **Phase B는 여기서 종결** — 6개 알고 거울반전·문헌기반 재해석·
+모멘텀크래시 사이징까지 전부 실패했다는 게 최종 결론이며, 선물 트랙은 무기한
+롱온리로 확정한다. `vix_rsi`(ETH)만 §14 옵션2대로 별도 관찰 대상 유지.
 
 ## 5. 변경 파일 지도
 
@@ -154,7 +211,15 @@ PERP_SHORT_ALGORITHMS: dict[str, SignalFn] = {}
 | `src/arena/positions.py` | product/semantics/track 무결성 및 숏 최종 guard |
 | `supabase/migrations/20260815_arena_perp_short_execution_v1.sql` | 운영 적용된 스키마·정리 migration |
 | `scripts/analysis/omnibus_short_backtest.py` | 공개 Binance 4H 기반 omnibus 후보 검증 |
-| `docs/arena/research/spot-to-perp-phase-b-short-entry-design-20260815.md` | 상세 설계와 연구 판정 |
+| `scripts/analysis/regime_trend_short_backtest.py` | Supabase macro 백필 기반 regime_trend 후보 검증(strict/relaxed 2변형) |
+| `scripts/analysis/multi_factor_short_backtest.py` | multi_factor 후보 검증(direction_soft/hard_reinterpreted 2변형) |
+| `scripts/analysis/vix_rsi_short_backtest.py` | vix_rsi 후보 검증(veto유지/제거 2변형) — `_momentum_not_improving` 헬퍼도 여기 정의, fng 스크립트가 재사용 |
+| `scripts/analysis/fng_contrarian_short_backtest.py` | fng_contrarian 후보 검증(veto유지/제거 2변형), fng 전용 이익포착 로직의 direction 미분기 결함 발견·우회 |
+| `scripts/analysis/gjr_garch_leverage_diagnosis.py` | 2순환 §3-1 — GJR-GARCH(1,1) 비대칭 계수 진단(전략 아님, 진단 전용) |
+| `scripts/analysis/macd_momentum_short_vol_sizing_backtest.py` | 2순환 §3-2 — macd_momentum 숏 모멘텀 고유 변동성 사이징 검증(veto제거 고정, 사이징 축만 신규) |
+| `docs/arena/research/short-entry-asymmetry-literature-review-20260815.md` | Phase B 1순환 직후 학술 문헌 조사(모멘텀 크래시·레버리지 효과), 2순환 제안 |
+| `docs/arena/research/spot-to-perp-phase-b-short-entry-design-20260815.md` | 상세 설계와 연구 판정(§8~§14 1순환, §15~§17 2순환·최종 종결) |
+| `docs/arena/overview/decision-log.md` | D017에 1순환(6개 알고)·2순환(문헌기반 진단·사이징) 근거와 종결 결론 반영 |
 
 주의: `supabase/migrations/`는 저장소 `.gitignore` 대상이다. 이 migration은 이미 운영에
 적용됐으며, 재현성을 위해 이번 커밋에서 `git add -f`로 추적해야 한다.
@@ -164,12 +229,15 @@ PERP_SHORT_ALGORITHMS: dict[str, SignalFn] = {}
 1. `AGENTS.md`
 2. `docs/arena/overview/next-session-handoff.md`
 3. `docs/arena/research/spot-to-perp-phase-b-short-entry-design-20260815.md`
-4. `supabase/migrations/20260815_arena_perp_short_execution_v1.sql`
-5. `src/arena/parameters.py`
-6. `src/arena/short_signals.py`
-7. `src/arena/scheduler.py`
-8. `src/arena/positions.py`
-9. 필요할 때만 `docs/arena/operations/ssm-deploy-fallback-20260815.md`
+4. `docs/arena/research/short-entry-asymmetry-literature-review-20260815.md`
+   (2순환 제안 문서 — 2026-08-15 같은 날 §3-1·§3-2 모두 실행·기각 완료, Phase B
+   종결. 재탐색 근거로 쓰지 말 것)
+5. `supabase/migrations/20260815_arena_perp_short_execution_v1.sql`
+6. `src/arena/parameters.py`
+7. `src/arena/short_signals.py`
+8. `src/arena/scheduler.py`
+9. `src/arena/positions.py`
+10. 필요할 때만 `docs/arena/operations/ssm-deploy-fallback-20260815.md`
 
 과거 `overview/current-state.md`와 일부 연구 문서는 역사적 맥락이지만 “spot only”처럼
 현재와 다른 서술이 남아 있을 수 있다. 현재 운영 판단은 이 문서와 코드·운영 조회를
@@ -245,7 +313,11 @@ where created_at >= now() - interval '10 minutes';
 
 ## 8. 변경 금지·안전 경계
 
-- 검증 결과 없이 `PERP_SHORT_ENABLED_TRACKS`를 채우지 않는다.
+- **기존 6알고**(`regime_trend`·`fng_contrarian`·`vix_rsi`·`macd_momentum`·
+  `multi_factor`·`omnibus`)는 D017 사전 DSR≥0.95 검증 결과 없이
+  `PERP_SHORT_ENABLED_TRACKS`를 채우지 않는다. `meridian`은 D019 경로로 이미
+  등록돼 있다(예외이지 선례 확장 아님 — 다른 알고나 다른 신규 알고에 D019를
+  적용할지는 매번 별도 사용자 결정 필요).
 - 현물의 기존 롱/플랫 의미론과 트랙레코드를 초기화하지 않는다.
 - 공통 OHLCV를 spot/perp별로 다시 복제하지 않는다.
 - 500 MiB 제한 아래에서 근거 없는 인덱스나 대형 JSON snapshot을 추가하지 않는다.
@@ -269,9 +341,21 @@ where created_at >= now() - interval '10 minutes';
   운영 migration은 supabase/migrations/20260815_arena_perp_short_execution_v1.sql을 확인해.
 - 운영 Supabase project ref는 etscgpquupksucbyrvhh이고, EC2는
   i-080675ad97e459f49 / arena.service다.
-- 선물 롱 트랙은 활성 상태지만 PERP_SHORT_ENABLED_TRACKS와
-  short_signals.PERP_SHORT_ALGORITHMS는 비어 있어 신규 숏은 꺼져 있다.
-- macd_momentum과 omnibus 숏 후보는 기각됐으므로 같은 사양을 재활성화하지 마.
+- 선물 롱 트랙은 활성 상태. 기존 6알고는 PERP_SHORT_ENABLED_TRACKS에 없어
+  신규 숏이 꺼져 있지만, **신규 7번째 알고 `meridian`(2026-08-15, D019 경로)은
+  3개 perp 트랙 전부 숏 등록·실거래 중**이다 — 아래 결론과 모순 아님(§1 참고,
+  기존 6알고 얘기다). meridian 설계:
+  docs/arena/research/meridian-combined-long-short-design-20260815.md.
+  대시보드(`arena/index.html`)에는 아직 미표시(§10-3 후속 과제, 백엔드는 정상).
+- **Phase B 숏 연구(기존 6알고)는 2026-08-15에 종결됐다.** 1순환(macd_momentum·omnibus·
+  regime_trend·multi_factor·vix_rsi·fng_contrarian 6개 알고 거울반전) + 2순환
+  (GJR-GARCH 레버리지효과 진단·macd_momentum 모멘텀 vol 사이징) 전부 기각.
+  같은 사양은 물론, 이미 반증된 축(가격변동성 비대칭·모멘텀 고유 변동성
+  사이징)의 재탐색도 하지 마 — 새로운 근거·데이터 없이는 이 방향을 다시
+  열지 마. 상세: docs/arena/research/spot-to-perp-phase-b-short-entry-design-20260815.md
+  §8~§17, docs/arena/overview/decision-log.md D017.
+- 선물 트랙은 무기한 롱온리로 확정됐다. `vix_rsi`(ETH)만 DSR 0.934(기준 0.95)로
+  근접 미달인 별개 트랙 — 표본이 더 쌓일 때까지 그리드 재탐색 없이 관찰만 지속.
 - 운영 DB는 최적화 후 약 206 MiB이며 500 MiB 한도에서 불필요한 복제·인덱스·대형
   JSON을 피해야 한다.
 
@@ -279,10 +363,10 @@ where created_at >= now() - interval '10 minutes';
 1. git 상태와 최근 관련 커밋을 확인하고 사용자 변경을 보존해.
 2. 코드, 테스트, migration을 기준으로 handoff 서술이 현재와 일치하는지 확인해.
 3. Supabase MCP와 AWS SSM이 연결돼 있으면 운영 상태를 읽기 전용으로 먼저 확인해.
-4. 다음 변경이 필요하면 spot/perp 공통 데이터는 재사용하고, 포지션·리스크·방향처럼
+4. Phase B는 종결됐으니 다시 열지 말고, 운영·인프라 작업이나 §10의 다른 로드맵
+   항목(P5/P6 등) 중 가치가 가장 높은 안전한 작업을 설계해 진행해.
+5. 다음 변경이 필요하면 spot/perp 공통 데이터는 재사용하고, 포지션·리스크·방향처럼
    의미가 다른 것만 트랙별로 분리해.
-5. 숏 후보를 연구할 경우 사양을 먼저 고정하고 자산별 비용 포함 walk-forward,
-   bootstrap 95% CI, DSR을 통과한 트랙만 제안해. 통과 전에는 숏 게이트를 열지 마.
 6. 변경 후 가장 좁은 테스트와 Ruff를 먼저 실행하고 영향이 넓으면
    env PYTHONPATH=.:src UV_CACHE_DIR=.cache/uv uv run pytest tests/test_arena_*.py -q까지 실행해.
 7. 운영 변경을 적용했다면 서비스 active 상태, 재시작 횟수, 최근 오류 로그, 신규
@@ -291,6 +375,7 @@ where created_at >= now() - interval '10 minutes';
 경계:
 - .env*나 자격증명 값을 읽거나 출력하지 마.
 - 현물 트랙레코드를 초기화하거나 검증되지 않은 숏을 활성화하지 마.
+- Phase B(숏 진입 로직)를 새 근거 없이 재탐색하지 마 — 종결된 스레드다.
 - gw/, lambda/arena/, review/, terraform/의 별도 작업은 건드리지 마.
 - 운영에 이미 적용된 내용을 다시 적용하기 전에 migration 이력을 확인해.
 
@@ -300,6 +385,38 @@ where created_at >= now() - interval '10 minutes';
 
 ## 10. 다음 우선순위
 
-현재 가장 합리적인 다음 연구 항목은 `regime_trend` 숏을 별도 신호로 설계하는 것이다.
-다만 이는 “활성화 작업”이 아니라 사전 선언된 연구 스프린트다. 통과 자산이 없다면
-숏 게이트를 계속 비워 두는 것이 완료 조건이다.
+**Phase B 숏 연구(기존 6알고)는 2026-08-15에 종결됐다**(1순환 §14 + 2순환 §17
+종합). 6개 알고 거울반전, GJR-GARCH 진단, 모멘텀 고유 변동성 사이징까지 전부
+§4 채택 기준(DSR≥0.95, CI 하한>0, 전/후반 부호일관)을 충족하지 못해 이 6알고
+기준 `PERP_SHORT_ENABLED_TRACKS`는 빈 집합을 유지하며, 이 6알고의 선물 트랙은
+무기한 롱온리로 확정됐다(신규 `meridian`은 D019 별개 경로로 이미 숏 등록 —
+위 §1 참조, 이 결론과 모순 아님). 남은 선택지는 다음 두 가지뿐이다(우선순위
+아님, 개별 판단):
+
+1. `vix_rsi`(ETH, veto유지, DSR 0.934)만 근접 미달이라 표본이 더 쌓일 때까지
+   관찰(그리드 재탐색 없이 대기)한 뒤 재평가한다.
+2. §13에서 발견한 `backtest.py`의 fng 전용 이익포착/물타기 로직이 `position.direction`을
+   보지 않는 결함을 (현재 도달 불가능한 경로라도) 정합성 차원에서 정식 수정할지
+   별도로 결정한다.
+
+Phase B 자체를 다시 여는 것(새 알고 거울반전 재시도, 레버리지효과·모멘텀사이징
+축 재탐색 등)은 새로운 근거·데이터 없이는 하지 않는다.
+
+**meridian 후속 작업(2026-08-15 추가)**:
+
+3. **대시보드 미표시 — 후속 필요**: `arena/index.html`의 `ALGOS`/`ALGO_IDS`에
+   `meridian`을 아직 추가하지 않았다. `computeGrandTotal()`이 `ALGO_IDS`를
+   모든 자산×시장에 균일 적용하는 구조라, 그대로 추가하면 존재하지 않는 spot
+   슬롯 3개(빈 슬롯 $1,000×0%)가 총수익률 계산에 섞여 2026-08-15 오전 세션에서
+   고친 것과 같은 "빈 슬롯 희석" 버그가 재발한다. `meridian`이 perp 전용이라는
+   사실을 프론트엔드도 인식하도록(예: `ALGOS`에 `scope: 'perp'` 필드 추가 후
+   `computeGrandTotal`/탭 렌더가 이를 반영) 고쳐야 하며, 반드시 브라우저에서
+   실제 렌더 확인 후 배포한다. 백엔드는 이미 정상 거래·기록 중이라 이 작업은
+   급하지 않다(데이터 유실 없음, 표시만 안 될 뿐).
+4. `meridian` 라이브 관찰 — 표본이 쌓이면(예: 20~50건) 롱/숏 leg별 성과를
+   분해해 볼 가치가 있다(설계 문서 §5 미결정 사항 참고, 예: 숏 사이징 감쇠값
+   재조정 여부). 지금은 관찰만, 그리드 튜닝 시작하지 않는다.
+
+다음 세션 리소스는 위 3(대시보드)·4(관찰) 또는 CLAUDE.md 로드맵의 다른 항목
+(P5 청산데이터·P6 숏/스테이블 슬리브 등 사용자 결정 대기 항목)이나 운영·인프라
+작업으로 재배치하는 게 합리적이다.

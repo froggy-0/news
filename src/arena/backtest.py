@@ -386,6 +386,14 @@ def _open_position(
         # Nonlinear TSMOM(v35, 2026-08-08 활성화): TSMOM_NL_ENABLED=False면 1.0(무효과).
         if algo_id == "macd_momentum":
             position_weight *= algorithms.tsmom_nl_position_multiplier(macro, frame.indicators)
+        # meridian(v36) — 추세 leg 진입일 때만 TSMOM_NL f(s) 사이징 재적용(역발산 leg는
+        # combined_position_weight 기본값 그대로, 설계 §2-2). live scheduler와 동일 배선.
+        if algo_id == "meridian" and direction == "long":
+            if algorithms.meridian_active_leg(macro, frame.indicators) == "trend":
+                position_weight *= algorithms.tsmom_nl_position_multiplier(macro, frame.indicators)
+    # meridian(v36) — 숏 leg 사이징 감쇠(설계 §2-3, 증거 비대칭을 명시적으로 반영).
+    if algo_id == "meridian" and direction == "short":
+        position_weight *= parameters.MERIDIAN_SHORT_SIZE_DAMPENER
     # P4(2026-07-21, 신규·미검증): unknown 레짐 진입 사이징 완화. dict에 없으면 1.0(무효과).
     # fng_contrarian은 최초 1차 트랜치에만 적용(이후 가격 기준 물타기는 정상 스케줄 유지 —
     # 진입 시점 레짐 불확실성은 초기 확신도만 낮출 뿐, 추가 하락이 주는 정보는 별개).

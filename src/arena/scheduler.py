@@ -43,6 +43,7 @@ from .algorithms import (
     fng_scaled_tranches,
     fng_target_pct,
     fng_vix_unknown_multiplier,
+    meridian_active_leg,
     omnibus_position_multiplier,
     omnibus_target_price,
     primary_flat_skip_reason,
@@ -842,6 +843,10 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
     # (spot BTC와 perp BTC가 서로 다른 리스크 상태를 가져야 함, ETH/SOL과 동일 원칙).
     portfolio_risk_state = await _risk_state(now, symbol=profile.symbol)
     for algo_id, fn in ALGORITHMS.items():
+        # 알고별 실행 트랙 범위(v36, meridian 등 perp 전용 신규 알고) — 스코프 밖
+        # 트랙은 이 알고를 아예 건드리지 않는다(신호 계산·자본 할당 없음).
+        if not parameters.algorithm_in_track_scope(algo_id, profile.symbol):
+            continue
         signal: str | None = None
         raw_signal: str | None = None
         action = "flat_skip"
@@ -1078,10 +1083,18 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
                 # Nonlinear TSMOM(v35, 2026-08-08 활성화): TSMOM_NL_ENABLED=False면 1.0(무효과).
                 if algo_id == "macd_momentum":
                     position_weight *= tsmom_nl_position_multiplier(macro, ind)
+                # meridian(v36) — 추세 leg 진입일 때만 TSMOM_NL f(s) 사이징 재적용
+                # (역발산 leg는 combined_position_weight 기본값 그대로, 설계 §2-2).
+                if algo_id == "meridian" and signal == "long":
+                    if meridian_active_leg(macro, ind) == "trend":
+                        position_weight *= tsmom_nl_position_multiplier(macro, ind)
             # P4(2026-07-21, 신규·미검증): unknown 레짐 진입 사이징 완화. dict에 없으면
             # 1.0(무효과). fng는 최초 1차 트랜치에만 적용(이후 물타기는 정상 스케줄 유지).
             if algo_id in ("fng_contrarian", "vix_rsi"):
                 position_weight *= fng_vix_unknown_multiplier(algo_id, macro)
+            # meridian(v36) — 숏 leg 사이징 감쇠(설계 §2-3, 증거 비대칭을 명시적으로 반영).
+            if algo_id == "meridian" and signal == "short":
+                position_weight *= parameters.MERIDIAN_SHORT_SIZE_DAMPENER
             open_signal_reason = _signal_reason(algo_id, signal, ind, macro)
             if is_fng_scale:
                 # 물타기 기준가 = 최초 진입가, 1단계 체결 표기.
