@@ -4,7 +4,7 @@
 이 모듈은 `backtest.py`의 `run_replay()`가 `product_type != "spot"`일 때 이미 쓰는
 (열림/보유/반전/청산을 방향 무관하게 처리하는) 상태머신과 동일한 의미론을 라이브
 스케줄러에 제공한다 — 백테스트가 이미 검증해온 로직을 그대로 미러링한 것이지 새로
-설계한 것이 아니다. `parameters.PERP_LIVE_ENABLED_ALGOS`에 포함된 algo_id만 이 정책을
+설계한 것이 아니다. `parameters.PERP_SHORT_ENABLED_TRACKS`에 포함된 자산×알고 쌍만 이 정책을
 탄다(기본 빈 집합 — 전 알고 spot_policy 그대로).
 
 레버리지 없음(1x) — notional = position_weight × 자본단위, spot과 동일 사이징. 청산가격·

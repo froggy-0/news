@@ -57,6 +57,8 @@ def test_open_position_rejects_short_for_spot_before_db_use() -> None:
             data_timestamp=datetime(2026, 6, 20, tzinfo=timezone.utc),
             strategy_version="arena-spot-v1",
             params_version="arena-params-v11",
+            product_type="spot",
+            position_semantics="spot_long_flat",
             params_snapshot={},
             indicator_snapshot={},
             macro_snapshot={},
@@ -64,5 +66,5 @@ def test_open_position_rejects_short_for_spot_before_db_use() -> None:
             signal_reason={},
         )
 
-    with pytest.raises(ValueError, match="PERP_LIVE_ENABLED_ALGOS"):
+    with pytest.raises(ValueError, match="approved.*perp track"):
         asyncio.run(call())

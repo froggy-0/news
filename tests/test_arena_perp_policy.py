@@ -84,7 +84,11 @@ def test_perp_policy_snapshot_shape_matches_spot_policy_fields() -> None:
 
 
 def test_open_position_allows_short_for_perp_enabled_algo(monkeypatch) -> None:
-    monkeypatch.setattr(parameters, "PERP_LIVE_ENABLED_ALGOS", frozenset({"macd_momentum"}))
+    monkeypatch.setattr(
+        parameters,
+        "PERP_SHORT_ENABLED_TRACKS",
+        frozenset({("BTCUSDT-PERP", "macd_momentum")}),
+    )
 
     async def call() -> None:
         await positions.open_position(
@@ -96,6 +100,9 @@ def test_open_position_allows_short_for_perp_enabled_algo(monkeypatch) -> None:
             data_timestamp=datetime(2026, 8, 15, tzinfo=timezone.utc),
             strategy_version="arena-spot-v4",
             params_version="arena-params-v35",
+            symbol="BTCUSDT-PERP",
+            product_type="usdm_perp",
+            position_semantics="usdm_perp_long_short",
             params_snapshot={},
             indicator_snapshot={},
             macro_snapshot={},
@@ -120,6 +127,9 @@ def test_open_position_still_rejects_short_for_non_enabled_algo() -> None:
             data_timestamp=datetime(2026, 8, 15, tzinfo=timezone.utc),
             strategy_version="arena-spot-v4",
             params_version="arena-params-v35",
+            symbol="BTCUSDT-PERP",
+            product_type="usdm_perp",
+            position_semantics="usdm_perp_long_short",
             params_snapshot={},
             indicator_snapshot={},
             macro_snapshot={},
@@ -127,27 +137,36 @@ def test_open_position_still_rejects_short_for_non_enabled_algo() -> None:
             signal_reason={},
         )
 
-    with pytest.raises(ValueError, match="PERP_LIVE_ENABLED_ALGOS"):
+    with pytest.raises(ValueError, match="approved.*perp track"):
         asyncio.run(call())
 
 
-def test_target_product_for_algo_defaults_to_spot() -> None:
-    assert parameters.target_product_for_algo("macd_momentum") == "spot"
-    assert parameters.target_position_semantics_for_algo("macd_momentum") == "spot_long_flat"
+def test_perp_short_gate_requires_product_track_and_algo(monkeypatch) -> None:
+    monkeypatch.setattr(
+        parameters,
+        "PERP_SHORT_ENABLED_TRACKS",
+        frozenset({("BTCUSDT-PERP", "macd_momentum")}),
+    )
+
+    assert parameters.perp_short_enabled(
+        track_symbol="BTCUSDT-PERP",
+        product_type="usdm_perp",
+        algo_id="macd_momentum",
+    )
+    assert not parameters.perp_short_enabled(
+        track_symbol="BTCUSDT",
+        product_type="spot",
+        algo_id="macd_momentum",
+    )
+    assert not parameters.perp_short_enabled(
+        track_symbol="ETHUSDT-PERP",
+        product_type="usdm_perp",
+        algo_id="macd_momentum",
+    )
 
 
-def test_target_product_for_algo_returns_perp_when_enabled(monkeypatch) -> None:
-    monkeypatch.setattr(parameters, "PERP_LIVE_ENABLED_ALGOS", frozenset({"macd_momentum"}))
-
-    assert parameters.target_product_for_algo("macd_momentum") == "usdm_perp"
-    assert parameters.target_product_for_algo("regime_trend") == "spot"
-
-
-def test_open_position_uses_explicit_product_type_when_given(monkeypatch) -> None:
-    # Phase A2(2026-08-15): 트랙(scheduler.py의 profile.product_type)이 명시적으로
-    # product_type을 넘기면 알고별 결정(target_product_for_algo)을 오버라이드해야 한다
-    # — 숏은 여전히 PERP_LIVE_ENABLED_ALGOS로 게이트되므로 롱으로 검증.
-    monkeypatch.setattr(parameters, "PERP_LIVE_ENABLED_ALGOS", frozenset())
+def test_open_position_records_explicit_track_product(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "PERP_SHORT_ENABLED_TRACKS", frozenset())
     captured: dict = {}
 
     class _FakeTable:
@@ -185,7 +204,5 @@ def test_open_position_uses_explicit_product_type_when_given(monkeypatch) -> Non
         )
     )
 
-    # regime_trend은 PERP_LIVE_ENABLED_ALGOS에 없지만, 트랙이 명시한 product_type이
-    # 그대로 기록돼야 한다(더 이상 algo_id로 product_type을 재계산하지 않음).
     assert captured["product_type"] == "usdm_perp"
     assert captured["position_semantics"] == "usdm_perp_long_short"

@@ -121,8 +121,8 @@ async def open_position(
     slippage_bps: float = 0.0,
     spread_bps_round_trip: float = 0.0,
     symbol: str = parameters.BINANCE_SYMBOL,
-    product_type: str | None = None,
-    position_semantics: str | None = None,
+    product_type: str,
+    position_semantics: str,
     params_snapshot: dict[str, Any],
     indicator_snapshot: dict[str, Any],
     macro_snapshot: dict[str, Any],
@@ -132,21 +132,30 @@ async def open_position(
 ) -> dict:
     """포지션 오픈. stop_loss_price는 ATR 기반으로 계산된 절대 가격.
 
-    product_type/position_semantics: Phase A2(2026-08-15)부터 트랙(호출부의
-    frequency.FrequencyProfile.product_type)이 명시적으로 넘긴다 — 미지정 시엔
-    Phase A의 알고별 결정(parameters.target_product_for_algo)으로 폴백해 기존
-    호출부·테스트가 그대로 동작한다.
+    product_type/position_semantics은 트랙 프로파일이 반드시 명시해야 한다.
+    algo_id로 상품을 추론하면 spot 트랙에 perp 포지션을 기록할 수 있어
+    폴백을 허용하지 않는다.
     """
-    resolved_product_type = product_type or parameters.target_product_for_algo(algo_id)
-    resolved_position_semantics = (
-        position_semantics or parameters.target_position_semantics_for_algo(algo_id)
-    )
-    if direction == "short" and (
-        resolved_product_type == "spot" or algo_id not in parameters.PERP_LIVE_ENABLED_ALGOS
+    if product_type == parameters.TARGET_PRODUCT:
+        if position_semantics != parameters.POSITION_SEMANTICS:
+            raise ValueError("spot product requires spot_long_flat position semantics")
+        if symbol.endswith(parameters.PERP_TRACK_SUFFIX):
+            raise ValueError("spot product cannot use a perp track symbol")
+    elif product_type == parameters.PERP_TARGET_PRODUCT:
+        if position_semantics != parameters.PERP_POSITION_SEMANTICS:
+            raise ValueError("perp product requires usdm_perp_long_short position semantics")
+        if not symbol.endswith(parameters.PERP_TRACK_SUFFIX):
+            raise ValueError("perp product requires a -PERP track symbol")
+    else:
+        raise ValueError(f"unsupported live product_type: {product_type}")
+
+    if direction == "short" and not parameters.perp_short_enabled(
+        track_symbol=symbol,
+        product_type=product_type,
+        algo_id=algo_id,
     ):
         raise ValueError(
-            f"short position requires a perp track and algo_id in "
-            f"parameters.PERP_LIVE_ENABLED_ALGOS: {algo_id}"
+            f"short position requires an approved (perp track, algo_id) pair: {symbol}, {algo_id}"
         )
     # 래칫 트레일링 거리 = |진입가 − 초기 손절가| (ATR×multiple 클램핑 거리 재사용) × mult.
     trail_distance = execution_rules.trail_distance_from_stop(
@@ -177,8 +186,8 @@ async def open_position(
         "signal_reason": signal_reason,
         "risk_snapshot": risk_snapshot or {},
         "runtime": parameters.RUNTIME,
-        "product_type": resolved_product_type,
-        "position_semantics": resolved_position_semantics,
+        "product_type": product_type,
+        "position_semantics": position_semantics,
     }
     # 아직 마이그레이션 전인 DB(컬럼 부재)에서도 안전하게 동작하도록 선택 컬럼 fallback.
     # symbol: 2026-07-31 멀티자산 마이그레이션(20260731_arena_multi_asset_v1.sql) 미적용

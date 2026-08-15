@@ -106,8 +106,9 @@ def test_asset_shadow_cycle_records_all_six_algos_without_touching_positions(
 
     asyncio.run(scheduler._run_asset_shadow_cycle("ETHUSDT"))
 
-    # run_started가 ETHUSDT 심볼로 기록됐는지
+    # 실행 트랙과 공유 시세 키가 모두 ETHUSDT로 기록됐는지
     assert record_run_started.call_args.kwargs["symbol"] == "ETHUSDT"
+    assert record_run_started.call_args.kwargs["market_data_symbol"] == "ETHUSDT"
 
     # 6개 알고 전부 기록됐는지 (sleeve_id로 vNext 단일-sleeve 경로와 구분됨)
     assert record_shadow_decision.call_count == len(algorithms.ALGORITHMS)

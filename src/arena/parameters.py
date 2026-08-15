@@ -72,31 +72,18 @@ SHORT_SIGNAL_ACTION = "exit_or_no_trade"
 ALLOW_LIVE_SHORT = False
 RESEARCH_PERP_SHADOW_ENABLED = True
 
-# Spot→perp 전환 Phase A(2026-08-15, docs/arena/research 예정 — 계획: 인프라 우선,
-# 레버리지 없음(1x), 알고별 백테스트 통과분만 순차 라이브 전환). 알고별 opt-in
-# 허용목록 — 여기 포함된 algo_id만 perp_policy(롱/숏 대칭)로 실행되고 나머지는 기존
-# spot_policy(롱/플랫)를 그대로 탄다. 기본 빈 집합 = 전 알고 무영향(spot 그대로).
-# Phase B에서 알고별 숏 진입 로직이 백테스트(DSR n_trials=1 + 부트스트랩95%CI +
-# 워크포워드)를 통과할 때만 해당 algo_id를 추가한다.
-PERP_LIVE_ENABLED_ALGOS: frozenset[str] = frozenset()
+# Spot→perp Phase B(2026-08-15): 숏 승격 단위는 알고가 아니라
+# (선물 트랙 심볼, 알고) 쌍이다. 자산별 백테스트 결과가 다른데 algo_id만
+# 허용하면 미통과 자산에도 숏이 열리는 문제가 있었다. 기본 빈 집합이며,
+# 검증을 통과한 쌍만 ("ETHUSDT-PERP", "omnibus") 형태로 추가한다.
+PERP_SHORT_ENABLED_TRACKS: frozenset[tuple[str, str]] = frozenset()
 PERP_TARGET_PRODUCT = "usdm_perp"
 PERP_POSITION_SEMANTICS = "usdm_perp_long_short"
 
 
-def target_product_for_algo(algo_id: str) -> str:
-    """포지션 오픈 시 기록할 product_type — 알고가 perp 허용목록에 있으면 perp, 아니면 spot."""
-    return PERP_TARGET_PRODUCT if algo_id in PERP_LIVE_ENABLED_ALGOS else TARGET_PRODUCT
-
-
-def target_position_semantics_for_algo(algo_id: str) -> str:
-    return PERP_POSITION_SEMANTICS if algo_id in PERP_LIVE_ENABLED_ALGOS else POSITION_SEMANTICS
-
-
-# Phase A2(2026-08-15) — 자산×시장 루트 트랙 분리. 위 PERP_LIVE_ENABLED_ALGOS/
-# target_product_for_algo()는 이제 "이 알고가 어느 product_type이냐"를 정하지 않는다
-# (그건 트랙, 즉 frequency.FrequencyProfile.product_type이 정함) — 대신 "perp 트랙
-# 안에서 이 알고가 숏 신호를 열어도 되느냐"만 담당(Phase B, 여전히 빈 집합 — 숏은
-# 아직 미승인, 선물 트랙도 지금은 현물과 동일하게 롱온리로만 동작·펀딩비만 추가 반영).
+# Phase A2(2026-08-15) — 자산×시장 루트 트랙 분리. product_type은 알고가 아니라
+# frequency.FrequencyProfile이 결정한다. 위 허용목록은 perp 트랙 안의 숏만
+# 게이트하며, 빈 집합인 현재 선물 트랙은 롱온리+펀딩 정산으로 동작한다.
 # 2026-08-15 사용자 결정으로 활성화 — BTC/ETH/SOL perp_live 트랙(각 6알고×$1000
 # 독립자본) 실거래 시작. 롤백: False로 되돌리면 트랙이 스케줄 안 됨(기존 spot 무영향).
 ARENA_PERP_LIVE_ENABLED = True
@@ -121,6 +108,31 @@ def real_ticker_for_track(symbol: str) -> str:
     담당한다(중복 파싱 금지). spot 트랙(symbol == binance_symbol)은 그대로 반환.
     """
     return symbol.split(PERP_TRACK_SUFFIX)[0]
+
+
+def perp_short_enabled(*, track_symbol: str, product_type: str, algo_id: str) -> bool:
+    """해당 자산×알고의 실행 숏이 승인됐는지 확인.
+
+    product_type과 트랙 접미사를 모두 검증해 spot 트랙이 허용목록의
+    algo_id 때문에 perp_policy를 타던 기존 결함을 막는다.
+    """
+    return (
+        product_type == PERP_TARGET_PRODUCT
+        and track_symbol.endswith(PERP_TRACK_SUFFIX)
+        and (track_symbol, algo_id) in PERP_SHORT_ENABLED_TRACKS
+    )
+
+
+def perp_short_enabled_for_track(*, track_symbol: str, product_type: str) -> bool:
+    return any(
+        perp_short_enabled(
+            track_symbol=track_symbol,
+            product_type=product_type,
+            algo_id=algo_id,
+        )
+        for enabled_track, algo_id in PERP_SHORT_ENABLED_TRACKS
+        if enabled_track == track_symbol
+    )
 
 
 HTTP_TIMEOUT_SECONDS = 30

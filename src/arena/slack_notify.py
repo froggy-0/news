@@ -383,7 +383,7 @@ async def notify_open(
         return
 
     sym_label = _symbol_label(symbol)
-    # spot→perp 전환 Phase A(2026-08-15): direction=="short"는 PERP_LIVE_ENABLED_ALGOS
+    # spot→perp 전환 Phase B(2026-08-15): direction=="short"는 PERP_SHORT_ENABLED_TRACKS
     # 알고에서만 나온다(positions.open_position()이 그 외엔 거부) — 이전엔 이 함수가
     # non-long을 전부 무음 처리해 숏 진입 알림이 아예 안 갔음.
     dir_emoji = "🟢" if direction == "long" else "🔴"

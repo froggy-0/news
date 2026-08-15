@@ -1,6 +1,6 @@
 # SOVEREIGNWON Arena Docs
 
-작성일: 2026-06-21
+최종 갱신: 2026-08-15
 
 이 디렉터리는 BTC Signal Arena의 현재 운영 상태, 아키텍처, 연구 검증, 제품 방향을 한곳에서 추적한다.
 
@@ -8,7 +8,7 @@
 
 | 문서 | 내용 | 먼저 읽을 상황 |
 | --- | --- | --- |
-| [overview/next-session-handoff.md](overview/next-session-handoff.md) | 다음 세션 시작 시 읽을 순서, 현재 운영 확인 명령, 다음 작업 | 새 세션에서 현황 파악 |
+| [overview/next-session-handoff.md](overview/next-session-handoff.md) | 현물·선물·숏·DB 용량의 최신 운영 상태, 검증 명령, 복사용 다음 세션 프롬프트 | 새 세션에서 가장 먼저 읽기 |
 | [overview/current-state.md](overview/current-state.md) | 현재 상태, 지금까지 한 일, 결정, 고민, 남은 일 | 전체 맥락 파악 |
 | [overview/decision-log.md](overview/decision-log.md) | 주요 의사결정과 이유 | 왜 이렇게 설계했는지 확인 |
 | [architecture/system-map.md](architecture/system-map.md) | 코드, 데이터 흐름, DB 객체, migration 순서 | 구조/영향 범위 파악 |
@@ -36,9 +36,11 @@
 ## 현재 판정
 
 - 운영 경로: EC2 `src/arena`가 primary.
-- 거래 기준: 현재 live/paper 알고리즘과 거래 원장은 **현물 spot long/flat**만 허용한다.
-- raw `short` 신호는 신규 숏 포지션이 아니라 long 청산 또는 no-trade 판단 재료다.
-- derivatives/perp-style long/short, funding/OI/basis/mark price는 research/shadow/backtest 전용이며 실거래 승격 대상이 아니다.
+- 거래 기준: BTC/ETH/SOL의 현물 `spot_long_flat`과 USDM perp 트랙이 함께 운영된다.
+- 선물 롱 트랙은 활성 상태지만 신규 숏은 트랙 단위 opt-in이며 현재 전부 비활성이다.
+- raw `short` 신호는 승인되지 않은 트랙에서 신규 숏을 만들지 않으며, 현물에서는 long 청산 또는 no-trade 판단 재료다.
+- 공통 OHLCV는 실제 거래소 티커로 공유하고, 실행별 입력은 범위만 기록한다.
+- Supabase는 2026-08-15 최적화 후 약 206 MiB로 500 MiB 한도의 약 41.3%를 사용한다.
 - Lambda arena 경로: 신규 개선 대상에서 제외. EC2와 동시 활성화하면 중복 거래 위험.
 - 데이터레이크: raw OHLCV, macro snapshot, indicator snapshot, decision ledger 분리 완료.
 - 전략 재현성: `strategy_version`, `params_snapshot`, `indicator_snapshot`, `macro_snapshot`, `data_timestamp` 저장 완료.
@@ -47,7 +49,8 @@
 - Frequency research: 4H live 유지, 1H/15m research profile과 비용 mart 구현 완료. 1H/15m raw backfill 저장 완료.
 - Realtime execution gate: 실시간 feature collector와 shadow execution gate 구현 완료. SQL 적용 후 collector enable 가능.
 - Realtime risk trigger: 1분 risk state와 risk event shadow 원장 구현 완료. `ENABLE_ARENA_REALTIME_RISK_LIVE=false` 기본 유지.
-- Spot semantics: `arena-spot-v4`, `arena-params-v18`, `arena-features-v8` 기준. legacy synthetic short는 `legacy_perp_sim`으로 분리한다.
+- 실행 버전: `arena-spot-v4`, `arena-params-v35`, `arena-features-v8`, `portfolio-risk-v2` 기준.
+- Spot semantics: legacy synthetic short는 `legacy_perp_sim`으로 분리하고 신규 spot short는 금지한다.
 - Roster diagnostics: 최신 decision마다 `skipped_reason`과 diagnostics veto를 저장한다.
 - Backtest parity: execution gate / realtime risk block을 replay하는 research 옵션이 있다.
 - 파라미터 튜닝: 아직 금지. live/shadow 표본과 closed trade가 충분히 쌓일 때까지 연구-only로 해석한다.

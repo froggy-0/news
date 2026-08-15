@@ -46,7 +46,7 @@ def test_notify_close_posts_spot_long_payload_without_network(monkeypatch) -> No
 
 def test_notify_close_labels_short_direction_explicitly(monkeypatch) -> None:
     # spot→perp 전환 Phase A(2026-08-15): "short"는 더 이상 legacy 잔재 전용이 아니라
-    # PERP_LIVE_ENABLED_ALGOS 알고의 정상 방향 — "숏"으로 명확히 라벨링돼야 한다.
+    # PERP_SHORT_ENABLED_TRACKS 자산×알고의 정상 방향 — "숏"으로 명확히 라벨링돼야 한다.
     captured: dict[str, Any] = {}
 
     async def fake_post(client: object, text: str, blocks: list[dict[str, Any]]) -> None:

@@ -1,8 +1,8 @@
 # Spot→Perp Phase B — 알고별 숏 진입 로직 설계 (2026-08-15, 설계안·미구현)
 
-**상태**: 설계 문서 + §8 macd_momentum 1차 검증(❌기각) 반영. 코드는 여전히 무변경
-(`ALGORITHMS`/`PERP_LIVE_ENABLED_ALGOS` 미터치). 다음은 §1원칙3 순서상 `omnibus`
-DOWN_TREND 레그(§3.2).
+**상태**: 실행 인프라와 자산×알고 게이트는 운영 반영. §8 `macd_momentum`, §9
+`omnibus` 숏 후보는 모두 ❌기각되어 실제 허용목록은 비어 있다. 다음 후보는 §1원칙3
+순서상 `regime_trend`지만, 별도 가설·검증 없이는 운영 숏을 열지 않는다.
 
 > **다음 세션은 이 문서 하나만 읽고 바로 시작 가능하도록 작성됨.** 새 세션에서 처음
 > 할 일은 §7("다음 세션 시작 가이드")로 바로 이동 — §1~§6은 §7에서 참조하는 배경/근거이므로
@@ -14,7 +14,7 @@ DOWN_TREND 레그(§3.2).
 
 [Phase A](spot-to-perp-phase-a-infrastructure-20260815.md)/[A2](spot-to-perp-phase-a2-root-track-split-20260815.md)로
 "선물이라는 독립 자본 트랙"은 실거래 중(`ARENA_PERP_LIVE_ENABLED=True`, BTC/ETH/SOL
-perp 트랙 각 6알고×$1,000). 하지만 `PERP_LIVE_ENABLED_ALGOS`(숏 opt-in 허용목록,
+perp 트랙 각 6알고×$1,000). 하지만 `PERP_SHORT_ENABLED_TRACKS`(숏 opt-in 허용목록,
 `parameters.py:81`)는 여전히 빈 집합이라 6개 알고 전부 롱/관망(`None`)만 낸다 — 선물
 트랙도 실질은 "현물과 동일 신호 + 펀딩비만 추가"인 상태.
 
@@ -25,7 +25,7 @@ perp 트랙 각 6알고×$1,000). 하지만 `PERP_LIVE_ENABLED_ALGOS`(숏 opt-in
 - `positions.py.close_position()` — 펀딩 정산이 `direction` 부호를 반영
   (`market_structure.funding_return_pct`: 롱은 양의 펀딩비 지불, 숏은 수취).
 - 캡: `MAX_SHORT_POSITIONS=6`, `MAX_NET_SHORT_EXPOSURE=6.0` — 롱과 동일 값으로 이미 설정됨
-  (`parameters.py:169,171`). 단, `_risk_policy()`의 숏 캡 개방은 "`PERP_LIVE_ENABLED_ALGOS`가
+  (`parameters.py:169,171`). 단, `_risk_policy()`의 숏 캡 개방은 "`PERP_SHORT_ENABLED_TRACKS`가
   하나라도 있으면 portfolio 전체 캡 개방"이라 algo_id 단위가 아니다 — 실제 이중 방어는
   `positions.open_position()`의 algo_id별 허용목록(`positions.py:144-150`).
 
@@ -235,7 +235,7 @@ RSI<50 크로스(반전 확인). **주의**: `vix_rsi`는 이름과 달리 이�
 **기각 시 처리**: `new-algo-candidates` 문서의 선례대로 — DSR 미달·CI가 0을 크게
 포함·전후반 부호 반전이 나오면 **그리드 재탐색 없이 기각**(이 프로젝트가 반복 확인한
 패턴: 실패한 단일사양은 튜닝으로 잘 안 살아남음). 기각된 알고는 해당 방향(숏)만
-빠지고 기존 롱 로직·PERP_LIVE_ENABLED_ALGOS 비가입 상태(선물 트랙에서도 롱온리)로
+빠지고 기존 롱 로직·PERP_SHORT_ENABLED_TRACKS 비가입 상태(선물 트랙에서도 롱온리)로
 유지.
 
 ## 5. 롤아웃 절차 (알고 1개 통과 시)
@@ -245,7 +245,7 @@ RSI<50 크로스(반전 확인). **주의**: `vix_rsi`는 이름과 달리 이�
    패턴 참고 — 숏 오픈/반전/청산 케이스).
 3. `PARAMS_VERSION` bump(신호 로직 변경이므로 — 기존 Phase A/A2는 bump 없었음, 이번엔
    실제 신호가 바뀌므로 필요).
-4. `parameters.PERP_LIVE_ENABLED_ALGOS`에 해당 algo_id **1개만** 추가(한 번에 여러 개
+4. `parameters.PERP_SHORT_ENABLED_TRACKS`에 해당 `(track_symbol, algo_id)` **1개만** 추가(한 번에 여러 개
    묶지 않음 — 승격 시 문제 발생해도 원인 알고 특정 쉽게).
 5. 로컬 검증 후 배포, 실거래 확인(1~2 사이클 관찰: 숏 포지션이 실제로 열리는지, 방향
    라벨(`slack_notify.py`/대시보드)이 올바른지, 펀딩 부호가 방향에 맞게 반영되는지).
@@ -267,7 +267,7 @@ RSI<50 크로스(반전 확인). **주의**: `vix_rsi`는 이름과 달리 이�
 **첫 작업 = `macd_momentum` 숏 백테스트 후보 구현 및 검증**(§3.1). 순서(§1원칙3)상
 1순위, 설계 리스크가 가장 낮음(이미 연속·부호형 신호). 사용자 승인 없이 바로 착수
 가능한 범위는 **격리 백테스트 스크립트 작성·실행까지**(§4) — `ALGORITHMS` dict나
-`PERP_LIVE_ENABLED_ALGOS`를 건드리는 건 백테스트 결과를 사용자에게 보고하고 승인받은
+`PERP_SHORT_ENABLED_TRACKS`를 건드리는 건 백테스트 결과를 사용자에게 보고하고 승인받은
 뒤(§6 미결정 사항도 이 시점에 같이 확인).
 
 ### 7-1. 작업 순서 (체크리스트)
@@ -299,7 +299,7 @@ RSI<50 크로스(반전 확인). **주의**: `vix_rsi`는 이름과 달리 이�
    - §6 미결정 사항 중 이 알고에 해당하는 것(리스크오프 veto) 확정 요청.
 6. **통과 시**(§5 롤아웃 절차 그대로): `algorithms.py`에 실제 반영 → 신규 테스트
    (`test_arena_perp_policy.py` 패턴 참고, 숏 오픈/반전/청산 케이스) →
-   `PARAMS_VERSION` bump → `PERP_LIVE_ENABLED_ALGOS`에 `macd_momentum` 1개만 추가 →
+   `PARAMS_VERSION` bump → `PERP_SHORT_ENABLED_TRACKS`에 해당 트랙의 `macd_momentum` 1개만 추가 →
    로컬 검증 → 배포 → 1~2 사이클 라이브 관찰(숏 포지션 오픈 여부, 방향 라벨, 펀딩
    부호).
 7. **기각 시**: §4 "기각 시 처리" 그대로(그리드 재탐색 없이 기각, 롱 로직 무변경 유지) →
@@ -314,7 +314,7 @@ RSI<50 크로스(반전 확인). **주의**: `vix_rsi`는 이름과 달리 이�
 - 패리티 백테스트 방법: Phase A 문서 §검증("스크래치, product_type spot↔usdm_perp
   대조, 4h 366봉") 그대로.
 - 테스트 패턴: `tests/test_arena_perp_policy.py`(숏 오픈/반전/청산 단위 테스트),
-  `tests/test_arena_scheduler_perp.py`(`PERP_LIVE_ENABLED_ALGOS` 배선 테스트).
+  `tests/test_arena_scheduler_perp.py`(`PERP_SHORT_ENABLED_TRACKS` 배선 테스트).
 
 ### 7-3. 로컬 검증 커맨드
 
@@ -342,5 +342,29 @@ DSR 최댓값 0.586(SOL veto제거), 6개 조합 전부 부트스트랩95%CI가 
 스크립트 실행 로그 참조(재현 가능, 그리드 아닌 단일사양이라 결과 고정).
 
 **❌ 기각, 그리드 재탐색 없음**(§4 기각 처리 원칙 그대로) — macd_momentum은 선물
-트랙에서도 롱온리 유지, `PERP_LIVE_ENABLED_ALGOS` 미가입. 사용자 확인 완료.
+트랙에서도 롱온리 유지, `PERP_SHORT_ENABLED_TRACKS` 미가입. 사용자 확인 완료.
 **다음: `omnibus` DOWN_TREND 레그(§3.2)로 동일 방법론 반복.**
+
+## 9. omnibus STRUCTURAL_DOWN 숏 후보 검증 결과 (2026-08-15, ❌기각)
+
+`scripts/analysis/omnibus_short_backtest.py`로 Supabase 쓰기 없이 Binance 공개 4H 봉과
+기존 macro 백필을 사용해 격리 검증했다. 사전 설계한 두 변형만 비교했다.
+
+- `structural`: DOWN_TREND이면서 `STRUCTURAL_DOWN`이면 숏.
+- `confirmed`: 위 조건에 EMA 역배열·하락 기울기·EMA200/MA200 하회를 추가.
+
+검증 구간은 2025-04-16~2026-07-11, 자산별 2,712 프레임이다. 비용 반영 perp
+상태머신으로 실행했으며 DSR은 두 사전 변형을 고려해 `n_trials=2`로 계산했다.
+
+| 변형 | 자산 | n | 가중수익 | PF | 부트스트랩 95% CI | 전반/후반 | DSR |
+|---|---|---:|---:|---:|---:|---:|---:|
+| structural | BTC | 161 | -19.29% | 0.63 | [-35.71%, -1.90%] | -5.46% / -13.82% | 0.004 |
+| confirmed | BTC | 79 | -9.32% | 0.61 | [-19.58%, +1.46%] | -5.59% / -3.74% | 0.018 |
+| structural | ETH | 170 | -28.00% | 0.54 | [-47.48%, -8.37%] | -22.72% / -5.28% | 0.000 |
+| confirmed | ETH | 70 | -13.41% | 0.49 | [-24.54%, -2.34%] | -5.11% / -8.30% | 0.003 |
+| structural | SOL | 170 | -11.78% | 0.74 | [-32.70%, +9.03%] | -15.34% / +3.55% | 0.022 |
+| confirmed | SOL | 71 | -1.27% | 0.96 | [-11.30%, +8.68%] | -2.36% / +1.09% | 0.258 |
+
+6개 셀 모두 가중수익이 음수이고 DSR 0.95 및 CI 양의 하한 기준을 충족하지 못했다.
+SOL은 전·후반 부호까지 반전됐다. 따라서 `omnibus` 숏도 **기각, 그리드 재탐색 없음**이며
+`PERP_SHORT_ENABLED_TRACKS`는 빈 집합을 유지한다.

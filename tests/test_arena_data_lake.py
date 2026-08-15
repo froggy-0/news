@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timezone
 
 from arena import data_lake, parameters
+from arena.execution_gate import ExecutionGateDecision, ExecutionGatePolicy
 from arena.market_structure import MarketStructureSnapshot
 
 
@@ -84,7 +85,7 @@ def test_capture_health_summarizes_write_results() -> None:
     }
 
 
-def test_record_ohlcv_bars_upserts_raw_and_run_inputs(monkeypatch) -> None:
+def test_record_ohlcv_bars_upserts_shared_bars_and_records_input_range(monkeypatch) -> None:
     class FakeBuilder:
         def __init__(self, table_name: str) -> None:
             self.table_name = table_name
@@ -95,6 +96,14 @@ def test_record_ohlcv_bars_upserts_raw_and_run_inputs(monkeypatch) -> None:
         def upsert(self, rows, *, on_conflict: str):
             self.rows = rows
             self.on_conflict = on_conflict
+            return self
+
+        def update(self, rows):
+            self.rows = rows
+            return self
+
+        def eq(self, field: str, value: str):
+            self.eq_filter = (field, value)
             return self
 
         async def execute(self) -> None:
@@ -138,21 +147,81 @@ def test_record_ohlcv_bars_upserts_raw_and_run_inputs(monkeypatch) -> None:
     assert raw_builder.rows[0]["run_id"] == "run-2"
     assert raw_builder.rows[0]["close"] == 101500.4
 
-    input_builder = fake_db.builders["arena_run_ohlcv_bars"]
-    assert input_builder.on_conflict == "run_id,exchange,symbol,interval,open_time"
+    input_builder = fake_db.builders["arena_runs"]
     assert input_builder.executed is True
-    assert input_builder.rows == [
-        {
-            "run_id": "run-2",
-            "exchange": "binance",
-            "symbol": "BTCUSDT",
-            "interval": "4h",
-            "open_time": "2026-12-18T10:40:00Z",
-            "close_time": "2026-12-18T14:39:59Z",
-            "input_position": 0,
-            "fetched_at": "2026-06-19T01:02:03Z",
-        }
-    ]
+    assert input_builder.eq_filter == ("run_id", "run-2")
+    assert input_builder.rows == {
+        "input_open_time": "2026-12-18T10:40:00Z",
+        "input_close_time": "2026-12-18T14:39:59Z",
+        "input_bar_count": 1,
+    }
+
+
+def test_record_execution_gate_drops_raw_depth_and_duplicate_snapshots(monkeypatch) -> None:
+    class FakeBuilder:
+        def __init__(self) -> None:
+            self.row = None
+
+        def upsert(self, row, *, on_conflict: str):
+            self.row = row
+            self.on_conflict = on_conflict
+            return self
+
+        async def execute(self) -> None:
+            return None
+
+    builder = FakeBuilder()
+
+    class FakeDb:
+        def table(self, table_name: str) -> FakeBuilder:
+            assert table_name == "arena_execution_gates"
+            return builder
+
+    monkeypatch.setattr(data_lake.positions, "db", lambda: FakeDb())
+    evaluated_at = datetime(2026, 8, 15, 1, 2, 3, tzinfo=timezone.utc)
+    decision = ExecutionGateDecision(
+        allowed=True,
+        decision="trade_allowed",
+        reject_reason=None,
+        expected_return_bps=30.0,
+        expected_cost_bps=10.0,
+        spread_bps=1.0,
+        expected_slippage_bps=2.0,
+        depth_score=1.0,
+        volatility_score=0.5,
+        api_latency_ms=20.0,
+        policy=ExecutionGatePolicy(),
+        evaluated_at=evaluated_at,
+        feature_snapshot={
+            "last_price": 100.0,
+            "depth_10bp_bid_usd": 10_000.0,
+            "depth_bids": [[99.0, 10.0]] * 1000,
+            "depth_asks": [[101.0, 10.0]] * 1000,
+            "realtime_risk_snapshot": {"large": "duplicate"},
+        },
+        risk_snapshot={"allowed": True},
+    )
+
+    result = asyncio.run(
+        data_lake.record_execution_gate(
+            run_id="run-3",
+            algo_id="omnibus",
+            signal="long",
+            timeframe="4h",
+            decision=decision,
+        )
+    )
+
+    assert result.ok is True
+    assert builder.on_conflict == "run_id,algo_id"
+    assert builder.row["feature_snapshot"] == {
+        "last_price": 100.0,
+        "depth_10bp_bid_usd": 10_000.0,
+    }
+    assert builder.row["risk_snapshot"] == {"allowed": True}
+    assert builder.row["gate_snapshot"] == {
+        "policy": data_lake.execution_gate_policy_snapshot(decision.policy)
+    }
 
 
 def test_record_strategy_metadata_upserts_strategy_and_features(monkeypatch) -> None:

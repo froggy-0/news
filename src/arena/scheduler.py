@@ -28,6 +28,7 @@ from . import (
     realtime_risk,
     regime,
     risk,
+    short_signals,
     slack_notify,
     sleeves,
     spot_policy,
@@ -248,7 +249,10 @@ def _base_params_snapshot(
         "derivatives_data_usage": "research_features_only",
         # spot→perp 전환 Phase A(2026-08-15): 위 필드들은 여전히 "기본 spot" 상태를
         # 기술한다(하위호환) — 실제 알고별 오버라이드는 이 필드로 관측한다.
-        "perp_live_enabled_algos": sorted(parameters.PERP_LIVE_ENABLED_ALGOS),
+        "perp_short_enabled_tracks": [
+            {"track_symbol": track_symbol, "algo_id": algo_id}
+            for track_symbol, algo_id in sorted(parameters.PERP_SHORT_ENABLED_TRACKS)
+        ],
     }
     return snapshot
 
@@ -274,7 +278,7 @@ def _params_snapshot(
         stop_loss_max_pct=config.STOP_LOSS_MAX_PCT,
         macro_stale_hours=config.MACRO_STALE_HOURS,
         slippage_bps=cost_scenario.slippage_bps,
-        portfolio_risk=risk.policy_snapshot(_risk_policy()),
+        portfolio_risk=risk.policy_snapshot(_risk_policy(profile)),
     )
 
 
@@ -287,14 +291,24 @@ def _position_semantics_for_product_type(product_type: str) -> str:
     )
 
 
-def _risk_policy() -> risk.PortfolioRiskPolicy:
-    # spot→perp 전환 Phase A(2026-08-15): risk.py 자체는 이미 long/short 대칭이라(포지션
-    # 캡이 algo_id 단위가 아닌 portfolio 단위) PERP_LIVE_ENABLED_ALGOS가 하나라도 있으면
-    # 숏 캡을 정상 개방한다. 개별 알고가 실제로 숏을 낼 수 있는지는
-    # positions.open_position()의 algo_id별 허용목록 가드가 별도로 막는다(이중 방어).
-    perp_active = bool(parameters.PERP_LIVE_ENABLED_ALGOS)
-    max_short_positions = config.MAX_SHORT_POSITIONS if perp_active else 0
-    max_net_short_exposure = config.MAX_NET_SHORT_EXPOSURE if perp_active else 0.0
+def _short_enabled_for(profile: frequency.FrequencyProfile, algo_id: str) -> bool:
+    """Return True only for an explicitly approved perp track and algorithm pair."""
+    return parameters.perp_short_enabled(
+        track_symbol=profile.symbol,
+        product_type=profile.product_type,
+        algo_id=algo_id,
+    )
+
+
+def _risk_policy(profile: frequency.FrequencyProfile) -> risk.PortfolioRiskPolicy:
+    # 숏 캡은 승인된 자산×알고 쌍이 있는 perp 트랙에서만 개방한다.
+    # 현물 트랙은 다른 트랙에서 동일 algo_id가 승인됐더라도 숏 캡 0을 유지한다.
+    short_active = parameters.perp_short_enabled_for_track(
+        track_symbol=profile.symbol,
+        product_type=profile.product_type,
+    )
+    max_short_positions = config.MAX_SHORT_POSITIONS if short_active else 0
+    max_net_short_exposure = config.MAX_NET_SHORT_EXPOSURE if short_active else 0.0
     return risk.PortfolioRiskPolicy(
         position_unit=config.POSITION_UNIT,
         max_open_positions_total=config.MAX_OPEN_POSITIONS_TOTAL,
@@ -644,6 +658,7 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
             started_at=started_at,
             params_snapshot=base_params_snapshot,
             symbol=profile.symbol,
+            market_data_symbol=profile.binance_symbol,
             interval=profile.interval,
             frequency_profile_id=profile.frequency_profile_id,
             indicator_profile_id=indicator_profile_id,
@@ -821,7 +836,7 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
     )
 
     had_algo_error = False
-    policy = _risk_policy()
+    policy = _risk_policy(profile)
     gate_policy = _execution_gate_policy(profile.binance_symbol)
     # symbol(트랙 식별자) 그대로 — 일간손실·drawdown은 트랙(자본풀) 단위로 독립 평가
     # (spot BTC와 perp BTC가 서로 다른 리스크 상태를 가져야 함, ETH/SOL과 동일 원칙).
@@ -837,9 +852,11 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
         product_decision: (
             spot_policy.SpotExecutionDecision | perp_policy.PerpExecutionDecision | None
         ) = None
+        directional_signal: short_signals.DirectionalSignalDecision | None = None
+        product_policy_snapshot: dict | None = None
         current = state.get_position(profile.symbol, algo_id)
         current_position_id = current["id"] if current else None
-        is_perp = algo_id in parameters.PERP_LIVE_ENABLED_ALGOS
+        short_enabled = _short_enabled_for(profile, algo_id)
         try:
             # 시간 손절(가격 손절 제거 알고 보완): 최대 보유시간 초과 시 청산.
             ts_hours = parameters.TIME_STOP_HOURS_BY_ALGO.get(algo_id)
@@ -877,12 +894,25 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
                 )
                 continue
 
-            raw_signal = fn(macro, ind)
+            long_signal = fn(macro, ind)
+            directional_signal = short_signals.resolve(
+                algo_id=algo_id,
+                long_signal=long_signal,
+                macro=macro,
+                indicators=ind,
+                short_enabled=short_enabled,
+                current_direction=current.get("direction") if current else None,
+            )
+            raw_signal = directional_signal.resolved_signal
             product_decision = (
                 perp_policy.decide(raw_signal, current)
-                if is_perp
+                if short_enabled
                 else spot_policy.decide(raw_signal, current)
             )
+            product_policy_snapshot = product_decision.policy_snapshot()
+            product_policy_snapshot.update(directional_signal.as_dict())
+            product_policy_snapshot["short_enabled"] = short_enabled
+            product_policy_snapshot["track_symbol"] = profile.symbol
             signal = product_decision.executable_signal
             action = product_decision.action
             skipped_reason = product_decision.skipped_reason
@@ -903,7 +933,7 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
                     # (spot은 애초에 숏을 보유할 수 없어 대기 자체가 의미 없음). perp는
                     # 반전을 포함해 min_hold를 균일 적용(backtest.py 비-spot 분기와 동일 —
                     # bypass 없음, 원치 않는 즉시 반전 매매를 억제).
-                    bypass_min_hold = (not is_perp) and (
+                    bypass_min_hold = (not short_enabled) and (
                         product_decision.legacy_short_close or raw_signal == "short"
                     )
                     if (
@@ -945,7 +975,7 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
                 # perp 반전(should_open도 True)이면 청산 직후 같은 사이클에서 재진입을
                 # 평가한다(아래로 진행) — spot은 should_close/should_open이 상호배타라
                 # 항상 continue(기존 동작 무변화).
-                if not (is_perp and product_decision.should_open):
+                if not (short_enabled and product_decision.should_open):
                     continue
 
             if not product_decision.should_open:
@@ -1167,7 +1197,7 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
                 )
                 if signal is not None and action in {
                     "open",
-                    "reverse",
+                    "signal_reverse",
                     "risk_blocked",
                     "execution_gate_blocked",
                     "realtime_risk_blocked",
@@ -1204,9 +1234,7 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
                     risk_snapshot=risk_decision.as_dict() if risk_decision else None,
                     raw_signal=product_decision.raw_signal if product_decision else raw_signal,
                     executable_signal=signal,
-                    product_policy_snapshot=(
-                        product_decision.policy_snapshot() if product_decision else None
-                    ),
+                    product_policy_snapshot=product_policy_snapshot,
                 )
             )
 
@@ -1258,6 +1286,7 @@ async def _run_frequency_shadow_cycle(profile_id: str) -> None:
             started_at=started_at,
             params_snapshot=base_params_snapshot,
             symbol=profile.symbol,
+            market_data_symbol=profile.binance_symbol,
             interval=profile.interval,
             frequency_profile_id=profile.frequency_profile_id,
             indicator_profile_id=indicator_profile_id,
@@ -1350,7 +1379,7 @@ async def _run_frequency_shadow_cycle(profile_id: str) -> None:
             frequency_profile_id=profile.frequency_profile_id,
         )
     )
-    policy = _risk_policy()
+    policy = _risk_policy(profile)
     portfolio_risk_state = await _risk_state(now, symbol=profile.symbol)
     capture_results.extend(
         await _run_shadow_vnext(
@@ -1407,6 +1436,7 @@ async def _run_asset_shadow_cycle(symbol: str) -> None:
             started_at=started_at,
             params_snapshot=base_params_snapshot,
             symbol=profile.symbol,
+            market_data_symbol=profile.binance_symbol,
             interval=profile.interval,
             frequency_profile_id=profile.frequency_profile_id,
             indicator_profile_id=indicator_profile_id,

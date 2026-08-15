@@ -119,3 +119,27 @@
 - 이유: baseline 성과와 live gate 적용 성과를 분리해서 비교해야 한다.
 - 영향: 옵션을 켜면 gate block이 신규 open을 막고 `arena_backtest_risk_events`에 `live_gate_replay` event를 남긴다.
 - 리스크: realtime feature coverage가 부족한 과거 구간에서는 gate replay가 보수적으로 해석될 수 있다.
+
+## D016. 현물·선물은 루트 트랙으로 분리하고 시장 입력은 공유한다
+
+- 결정: 실행·결정·포지션·리스크는 `BTCUSDT`와 `BTCUSDT-PERP`처럼 트랙별로 분리한다.
+- 결정: OHLCV와 공통 시장 피처는 `market_data_symbol=BTCUSDT`처럼 실제 거래소 티커로 공유한다.
+- 이유: 상품 의미론과 트랙레코드는 섞지 않되 동일 시장 데이터를 실행마다 복제하지 않기 위해서다.
+- 영향: 실행별 `arena_run_ohlcv_bars` 저장을 중단하고 입력 시작·종료·bar 수만 `arena_runs`에 남긴다.
+- 리스크: 실행 재현은 공통 OHLCV 보존기간과 입력 범위 무결성에 의존한다.
+
+## D017. 숏 승격은 자산×알고리즘 단위로 제한한다
+
+- 결정: 신규 숏은 `PERP_SHORT_ENABLED_TRACKS`의 `(track_symbol, algo_id)` 가입과 별도 숏 함수 등록을 모두 요구한다.
+- 이유: 알고리즘 ID만 허용하면 검증하지 않은 다른 자산이나 spot 트랙까지 숏 의미론이 전파될 수 있다.
+- 현재 상태: allowlist와 숏 registry 모두 비어 있다. 선물 트랙은 롱온리로 운영된다.
+- 근거: `macd_momentum`과 omnibus 후보는 DSR/bootstrap CI/비용 포함 성과 기준을 통과하지 못했다.
+- 리스크: 다음 후보도 자산별 검증 전에는 절대 활성화하지 않는다.
+
+## D018. 500 MiB DB 한도에서는 근거 있는 저장과 인덱스만 유지한다
+
+- 결정: 원본 1,000레벨 order book과 중첩 snapshot 사본을 execution gate 원장에서 제거한다.
+- 결정: 운영 쿼리 통계로 정당화되지 않은 신규 범용 인덱스 6개는 추가하지 않는다.
+- 결과: 운영 DB가 약 316 MiB에서 206 MiB로 감소했다.
+- 유지: 공통 OHLCV, scalar 판단 입력, typed 결과, gate policy, 필요한 risk snapshot과 기존 retention 정책.
+- 리스크: 신규 JSON이나 인덱스를 추가할 때 크기와 실제 조회 경로를 함께 증명해야 한다.

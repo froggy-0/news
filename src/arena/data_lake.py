@@ -15,7 +15,12 @@ from typing import Any
 from uuid import uuid4
 
 from . import execution_rules, feature_registry, frequency, parameters, positions
-from .execution_gate import ExecutionGateDecision
+from .execution_gate import (
+    ExecutionGateDecision,
+)
+from .execution_gate import (
+    policy_snapshot as execution_gate_policy_snapshot,
+)
 from .market_structure import MarketStructureSnapshot
 from .realtime_risk import RealtimeRiskDecision
 from .sleeves import AllocationDecision, SleeveSignal
@@ -87,20 +92,38 @@ def _capture_health(results: list[CaptureWriteResult]) -> dict[str, Any]:
     }
 
 
-def _run_ohlcv_input_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [
-        {
-            "run_id": row["run_id"],
-            "exchange": row["exchange"],
-            "symbol": row["symbol"],
-            "interval": row["interval"],
-            "open_time": row["open_time"],
-            "close_time": row["close_time"],
-            "input_position": position,
-            "fetched_at": row["fetched_at"],
-        }
-        for position, row in enumerate(rows)
-    ]
+_EXECUTION_GATE_FEATURE_KEYS = frozenset(
+    {
+        "algo_id",
+        "api_latency_ms_p95",
+        "data_timestamp",
+        "depth_10bp_ask_usd",
+        "depth_10bp_bid_usd",
+        "depth_score",
+        "expected_slippage_bps",
+        "last_ask",
+        "last_bid",
+        "last_price",
+        "realtime_risk_age_seconds",
+        "realtime_risk_fresh",
+        "realtime_risk_live_enabled",
+        "realtime_risk_quality_status",
+        "realtime_risk_recommended_action",
+        "realtime_risk_score",
+        "realtime_risk_state",
+        "realtime_risk_trigger_reasons",
+        "regime",
+        "source",
+        "spread_bps_avg",
+        "spread_bps_p95",
+        "volatility_score",
+    }
+)
+
+
+def _compact_execution_gate_features(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Keep decision inputs, excluding raw depth arrays and duplicated risk payloads."""
+    return {key: snapshot[key] for key in _EXECUTION_GATE_FEATURE_KEYS if key in snapshot}
 
 
 async def _safe_execute(label: str, builder: Any) -> CaptureWriteResult:
@@ -215,6 +238,7 @@ async def record_run_started(
     started_at: datetime,
     params_snapshot: dict[str, Any],
     symbol: str = parameters.BINANCE_SYMBOL,
+    market_data_symbol: str = parameters.BINANCE_SYMBOL,
     interval: str = parameters.BINANCE_KLINE_INTERVAL,
     frequency_profile_id: str = frequency.LIVE_4H_PROFILE_ID,
     indicator_profile_id: str = frequency.DEFAULT_INDICATOR_PROFILE_ID,
@@ -229,6 +253,7 @@ async def record_run_started(
         "status": "started",
         "runtime": parameters.RUNTIME,
         "symbol": symbol,
+        "market_data_symbol": market_data_symbol,
         "interval": interval,
         "strategy_version": parameters.STRATEGY_VERSION,
         "params_version": parameters.PARAMS_VERSION,
@@ -253,6 +278,7 @@ async def record_run_started(
             not in {
                 "feature_set_version",
                 "risk_model_version",
+                "market_data_symbol",
                 "product_type",
                 "position_semantics",
                 "frequency_profile_id",
@@ -372,13 +398,17 @@ async def record_ohlcv_bars(
         .upsert(rows, on_conflict="exchange,symbol,interval,open_time"),
     )
     input_result = await _safe_execute(
-        "arena_run_ohlcv_bars.upsert",
+        "arena_runs.input_range.update",
         positions.db()
-        .table("arena_run_ohlcv_bars")
-        .upsert(
-            _run_ohlcv_input_rows(rows),
-            on_conflict="run_id,exchange,symbol,interval,open_time",
-        ),
+        .table("arena_runs")
+        .update(
+            {
+                "input_open_time": rows[0]["open_time"],
+                "input_close_time": rows[-1]["close_time"],
+                "input_bar_count": len(rows),
+            }
+        )
+        .eq("run_id", run_id),
     )
     return [bar_result, input_result]
 
@@ -916,6 +946,7 @@ async def record_execution_gate(
     timeframe: str,
     decision: ExecutionGateDecision,
 ) -> CaptureWriteResult:
+    compact_features = _compact_execution_gate_features(decision.feature_snapshot)
     row = {
         "run_id": run_id,
         "algo_id": algo_id,
@@ -933,9 +964,11 @@ async def record_execution_gate(
         "api_latency_ms": decision.api_latency_ms,
         "decision": decision.decision,
         "reject_reason": decision.reject_reason,
-        "feature_snapshot": decision.feature_snapshot,
+        "feature_snapshot": compact_features,
         "risk_snapshot": decision.risk_snapshot,
-        "gate_snapshot": decision.as_dict(),
+        # Scalar outcomes already have typed columns. Retain only the policy that
+        # is required to reproduce the gate, not a second copy of features/risk.
+        "gate_snapshot": {"policy": execution_gate_policy_snapshot(decision.policy)},
     }
     return await _safe_execute_optional_schema(
         "arena_execution_gates.upsert",
