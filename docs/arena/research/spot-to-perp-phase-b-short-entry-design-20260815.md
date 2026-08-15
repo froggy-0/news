@@ -3,6 +3,12 @@
 **상태**: 설계 문서만. 코드 변경 없음. 이 문서에서 확정한 방향에 대해 사용자 승인 후
 알고별로 하나씩 구현→백테스트→(통과 시) `PERP_LIVE_ENABLED_ALGOS` 추가를 진행한다.
 
+> **다음 세션은 이 문서 하나만 읽고 바로 시작 가능하도록 작성됨.** 새 세션에서 처음
+> 할 일은 §7("다음 세션 시작 가이드")로 바로 이동 — §1~§6은 §7에서 참조하는 배경/근거이므로
+> 필요할 때만 되짚어 읽으면 된다. 이 문서 자체가 코드 변경을 반영하지 않으므로,
+> 구현 세션 시작 시 §3의 코드 앵커(줄번호 포함)가 여전히 유효한지 먼저 grep으로
+> 스팟체크할 것(다른 세션이 그 사이 `algorithms.py`/`parameters.py`를 건드렸을 수 있음).
+
 ## 0. 배경 — 지금 뭐가 왜 막혀 있나
 
 [Phase A](spot-to-perp-phase-a-infrastructure-20260815.md)/[A2](spot-to-perp-phase-a2-root-track-split-20260815.md)로
@@ -254,3 +260,68 @@ RSI<50 크로스(반전 확인). **주의**: `vix_rsi`는 이름과 달리 이�
   크기 임계값으로 가정, 필요 시 조정).
 - 자산별(3/3 vs 다수결) 승격 기준.
 - 순서(§1원칙3)는 세션 합의사항을 그대로 반영한 것 — 이견 있으면 우선순위 조정 가능.
+
+## 7. 다음 세션 시작 가이드
+
+**첫 작업 = `macd_momentum` 숏 백테스트 후보 구현 및 검증**(§3.1). 순서(§1원칙3)상
+1순위, 설계 리스크가 가장 낮음(이미 연속·부호형 신호). 사용자 승인 없이 바로 착수
+가능한 범위는 **격리 백테스트 스크립트 작성·실행까지**(§4) — `ALGORITHMS` dict나
+`PERP_LIVE_ENABLED_ALGOS`를 건드리는 건 백테스트 결과를 사용자에게 보고하고 승인받은
+뒤(§6 미결정 사항도 이 시점에 같이 확인).
+
+### 7-1. 작업 순서 (체크리스트)
+
+1. **코드 앵커 재확인**(다른 세션이 그 사이 바꿨을 수 있음):
+   ```
+   grep -n "TSMOM_NL_ENABLED\|TSMOM_NL_MIN_SIGNAL\|TSMOM_NL_WEIGHT_CAP" src/arena/parameters.py
+   grep -n "def tsmom_nl_position_multiplier\|def _tsmom_nl_signal\|def macd_momentum" src/arena/algorithms.py
+   ```
+   §3.1이 참조하는 `algorithms.py:578`(`tsmom_nl_position_multiplier`)·`:596`
+   (`macd_momentum`)이 여전히 맞는지 확인.
+2. **패리티 스팟체크**(§4-6) — 숏 후보 넣기 전에 macd_momentum만 product_type
+   spot→usdm_perp 패리티가 아직 깨지지 않았는지 재확인(Phase A 문서의 검증 결과가
+   유효한지 회귀 확인).
+3. **격리 백테스트 스크립트 작성** — `scripts/analysis/new_algo_candidates_backtest.py`
+   패턴을 그대로 재사용(`backtest.run_replay(frames, strategy_fns={...})` 오버라이드,
+   `ALGORITHMS`/live 배선 무변경). 신규 파일 제안: `scripts/analysis/macd_momentum_short_backtest.py`.
+   - 숏 후보 함수: §3.1 설계안 그대로(`s < -TSMOM_NL_MIN_SIGNAL`, `f(s)` 절댓값 사이징).
+   - **risk-off veto 유지/제거 두 변형 모두 실행**(§3.1 미해결 질문 — 백테스트로 먼저
+     방향성 확인 후 사용자에게 보고, §6에서 결정하지 않은 항목).
+   - 6개 품질필터 미러는 1차로 "대칭 임계값 가정"으로 구현(§2 참조 — `_below_ma200`류는
+     그대로 재사용, `funding_not_hot`류는 새 "cold" 상수를 부호만 뒤집어 1차 시도).
+   - `product_type="usdm_perp"`로 `run_replay()` 실행(비-spot 상태머신 경로 태우기).
+4. **§4 방법론대로 채점**: 3자산(BTC/ETH/SOL), DSR(n_trials=1), 부트스트랩95%CI(3000회),
+   전/후반 분할. `backtest_with_macro_backfill.build_macro_rows()` 재사용.
+5. **결과를 사용자에게 보고**(구현/배포로 넘어가기 전 필수 체크포인트):
+   - DSR·CI·전후반 결과표.
+   - risk-off veto 변형 중 어느 쪽이 나은지.
+   - §6 미결정 사항 중 이 알고에 해당하는 것(리스크오프 veto) 확정 요청.
+6. **통과 시**(§5 롤아웃 절차 그대로): `algorithms.py`에 실제 반영 → 신규 테스트
+   (`test_arena_perp_policy.py` 패턴 참고, 숏 오픈/반전/청산 케이스) →
+   `PARAMS_VERSION` bump → `PERP_LIVE_ENABLED_ALGOS`에 `macd_momentum` 1개만 추가 →
+   로컬 검증 → 배포 → 1~2 사이클 라이브 관찰(숏 포지션 오픈 여부, 방향 라벨, 펀딩
+   부호).
+7. **기각 시**: §4 "기각 시 처리" 그대로(그리드 재탐색 없이 기각, 롱 로직 무변경 유지) →
+   §1원칙3 순서대로 다음 알고(`omnibus` DOWN_TREND 레그, §3.2)로 이동.
+
+### 7-2. 참고할 기존 코드/문서 (그대로 재사용, 새로 안 만듦)
+
+- 백테스트 스크립트 템플릿: `scripts/analysis/new_algo_candidates_backtest.py`,
+  `scripts/analysis/tsmom_nl_walk_forward.py`(TSMOM_NL 자체 검증 시 이미 쓴 워크포워드
+  하니스 — 숏 변형에도 구조 재사용 가능).
+- DSR·부트스트랩 계산 로직: 위 두 스크립트가 이미 구현해 둔 유틸 재사용(중복 구현 금지).
+- 패리티 백테스트 방법: Phase A 문서 §검증("스크래치, product_type spot↔usdm_perp
+  대조, 4h 366봉") 그대로.
+- 테스트 패턴: `tests/test_arena_perp_policy.py`(숏 오픈/반전/청산 단위 테스트),
+  `tests/test_arena_scheduler_perp.py`(`PERP_LIVE_ENABLED_ALGOS` 배선 테스트).
+
+### 7-3. 로컬 검증 커맨드
+
+```bash
+.venv/bin/python -m pytest tests/test_arena_perp_policy.py tests/test_arena_scheduler_perp.py tests/test_arena_positions_perp_funding.py -q
+.venv/bin/ruff check src/arena scripts/analysis
+```
+
+(`pyproject.toml`이 `pythonpath = ["src", "scripts"]`를 이미 설정하므로 `PYTHONPATH=src`
+수동 지정 불필요 — 로컬 개발 환경에 `.venv`가 없다면 프로젝트 표준 셋업(`requirements-dev.txt`)
+먼저 확인.)
