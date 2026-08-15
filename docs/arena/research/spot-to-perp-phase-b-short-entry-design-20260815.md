@@ -1,7 +1,8 @@
 # Spot→Perp Phase B — 알고별 숏 진입 로직 설계 (2026-08-15, 설계안·미구현)
 
-**상태**: 설계 문서만. 코드 변경 없음. 이 문서에서 확정한 방향에 대해 사용자 승인 후
-알고별로 하나씩 구현→백테스트→(통과 시) `PERP_LIVE_ENABLED_ALGOS` 추가를 진행한다.
+**상태**: 설계 문서 + §8 macd_momentum 1차 검증(❌기각) 반영. 코드는 여전히 무변경
+(`ALGORITHMS`/`PERP_LIVE_ENABLED_ALGOS` 미터치). 다음은 §1원칙3 순서상 `omnibus`
+DOWN_TREND 레그(§3.2).
 
 > **다음 세션은 이 문서 하나만 읽고 바로 시작 가능하도록 작성됨.** 새 세션에서 처음
 > 할 일은 §7("다음 세션 시작 가이드")로 바로 이동 — §1~§6은 §7에서 참조하는 배경/근거이므로
@@ -325,3 +326,21 @@ RSI<50 크로스(반전 확인). **주의**: `vix_rsi`는 이름과 달리 이�
 (`pyproject.toml`이 `pythonpath = ["src", "scripts"]`를 이미 설정하므로 `PYTHONPATH=src`
 수동 지정 불필요 — 로컬 개발 환경에 `.venv`가 없다면 프로젝트 표준 셋업(`requirements-dev.txt`)
 먼저 확인.)
+
+## 8. macd_momentum 숏 후보 1차 검증 결과 (2026-08-15, ❌기각)
+
+§7 체크리스트대로 `scripts/analysis/macd_momentum_short_backtest.py` 신규 작성 —
+`s < -TSMOM_NL_MIN_SIGNAL` 숏 후보(§3.1), 사이징은 `f(s)` 절댓값(스크립트 프로세스
+내 `algorithms.tsmom_nl_position_multiplier` 몽키패치로만 구현, **소스 무변경**).
+`product_type="usdm_perp"`, macro 백필(446일) × 3자산 × risk-off veto 유지/제거
+2변형 = 6셀. 패리티 회귀(`test_arena_perp_policy.py` 등 4개 스위트) 선통과 확인.
+
+**결과 — 18개 판정기준 전부 미달**(DSR≥0.95 / CI하한>0 / 전후반 부호일관):
+DSR 최댓값 0.586(SOL veto제거), 6개 조합 전부 부트스트랩95%CI가 0 포함(하한 전부
+음수), BTC veto유지는 전후반 둘 다 손실. 방향성만 보면 veto제거가 veto유지보다
+3자산 전부 일관되게 우세(sum_w%·PF 개선)했으나 기준선 근처에도 못 미침 — 요약표는
+스크립트 실행 로그 참조(재현 가능, 그리드 아닌 단일사양이라 결과 고정).
+
+**❌ 기각, 그리드 재탐색 없음**(§4 기각 처리 원칙 그대로) — macd_momentum은 선물
+트랙에서도 롱온리 유지, `PERP_LIVE_ENABLED_ALGOS` 미가입. 사용자 확인 완료.
+**다음: `omnibus` DOWN_TREND 레그(§3.2)로 동일 방법론 반복.**
