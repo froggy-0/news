@@ -95,9 +95,11 @@ def target_position_semantics_for_algo(algo_id: str) -> str:
 # Phase A2(2026-08-15) — 자산×시장 루트 트랙 분리. 위 PERP_LIVE_ENABLED_ALGOS/
 # target_product_for_algo()는 이제 "이 알고가 어느 product_type이냐"를 정하지 않는다
 # (그건 트랙, 즉 frequency.FrequencyProfile.product_type이 정함) — 대신 "perp 트랙
-# 안에서 이 알고가 숏 신호를 열어도 되느냐"만 담당(Phase B). 기본 False = 전 선물
-# 트랙도 오늘처럼 롱온리로 동작(펀딩비만 추가로 반영).
-ARENA_PERP_LIVE_ENABLED = False
+# 안에서 이 알고가 숏 신호를 열어도 되느냐"만 담당(Phase B, 여전히 빈 집합 — 숏은
+# 아직 미승인, 선물 트랙도 지금은 현물과 동일하게 롱온리로만 동작·펀딩비만 추가 반영).
+# 2026-08-15 사용자 결정으로 활성화 — BTC/ETH/SOL perp_live 트랙(각 6알고×$1000
+# 독립자본) 실거래 시작. 롤백: False로 되돌리면 트랙이 스케줄 안 됨(기존 spot 무영향).
+ARENA_PERP_LIVE_ENABLED = True
 
 
 PERP_TRACK_SUFFIX = "-PERP"
