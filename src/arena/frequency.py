@@ -59,7 +59,13 @@ class IndicatorSettings:
 @dataclass(frozen=True)
 class FrequencyProfile:
     frequency_profile_id: str
+    # DB/state/대시보드 파티션 키(트랙 식별자) — 실제 바이낸스 티커와 다를 수 있다.
+    # spot→perp 트랙 분리(Phase A2, 2026-08-15): perp 트랙은 "{binance_symbol}-PERP"
+    # 컨벤션(parameters.real_ticker_for_track()가 역변환)을 쓴다. 기존 spot/shadow/
+    # research 프로파일은 symbol == binance_symbol(무변화).
     symbol: str
+    # REST/WS 호출에 실제로 쓰는 바이낸스 티커. symbol과 분리한 이유는 위 주석 참조.
+    binance_symbol: str
     interval: str
     decision_cadence_minutes: int
     # 설명용 메타데이터일 뿐 런타임 게이트가 아니다 — 실제 실거래 여부는
@@ -76,11 +82,15 @@ class FrequencyProfile:
     min_hold_fallback_hours: float
     default_indicator_profile_id: str = DEFAULT_INDICATOR_PROFILE_ID
     default_cost_scenario_id: str = DEFAULT_COST_SCENARIO_ID
+    # 이 프로파일로 연 포지션에 기록할 product_type/position_semantics — 트랙 단위로
+    # 결정(Phase A2). "spot" | "usdm_perp".
+    product_type: str = "spot"
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "frequency_profile_id": self.frequency_profile_id,
             "symbol": self.symbol,
+            "binance_symbol": self.binance_symbol,
             "interval": self.interval,
             "decision_cadence_minutes": self.decision_cadence_minutes,
             "live_enabled": self.live_enabled,
@@ -94,6 +104,7 @@ class FrequencyProfile:
             "min_hold_fallback_hours": self.min_hold_fallback_hours,
             "default_indicator_profile_id": self.default_indicator_profile_id,
             "default_cost_scenario_id": self.default_cost_scenario_id,
+            "product_type": self.product_type,
         }
 
 
@@ -168,6 +179,7 @@ FREQUENCY_PROFILES: dict[str, FrequencyProfile] = {
     LIVE_4H_PROFILE_ID: FrequencyProfile(
         frequency_profile_id=LIVE_4H_PROFILE_ID,
         symbol=parameters.BINANCE_SYMBOL,
+        binance_symbol=parameters.BINANCE_SYMBOL,
         interval="4h",
         decision_cadence_minutes=240,
         live_enabled=True,
@@ -183,6 +195,7 @@ FREQUENCY_PROFILES: dict[str, FrequencyProfile] = {
     "research_1h": FrequencyProfile(
         frequency_profile_id="research_1h",
         symbol=parameters.BINANCE_SYMBOL,
+        binance_symbol=parameters.BINANCE_SYMBOL,
         interval="1h",
         decision_cadence_minutes=60,
         live_enabled=False,
@@ -198,6 +211,7 @@ FREQUENCY_PROFILES: dict[str, FrequencyProfile] = {
     "research_15m": FrequencyProfile(
         frequency_profile_id="research_15m",
         symbol=parameters.BINANCE_SYMBOL,
+        binance_symbol=parameters.BINANCE_SYMBOL,
         interval="15m",
         decision_cadence_minutes=15,
         live_enabled=False,
@@ -288,6 +302,7 @@ def _register_multi_asset_shadow_profiles() -> None:
         FREQUENCY_PROFILES[profile_id] = FrequencyProfile(
             frequency_profile_id=profile_id,
             symbol=symbol,
+            binance_symbol=symbol,
             interval=base.interval,
             decision_cadence_minutes=base.decision_cadence_minutes,
             live_enabled=True,
@@ -315,6 +330,70 @@ def _register_multi_asset_shadow_profiles() -> None:
 
 
 _register_multi_asset_shadow_profiles()
+
+PERP_LIVE_PROFILE_PREFIX = "perp_live_"
+
+
+def perp_live_profile_id(symbol: str) -> str:
+    """자산의 선물(perp) 트랙 frequency_profile_id (예: BTCUSDT -> perp_live_btcusdt).
+
+    `symbol` 인자는 실제 바이낸스 티커(BTCUSDT 등) — 반환값은 그 티커의 perp 트랙
+    profile_id일 뿐, 이 profile의 `.symbol`(DB/state 파티션 키)은 별도로
+    `f"{symbol}-PERP"`가 된다(`_register_perp_live_profiles` 참조).
+    """
+    return f"{PERP_LIVE_PROFILE_PREFIX}{symbol.lower()}"
+
+
+def _register_perp_live_profiles() -> None:
+    """spot→perp Phase A2(2026-08-15) — 자산×시장 루트 트랙 분리.
+
+    "BTC 현물"과 "BTC 선물"을 오늘의 "BTC"/"ETH"처럼 완전히 독립된 자본 풀로 만든다.
+    기존 현물 프로파일(LIVE_4H_PROFILE_ID/shadow_4h_*)과 동일 파라미터를 심볼만 바꿔
+    재사용(자산별 재튜닝 금지 원칙, _register_multi_asset_shadow_profiles와 동일 근거).
+    핵심 차이 2가지: (1) `.symbol`(DB/state 파티션 키)은 `f"{binance_symbol}-PERP"`
+    — 기존 spot 트랙과 다른 문자열이라 `(symbol, algo_id)` 유니크 인덱스·
+    `state.open_positions[symbol]` 등 기존 파티셔닝이 마이그레이션 없이 그대로 통함.
+    (2) `.binance_symbol`은 실제 티커 그대로 — REST/WS 호출은 spot API를 계속 쓴다
+    (가격 피드는 spot 프록시 유지, 전용 futures 피드는 별도 스프린트 — 근거는
+    docs/arena/research/spot-to-perp-phase-a-infrastructure-20260815.md).
+    BTC도 포함(현물과 달리 perp는 BTC도 신규 트랙이라 심볼 스킵 없음).
+    """
+    base = FREQUENCY_PROFILES[LIVE_4H_PROFILE_ID]
+    for symbol in parameters.MULTI_ASSET_SYMBOLS:
+        profile_id = perp_live_profile_id(symbol)
+        FREQUENCY_PROFILES[profile_id] = FrequencyProfile(
+            frequency_profile_id=profile_id,
+            symbol=parameters.perp_track_symbol(symbol),
+            binance_symbol=symbol,
+            interval=base.interval,
+            decision_cadence_minutes=base.decision_cadence_minutes,
+            live_enabled=True,
+            shadow_candidate=False,
+            train_days=base.train_days,
+            test_days=base.test_days,
+            embargo_hours=base.embargo_hours,
+            ecr_threshold=base.ecr_threshold,
+            max_trades_per_day_per_algo=base.max_trades_per_day_per_algo,
+            min_hold_hours=dict(base.min_hold_hours),
+            min_hold_fallback_hours=base.min_hold_fallback_hours,
+            default_indicator_profile_id=base.default_indicator_profile_id,
+            default_cost_scenario_id=base.default_cost_scenario_id,
+            product_type="usdm_perp",
+        )
+        # 왕복비용 산식은 spot과 동일(fee/slippage/spread) — 펀딩비는 여기서 정액
+        # 반영하지 않고 positions.close_position()이 실제 arena_funding_rates로
+        # 청산 시점에 정산한다(backtest.py와 동일 패턴).
+        _add_costs(
+            profile_id,
+            [
+                ("low", parameters.FEE_BPS, 0.0, 0.0, 0.0),
+                ("base", parameters.FEE_BPS, 1.0, 1.0, 0.0),
+                ("high", parameters.FEE_BPS, 2.0, 3.0, 0.0),
+            ],
+        )
+
+
+_register_perp_live_profiles()
 
 DAILY_RESEARCH_PROFILE_PREFIX = "research_1d_"
 
@@ -344,6 +423,7 @@ def _register_daily_research_profiles() -> None:
         FREQUENCY_PROFILES[profile_id] = FrequencyProfile(
             frequency_profile_id=profile_id,
             symbol=symbol,
+            binance_symbol=symbol,
             interval="1d",
             decision_cadence_minutes=1440,
             live_enabled=False,

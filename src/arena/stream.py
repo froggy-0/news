@@ -207,8 +207,14 @@ def _parse_tick(raw: str, symbols: tuple[str, ...]) -> tuple[str, float] | None:
 
 
 async def run() -> None:
-    """무한 재접속 루프. 외부에서 asyncio.gather()로 실행."""
-    symbols = config.ARENA_LIVE_SYMBOLS
+    """무한 재접속 루프. 외부에서 asyncio.gather()로 실행.
+
+    spot→perp Phase A2(2026-08-15): 구독은 실제 티커(config.ARENA_LIVE_REAL_SYMBOLS)
+    하나뿐이다 — perp 트랙도 spot 가격 프록시를 쓰므로 새 WS 커넥션이 필요 없다. 틱
+    하나가 도착하면 그 실제 티커에 매핑된 모든 트랙(config.ARENA_LIVE_TRACKS_BY_SYMBOL,
+    perp 비활성 시 트랙이 1개뿐이라 기존과 동일)의 스탑로스를 전부 체크한다.
+    """
+    symbols = config.ARENA_LIVE_REAL_SYMBOLS
     url = _combined_stream_url(symbols)
     while True:
         try:
@@ -221,9 +227,12 @@ async def run() -> None:
                     tick = _parse_tick(raw, symbols)
                     if tick is None:
                         continue
-                    symbol, price = tick
-                    state.set_price(symbol, price)
-                    await _check_stop_loss(symbol, price)
+                    real_symbol, price = tick
+                    for track_symbol in config.ARENA_LIVE_TRACKS_BY_SYMBOL.get(
+                        real_symbol, (real_symbol,)
+                    ):
+                        state.set_price(track_symbol, price)
+                        await _check_stop_loss(track_symbol, price)
         except asyncio.CancelledError:
             raise
         except Exception as exc:

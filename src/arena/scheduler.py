@@ -23,6 +23,7 @@ from . import (
     liquidation_features,
     market_structure,
     parameters,
+    perp_policy,
     positions,
     realtime_risk,
     regime,
@@ -245,6 +246,9 @@ def _base_params_snapshot(
         "research_perp_shadow_enabled": config.RESEARCH_PERP_SHADOW_ENABLED,
         "spot_execution_only": True,
         "derivatives_data_usage": "research_features_only",
+        # spot→perp 전환 Phase A(2026-08-15): 위 필드들은 여전히 "기본 spot" 상태를
+        # 기술한다(하위호환) — 실제 알고별 오버라이드는 이 필드로 관측한다.
+        "perp_live_enabled_algos": sorted(parameters.PERP_LIVE_ENABLED_ALGOS),
     }
     return snapshot
 
@@ -274,11 +278,23 @@ def _params_snapshot(
     )
 
 
-def _risk_policy() -> risk.PortfolioRiskPolicy:
-    max_short_positions = 0 if config.TARGET_PRODUCT == "spot" else config.MAX_SHORT_POSITIONS
-    max_net_short_exposure = (
-        0.0 if config.TARGET_PRODUCT == "spot" else config.MAX_NET_SHORT_EXPOSURE
+def _position_semantics_for_product_type(product_type: str) -> str:
+    """트랙의 product_type(profile.product_type)에서 position_semantics를 도출."""
+    return (
+        parameters.POSITION_SEMANTICS
+        if product_type == "spot"
+        else parameters.PERP_POSITION_SEMANTICS
     )
+
+
+def _risk_policy() -> risk.PortfolioRiskPolicy:
+    # spot→perp 전환 Phase A(2026-08-15): risk.py 자체는 이미 long/short 대칭이라(포지션
+    # 캡이 algo_id 단위가 아닌 portfolio 단위) PERP_LIVE_ENABLED_ALGOS가 하나라도 있으면
+    # 숏 캡을 정상 개방한다. 개별 알고가 실제로 숏을 낼 수 있는지는
+    # positions.open_position()의 algo_id별 허용목록 가드가 별도로 막는다(이중 방어).
+    perp_active = bool(parameters.PERP_LIVE_ENABLED_ALGOS)
+    max_short_positions = config.MAX_SHORT_POSITIONS if perp_active else 0
+    max_net_short_exposure = config.MAX_NET_SHORT_EXPOSURE if perp_active else 0.0
     return risk.PortfolioRiskPolicy(
         position_unit=config.POSITION_UNIT,
         max_open_positions_total=config.MAX_OPEN_POSITIONS_TOTAL,
@@ -292,7 +308,25 @@ def _risk_policy() -> risk.PortfolioRiskPolicy:
     )
 
 
-def _execution_gate_policy() -> execution_gate.ExecutionGatePolicy:
+def _min_depth_10bp_usd_for_symbol(symbol: str) -> float:
+    """자산별 depth 하한(2026-08-14) — 단일 전역값이 BTC 기준으로 캘리브레이션돼 SOL
+    신호의 62.5%를 "체결 나빠서"가 아니라 "SOL이라서" depth_too_thin으로 거부하던 문제
+    수정(실측: scripts/analysis/exec_gate_depth_calibration.py). EXEC_GATE_MIN_DEPTH_
+    10BP_USD_BY_SYMBOL에 없는 심볼은 기존 전역 env-override값(BTC 캘리브레이션)으로 폴백.
+    ⚠️ _execution_gate_policy()와 _book_execution_features() 양쪽에서 반드시 이 함수를
+    통해 조회할 것 — _book_execution_features()가 depth_score/expected_slippage_bps를
+    선계산해 explicit 값으로 두면 execution_gate._depth_score()가 policy 값을 무시하고
+    그 값을 그대로 쓴다(2026-08-14 배포 직후 SOL 실측으로 발견: depth_score가 신
+    threshold가 아니라 구 전역값 $1M 기준으로 나오고 있었음).
+    """
+    return parameters.EXEC_GATE_MIN_DEPTH_10BP_USD_BY_SYMBOL.get(
+        symbol, config.EXEC_GATE_MIN_DEPTH_10BP_USD
+    )
+
+
+def _execution_gate_policy(
+    symbol: str = parameters.BINANCE_SYMBOL,
+) -> execution_gate.ExecutionGatePolicy:
     return execution_gate.ExecutionGatePolicy(
         ecr_multiple=config.EXEC_GATE_ECR_MULTIPLE,
         max_spread_bps=config.EXEC_GATE_MAX_SPREAD_BPS,
@@ -300,7 +334,7 @@ def _execution_gate_policy() -> execution_gate.ExecutionGatePolicy:
         min_depth_score=config.EXEC_GATE_MIN_DEPTH_SCORE,
         max_latency_ms=config.EXEC_GATE_MAX_LATENCY_MS,
         vol_spike_max=config.EXEC_GATE_VOL_SPIKE_MAX,
-        min_depth_10bp_usd=config.EXEC_GATE_MIN_DEPTH_10BP_USD,
+        min_depth_10bp_usd=_min_depth_10bp_usd_for_symbol(symbol),
     )
 
 
@@ -350,6 +384,7 @@ def _book_execution_features(
     asks: list[tuple[float, float]] | None = None,
     price: float,
     data_timestamp: datetime,
+    min_depth_10bp_usd: float = parameters.EXEC_GATE_MIN_DEPTH_10BP_USD,
 ) -> dict:
     features = {
         "source": "book_ticker_snapshot",
@@ -380,10 +415,10 @@ def _book_execution_features(
         if min_depth is not None:
             depth_penalty = max(
                 0.0,
-                config.EXEC_GATE_MIN_DEPTH_10BP_USD / max(min_depth, 1.0) - 1.0,
+                min_depth_10bp_usd / max(min_depth, 1.0) - 1.0,
             )
             features["expected_slippage_bps"] = spread_bps / 2.0 + depth_penalty
-            features["depth_score"] = min_depth / config.EXEC_GATE_MIN_DEPTH_10BP_USD
+            features["depth_score"] = min_depth / min_depth_10bp_usd
         features.update(
             {
                 "depth_10bp_bid_usd": bid_depth,
@@ -494,7 +529,7 @@ async def _run_shadow_vnext(
     results: list[data_lake.CaptureWriteResult] = []
     try:
         snapshot = await market_structure.fetch_market_structure_snapshot(
-            symbol=profile.symbol,
+            symbol=profile.binance_symbol,
             interval=profile.interval,
             data_timestamp=data_timestamp,
             spot_close=price,
@@ -541,7 +576,7 @@ async def _run_shadow_vnext(
                 cost_scenario=cost_scenario,
                 risk_decision=None,
                 evaluated_at=data_timestamp,
-                policy=_execution_gate_policy(),
+                policy=_execution_gate_policy(profile.binance_symbol),
             )
             sleeve_reason = dict(sleeve_signal.reason)
             sleeve_reason["execution_gate"] = gate_decision.as_dict()
@@ -614,14 +649,16 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
             indicator_profile_id=indicator_profile_id,
             cost_model_version=cost_scenario.cost_model_version,
             cost_scenario_id=cost_scenario.cost_scenario_id,
-            product_type=config.TARGET_PRODUCT,
-            position_semantics=config.POSITION_SEMANTICS,
+            product_type=profile.product_type,
+            position_semantics=_position_semantics_for_product_type(profile.product_type),
         )
     )
     # return_exceptions=True 로 각 API 실패를 독립적으로 감지
+    # binance_symbol(실제 티커) 사용 — profile.symbol은 트랙 식별자(perp는 "-PERP"
+    # 접미사)라 REST 호출엔 못 씀. Phase A2(2026-08-15): 가격 피드는 spot 프록시 유지.
     ohlcv_res, macro_res = await asyncio.gather(
         _fetch_ohlcv(
-            symbol=profile.symbol,
+            symbol=profile.binance_symbol,
             interval=profile.interval,
             limit=config.KLINES_LIMIT,
         ),
@@ -703,7 +740,7 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
     # docs/arena/research/liquidation-feature-design-20260810.md). 조회 실패해도 사이클 무영향.
     try:
         _liq_bars = await data_lake.fetch_liquidation_bars(
-            symbol=profile.symbol, since=now - timedelta(days=32)
+            symbol=profile.binance_symbol, since=now - timedelta(days=32)
         )
         macro.update(liquidation_features.liquidation_snapshot(_liq_bars, now=now))
     except Exception as exc:
@@ -714,7 +751,10 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
             run_id=run_id,
             raw_klines=ohlcv.raw_klines,
             fetched_at=now,
-            symbol=profile.symbol,
+            # binance_symbol(실제 티커) — perp 트랙도 spot 가격 프록시를 쓰므로 봉
+            # 데이터가 spot 트랙과 동일하다. 트랙 식별자로 쓰면 캔들 히스토리가
+            # 불필요하게 중복 저장되므로 실제 티커 하나로 합쳐 upsert(idempotent).
+            symbol=profile.binance_symbol,
             interval=profile.interval,
         )
     )
@@ -732,7 +772,9 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
             run_id=run_id,
             data_timestamp=data_timestamp,
             indicators=ind,
-            symbol=profile.symbol,
+            # binance_symbol — 지표도 spot 프록시 봉에서 계산되므로 spot 트랙과 동일한
+            # 값이다(record_ohlcv_bars와 동일 근거로 실제 티커에 합쳐 저장).
+            symbol=profile.binance_symbol,
             interval=profile.interval,
             indicator_profile_id=indicator_profile_id,
             frequency_profile_id=profile.frequency_profile_id,
@@ -741,7 +783,7 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
     capture_results.append(
         await data_lake.record_indicator_feature_bar(
             run_id=run_id,
-            symbol=profile.symbol,
+            symbol=profile.binance_symbol,
             interval=profile.interval,
             data_timestamp=data_timestamp,
             indicators=ind,
@@ -759,9 +801,11 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
     )
 
     # 의사결정 시점 호가 스냅샷 (Tier 1 TCA 선행 데이터). 사이클당 1회 공유.
+    # 전부 binance_symbol(실제 티커) — 호가/뎁스/실시간리스크는 실제 시장 데이터라
+    # 트랙 식별자로는 조회 안 됨(perp도 spot 프록시 시장데이터를 그대로 씀).
     (bid, ask), (depth_bids, depth_asks) = await asyncio.gather(
-        _fetch_book_ticker(profile.symbol),
-        _fetch_depth_snapshot(profile.symbol),
+        _fetch_book_ticker(profile.binance_symbol),
+        _fetch_depth_snapshot(profile.binance_symbol),
     )
     execution_features = _book_execution_features(
         bid=bid,
@@ -770,12 +814,17 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
         asks=depth_asks,
         price=price,
         data_timestamp=data_timestamp,
+        min_depth_10bp_usd=_min_depth_10bp_usd_for_symbol(profile.binance_symbol),
     )
-    execution_features.update(await _latest_realtime_risk_features(symbol=profile.symbol, now=now))
+    execution_features.update(
+        await _latest_realtime_risk_features(symbol=profile.binance_symbol, now=now)
+    )
 
     had_algo_error = False
     policy = _risk_policy()
-    gate_policy = _execution_gate_policy()
+    gate_policy = _execution_gate_policy(profile.binance_symbol)
+    # symbol(트랙 식별자) 그대로 — 일간손실·drawdown은 트랙(자본풀) 단위로 독립 평가
+    # (spot BTC와 perp BTC가 서로 다른 리스크 상태를 가져야 함, ETH/SOL과 동일 원칙).
     portfolio_risk_state = await _risk_state(now, symbol=profile.symbol)
     for algo_id, fn in ALGORITHMS.items():
         signal: str | None = None
@@ -785,9 +834,12 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
         resulting_position_id: int | None = None
         risk_decision: risk.RiskDecision | None = None
         gate_decision: execution_gate.ExecutionGateDecision | None = None
-        product_decision: spot_policy.SpotExecutionDecision | None = None
+        product_decision: (
+            spot_policy.SpotExecutionDecision | perp_policy.PerpExecutionDecision | None
+        ) = None
         current = state.get_position(profile.symbol, algo_id)
         current_position_id = current["id"] if current else None
+        is_perp = algo_id in parameters.PERP_LIVE_ENABLED_ALGOS
         try:
             # 시간 손절(가격 손절 제거 알고 보완): 최대 보유시간 초과 시 청산.
             ts_hours = parameters.TIME_STOP_HOURS_BY_ALGO.get(algo_id)
@@ -826,7 +878,11 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
                 continue
 
             raw_signal = fn(macro, ind)
-            product_decision = spot_policy.decide(raw_signal, current)
+            product_decision = (
+                perp_policy.decide(raw_signal, current)
+                if is_perp
+                else spot_policy.decide(raw_signal, current)
+            )
             signal = product_decision.executable_signal
             action = product_decision.action
             skipped_reason = product_decision.skipped_reason
@@ -835,13 +891,21 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
 
             if product_decision.should_close:
                 if current is not None:
-                    # 청산 히스테리시스: flat 청산만 보류 대상(risk-off·legacy short은 즉시).
+                    # 청산 히스테리시스: flat 청산만 보류 대상(risk-off·legacy short·perp
+                    # 반전은 즉시 — perp 반전은 바로 아래 min_hold 체크가 별도로 게이팅).
                     if product_decision.close_reason == "flat_signal" and exit_hold_override(
                         algo_id, macro, ind
                     ):
                         action = "hold"
                         skipped_reason = "exit_hold_override"
                         continue
+                    # spot은 legacy short 청산·숏 신호를 min_hold 무시하고 즉시 강제청산
+                    # (spot은 애초에 숏을 보유할 수 없어 대기 자체가 의미 없음). perp는
+                    # 반전을 포함해 min_hold를 균일 적용(backtest.py 비-spot 분기와 동일 —
+                    # bypass 없음, 원치 않는 즉시 반전 매매를 억제).
+                    bypass_min_hold = (not is_perp) and (
+                        product_decision.legacy_short_close or raw_signal == "short"
+                    )
                     if (
                         not execution_rules.min_hold_ok(
                             current,
@@ -850,34 +914,39 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
                             parameters.MIN_HOLD_HOURS,
                             parameters.MIN_HOLD_FALLBACK_HOURS,
                         )
-                        and not product_decision.legacy_short_close
-                        and raw_signal != "short"
+                        and not bypass_min_hold
                     ):
                         action = "min_hold_skip"
                         skipped_reason = "flat_signal_before_min_hold"
                         continue
+                    closing = current
                     ret_pct = await positions.close_position(
-                        current["id"],
+                        closing["id"],
                         now,
                         price,
                         close_reason=product_decision.close_reason,
                     )
-                    hold_h = execution_rules.hold_hours(current["open_time"], now)
+                    hold_h = execution_rules.hold_hours(closing["open_time"], now)
                     state.set_position(profile.symbol, algo_id, None)
+                    current = None
                     portfolio_risk_state = await _risk_state(now, symbol=profile.symbol)
                     await slack_notify.notify_close(
                         symbol=profile.symbol,
                         algo_id=algo_id,
-                        direction=current["direction"],
-                        open_price=current["open_price"],
+                        direction=closing["direction"],
+                        open_price=closing["open_price"],
                         close_price=price,
                         ret_pct=ret_pct,
                         hold_hours=hold_h,
-                        position_id=current["id"],
+                        position_id=closing["id"],
                         is_stop_loss=False,
                         close_reason=product_decision.close_reason or "flat_signal",
                     )
-                continue
+                # perp 반전(should_open도 True)이면 청산 직후 같은 사이클에서 재진입을
+                # 평가한다(아래로 진행) — spot은 should_close/should_open이 상호배타라
+                # 항상 continue(기존 동작 무변화).
+                if not (is_perp and product_decision.should_open):
+                    continue
 
             if not product_decision.should_open:
                 # 역발산 물타기 4h 백업: 실시간 체결은 stream(1m 틱)이 담당하나, 스트림
@@ -1025,6 +1094,8 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
                 slippage_bps=cost_scenario.slippage_bps,
                 spread_bps_round_trip=cost_scenario.spread_bps_round_trip,
                 symbol=profile.symbol,
+                product_type=profile.product_type,
+                position_semantics=_position_semantics_for_product_type(profile.product_type),
                 params_snapshot=_params_snapshot(
                     algo_id,
                     profile=profile,
@@ -1540,6 +1611,19 @@ async def run() -> None:
                 hour=parameters.SCHEDULER_CRON_HOUR,
                 minute=(parameters.SCHEDULER_CRON_MINUTE + offset * 2) % 60,
             )
+    if config.ENABLE_ARENA_PERP_LIVE:
+        # spot→perp Phase A2(2026-08-15): BTC/ETH/SOL 선물(perp) 트랙 — 위 현물
+        # 멀티에셋 루프와 완전히 동일한 패턴(_run_cycle_safe 재사용, 자산별 재튜닝 없이
+        # frequency.perp_live_profile_id 프로파일만 다르게). 스태거 오프셋을 현물
+        # 오프셋(+2,+4분)과 겹치지 않게 (+3,+5,+7분)으로 분리.
+        for offset, symbol in enumerate(parameters.MULTI_ASSET_SYMBOLS, start=1):
+            scheduler.add_job(
+                _run_cycle_safe,
+                "cron",
+                args=[frequency.perp_live_profile_id(symbol)],
+                hour=parameters.SCHEDULER_CRON_HOUR,
+                minute=(parameters.SCHEDULER_CRON_MINUTE + offset * 2 + 1) % 60,
+            )
     # 주간 백테스트 리포트: 매주 월요일 00:10 UTC = 09:10 KST
     scheduler.add_job(
         _run_weekly_backtest_safe,
@@ -1564,6 +1648,13 @@ async def run() -> None:
             *[
                 _run_cycle_safe(frequency.multi_asset_shadow_profile_id(symbol))
                 for symbol in config.ARENA_MULTI_ASSET_SHADOW_SYMBOLS
+            ]
+        )
+    if config.ENABLE_ARENA_PERP_LIVE:
+        await asyncio.gather(
+            *[
+                _run_cycle_safe(frequency.perp_live_profile_id(symbol))
+                for symbol in parameters.MULTI_ASSET_SYMBOLS
             ]
         )
 

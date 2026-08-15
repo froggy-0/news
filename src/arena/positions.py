@@ -8,7 +8,7 @@ from typing import Any
 
 from supabase import AsyncClient, acreate_client
 
-from . import config, execution_rules, parameters, state
+from . import config, execution_rules, market_structure, parameters, state
 from .algorithms import ALGORITHMS, fng_scaled_tranches
 
 logger = logging.getLogger(__name__)
@@ -121,6 +121,8 @@ async def open_position(
     slippage_bps: float = 0.0,
     spread_bps_round_trip: float = 0.0,
     symbol: str = parameters.BINANCE_SYMBOL,
+    product_type: str | None = None,
+    position_semantics: str | None = None,
     params_snapshot: dict[str, Any],
     indicator_snapshot: dict[str, Any],
     macro_snapshot: dict[str, Any],
@@ -128,9 +130,24 @@ async def open_position(
     signal_reason: dict[str, Any],
     risk_snapshot: dict[str, Any] | None = None,
 ) -> dict:
-    """포지션 오픈. stop_loss_price는 ATR 기반으로 계산된 절대 가격."""
-    if direction == "short" and config.TARGET_PRODUCT == "spot" and not config.ALLOW_LIVE_SHORT:
-        raise ValueError("spot paper/live execution cannot open short positions")
+    """포지션 오픈. stop_loss_price는 ATR 기반으로 계산된 절대 가격.
+
+    product_type/position_semantics: Phase A2(2026-08-15)부터 트랙(호출부의
+    frequency.FrequencyProfile.product_type)이 명시적으로 넘긴다 — 미지정 시엔
+    Phase A의 알고별 결정(parameters.target_product_for_algo)으로 폴백해 기존
+    호출부·테스트가 그대로 동작한다.
+    """
+    resolved_product_type = product_type or parameters.target_product_for_algo(algo_id)
+    resolved_position_semantics = (
+        position_semantics or parameters.target_position_semantics_for_algo(algo_id)
+    )
+    if direction == "short" and (
+        resolved_product_type == "spot" or algo_id not in parameters.PERP_LIVE_ENABLED_ALGOS
+    ):
+        raise ValueError(
+            f"short position requires a perp track and algo_id in "
+            f"parameters.PERP_LIVE_ENABLED_ALGOS: {algo_id}"
+        )
     # 래칫 트레일링 거리 = |진입가 − 초기 손절가| (ATR×multiple 클램핑 거리 재사용) × mult.
     trail_distance = execution_rules.trail_distance_from_stop(
         open_price,
@@ -160,8 +177,8 @@ async def open_position(
         "signal_reason": signal_reason,
         "risk_snapshot": risk_snapshot or {},
         "runtime": parameters.RUNTIME,
-        "product_type": config.TARGET_PRODUCT,
-        "position_semantics": config.POSITION_SEMANTICS,
+        "product_type": resolved_product_type,
+        "position_semantics": resolved_position_semantics,
     }
     # 아직 마이그레이션 전인 DB(컬럼 부재)에서도 안전하게 동작하도록 선택 컬럼 fallback.
     # symbol: 2026-07-31 멀티자산 마이그레이션(20260731_arena_multi_asset_v1.sql) 미적용
@@ -324,6 +341,34 @@ async def close_position(
         slippage_bps=float(row.get("slippage_bps") or 0.0),
         spread_bps_round_trip=float(row.get("spread_bps_round_trip") or 0.0),
     )
+    # perp 전환 Phase A(2026-08-15): spot은 펀딩 없음(product_type='spot'/None). perp
+    # 포지션은 보유기간 동안의 실제 arena_funding_rates(4h마다 수집)를 합산해 정산 —
+    # backtest.py._close_position이 이미 하는 것과 동일 방식(부호: 롱은 양의 펀딩비
+    # 지불·숏은 수취, market_structure.funding_return_pct). 조회 실패는 그레이스풀(펀딩 0).
+    if row.get("product_type") not in (None, "spot"):
+        from . import data_lake  # 순환 임포트 회피(data_lake가 positions를 임포트함)
+
+        try:
+            # Phase A2(2026-08-15): row["symbol"]은 이제 트랙 식별자(예: "BTCUSDT-PERP")일
+            # 수 있음 — arena_funding_rates는 실제 바이낸스 티커로만 저장되므로 반드시
+            # real_ticker_for_track()로 역변환해서 조회해야 한다(안 하면 조회 0건 →
+            # 펀딩 항상 0 취급되는 조용한 버그).
+            funding_rows = await data_lake.fetch_funding_rates(
+                symbol=parameters.real_ticker_for_track(
+                    row.get("symbol", parameters.BINANCE_SYMBOL)
+                ),
+                since=execution_rules.parse_utc_datetime(row["open_time"]),
+                until=execution_rules.parse_utc_datetime(close_time),
+            )
+            funding_pct = market_structure.funding_return_pct(
+                direction=row["direction"],
+                funding_rates=funding_rows,
+                open_time=row["open_time"],
+                close_time=close_time,
+            )
+            ret_pct += funding_pct
+        except Exception as exc:
+            logger.warning("Funding accrual skipped (id=%s): %s", position_id, exc)
     hold_hours = execution_rules.hold_hours(row["open_time"], close_time)
 
     update_payload = {

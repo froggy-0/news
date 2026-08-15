@@ -214,6 +214,42 @@ def test_fng_contrarian_scales_in_and_skips_price_stop(monkeypatch) -> None:
     assert trade.open_price == pytest.approx(96.3571, abs=1e-3)
 
 
+def test_fng_contrarian_scale_in_has_parity_under_non_spot_product_type(monkeypatch) -> None:
+    # spot→perp 전환 Phase A(2026-08-15) 발견·수정: run_replay()의 비-spot 분기(else:
+    # signal=raw_signal)엔 원래 fng_contrarian 물타기(_maybe_scale_in_fng_sim) 호출이
+    # 없었음 — product_type="spot"이 아닌 설정(perp 검증 백테스트)으로 fng_contrarian을
+    # 돌리면 트랜치가 하나도 안 쌓여 거래수·비중이 spot과 달라지는 조용한 격차였음.
+    # 위 test_fng_contrarian_scales_in_and_skips_price_stop와 동일 시나리오를 non-spot
+    # settings로 재현해 이제 동일 결과(단일 거래·비중 0.70·가중평균 진입가)가 나오는지 확인.
+    monkeypatch.setattr(parameters, "FNG_TARGET_EXIT_ENABLED", False)
+
+    def fng_long(macro, indicators):
+        return "long" if macro.get("fng", 100) < 30 else None
+
+    result = backtest.run_replay(
+        [
+            _frame(0, close=100.0, macro={"fng": 25}),
+            _frame(1, close=98.0, low=96.5, macro={"fng": 15}),
+            _frame(2, close=95.0, low=93.0, macro={"fng": 5}),
+            _frame(3, close=70.0, low=65.0, macro={"fng": 5}),
+            *[_frame(i, close=72.0, macro={"fng": 20}) for i in range(4, 12)],
+            _frame(12, close=95.0, macro={"fng": 60}),
+        ],
+        strategy_fns={"fng_contrarian": fng_long},
+        settings=backtest.BacktestSettings(
+            close_open_at_end=False,
+            product_type="usdm_perp",
+            position_semantics="usdm_perp_long_short",
+        ),
+    )
+
+    assert len(result.trades) == 1
+    trade = result.trades[0]
+    assert trade.exit_reason == "signal_flat"
+    assert trade.position_weight == pytest.approx(0.70)
+    assert trade.open_price == pytest.approx(96.3571, abs=1e-3)
+
+
 def test_fng_contrarian_unknown_regime_multiplier_scales_first_tranche_only(monkeypatch) -> None:
     # P4(2026-07-21, 신규·미검증): UNKNOWN_REGIME_SIZE_MULT_BY_ALGO가 최초 1차 트랜치에만
     # 적용되고, 이후 가격 기준 물타기(fill_price_tranches)는 정상 절대비중·정상 상한대로

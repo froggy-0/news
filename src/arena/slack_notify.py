@@ -32,7 +32,12 @@ _SYMBOL_LABEL: dict[str, str] = {
 
 
 def _symbol_label(symbol: str) -> str:
-    return _SYMBOL_LABEL.get(symbol, symbol.removesuffix("USDT") or symbol)
+    # spot→perp Phase A2(2026-08-15): perp 트랙 심볼("BTCUSDT-PERP")은 실제 티커에
+    # "-PERP" 접미사가 붙은 형태 — 실제 티커로 역변환해 라벨을 찾고 "-F"(선물) 표시를
+    # 덧붙인다. spot 트랙은 real_ticker_for_track()이 그대로 반환해 무변화.
+    real_symbol = parameters.real_ticker_for_track(symbol)
+    label = _SYMBOL_LABEL.get(real_symbol, real_symbol.removesuffix("USDT") or real_symbol)
+    return f"{label}-F" if real_symbol != symbol else label
 
 
 # ── 알고리즘 한/영 라벨 ──────────────────────────────────────────────────────────
@@ -146,7 +151,12 @@ def _signal_narrative(
     algo_id: str, direction: str, ind: dict[str, Any], macro: dict[str, Any]
 ) -> str:
     """알고리즘별 진입 근거를 한국어로 풀어서 설명."""
-    dir_ko = "현물 매수" if direction == "long" else "현물 실행 제외 신호"
+    if direction == "long":
+        dir_ko = "현물 매수"
+    elif direction == "short":
+        dir_ko = "숏 진입"
+    else:
+        dir_ko = "현물 실행 제외 신호"
     rsi = ind.get("rsi", 50.0)
 
     if algo_id == "regime_trend":
@@ -273,7 +283,7 @@ def _close_narrative(
     is_stop_loss: bool,
 ) -> str:
     """청산 결과를 한국어로 풀어서 설명."""
-    dir_ko = "현물 매수" if direction == "long" else "legacy synthetic short"
+    dir_ko = "현물 매수" if direction == "long" else "숏"
     algo_ko = _ALGO_KO.get(algo_id, algo_id)
     ret_str = f"{ret_pct * 100:+.2f}%"
     pnl_usd = ret_pct * VIRTUAL_CAPITAL
@@ -366,18 +376,18 @@ async def notify_open(
     client = _get_client()
     if client is None:
         return
-    if direction != "long":
+    if direction not in ("long", "short"):
         logger.warning(
-            "Spot execution skipped non-long open notification: %s %s %s",
-            symbol,
-            algo_id,
-            direction,
+            "Unsupported direction for open notification: %s %s %s", symbol, algo_id, direction
         )
         return
 
     sym_label = _symbol_label(symbol)
-    dir_emoji = "🟢"
-    dir_ko = "현물 매수 진입"
+    # spot→perp 전환 Phase A(2026-08-15): direction=="short"는 PERP_LIVE_ENABLED_ALGOS
+    # 알고에서만 나온다(positions.open_position()이 그 외엔 거부) — 이전엔 이 함수가
+    # non-long을 전부 무음 처리해 숏 진입 알림이 아예 안 갔음.
+    dir_emoji = "🟢" if direction == "long" else "🔴"
+    dir_ko = "현물 매수 진입" if direction == "long" else "숏 진입"
     algo_ko = _ALGO_KO.get(algo_id, algo_id)
     algo_en = _ALGO_EN.get(algo_id, algo_id.upper())
 
@@ -458,7 +468,7 @@ async def notify_close(
     hit = ret_pct >= 0
     result_emoji = "✅" if hit else "❌"
     result_ko = "수익" if hit else "손실"
-    dir_ko = "현물 매수" if direction == "long" else "legacy synthetic short"
+    dir_ko = "현물 매수" if direction == "long" else "숏"
     algo_ko = _ALGO_KO.get(algo_id, algo_id)
     algo_en = _ALGO_EN.get(algo_id, algo_id.upper())
 

@@ -20,7 +20,9 @@ async def _main() -> None:
     await positions.init()
     # 2026-08-06: ETH/SOL 실거래 승격 — 라이브 심볼마다 독립적으로 오픈 포지션을
     # state.open_positions[symbol]에 적재(단일 flat dict였다면 심볼 간 포지션이 뒤섞임).
-    for symbol in config.ARENA_LIVE_SYMBOLS:
+    # spot→perp Phase A2(2026-08-15): ARENA_LIVE_ALL_TRACKS는 spot 트랙 + (활성 시)
+    # perp 트랙까지 개별 워밍업(perp 비활성 시 ARENA_LIVE_SYMBOLS와 동일 리스트).
+    for symbol in config.ARENA_LIVE_ALL_TRACKS:
         await positions.refresh_open_positions(symbol=symbol)
 
     loop = asyncio.get_running_loop()

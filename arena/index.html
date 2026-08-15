@@ -107,10 +107,21 @@
     /* ── Layout ───────────────────────────────────────────── */
     .wrap{max-width:1480px;margin:0 auto;padding:16px 20px 32px}
 
-    /* ── Asset switcher ───────────────────────────────────── */
+    /* ── Asset / market switcher ─────────────────────────────
+       spot→perp Phase A2(2026-08-15): 시장(현물/선물) 토글을 자산 토글과 같은 줄에 —
+       루트 레벨에서 나란한 두 축이라는 걸 시각적으로 보여준다. */
+    .switcher-row{
+      display:flex;flex-wrap:wrap;align-items:center;gap:0 16px;
+      max-width:1480px;margin:0 auto;
+    }
     .asset-switcher{
-      display:flex;gap:6px;max-width:1480px;margin:0 auto;
+      display:flex;flex-wrap:wrap;gap:6px;
       padding:12px 20px 0;
+    }
+    #marketSwitcher{padding-left:0}
+    .mtab.active{
+      color:#34D399;border-color:#34D399;
+      background:color-mix(in srgb,#34D399 10%,transparent);
     }
     .atab{
       font-family:'Barlow Condensed',sans-serif;
@@ -479,7 +490,7 @@
     <div class="gs-id">
       <span class="gs-id-dot" aria-hidden="true"></span>
       <span class="gs-id-txt">TOTAL ARENA</span>
-      <span class="gs-id-sub">BTC + ETH + SOL · 18슬롯(자산×알고 독립자본) · 알고당 $1,000</span>
+      <span class="gs-id-sub" id="gsIdSub">BTC + ETH + SOL · 18슬롯(자산×알고 독립자본) · 알고당 $1,000</span>
     </div>
     <div class="gs-figures" aria-live="polite">
       <div class="gs-fig gs-fig-main">
@@ -502,7 +513,10 @@
   </div>
 </section>
 
-<div class="asset-switcher" id="assetSwitcher" role="tablist" aria-label="자산 선택"></div>
+<div class="switcher-row">
+  <div class="asset-switcher" id="assetSwitcher" role="tablist" aria-label="자산 선택"></div>
+  <div class="asset-switcher" id="marketSwitcher" role="tablist" aria-label="시장 선택"></div>
+</div>
 
 <main class="wrap">
 
@@ -636,6 +650,9 @@ const STARTING_CAPITAL = 1000;
 const ROUND_TRIP_COST_PCT = 0.0023;
 // 아레나 실가동 시작 — 에쿼티 커브·벤치마크·D+N의 공통 기준점.
 const ARENA_START_MS = Date.parse('2026-06-20T00:00:00Z');
+// spot→perp 전환 Phase A(2026-08-15): direction별 손익 부호 — 롱은 가격상승=이익,
+// 숏은 가격하락=이익(src/arena/execution_rules.py의 direction_sign()과 동일 관례).
+function dirSign(direction) { return direction === 'short' ? -1 : 1; }
 
 const TAB_LABELS = {
   all: '전체',
@@ -681,6 +698,22 @@ const ASSETS = {
   SOL: { symbol: 'SOLUSDT', label: 'SOL', color: '#9945FF' },
 };
 let activeAsset = 'BTC';
+
+// spot→perp Phase A2(2026-08-15): 자산(BTC/ETH/SOL)과 동일 레벨의 독립 루트 트랙으로
+// 시장(현물/선물)을 분리 — src/arena/parameters.py perp_track_symbol()과 동일 컨벤션
+// ("{실제티커}-PERP"). perp 트랙은 처음엔 롱온리(펀딩비만 반영)로 시작하고, 알고별
+// 숏 승인은 PERP_LIVE_ENABLED_ALGOS(Phase B)가 결정 — 대시보드는 direction 필드를
+// 그대로 렌더링(이미 dirSign()/포지션 배지가 방향 대응 완료, Phase A 참조).
+const MARKETS = {
+  spot: { label: '현물', suffix: '' },
+  perp: { label: '선물', suffix: '-PERP' },
+};
+let activeMarket = 'spot';
+
+function trackSymbol(assetKey, marketKey) {
+  return `${ASSETS[assetKey].symbol}${MARKETS[marketKey].suffix}`;
+}
+
 let supaClient = null;
 
 const TAB_DEFS = [
@@ -893,7 +926,7 @@ function algoStats(ps) {
     if (open && latestBtcPrice && open.open_price) {
       const w = open.position_weight != null ? open.position_weight : 1;
       openWeight = w;
-      const raw = (latestBtcPrice - open.open_price) / open.open_price;
+      const raw = dirSign(open.direction) * (latestBtcPrice - open.open_price) / open.open_price;
       // 청산 시 차감될 왕복 비용을 미리 반영한 순(net) 미실현손익.
       const net = raw - ROUND_TRIP_COST_PCT;
       unrealizedPct = net * 100;          // 비용 차감 후(실현 시 실제 반영값)
@@ -1095,7 +1128,7 @@ function renderPositionStrip() {
       const w = p.position_weight != null ? p.position_weight : 1;
       let unrlStr = '—', unrlColor = 'var(--muted)', pnlStr = '';
       if (latestBtcPrice && p.open_price) {
-        const raw = (latestBtcPrice - p.open_price) / p.open_price;
+        const raw = dirSign(p.direction) * (latestBtcPrice - p.open_price) / p.open_price;
         const u = raw * 100;
         unrlColor = u >= 0 ? 'var(--green)' : 'var(--red)';
         unrlStr   = `${u >= 0 ? '+' : ''}${u.toFixed(2)}%`;
@@ -1108,10 +1141,13 @@ function renderPositionStrip() {
         const slPct = Math.abs(p.open_price - p.stop_loss_price) / p.open_price * 100;
         slStr = ` · 손절 $${Math.round(p.stop_loss_price).toLocaleString()} (−${slPct.toFixed(1)}%)`;
       }
+      const dirLabel = p.direction === 'short'
+        ? '▼ SHORT'
+        : (p.product_type && p.product_type !== 'spot' ? '▲ PERP LONG' : '▲ SPOT LONG');
       return `<div class="pos-card" style="--pc:${color};--pc40:${color}40;border-left-color:${color}">
         <div class="pos-card-top">
           <div class="pos-card-left">
-            <span class="pos-dir-badge">▲ SPOT LONG</span>
+            <span class="pos-dir-badge">${dirLabel}</span>
             ${activeTab === 'all' ? `<span class="pos-algo-name">${p.algo_id}</span>` : ''}
           </div>
           <span class="pos-unrl" style="color:${unrlColor}">${unrlStr}</span>
@@ -1197,7 +1233,7 @@ function renderPriceChart() {
   clearPriceLines();
 
   const trades = positions.filter(p =>
-    p.direction === 'long' && (activeTab === 'all' || p.algo_id === activeTab));
+    (activeTab === 'all' || p.algo_id === activeTab));
 
   const markers = [];
   for (const p of trades) {
@@ -1208,8 +1244,11 @@ function renderPriceChart() {
       // 그래프 내부 표현 간결화: 알고 구분은 이미 색상으로 되므로 텍스트 라벨은 생략
       // ("전체" 탭에서 6개 텍스트가 겹쳐 어지러웠던 문제 해소), 크로스헤어 툴팁이 상세를 대체.
       markers.push({
-        time: ot, position: 'belowBar', color,
-        shape: 'arrowUp', size: 1,
+        time: ot,
+        position: p.direction === 'short' ? 'aboveBar' : 'belowBar',
+        color,
+        shape: p.direction === 'short' ? 'arrowDown' : 'arrowUp',
+        size: 1,
       });
     }
     if (p.status === 'closed' && p.close_time) {
@@ -1311,7 +1350,7 @@ function renderLog(ps) {
     let retHtml;
     if (p.status === 'open') {
       if (latestBtcPrice && p.open_price) {
-        const u = (latestBtcPrice - p.open_price) / p.open_price * 100;
+        const u = dirSign(p.direction) * (latestBtcPrice - p.open_price) / p.open_price * 100;
         retHtml = `<span class="${u >= 0 ? 'ret-pos' : 'ret-neg'}">${u >= 0 ? '+' : ''}${u.toFixed(2)}%<span class="open-tag">진입중</span></span>`;
       } else {
         retHtml = '<span class="ret-open">진입 중</span>';
@@ -1524,22 +1563,59 @@ function renderAssetSwitcher() {
   });
 }
 
+function renderMarketSwitcher() {
+  const el = document.getElementById('marketSwitcher');
+  if (!el) return;
+  el.innerHTML = Object.keys(MARKETS).map(k => {
+    return `<button class="atab mtab${activeMarket === k ? ' active' : ''}" data-market="${k}" role="tab" aria-selected="${activeMarket === k}">${MARKETS[k].label}</button>`;
+  }).join('');
+  el.querySelectorAll('.mtab').forEach(b => {
+    b.addEventListener('click', () => switchMarket(b.dataset.market));
+  });
+}
+
 function setBtcOnlyVisible(visible) {
   document.querySelectorAll('.btc-only').forEach(el => { el.style.display = visible ? '' : 'none'; });
+}
+
+async function switchMarket(marketKey) {
+  if (marketKey === activeMarket || !MARKETS[marketKey]) return;
+  activeMarket = marketKey;
+  activeTab = 'all';
+  renderMarketSwitcher();
+  renderTabs();
+  await refreshActiveTrack();
 }
 
 async function switchAsset(assetKey) {
   if (assetKey === activeAsset || !ASSETS[assetKey]) return;
   activeAsset = assetKey;
   activeTab = 'all';
-  const meta = ASSETS[assetKey];
   renderAssetSwitcher();
   renderTabs();
+  await refreshActiveTrack();
+}
+
+// spot→perp Phase A2(2026-08-15): switchAsset/switchMarket 공용 — 현재 선택된
+// (activeAsset, activeMarket) 트랙 데이터를 전부 다시 그린다. 가격/캔들은 항상 실제
+// 티커(ASSETS[activeAsset].symbol) — perp도 spot 가격 프록시를 쓰므로 시장과 무관하다.
+// paper_positions/arena_decisions 조회만 trackSymbol()(트랙 식별자)을 쓴다.
+//
+// 시퀀스 가드: 두 축(자산×시장)이 생기면서 사용자가 탭을 빠르게 연속 전환할 가능성이
+// 늘었다 — 이전 트랙의 느린 응답이 나중에 도착해 최신 트랙 데이터를 덮어쓰는 경합을
+// trackRequestSeq로 차단한다(막바지 요청만 렌더 반영, 그 사이 응답은 조용히 폐기).
+let trackRequestSeq = 0;
+async function refreshActiveTrack() {
+  const seq = ++trackRequestSeq;
+  const meta = ASSETS[activeAsset];
+  const symbol = trackSymbol(activeAsset, activeMarket);
 
   // 2026-08-06: ETH/SOL도 BTC와 동일하게 알고당 $1000 독립자본 실거래로 승격
   // (paper_positions 실체결) — SHADOW 배너·서로 다른 렌더 경로 구분을 없앤다.
   const hdSub = document.getElementById('hdSub');
-  if (hdSub) hdSub.textContent = `${meta.symbol} · 4H · 현물 LONG/FLAT`;
+  if (hdSub) {
+    hdSub.textContent = `${meta.symbol} · 4H · ${activeMarket === 'perp' ? '선물 LONG/SHORT' : '현물 LONG/FLAT'}`;
+  }
 
   setBtcOnlyVisible(true);
 
@@ -1551,16 +1627,17 @@ async function switchAsset(assetKey) {
   await Promise.all([fetchKlinesData(meta.symbol), fetchPrice(meta.symbol)]);
 
   const newsPanel = document.getElementById('assetNewsPanel');
-  if (newsPanel) newsPanel.style.display = assetKey === 'BTC' ? 'none' : '';
+  if (newsPanel) newsPanel.style.display = activeAsset === 'BTC' ? 'none' : '';
 
   const [data, decisions, news] = await Promise.all([
-    fetchPositions(supaClient, meta.symbol),
-    fetchDecisions(supaClient, meta.symbol),
-    assetKey === 'BTC' ? Promise.resolve([]) : fetchAssetNews(supaClient, meta.symbol),
+    fetchPositions(supaClient, symbol),
+    fetchDecisions(supaClient, symbol),
+    activeAsset === 'BTC' ? Promise.resolve([]) : fetchAssetNews(supaClient, meta.symbol),
   ]);
+  if (seq !== trackRequestSeq) return; // 그 사이 더 최신 트랙 전환이 있었음 — 이 응답은 폐기.
   latestDecisions = decisions;
   if (data) renderAll(data);
-  if (assetKey !== 'BTC') renderAssetNews(news);
+  if (activeAsset !== 'BTC') renderAssetNews(news);
 }
 
 /* ── Supabase ───────────────────────────────────────────────── */
@@ -1598,15 +1675,17 @@ async function fetchPositions(client, symbol) {
     .order('open_time', { ascending: false })
     .limit(500);
   if (error) { console.error('[Arena] fetch error:', error.message); return null; }
+  // spot→perp 전환 Phase A(2026-08-15): spot 롱 + perp(usdm_perp) 롱/숏 둘 다 통과시키고,
+  // 2026-06-20 이전 legacy_perp_sim 행만 계속 배제(product_type 불일치로 자동 제외).
   return (data || []).filter(p =>
-    p.direction === 'long' &&
-    p.product_type === 'spot' &&
-    p.position_semantics === 'spot_long_flat');
+    (p.product_type === 'spot' || p.product_type === 'usdm_perp') &&
+    (p.direction === 'long' || p.direction === 'short'));
 }
 
-/* ── Grand total (3자산 합산, 최상단 섹션 전용) ─────────────── */
-// 자산 탭 선택과 무관하게 항상 BTC+ETH+SOL 전체를 집계 — 섹션1은 "지금 뭘 보고 있나"가
-// 아니라 "아레나 전체가 지금 어떤가"를 보여줘야 하므로 activeAsset에 종속되지 않는다.
+/* ── Grand total (자산×시장 전체 합산, 최상단 섹션 전용) ───────── */
+// 자산·시장 탭 선택과 무관하게 항상 전체(BTC/ETH/SOL × 현물/선물)를 집계 — 섹션1은
+// "지금 뭘 보고 있나"가 아니라 "아레나 전체가 지금 어떤가"를 보여줘야 하므로
+// activeAsset/activeMarket에 종속되지 않는다.
 async function fetchAllAssetPrices() {
   await Promise.all(Object.keys(ASSETS).map(async k => {
     try {
@@ -1631,37 +1710,49 @@ async function fetchAllPositions(client) {
     .limit(1500);
   if (error) { console.error('[Arena] fetch-all error:', error.message); return null; }
   return (data || []).filter(p =>
-    p.direction === 'long' &&
-    p.product_type === 'spot' &&
-    p.position_semantics === 'spot_long_flat');
+    (p.product_type === 'spot' || p.product_type === 'usdm_perp') &&
+    (p.direction === 'long' || p.direction === 'short'));
 }
 
 function computeGrandTotal(ps) {
+  // spot→perp Phase A2(2026-08-15) 버그 수정: 기존엔 symbol(=자산)로만 묶어서, 같은
+  // 자산에 spot·perp 포지션이 동시에 있으면 한 슬롯에 뒤섞였다(트랙 식별자 도입 이후
+  // symbol 값 자체가 자산×시장을 이미 구분하므로 이 중첩 루프로 자연히 해결).
+  // perp 트랙이 아직 라이브가 아니면(ENABLE_ARENA_PERP_LIVE=False, 행 자체가 없음)
+  // 빈 선물 슬롯 18개를 합계에 끼워넣지 않는다 — 안 그러면 실거래 없는 슬롯이 그대로
+  // $1,000·0%로 잡혀 현물만 있던 시절의 총수익률이 희석돼 보인다. 선물 포지션이 하나라도
+  // 생기는 순간 자동으로 36슬롯 집계로 전환된다.
+  const hasPerpData = ps.some(p => p.product_type === 'usdm_perp');
+  const activeMarketKeys = Object.keys(MARKETS).filter(k => k === 'spot' || hasPerpData);
+
   let totalEquity = 0, totalStart = 0, totalSlots = 0, openCount = 0;
   for (const assetKey of Object.keys(ASSETS)) {
-    const symbol = ASSETS[assetKey].symbol;
-    const price  = assetPrices[assetKey];
-    const assetPs = ps.filter(p => p.symbol === symbol);
-    for (const algo of ALGO_IDS) {
-      totalSlots++;
-      totalStart += STARTING_CAPITAL;
-      const algoPs = assetPs.filter(p => p.algo_id === algo);
-      const done = algoPs.filter(p => p.status === 'closed' && p.ret_pct != null)
-        .sort((a, b) => new Date(a.close_time) - new Date(b.close_time));
-      const open = algoPs.find(p => p.status === 'open');
-      let equity = STARTING_CAPITAL;
-      for (const p of done) {
-        const w = p.position_weight != null ? p.position_weight : 1;
-        equity *= (1 + w * (p.ret_pct || 0));
+    const price = assetPrices[assetKey]; // 실제 티커 가격 — 시장과 무관(perp도 프록시).
+    for (const marketKey of activeMarketKeys) {
+      const symbol = trackSymbol(assetKey, marketKey);
+      const trackPs = ps.filter(p => p.symbol === symbol);
+      for (const algo of ALGO_IDS) {
+        totalSlots++;
+        totalStart += STARTING_CAPITAL;
+        const algoPs = trackPs.filter(p => p.algo_id === algo);
+        const done = algoPs.filter(p => p.status === 'closed' && p.ret_pct != null)
+          .sort((a, b) => new Date(a.close_time) - new Date(b.close_time));
+        const open = algoPs.find(p => p.status === 'open');
+        let equity = STARTING_CAPITAL;
+        for (const p of done) {
+          const w = p.position_weight != null ? p.position_weight : 1;
+          equity *= (1 + w * (p.ret_pct || 0));
+        }
+        let equityTotal = equity;
+        if (open && price && open.open_price) {
+          const w = open.position_weight != null ? open.position_weight : 1;
+          const net = dirSign(open.direction) * (price - open.open_price) / open.open_price
+            - ROUND_TRIP_COST_PCT;
+          equityTotal = equity * (1 + w * net);
+          openCount++;
+        }
+        totalEquity += equityTotal;
       }
-      let equityTotal = equity;
-      if (open && price && open.open_price) {
-        const w = open.position_weight != null ? open.position_weight : 1;
-        const net = (price - open.open_price) / open.open_price - ROUND_TRIP_COST_PCT;
-        equityTotal = equity * (1 + w * net);
-        openCount++;
-      }
-      totalEquity += equityTotal;
     }
   }
   return { totalEquity, totalStart, totalSlots, openCount };
@@ -1683,6 +1774,14 @@ function renderGrandTotal(ps) {
   if (pctEl) pctEl.innerHTML = `<span style="color:${color}">${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%</span>`;
   if (pnlEl) pnlEl.innerHTML = `<span style="color:${color}">${sign}$${Math.abs(pnl).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>`;
   if (openEl) openEl.textContent = `${openCount} / ${totalSlots}`;
+
+  // spot→perp Phase A2(2026-08-15): 선물 트랙이 라이브가 되면(36슬롯) 부제도 반영.
+  const subEl = document.getElementById('gsIdSub');
+  if (subEl) {
+    subEl.textContent = totalSlots > 18
+      ? 'BTC + ETH + SOL · 현물+선물 · 36슬롯(자산×시장×알고 독립자본) · 알고당 $1,000'
+      : 'BTC + ETH + SOL · 18슬롯(자산×알고 독립자본) · 알고당 $1,000';
+  }
 }
 
 function renderConnectionError() {
@@ -1698,8 +1797,9 @@ function setupRealtime(client) {
   client
     .channel('paper_positions_live')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'paper_positions' }, async () => {
-      // 2026-08-06: paper_positions에 3개 심볼이 섞여 쓰이므로 현재 선택 자산만 재조회.
-      const fresh = await fetchPositions(client, ASSETS[activeAsset].symbol);
+      // 2026-08-06: paper_positions에 여러 심볼(자산×시장)이 섞여 쓰이므로 현재 선택
+      // 트랙만 재조회.
+      const fresh = await fetchPositions(client, trackSymbol(activeAsset, activeMarket));
       if (fresh) renderAll(fresh);
       // 최상단 합산 섹션은 자산 무관 — 어느 자산이든 체결이 나면 즉시 반영.
       const all = await fetchAllPositions(client);
@@ -1732,7 +1832,9 @@ async function init() {
   updateClock();
   setInterval(updateClock, 1000);
   renderAssetSwitcher();
+  renderMarketSwitcher();
 
+  // 가격/캔들은 항상 실제 티커 — perp도 spot 가격 프록시(시장 무관).
   fetchPrice(ASSETS[activeAsset].symbol);
   setInterval(() => { fetchPrice(ASSETS[activeAsset].symbol).then(refreshAssetView); }, 60_000);
   fetchKlinesData(ASSETS[activeAsset].symbol).then(() => renderPriceChart());
@@ -1742,8 +1844,8 @@ async function init() {
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   supaClient = client;
   const [data, decisions] = await Promise.all([
-    fetchPositions(client, ASSETS[activeAsset].symbol),
-    fetchDecisions(client, ASSETS[activeAsset].symbol),
+    fetchPositions(client, trackSymbol(activeAsset, activeMarket)),
+    fetchDecisions(client, trackSymbol(activeAsset, activeMarket)),
   ]);
   latestDecisions = decisions;
   if (data) {
@@ -1759,7 +1861,7 @@ async function init() {
 
   setInterval(async () => {
     // 2026-08-06: ETH/SOL도 실거래 승격 — 자산 구분 없이 동일 라이브 갱신 경로.
-    latestDecisions = await fetchDecisions(client, ASSETS[activeAsset].symbol);
+    latestDecisions = await fetchDecisions(client, trackSymbol(activeAsset, activeMarket));
     if (positions.length) renderCards(algoStats(positions));
     renderFreshness();
   }, 60_000);

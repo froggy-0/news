@@ -868,6 +868,38 @@ async def fetch_liquidation_bars(*, symbol: str, since: datetime) -> list[dict[s
     return res.data or []
 
 
+async def fetch_funding_rates(
+    *, symbol: str, since: datetime, until: datetime
+) -> list[dict[str, Any]]:
+    """spot→perp 전환(Phase A): perp 포지션 청산 시 실제 펀딩비 정산에 쓸 원본 행.
+
+    market_structure.py가 4h마다 수집해 upsert하는 arena_funding_rates에서 [since,until]
+    구간을 읽는다 — market_structure.funding_return_pct()에 그대로 넘길 수 있는 shape
+    (funding_time, funding_rate). 조회 실패·데이터 없음은 그레이스풀(빈 리스트 → 펀딩 0
+    취급, 포지션 청산 자체는 막지 않음).
+    """
+    try:
+        res = (
+            await positions.db()
+            .table("arena_funding_rates")
+            .select("funding_time,funding_rate")
+            .eq("exchange", "binance")
+            .eq("symbol", symbol)
+            .gt("funding_time", _ts(since))
+            .lte("funding_time", _ts(until))
+            .order("funding_time")
+            .limit(200)
+            .execute()
+        )
+    except Exception as exc:
+        if "arena_funding_rates" in str(exc):
+            logger.info("Arena funding rates read skipped: %s", exc)
+            return []
+        logger.warning("Arena funding rates read failed: %s", exc)
+        return []
+    return res.data or []
+
+
 def _risk_event_severity(risk_state: str) -> str:
     if risk_state in {"FORCE_EXIT_CANDIDATE", "EXIT_CANDIDATE"}:
         return "high"

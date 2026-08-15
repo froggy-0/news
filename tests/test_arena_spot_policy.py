@@ -64,5 +64,5 @@ def test_open_position_rejects_short_for_spot_before_db_use() -> None:
             signal_reason={},
         )
 
-    with pytest.raises(ValueError, match="cannot open short"):
+    with pytest.raises(ValueError, match="PERP_LIVE_ENABLED_ALGOS"):
         asyncio.run(call())

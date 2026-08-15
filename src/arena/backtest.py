@@ -900,6 +900,19 @@ def run_replay(
                 signal = product_decision.executable_signal
             else:
                 signal = raw_signal
+                # spot 분기(위)의 fng_contrarian 물타기와 패리티 — product_type이 spot이
+                # 아니어도(perp 검증 백테스트) 같은 방향 보유("hold") 중이면 동일하게
+                # 가격기준 추가 트랜치를 평가한다. 2026-08-15 발견: 이 훅이 spot 분기
+                # 안에만 있어 product_type=usdm_perp로 롱온리 패리티 백테스트를 돌리면
+                # fng_contrarian만 거래수가 달라지던 기존 격차(라이브 scheduler.py는
+                # 이 호출이 product_type 분기 밖에 있어 원래부터 이 문제 없음).
+                if (
+                    position is not None
+                    and raw_signal == position.direction
+                    and algo_id == "fng_contrarian"
+                    and parameters.FNG_CONTRARIAN_SCALE_IN_ENABLED
+                ):
+                    positions_by_algo[algo_id] = _maybe_scale_in_fng_sim(position, frame.bar.low)
 
             if signal is None:
                 if position and algorithms.exit_hold_override(algo_id, macro, frame.indicators):

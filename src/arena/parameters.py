@@ -72,6 +72,55 @@ SHORT_SIGNAL_ACTION = "exit_or_no_trade"
 ALLOW_LIVE_SHORT = False
 RESEARCH_PERP_SHADOW_ENABLED = True
 
+# Spot→perp 전환 Phase A(2026-08-15, docs/arena/research 예정 — 계획: 인프라 우선,
+# 레버리지 없음(1x), 알고별 백테스트 통과분만 순차 라이브 전환). 알고별 opt-in
+# 허용목록 — 여기 포함된 algo_id만 perp_policy(롱/숏 대칭)로 실행되고 나머지는 기존
+# spot_policy(롱/플랫)를 그대로 탄다. 기본 빈 집합 = 전 알고 무영향(spot 그대로).
+# Phase B에서 알고별 숏 진입 로직이 백테스트(DSR n_trials=1 + 부트스트랩95%CI +
+# 워크포워드)를 통과할 때만 해당 algo_id를 추가한다.
+PERP_LIVE_ENABLED_ALGOS: frozenset[str] = frozenset()
+PERP_TARGET_PRODUCT = "usdm_perp"
+PERP_POSITION_SEMANTICS = "usdm_perp_long_short"
+
+
+def target_product_for_algo(algo_id: str) -> str:
+    """포지션 오픈 시 기록할 product_type — 알고가 perp 허용목록에 있으면 perp, 아니면 spot."""
+    return PERP_TARGET_PRODUCT if algo_id in PERP_LIVE_ENABLED_ALGOS else TARGET_PRODUCT
+
+
+def target_position_semantics_for_algo(algo_id: str) -> str:
+    return PERP_POSITION_SEMANTICS if algo_id in PERP_LIVE_ENABLED_ALGOS else POSITION_SEMANTICS
+
+
+# Phase A2(2026-08-15) — 자산×시장 루트 트랙 분리. 위 PERP_LIVE_ENABLED_ALGOS/
+# target_product_for_algo()는 이제 "이 알고가 어느 product_type이냐"를 정하지 않는다
+# (그건 트랙, 즉 frequency.FrequencyProfile.product_type이 정함) — 대신 "perp 트랙
+# 안에서 이 알고가 숏 신호를 열어도 되느냐"만 담당(Phase B). 기본 False = 전 선물
+# 트랙도 오늘처럼 롱온리로 동작(펀딩비만 추가로 반영).
+ARENA_PERP_LIVE_ENABLED = False
+
+
+PERP_TRACK_SUFFIX = "-PERP"
+
+
+def perp_track_symbol(binance_symbol: str) -> str:
+    """실제 바이낸스 티커에서 perp 트랙 심볼을 만든다(예: "BTCUSDT" -> "BTCUSDT-PERP").
+
+    이 접미사 컨벤션의 유일한 생성 지점 — frequency.py의 _register_perp_live_profiles와
+    config.py의 트랙 매핑이 둘 다 이 함수를 쓴다(문자열 리터럴 중복 금지).
+    """
+    return f"{binance_symbol}{PERP_TRACK_SUFFIX}"
+
+
+def real_ticker_for_track(symbol: str) -> str:
+    """트랙 심볼(예: "BTCUSDT-PERP")에서 실제 바이낸스 티커("BTCUSDT")를 복원.
+
+    perp_track_symbol()의 역함수 — 이 함수가 그 파싱을 전 코드베이스에서 유일하게
+    담당한다(중복 파싱 금지). spot 트랙(symbol == binance_symbol)은 그대로 반환.
+    """
+    return symbol.split(PERP_TRACK_SUFFIX)[0]
+
+
 HTTP_TIMEOUT_SECONDS = 30
 WEBSOCKET_PING_INTERVAL_SECONDS = 20
 WEBSOCKET_RECONNECT_DELAY_SECONDS = 5
@@ -627,6 +676,18 @@ EXEC_GATE_VOL_SPIKE_MAX = 1.0
 # → depth_too_thin/slippage_too_high 오탐 유발. limit={100,500,1000,5000} 실측 결과
 # 1000부터 양쪽(bid/ask) 10bps 완전 커버(5000과 동일 값, 추가 이득 없음).
 EXEC_GATE_MIN_DEPTH_10BP_USD = 1_000_000.0
+# 2026-08-14: 자산별 정상 유동성 실측(arena_execution_gates.feature_snapshot, 2026-07-31
+# depth limit 수정 반영분만, BTC n=606·ETH/SOL n=324) 기반 캘리브레이션. 위 전역값은
+# BTC 전용으로 잡힌 것이었음 — SOL은 정상 상태에서도 10bp 밴드 유동성이 항상 $1M 밑
+# (관측 min $241K~p90 $575K, 절대 못 넘김)이라 그대로 쓰면 신호의 62.5%가 "체결이
+# 나빠서"가 아니라 "SOL이라서" depth_too_thin으로 거부됨(실측). ETH는 관측 min이 $1.07M로
+# $1M 위이긴 하나 여유폭 7%뿐이라 정상 변동에도 오탐 가능 — BTC(여유폭 2.9x)와 동일 원칙
+# (관측 최소값 대비 ~3x 여유)으로 재산출. 재현: scripts/analysis/exec_gate_depth_calibration.py
+EXEC_GATE_MIN_DEPTH_10BP_USD_BY_SYMBOL: dict[str, float] = {
+    "BTCUSDT": 1_000_000.0,  # 기존값 유지 — 관측 min $2.93M, 이미 여유폭 2.9x로 안전
+    "ETHUSDT": 400_000.0,  # 관측 min $1.07M 대비 여유폭 2.7x(기존 $1M은 마진 7%로 위험)
+    "SOLUSDT": 80_000.0,  # 관측 min $241K 대비 여유폭 3.0x
+}
 EXEC_GATE_DEPTH_SNAPSHOT_LIMIT = 1000
 SHADOW_ORDER_NOTIONAL_USD = 1_000.0
 SHADOW_ORDER_TIMEOUT_SEC = 30

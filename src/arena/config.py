@@ -58,6 +58,13 @@ ENABLE_ARENA_MULTI_ASSET_SHADOW: bool = _bool_env(
     "ENABLE_ARENA_MULTI_ASSET_SHADOW",
     parameters.ARENA_MULTI_ASSET_SHADOW_ENABLED,
 )
+# spot→perp Phase A2(2026-08-15): BTC/ETH/SOL 선물(perp) 트랙을 현물과 독립된
+# 자본풀로 라이브 실행할지. 기본 False — 꺼져 있으면 frequency.py에 perp 프로파일이
+# 등록만 되고 scheduler.run()이 스케줄하지 않아 오늘 코드와 100% 동일 동작.
+ENABLE_ARENA_PERP_LIVE: bool = _bool_env(
+    "ENABLE_ARENA_PERP_LIVE",
+    parameters.ARENA_PERP_LIVE_ENABLED,
+)
 TARGET_PRODUCT: str = parameters.TARGET_PRODUCT
 POSITION_SEMANTICS: str = parameters.POSITION_SEMANTICS
 SHORT_SIGNAL_ACTION: str = parameters.SHORT_SIGNAL_ACTION
@@ -213,6 +220,30 @@ ARENA_LIVE_SYMBOLS: tuple[str, ...] = (
     (parameters.BINANCE_SYMBOL, *ARENA_MULTI_ASSET_SHADOW_SYMBOLS)
     if ENABLE_ARENA_MULTI_ASSET_SHADOW
     else (parameters.BINANCE_SYMBOL,)
+)
+
+
+# spot→perp Phase A2(2026-08-15): 실제 바이낸스 티커 → 그 가격을 구독해야 하는 "트랙"
+# (paper_positions.symbol 값) 리스트. perp 트랙도 spot 가격 프록시를 쓰므로 WS 구독은
+# 실제 티커당 1개뿐 — 틱 하나로 spot 트랙과 perp 트랙 양쪽의 스탑로스를 체크한다
+# (stream.py._check_stop_loss가 이 매핑으로 팬아웃). ENABLE_ARENA_PERP_LIVE가 꺼져
+# 있으면 매핑이 {symbol: (symbol,)} 형태라 기존 동작과 완전히 동일.
+def _live_tracks_by_symbol() -> dict[str, tuple[str, ...]]:
+    mapping: dict[str, list[str]] = {}
+    for symbol in ARENA_LIVE_SYMBOLS:
+        mapping.setdefault(symbol, []).append(symbol)
+    if ENABLE_ARENA_PERP_LIVE:
+        for symbol in parameters.MULTI_ASSET_SYMBOLS:
+            mapping.setdefault(symbol, []).append(parameters.perp_track_symbol(symbol))
+    return {symbol: tuple(tracks) for symbol, tracks in mapping.items()}
+
+
+ARENA_LIVE_TRACKS_BY_SYMBOL: dict[str, tuple[str, ...]] = _live_tracks_by_symbol()
+# WS 구독 대상(실제 티커, 중복 없음) — stream.py/server.py 워밍업이 사용.
+ARENA_LIVE_REAL_SYMBOLS: tuple[str, ...] = tuple(ARENA_LIVE_TRACKS_BY_SYMBOL.keys())
+# 워밍업(refresh_open_positions) 등 "개별 트랙 전부"가 필요한 곳에서 사용.
+ARENA_LIVE_ALL_TRACKS: tuple[str, ...] = tuple(
+    track for tracks in ARENA_LIVE_TRACKS_BY_SYMBOL.values() for track in tracks
 )
 
 
