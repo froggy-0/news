@@ -4,6 +4,12 @@
 
 이 문서는 현재 운영 중인 Arena EC2와 Supabase 상태를 확인하는 최소 절차다. 시크릿 값은 출력하지 않는다.
 
+> ⚠️ 아래 SSH 방식(포트 22)이 실행 환경에 따라 막혀 있을 수 있다(2026-08-15 세션에서
+> 실측 — 일반 HTTPS는 정상인데 포트 22만 타임아웃). 그럴 땐
+> [ssm-deploy-fallback-20260815.md](ssm-deploy-fallback-20260815.md)의 AWS SSM
+> `send-command` 방식으로 우회한다(EC2에 이미 SSM Agent·IAM role 준비돼 있음,
+> `terraform/modules/iam/main.tf` 참조).
+
 ## 현재 운영 접속 정보
 
 | 항목 | 값 |
