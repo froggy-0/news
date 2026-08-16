@@ -217,18 +217,6 @@
     }
     .spark{width:100%;height:24px;display:block;margin:0 0 7px}
 
-    /* ── Equity panel ─────────────────────────────────────── */
-    .eq-panel{background:var(--panel);border:1px solid var(--border);margin-bottom:12px}
-    .eq-head{
-      display:flex;justify-content:space-between;align-items:center;
-      padding:10px 18px;border-bottom:1px solid var(--border);gap:12px;
-    }
-    .eq-stats{font-size:10px;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
-    .eq-container{height:170px;position:relative}
-    #eqChartEl{position:absolute;inset:0}
-    .eq-legend{display:flex;gap:16px;padding:6px 18px 10px;font-size:9px;color:var(--muted)}
-    .eq-legend .swatch{display:inline-block;width:14px;height:2px;vertical-align:middle;margin-right:5px}
-
     .live-badge.stale{color:#F0B90B}
     .live-badge.stale .live-dot{background:#F0B90B;box-shadow:none;animation:none}
 
@@ -324,7 +312,7 @@
     .tlog-scroll::-webkit-scrollbar-track{background:transparent}
     .tlog-scroll::-webkit-scrollbar-thumb{background:var(--border-l)}
 
-    .tbl{width:100%;border-collapse:collapse;min-width:560px}
+    .tbl{width:100%;border-collapse:collapse;min-width:460px}
     .tbl th{
       font-size:9px;letter-spacing:1px;font-weight:400;color:var(--muted);
       text-transform:uppercase;padding:10px 14px 10px 0;text-align:left;
@@ -416,20 +404,14 @@
       .atab{font-size:10px;padding:5px 11px}
       .shadow-banner{padding:7px 14px;font-size:10px;margin-top:8px}
       .chart-container{height:280px}
-      .eq-container{height:130px}
-      .eq-stats{display:none}
       /* 포트 스탯 3개를 한 행에 — "진입 중" 단독 행의 어색한 여백 제거 */
       .port-bar{grid-template-columns:repeat(3,1fr);gap:10px;padding:12px 14px}
       .port-label{grid-column:1/-1;margin-bottom:2px;font-size:10px;letter-spacing:1px}
       .port-stat{text-align:left}
       .port-stat-val{font-size:15px}
       .port-stat-sub{font-size:9px}
-      /* 거래 로그: 가격·비중은 모바일에서 숨김 — 시각·알고·수익률·사유·보유 5컬럼.
-         수익률(핵심)이 가로 스크롤 없이 첫 화면에 보이는 것이 우선 */
+      /* 거래 로그: 5컬럼 전부 유지 — 수익률(핵심)이 가로 스크롤 없이 보이도록 폭만 압축 */
       .tbl{min-width:0}
-      .tbl th:nth-child(3),.tbl td:nth-child(3),
-      .tbl th:nth-child(4),.tbl td:nth-child(4),
-      .tbl th:nth-child(6),.tbl td:nth-child(6){display:none}
       .tbl th{padding:9px 8px 9px 0}
       .tbl td{padding:8px 8px 8px 0;font-size:11px}
       .tbl td:first-child{font-size:10px}
@@ -440,7 +422,6 @@
       .ac{padding:10px 11px}
       .ac-name{font-size:10px;letter-spacing:1.1px}
       .ac-equity{font-size:14px}
-      .eq-legend{flex-wrap:wrap;gap:10px}
       .chart-legend{gap:12px;font-size:9px;padding:8px 14px 10px}
       .ft{line-height:1.9;padding:14px 16px}
     }
@@ -539,20 +520,6 @@
     </div>
   </div>
 
-  <section class="eq-panel btc-only" aria-label="포트폴리오 자산 곡선">
-    <div class="eq-head">
-      <span class="panel-title">EQUITY CURVE</span>
-      <span class="eq-stats" id="eqStats">—</span>
-    </div>
-    <div class="eq-container">
-      <div id="eqChartEl" role="img" aria-label="전체 알고리즘 합산 자산 곡선 — BTC 보유 벤치마크 비교"></div>
-    </div>
-    <div class="eq-legend" aria-hidden="true">
-      <span><span class="swatch" style="background:var(--gold)"></span>아레나 (<span id="eqLegendAlgoN">6</span>알고 합산, 실현 기준)</span>
-      <span><span class="swatch" style="background:var(--muted);opacity:.7"></span>BTC 보유 (동일 자본)</span>
-    </div>
-  </section>
-
   <div class="algo-grid" id="algoGrid" aria-label="알고리즘 성과 리더보드">
     <div class="ac" style="--ac:#2B3139"><div class="ac-head"><div class="sk" style="height:11px;width:70%;margin-bottom:0"></div></div><div class="sk" style="height:15px;width:50%;margin-bottom:6px"></div><div class="sk" style="height:11px;width:35%;margin-bottom:10px"></div><div class="sk" style="height:9px;width:80%;margin-bottom:4px"></div><div class="sk" style="height:9px;width:60%"></div></div>
     <div class="ac" style="--ac:#2B3139"><div class="ac-head"><div class="sk" style="height:11px;width:70%;margin-bottom:0"></div></div><div class="sk" style="height:15px;width:50%;margin-bottom:6px"></div><div class="sk" style="height:11px;width:35%;margin-bottom:10px"></div><div class="sk" style="height:9px;width:80%;margin-bottom:4px"></div><div class="sk" style="height:9px;width:60%"></div></div>
@@ -603,16 +570,13 @@
           <tr id="tradeLogHead">
             <th scope="col">시각 (KST)</th>
             <th scope="col">알고리즘</th>
-            <th scope="col">진입가</th>
-            <th scope="col">청산가</th>
             <th scope="col">수익률</th>
-            <th scope="col">비중</th>
             <th scope="col">청산사유</th>
             <th scope="col">보유</th>
           </tr>
         </thead>
         <tbody id="tradeLogBody">
-          <tr><td colspan="8" style="color:var(--muted);font-size:11px;padding:20px 18px">거래 기록 불러오는 중…</td></tr>
+          <tr><td colspan="5" style="color:var(--muted);font-size:11px;padding:20px 18px">거래 기록 불러오는 중…</td></tr>
         </tbody>
       </table>
     </div>
@@ -702,9 +666,6 @@ let lwChart = null;
 let candleSeries = null;
 let priceLinesOpen = [];
 let activeTab = 'all';
-let eqChart = null;
-let eqSeries = null;
-let bhSeries = null;
 
 // ── 멀티자산 — BTC/ETH/SOL 전부 알고당 $1000 독립자본 실거래(paper_positions) ──
 // (2026-08-06: shadow signal-only에서 승격. docs/arena/research/
@@ -784,35 +745,6 @@ function esc(v) {
     .replaceAll("'", '&#039;');
 }
 
-/* ── Equity curves (트랙레코드 기본기) ──────────────────────── */
-// 청산 거래 누적으로 알고별·전체 자산 곡선을 프론트에서 파생 (추가 쿼리 없음).
-function buildCurves(ps, algoIds = ALGO_IDS) {
-  const closed = ps
-    .filter(p => p.status === 'closed' && p.ret_pct != null && p.close_time)
-    .sort((a, b) => new Date(a.close_time) - new Date(b.close_time));
-  const eq = {};
-  const byAlgo = {};
-  for (const a of algoIds) { eq[a] = STARTING_CAPITAL; byAlgo[a] = [STARTING_CAPITAL]; }
-  const port = [{ time: Math.floor(ARENA_START_MS / 1000), value: algoIds.length * STARTING_CAPITAL }];
-  for (const p of closed) {
-    if (!(p.algo_id in eq)) continue;
-    const w = p.position_weight != null ? p.position_weight : 1;
-    eq[p.algo_id] *= (1 + w * (p.ret_pct || 0));
-    byAlgo[p.algo_id].push(eq[p.algo_id]);
-    port.push({
-      time: Math.floor(new Date(p.close_time).getTime() / 1000),
-      value: algoIds.reduce((s, a) => s + eq[a], 0),
-    });
-  }
-  // lightweight-charts는 시간 오름차순·중복 금지 — 같은 시각은 마지막 값만 유지
-  const dedup = [];
-  for (const pt of port) {
-    if (dedup.length && dedup[dedup.length - 1].time >= pt.time) dedup[dedup.length - 1] = pt;
-    else dedup.push(pt);
-  }
-  return { port: dedup, byAlgo };
-}
-
 function maxDrawdownPct(vals) {
   let peak = -Infinity, mdd = 0;
   for (const v of vals) {
@@ -834,92 +766,6 @@ function sparkSVG(vals) {
   const c = vals[vals.length - 1] >= vals[0] ? 'var(--green)' : 'var(--red)';
   return `<svg class="spark" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">
     <polyline points="${pts}" fill="none" stroke="${c}" stroke-width="1.5"/></svg>`;
-}
-
-function initEqChart() {
-  const container = document.getElementById('eqChartEl');
-  if (!container || typeof LightweightCharts === 'undefined') return;
-  if (eqChart) { eqChart.remove(); eqChart = null; eqSeries = null; bhSeries = null; }
-  eqChart = LightweightCharts.createChart(container, {
-    width: container.clientWidth,
-    height: container.clientHeight || 170,
-    layout: {
-      background: { type: 'solid', color: '#0B0E11' },
-      textColor: '#848E9C',
-      fontFamily: "'IBM Plex Mono', monospace",
-      fontSize: 9,
-    },
-    grid: { vertLines: { visible: false }, horzLines: { color: '#1A1F27' } },
-    rightPriceScale: { borderColor: '#2B3139' },
-    timeScale: {
-      borderColor: '#2B3139', timeVisible: false,
-      tickMarkFormatter: (t) => new Date(t * 1000).toLocaleDateString('ko-KR',
-        { month: '2-digit', day: '2-digit', timeZone: 'Asia/Seoul' }),
-    },
-    crosshair: { mode: LightweightCharts.CrosshairMode.Magnet },
-    localization: {
-      timeFormatter: (t) => fmtKSTFull(t * 1000) + ' KST',
-      priceFormatter: (v) => '$' + v.toLocaleString('en-US', { maximumFractionDigits: 0 }),
-    },
-    handleScroll: false, handleScale: false,
-  });
-  bhSeries = eqChart.addLineSeries({
-    color: 'rgba(122,136,150,.75)', lineWidth: 1, lineStyle: 2,
-    priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
-  });
-  eqSeries = eqChart.addAreaSeries({
-    lineColor: '#3D9EDB',
-    topColor: 'rgba(61,158,219,.22)', bottomColor: 'rgba(61,158,219,.02)',
-    lineWidth: 2, priceLineVisible: false,
-  });
-  const ro = new ResizeObserver(entries => {
-    if (!eqChart || !entries[0]) return;
-    const { width, height } = entries[0].contentRect;
-    eqChart.applyOptions({ width, height });
-  });
-  ro.observe(container);
-}
-
-function renderEquityChart(stats, algoIds = ALGO_IDS) {
-  if (!eqChart || !eqSeries || !positions.length) return;
-  const legendN = document.getElementById('eqLegendAlgoN');
-  if (legendN) legendN.textContent = String(algoIds.length);
-  const { port } = buildCurves(positions, algoIds);
-  // 현재 시점(미실현 포함)을 마지막 점으로 — 커브가 "지금"까지 이어지도록
-  if (stats) {
-    const nowSec = Math.floor(Date.now() / 1000);
-    const totalNow = algoIds.reduce((s, a) => s + stats[a].equityTotal, 0);
-    if (port.length && port[port.length - 1].time < nowSec) {
-      port.push({ time: nowSec, value: totalNow });
-    }
-  }
-  eqSeries.setData(port);
-
-  // buy&hold 벤치마크: 아레나 시작 시점 BTC에 동일 자본 투입 가정
-  const startSec = Math.floor(ARENA_START_MS / 1000);
-  const bhBars = ohlcv.filter(b => b.time >= startSec);
-  let bhLine = [], bhRetPct = null;
-  if (bhBars.length) {
-    const c0 = bhBars[0].close;
-    bhLine = bhBars.map(b => ({ time: b.time, value: algoIds.length * STARTING_CAPITAL * b.close / c0 }));
-    bhRetPct = (bhBars[bhBars.length - 1].close / c0 - 1) * 100;
-  }
-  if (bhSeries) bhSeries.setData(bhLine);
-  try { eqChart.timeScale().fitContent(); } catch (_) {}
-
-  // 헤드 스탯: MaxDD + vs BTC
-  const mdd = maxDrawdownPct(port.map(p => p.value));
-  const el = document.getElementById('eqStats');
-  if (el) {
-    const totalPct = (port[port.length - 1].value / (algoIds.length * STARTING_CAPITAL) - 1) * 100;
-    let vs = '';
-    if (bhRetPct != null) {
-      const diff = totalPct - bhRetPct;
-      vs = ` · vs BTC ${diff >= 0 ? '+' : ''}${diff.toFixed(2)}%p`;
-    }
-    el.textContent = `MaxDD ${mdd.toFixed(2)}%${vs}`;
-  }
-  return bhRetPct;
 }
 
 /* ── Algo stats ─────────────────────────────────────────────── */
@@ -1372,7 +1218,7 @@ function renderLog(ps) {
 
   const body = document.getElementById('tradeLogBody');
   if (!sorted.length) {
-    body.innerHTML = `<tr><td colspan="8" style="color:var(--muted);font-size:11px;padding:20px 18px">거래 없음</td></tr>`;
+    body.innerHTML = `<tr><td colspan="5" style="color:var(--muted);font-size:11px;padding:20px 18px">거래 없음</td></tr>`;
     return;
   }
 
@@ -1398,23 +1244,14 @@ function renderLog(ps) {
       retHtml = '<span class="ret-open">—</span>';
     }
 
-    const exitTd = p.close_price
-      ? `$${p.close_price.toLocaleString()}`
-      : `<span style="color:var(--muted)">—</span>`;
     const holdTd = p.hold_hours != null
       ? `${Math.round(p.hold_hours)}h`
-      : `<span style="color:var(--muted)">—</span>`;
-    const wTd = p.position_weight != null
-      ? `${p.position_weight.toFixed(2)}x`
       : `<span style="color:var(--muted)">—</span>`;
 
     return `<tr class="${p.status === 'open' ? 'open-row' : ''}${isNew ? ' row-flash' : ''}" data-pid="${p.id}">
       <td style="color:var(--muted)">${ts}</td>
       <td><span class="algo-chip" style="color:${cfg.color};border-color:${cfg.color}40">${p.algo_id}</span></td>
-      <td>$${p.open_price.toLocaleString()}</td>
-      <td style="color:var(--muted2)">${exitTd}</td>
       <td>${retHtml}</td>
-      <td style="color:var(--muted2)">${wTd}</td>
       <td>${reasonChip(p)}</td>
       <td style="color:var(--muted)">${holdTd}</td>
     </tr>`;
@@ -1491,7 +1328,6 @@ function renderAll(ps) {
   const stats = algoStats(ps, algoIds);
   renderPortfolio(stats);
   renderCards(stats);
-  renderEquityChart(stats, algoIds);
   renderFreshness();
   renderTabs();
   renderPositionStrip();
@@ -1550,7 +1386,6 @@ function refreshAssetView() {
     const stats = algoStats(positions, algoIds);
     renderPortfolio(stats);
     renderCards(stats);
-    renderEquityChart(stats, algoIds);
     renderPositionStrip();
   }
 }
@@ -1558,7 +1393,7 @@ function refreshAssetView() {
 function renderLogHeader() {
   const tr = document.getElementById('tradeLogHead');
   if (!tr) return;
-  tr.innerHTML = `<th scope="col">시각 (KST)</th><th scope="col">알고리즘</th><th scope="col">진입가</th><th scope="col">청산가</th><th scope="col">수익률</th><th scope="col">비중</th><th scope="col">청산사유</th><th scope="col">보유</th>`;
+  tr.innerHTML = `<th scope="col">시각 (KST)</th><th scope="col">알고리즘</th><th scope="col">수익률</th><th scope="col">청산사유</th><th scope="col">보유</th>`;
 }
 
 /* ── 관련 뉴스 (ETH/SOL 전용, arena_asset_news) ─────────────── */
@@ -1833,7 +1668,7 @@ function renderConnectionError() {
       Supabase 연결 실패 — 데이터를 불러올 수 없습니다
     </div>`;
   document.getElementById('tradeLogBody').innerHTML =
-    `<tr><td colspan="6" style="color:var(--red);padding:20px 18px">연결 실패</td></tr>`;
+    `<tr><td colspan="5" style="color:var(--red);padding:20px 18px">연결 실패</td></tr>`;
 }
 
 function setupRealtime(client) {
@@ -1869,7 +1704,6 @@ function updateClock() {
 /* ── Init ───────────────────────────────────────────────────── */
 async function init() {
   initChart();
-  initEqChart();
   setupCardNavigation();
   setupPeriodToggle();
   updateClock();
