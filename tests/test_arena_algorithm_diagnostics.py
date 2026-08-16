@@ -550,10 +550,13 @@ def _regime_trend_core_ind() -> dict:
     }
 
 
-def test_regime_trend_relaxed_mode_defaults_on_with_v34() -> None:
-    # arena-params-v34(2026-08-07): v33(5)에서 한 단계 더 완화된 기본값이어야 한다.
-    assert parameters.REGIME_TREND_ENTRY_RELAXED_ENABLED is True
-    assert parameters.REGIME_TREND_ENTRY_MIN_SECONDARY_VOTES == 4
+def test_regime_trend_relaxed_mode_defaults_off_with_v38_rollback() -> None:
+    # arena-params-v38(2026-08-16): v33/v34 완화의 부분 롤백 — regime_trend만 v32
+    # 이전(unanimous AND, 8개 전부 요구)으로 원복(evidence-criteria-framework-
+    # 20260816.md 재검증에서 2×2 사후귀속 −7.62%p로 6알고 중 유일하게 뚜렷한 해악
+    # 확인, 전/후반 분할도 방향 일관). 나머지 5알고 완화는 무변경.
+    assert parameters.REGIME_TREND_ENTRY_RELAXED_ENABLED is False
+    assert parameters.REGIME_TREND_ENTRY_MIN_SECONDARY_VOTES == 5
 
 
 def test_regime_trend_strict_mode_requires_all_eight_secondary_conditions(monkeypatch) -> None:

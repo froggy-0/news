@@ -62,7 +62,10 @@ STRATEGY_VERSION = "arena-spot-v4"
 #   제외(재시도 대상 아님, 표본이 더 쌓이면 재평가). 함수: algorithms.vix_rsi_short
 #   (Phase B §3.5 veto유지 변형 그대로), 등록: short_signals.PERP_SHORT_ALGORITHMS.
 # 롤백: PERP_SHORT_ENABLED_TRACKS에서 ("ETHUSDT-PERP", "vix_rsi") 제거.
-PARAMS_VERSION = "arena-params-v37"
+# v38(2026-08-16): regime_trend 진입완화 부분 롤백(§514 부근 v33/v34 블록 주석 참조) —
+#   2×2 사후귀속 재검증에서 유일하게 뚜렷한 해악(−7.62%p, 전/후반 방향 일관) 확인된
+#   알고 하나만 원복. 나머지 5알고 완화는 무변경.
+PARAMS_VERSION = "arena-params-v38"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v2"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
@@ -527,8 +530,21 @@ TAKER_CONFIRM_RATIO_4H_MIN = 0.95
 #   기록"이지 "무모한 진입"이 아니기 때문. 그리드 탐색 없이 설계값(과반+1)으로
 #   즉시 활성화 — 이번 결정 자체가 "검증보다 표본"이라 재현 그리드를 또 돌리지 않는다.
 # 롤백: 각 ENABLED를 False로 되돌리면 기존(2026-08-04 이전) 동작과 100% 동일.
-REGIME_TREND_ENTRY_RELAXED_ENABLED = True
-REGIME_TREND_ENTRY_MIN_SECONDARY_VOTES = 4  # v33=5 → v34=4 (아래 블록 참조). 8개 중 최소 충족 개수
+#
+# v38(2026-08-16) 부분 롤백 — regime_trend만 원복, macd_momentum 이하 나머지는 유지.
+#   근거: [증거기준 프레임워크](docs/arena/research/evidence-criteria-framework-20260816.md)
+#   재검증 중 발견한 부수 결과(v33/v34 진입완화 2×2 사후귀속)를 4개 알고 개별로
+#   분해하니 효과가 균일하지 않았다 — regime_trend −7.62%p(6알고 중 최대, 거래
+#   7→37건 폭증)로 압도적, multi_factor는 오히려 +0.48%p, macd_momentum은 0.00%p
+#   (v35 TSMOM_NL 전환으로 이 플래그가 이미 죽은 코드였을 가능성). 전/후반 분할
+#   재검증(완화ON 전반 −1.60%/후반 −8.37%, 완화OFF 전반 +0.56%/후반 −0.77%)에서도
+#   방향 일관 — regime_trend에 한해서만 신뢰할 만한 해악 근거. 라이브 데이터는
+#   regime_trend 청산 n=2뿐이라 판단 근거로 못 씀(백테스트 단독 근거).
+#   전면 롤백은 안 함 — "표본 확보" 전략 자체를 부정하는 과잉대응이고, 나머지
+#   3개(macd_momentum/fng_contrarian·vix_rsi 환경필터/multi_factor/omnibus)는
+#   해악 근거가 약하거나(0~+0.5%p) 무효.
+REGIME_TREND_ENTRY_RELAXED_ENABLED = False
+REGIME_TREND_ENTRY_MIN_SECONDARY_VOTES = 5  # v38: v33 이전(8개 전부 요구)으로 원복 — RELAXED_ENABLED=False라 이 값 자체는 무효과, 문서화용
 MACD_MOMENTUM_ENTRY_RELAXED_ENABLED = True
 MACD_MOMENTUM_ENTRY_MIN_SECONDARY_VOTES = 3  # v33=4 → v34=3 (아래 블록 참조). 6개 중 최소 충족 개수
 
