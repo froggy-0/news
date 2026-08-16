@@ -843,9 +843,14 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
     # (spot BTC와 perp BTC가 서로 다른 리스크 상태를 가져야 함, ETH/SOL과 동일 원칙).
     portfolio_risk_state = await _risk_state(now, symbol=profile.symbol)
     for algo_id, fn in ALGORITHMS.items():
-        # 알고별 실행 트랙 범위(v36, meridian 등 perp 전용 신규 알고) — 스코프 밖
-        # 트랙은 이 알고를 아예 건드리지 않는다(신호 계산·자본 할당 없음).
-        if not parameters.algorithm_in_track_scope(algo_id, profile.symbol):
+        current = state.get_position(profile.symbol, algo_id)
+        # 알고별 실행 트랙 범위(v36, meridian 등 perp 전용 신규 알고 / v39, perp에서 숏을
+        # 안 쓰는 기존 알고 정리) — 스코프 밖이고 열린 포지션도 없으면 이 알고를 아예
+        # 건드리지 않는다(신규 진입 차단). 스코프 밖이어도 이미 열린 포지션이 있으면
+        # 아래로 계속 진행해 정상 관리한다(시간손절·손절·트레일링·flat청산) — 스코프를
+        # 좁혔다고 기존 포지션이 고아화(관리 안 되고 방치)되는 걸 막기 위함.
+        in_scope = parameters.algorithm_in_track_scope(algo_id, profile.symbol)
+        if not in_scope and current is None:
             continue
         signal: str | None = None
         raw_signal: str | None = None
@@ -859,7 +864,6 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
         ) = None
         directional_signal: short_signals.DirectionalSignalDecision | None = None
         product_policy_snapshot: dict | None = None
-        current = state.get_position(profile.symbol, algo_id)
         current_position_id = current["id"] if current else None
         short_enabled = _short_enabled_for(profile, algo_id)
         try:

@@ -133,10 +133,29 @@ def test_meridian_scoped_to_perp_tracks_only() -> None:
     assert parameters.algorithm_in_track_scope("meridian", "ETHUSDT") is False
 
 
-def test_existing_algos_unscoped_by_default() -> None:
-    for algo_id in ("regime_trend", "fng_contrarian", "vix_rsi", "macd_momentum"):
-        assert parameters.algorithm_in_track_scope(algo_id, "BTCUSDT") is True
-        assert parameters.algorithm_in_track_scope(algo_id, "BTCUSDT-PERP") is True
+def test_v39_non_short_algos_scoped_to_spot_only() -> None:
+    """v39: perp에서 숏을 안 쓰는 기존 알고는 spot만 신규진입 허용, perp는 차단."""
+    for algo_id in (
+        "regime_trend",
+        "fng_contrarian",
+        "macd_momentum",
+        "multi_factor",
+        "omnibus",
+    ):
+        for spot_symbol in ("BTCUSDT", "ETHUSDT", "SOLUSDT"):
+            assert parameters.algorithm_in_track_scope(algo_id, spot_symbol) is True
+        for perp_symbol in ("BTCUSDT-PERP", "ETHUSDT-PERP", "SOLUSDT-PERP"):
+            assert parameters.algorithm_in_track_scope(algo_id, perp_symbol) is False
+
+
+def test_v39_vix_rsi_scoped_to_spot_and_eth_perp_only() -> None:
+    """vix_rsi는 ETH-PERP에서만 숏이 승인돼 있어(PERP_SHORT_ENABLED_TRACKS) 그 트랙만
+    perp 신규진입 허용, BTC/SOL-PERP는 차단."""
+    for spot_symbol in ("BTCUSDT", "ETHUSDT", "SOLUSDT"):
+        assert parameters.algorithm_in_track_scope("vix_rsi", spot_symbol) is True
+    assert parameters.algorithm_in_track_scope("vix_rsi", "ETHUSDT-PERP") is True
+    assert parameters.algorithm_in_track_scope("vix_rsi", "BTCUSDT-PERP") is False
+    assert parameters.algorithm_in_track_scope("vix_rsi", "SOLUSDT-PERP") is False
 
 
 # ── 사이징 배선(backtest.py 회귀) ─────────────────────────────────────────

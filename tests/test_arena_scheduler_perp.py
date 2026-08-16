@@ -1,6 +1,23 @@
 from __future__ import annotations
 
-from arena import frequency, parameters, scheduler
+from arena import frequency, parameters, scheduler, spot_policy
+
+
+def test_v39_out_of_scope_track_blocks_new_entry_but_not_management() -> None:
+    """v39: perp에서 숏을 안 쓰는 알고(예: fng_contrarian)는 ALGORITHM_TRACK_SCOPE로
+    perp 신규진입이 막힌다. 하지만 이미 열린 포지션이 있으면(scheduler._run_cycle의
+    `current is None` 가드) 계속 관리 대상이어야 한다 — 이 테스트는 그 전제가 되는
+    spot_policy 불변식(현재 포지션이 있으면 should_open은 절대 True가 아님)을 문서화한다.
+    스코프 밖+포지션 없음이면 신규진입 차단(scheduler.py의 `if not in_scope and current
+    is None: continue`), 스코프 밖+포지션 있음이면 정상 진행해 이 불변식 덕에 안전하게
+    청산까지만 일어나고 재진입은 없다.
+    """
+    assert parameters.algorithm_in_track_scope("fng_contrarian", "BTCUSDT-PERP") is False
+
+    current = {"id": 1, "direction": "long", "open_time": None}
+    for raw_signal in (None, "long", "short"):
+        decision = spot_policy.decide(raw_signal, current)
+        assert decision.should_open is False
 
 
 def test_risk_policy_zeroes_short_caps_for_spot_even_when_perp_pair_enabled(monkeypatch) -> None:

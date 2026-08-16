@@ -65,7 +65,16 @@ STRATEGY_VERSION = "arena-spot-v4"
 # v38(2026-08-16): regime_trend 진입완화 부분 롤백(§514 부근 v33/v34 블록 주석 참조) —
 #   2×2 사후귀속 재검증에서 유일하게 뚜렷한 해악(−7.62%p, 전/후반 방향 일관) 확인된
 #   알고 하나만 원복. 나머지 5알고 완화는 무변경.
-PARAMS_VERSION = "arena-params-v38"
+# v39(2026-08-16): perp 트랙 스코프 정리 — PERP_SHORT_ENABLED_TRACKS에 없는 (트랙,알고)는
+#   숏을 전혀 안 쓰고 spot_policy(롱/플랫) 그대로라 perp에서 spot 복제본 + 펀딩비만 부담하는
+#   구조였음(실측: BTC/ETH/SOL 평균 펀딩 전부 양수 — 롱이 항상 지불, 거래당 0.5~3.4bps
+#   드래그). 숏을 실제로 쓰는 조합(meridian 전자산·vix_rsi ETH)만 perp에 남기고 나머지
+#   5알고(regime_trend·fng_contrarian·macd_momentum·multi_factor·omnibus) + vix_rsi의
+#   BTC/SOL-PERP는 perp 신규진입을 차단(spot에는 그대로 유지). 기존 오픈 포지션은 고아화
+#   방지를 위해 scheduler.py가 스코프와 무관하게 계속 관리(시간손절·손절·트레일링·flat청산)
+#   하도록 분리했다(scheduler.py의 스코프 체크 위치 변경 참조). 롤백:
+#   ALGORITHM_TRACK_SCOPE에서 이번에 추가된 5개 항목 제거 + vix_rsi를 ETH-PERP만으로 되돌림.
+PARAMS_VERSION = "arena-params-v39"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v2"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
@@ -131,17 +140,34 @@ MERIDIAN_SHORT_RSI_ABOVE = 70.0
 # 판단, 설계 §2-3). combined_position_weight() 결과에 곱셈으로 적용.
 MERIDIAN_SHORT_SIZE_DAMPENER = 0.5
 
-# 알고별 실행 트랙 범위 — 미등록 알고는 제한 없음(기존 6알고는 spot+perp 전부,
-# 무변화). `meridian`은 롱/숏 판단이 핵심이라 spot(롱only)에서 중복 자본을 만들지
-# 않도록 perp 트랙에만 한정한다(scheduler._run_cycle이 이 스코프로 필터링).
-# 설계 §3-1(신규 스코핑 메커니즘).
+# 알고별 실행 트랙 범위 — 미등록 알고는 제한 없음. `meridian`은 롱/숏 판단이 핵심이라
+# spot(롱only)에서 중복 자본을 만들지 않도록 perp 트랙에만 한정한다(scheduler._run_cycle이
+# 이 스코프로 필터링). 설계 §3-1(신규 스코핑 메커니즘).
+#
+# v39(2026-08-16): 나머지 5알고 + vix_rsi(BTC/SOL)를 perp에서 제외 — PERP_SHORT_ENABLED_TRACKS에
+# 없는 (트랙,알고)는 perp에서도 숏을 전혀 안 쓰고 spot_policy 그대로라, perp가 "숏 못 쓰는
+# spot 복제본 + 펀딩비"일 뿐이었음(펀딩비가 항상 양수라 롱 전용 알고에게 perp는 spot보다
+# 기댓값이 구조적으로 나쁨, 실측 거래당 0.5~3.4bps 드래그). 숏을 실제로 쓰는 조합만 perp에
+# 남긴다: meridian(전자산) + vix_rsi(ETH-PERP만, PERP_SHORT_ENABLED_TRACKS 참조).
+# ⚠️ 이 스코프는 "신규 진입"만 막는다 — 이미 열린 포지션은 스코프 밖이어도
+# scheduler._run_cycle()이 계속 관리한다(고아 포지션 방지, 스코프 체크 위치 참조).
 ALGORITHM_TRACK_SCOPE: dict[str, frozenset[str]] = {
     "meridian": frozenset({"BTCUSDT-PERP", "ETHUSDT-PERP", "SOLUSDT-PERP"}),
+    "regime_trend": frozenset(MULTI_ASSET_SYMBOLS),
+    "fng_contrarian": frozenset(MULTI_ASSET_SYMBOLS),
+    "macd_momentum": frozenset(MULTI_ASSET_SYMBOLS),
+    "multi_factor": frozenset(MULTI_ASSET_SYMBOLS),
+    "omnibus": frozenset(MULTI_ASSET_SYMBOLS),
+    "vix_rsi": frozenset(MULTI_ASSET_SYMBOLS) | {"ETHUSDT-PERP"},
 }
 
 
 def algorithm_in_track_scope(algo_id: str, track_symbol: str) -> bool:
-    """algo_id가 이 트랙에서 실행 대상인지. ALGORITHM_TRACK_SCOPE에 없으면 무제한(True)."""
+    """algo_id가 이 트랙에서 신규 진입 대상인지. ALGORITHM_TRACK_SCOPE에 없으면 무제한(True).
+
+    ⚠️ 이미 열린 포지션의 관리(청산·손절 등)는 이 함수와 무관하게 항상 계속된다 —
+    scheduler.py가 신규 진입 게이팅에만 이 함수를 쓴다.
+    """
     scope = ALGORITHM_TRACK_SCOPE.get(algo_id)
     return scope is None or track_symbol in scope
 
