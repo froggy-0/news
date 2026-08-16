@@ -325,6 +325,25 @@ def _momentum_not_worsening(
     return True
 
 
+def _momentum_not_improving(ind: dict) -> bool:
+    """`_momentum_not_worsening`의 거울 — 상승 가속이 아직 안 멈췄으면 False(숏 보류).
+
+    MACD 히스토그램이 직전봉보다 커지지 않을 때만 True(고점 추격 매도 회피). 미수집
+    시 True(graceful). `vix_rsi` 숏(§ vix_rsi_short)에서 사용 — Phase B §12/§3.5
+    검증 시 이 조건을 포함해 채택기준(PSR≥0.95·MinTRL 충족)을 통과했으므로 제거하지
+    않는다. 매그니튜드 게이트는 롱 쪽만 검증된 확장이라 이식하지 않는다.
+    """
+    mh = ind.get("macd_hist")
+    mhp = ind.get("macd_hist_prev")
+    if mh is None or mhp is None:
+        return True
+    try:
+        mh_f, mhp_f = float(mh), float(mhp)
+    except (TypeError, ValueError):
+        return True
+    return mh_f <= mhp_f
+
+
 def _momentum_magnitude_threshold(algo_id: str, ind: dict) -> float | None:
     """ATR×배수로 정규화된 |macd_hist| 임계 — 없으면(dict 미등록) None(무효과)."""
     mult = parameters.MOMENTUM_MAGNITUDE_GATE_ATR_MULT_BY_ALGO.get(algo_id)
@@ -534,6 +553,49 @@ def vix_rsi(macro: dict, ind: dict) -> str | None:
         if parameters.VIX_RSI_MIN_RSI is not None and rsi < parameters.VIX_RSI_MIN_RSI:
             return None
         return "long"
+    return None
+
+
+def vix_rsi_short(macro: dict, ind: dict) -> str | None:
+    """vix_rsi 숏(ETH-PERP 전용, arena-params-v37) — VIX 고조 + RSI 과열 fade.
+
+    Phase B §3.5/§12(docs/arena/research/spot-to-perp-phase-b-short-entry-design-20260815.md)
+    설계 그대로. `vix_rsi`는 "VIX가 낮을 때 사는" 역발산 전략이라 롱 조건의 부호
+    반전이 숏의 자연스러운 거울이 아니다 — 이 함수는 별개 가설(VIX **고조**+RSI
+    **과열**)로 검증됐다. risk-off veto는 유지(§12 veto유지 변형 — 3자산 중 veto제거
+    보다 일관되게 우세).
+
+    2026-08-16 [증거기준 프레임워크](docs/arena/research/evidence-criteria-framework-20260816.md)
+    재검증: 사전등록 단일가설이므로 맞는 지표는 PSR이며 **ETH만 PSR=0.970(≥0.95)에
+    MinTRL 37건 ≤ 보유 48건으로 검정력도 충족**(Phase B 전체에서 유일하게 판정
+    가능하고 통과한 사례). BTC는 SR 음수로 기각, SOL은 방향은 양이지만 MinTRL
+    132건 > 보유 48건으로 판정 불가 — 그래서 `PERP_SHORT_ENABLED_TRACKS`는 ETH만
+    등록한다(§ parameters.py). 이 함수 자체는 자산 무관 로직이고, 자산별 허용은
+    등록 테이블(`short_signals.PERP_SHORT_ALGORITHMS`)이 아니라
+    `PERP_SHORT_ENABLED_TRACKS`가 트랙 단위로 게이팅한다.
+    """
+    vix_now = macro.get("vix_now")
+    vix_q40 = macro.get("vix_q40")
+    rsi = ind.get("rsi", 50.0)
+    if vix_now is None:
+        return None
+    if _is_risk_off(_regime_state(macro)):
+        return None
+    secondary = _vix_rsi_secondary_votes(macro)
+    if parameters.VIX_RSI_ENTRY_RELAXED_ENABLED:
+        if sum(secondary.values()) < parameters.VIX_RSI_ENTRY_MIN_SECONDARY_VOTES:
+            return None
+    elif not all(secondary.values()):
+        return None
+    if not _momentum_not_improving(ind):
+        return None
+    vix_elevated = (
+        (vix_now >= vix_q40 * parameters.VIX_CALM_TOLERANCE_BAND) if vix_q40 else (vix_now >= 20.0)
+    )
+    if not vix_elevated:
+        return None
+    if rsi > (100.0 - parameters.VIX_RSI_LONG_MAX):
+        return "short"
     return None
 
 

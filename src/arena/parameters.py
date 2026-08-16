@@ -52,7 +52,17 @@ STRATEGY_VERSION = "arena-spot-v4"
 #   추세미러 숏은 Phase B 6알고 전부 기각 근거로 의도적 배제. perp 트랙 전용
 #   (ALGORITHM_TRACK_SCOPE), 독립자본 3트랙×$1,000. 설계:
 #   docs/arena/research/meridian-combined-long-short-design-20260815.md.
-PARAMS_VERSION = "arena-params-v36"
+# v37(2026-08-16): D017 경로(자산×알고 사전통계 게이트)로 첫 숏 승격 —
+#   `vix_rsi` 숏을 ETHUSDT-PERP 트랙 하나에만 추가. Phase B §12가 DSR(n_trials=2)
+#   0.934로 "근접 미달" 처리했던 걸 증거기준 프레임워크(evidence-criteria-
+#   framework-20260816.md)로 재검증: 사전등록 단일가설에는 DSR이 아니라 PSR이
+#   맞는 지표이고, ETH는 PSR=0.970(≥0.95)·MinTRL 37건(≤보유 48건, 검정력도
+#   충족) — Phase B 전체에서 유일하게 판정 가능하고 통과한 사례. BTC는 SR
+#   음수로 기각, SOL은 방향은 양(+)이나 MinTRL 132건>48건으로 판정 불가라
+#   제외(재시도 대상 아님, 표본이 더 쌓이면 재평가). 함수: algorithms.vix_rsi_short
+#   (Phase B §3.5 veto유지 변형 그대로), 등록: short_signals.PERP_SHORT_ALGORITHMS.
+# 롤백: PERP_SHORT_ENABLED_TRACKS에서 ("ETHUSDT-PERP", "vix_rsi") 제거.
+PARAMS_VERSION = "arena-params-v37"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v2"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
@@ -93,6 +103,9 @@ PERP_SHORT_ENABLED_TRACKS: frozenset[tuple[str, str]] = frozenset(
         ("BTCUSDT-PERP", "meridian"),
         ("ETHUSDT-PERP", "meridian"),
         ("SOLUSDT-PERP", "meridian"),
+        # v37: D017 경로 첫 승격 — PSR 0.970·MinTRL 37≤48로 검정력까지 충족된
+        # 유일한 자산×알고 쌍. BTC/SOL은 각각 기각/판정불가라 추가하지 않는다.
+        ("ETHUSDT-PERP", "vix_rsi"),
     }
 )
 PERP_TARGET_PRODUCT = "usdm_perp"
