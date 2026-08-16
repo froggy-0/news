@@ -74,7 +74,7 @@ STRATEGY_VERSION = "arena-spot-v4"
 #   방지를 위해 scheduler.py가 스코프와 무관하게 계속 관리(시간손절·손절·트레일링·flat청산)
 #   하도록 분리했다(scheduler.py의 스코프 체크 위치 변경 참조). 롤백:
 #   ALGORITHM_TRACK_SCOPE에서 이번에 추가된 5개 항목 제거 + vix_rsi를 ETH-PERP만으로 되돌림.
-PARAMS_VERSION = "arena-params-v39"
+PARAMS_VERSION = "arena-params-v40"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v2"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
@@ -139,6 +139,38 @@ MERIDIAN_SHORT_RSI_ABOVE = 70.0
 # 배분한다(백테스트로 최적화된 값이 아니라 증거 비대칭을 자본배분에 반영한 설계
 # 판단, 설계 §2-3). combined_position_weight() 결과에 곱셈으로 적용.
 MERIDIAN_SHORT_SIZE_DAMPENER = 0.5
+
+# 역발산 leg 모멘텀 안정화 게이트 (2026-08-16) — fng_contrarian/vix_rsi가 실제
+# 진입함수에서 쓰는 _momentum_not_worsening()을 meridian 역발산 leg(FNG/VIX+RSI 둘 다)
+# 에도 동일 적용. 원래 설계문서는 "핵심조건만 재사용"하며 이 조건을 빠뜨렸는데,
+# fng_contrarian(algorithms.py:463)·vix_rsi(algorithms.py:530) 코드상 이건 v22/v23
+# 부가 메커니즘(물타기·시간손절)이 아니라 실제 진입 AND조건 중 하나라 재사용 대상에
+# 포함돼야 했던 것 — fng_contrarian/vix_rsi와의 일관성 회복 + 칼받기 방지 목적으로
+# 기본 True(이미 검증된 필터 재적용). ⚠️ 자산 간 상관 완화 효과는 실측 결과 거의
+# 없었음(20개월 macro 백필: 역발산 leg 동시진입률 27.1%→28.7%, 무변화) — FNG/VIX
+# 자체가 자산 무관 매크로 트리거라 실제 공포장에선 자산별 모멘텀도 같이 움직여
+# 차별화가 안 됨. 상관 완화는 MERIDIAN_LEG_CONCURRENCY_CAP(아래)이 담당.
+MERIDIAN_REVERSION_STABILIZATION_ENABLED = True
+
+# 3자산(perp) 동시진입 상관캡 (2026-08-16) — 모멘텀 게이트가 상관관계를 못 줄인 것을
+# 확인한 뒤 설계. 새 meridian 포지션을 열기 직전, 같은 leg로 이미 열려 있는 "다른"
+# perp 트랙 수를 세어 이 값 이상이면 신규 진입을 막는다(scheduler.py
+# `_meridian_concurrent_leg_count`). dict에 leg가 없으면 비활성(무제한, 기존 동작).
+#
+# leg별로 다르게 설정 — 20개월 macro 백필 사후 시뮬레이션(scripts/analysis/
+# meridian_reversion_correlation_check.py) 근거:
+#   reversion(FNG/VIX, 자산 무관 매크로 트리거): cap=1(완전 직렬화)이 cap=2보다도
+#     압도적으로 나음 — 동시진입 28.7%→0%(완전 제거) *동시에* 3자산 합산 sum_w%
+#     -52.33→-20.94(캡이 없을 때보다 손실이 60% 줄어듦, trade-off가 아니라 양쪽 다
+#     개선). 거래수는 889→673(레그 전체 기준, -24%) — 표본 감소보다 상관 리스크
+#     제거·손실 축소가 우선이라는 판단(설계 §1 원칙과 별개로, 이 leg는 손실 원흉).
+#   short(FNG>70/RSI>70 fade, 마찬가지로 매크로 트리거): 실거래 표본이 아직 0건이라
+#     직접 검증은 못 했으나 reversion과 신호 성격이 동일(같은 매크로 값이 3자산에
+#     동시 발화)해 선제적으로 cap=1 적용.
+#   trend(TSMOM_NL, 자산별 고유 trailing return): cap을 걸어도 동시진입률 자체가
+#     낮고(14.4%, 매크로가 아니라 가격 데이터라 원래 덜 상관됨) sum_w 개선도 없음
+#     (-52.33→-53.14, 사실상 무변화) — 이 leg는 넣지 않음(불필요한 표본 손실 방지).
+MERIDIAN_LEG_CONCURRENCY_CAP_BY_LEG: dict[str, int] = {"reversion": 1, "short": 1}
 
 # 알고별 실행 트랙 범위 — 미등록 알고는 제한 없음. `meridian`은 롱/숏 판단이 핵심이라
 # spot(롱only)에서 중복 자본을 만들지 않도록 perp 트랙에만 한정한다(scheduler._run_cycle이

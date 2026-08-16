@@ -1202,6 +1202,14 @@ def _meridian_active_leg(macro: dict, ind: dict) -> str | None:
     §1(채택/미채택 근거)·§2(신호 로직). "검증된 엣지"가 아니라 6알고 리서치 중
     상대적으로 반증되지 않은 두 계열(추세: TSMOM_NL, 역발산: fng_contrarian/vix_rsi
     핵심조건)만 재사용한 배선(wiring) — 새 조건 발명 없음.
+
+    역발산 leg 모멘텀 게이트(2026-08-16 추가): fng_contrarian/vix_rsi가 실제
+    진입함수에서 쓰는 _momentum_not_worsening()을 여기서도 적용한다 — v22/v23
+    부가 메커니즘(물타기·시간손절)과 달리 이건 두 알고의 실제 AND조건이라 애초에
+    "핵심조건 재사용" 범위에 들어갔어야 했다. 부수 효과로 자산별 macd_hist가
+    독립적이라, FNG/VIX 같은 매크로 트리거가 3자산에 동시에 켜져도 실제 진입
+    타이밍은 자산별로 갈라진다(라이브에서 BTC/ETH/SOL이 같은 봉에 통째로 동시
+    진입하던 상관 문제의 완화책).
     """
     state = _regime_state(macro)
     if _is_risk_off(state):
@@ -1210,10 +1218,17 @@ def _meridian_active_leg(macro: dict, ind: dict) -> str | None:
     # 추세 leg — 로컬 4h 레짐이 명시적으로 bull_trend일 때만(오버레이 폴백 라벨
     # 제외, _below_ema_trend_strict:151-160과 동일 원칙 — 레짐분류기가 이미 구조적
     # 추세를 확인한 경우로 한정). TSMOM_NL 핵심신호 재사용(algorithms.py:556-575).
+    # 모멘텀 게이트는 역발산 전용(칼받기 방지 취지가 추세지속에는 안 맞음) — 적용 안 함.
     if macro.get("arena_regime_state") == regime.REGIME_BULL_TREND:
         s = _tsmom_nl_signal(ind)
         if s is not None and s > parameters.TSMOM_NL_MIN_SIGNAL:
             return "trend"
+
+    momentum_ok = _momentum_not_worsening(
+        ind, enabled=parameters.MERIDIAN_REVERSION_STABILIZATION_ENABLED
+    )
+    if not momentum_ok:
+        return None
 
     # 역발산 leg 1 — fng_contrarian 핵심조건(FNG<30)만 재사용, 레짐 무관(risk-off는
     # 위에서 이미 배제). 물타기·시간손절 등 v22 부가 메커니즘은 재사용 안 함(설계 §1-3
@@ -1651,9 +1666,15 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
                 "vix_rsi_long_max": parameters.VIX_RSI_LONG_MAX,
                 "short_fng_above": parameters.MERIDIAN_SHORT_FNG_ABOVE,
                 "short_rsi_above": parameters.MERIDIAN_SHORT_RSI_ABOVE,
+                "reversion_stabilization_enabled": parameters.MERIDIAN_REVERSION_STABILIZATION_ENABLED,
             }
         )
         _record_condition(diag, "not_risk_off", not _is_risk_off(state), veto=True)
+        # 역발산 leg에만 적용되는 게이트라 veto=False(트렌드 leg 발화를 오염하지 않음) —
+        # 자산별 진입 타이밍 차별화 여부를 사후 분석에서 볼 수 있도록 factor로만 노출.
+        diag["factors"]["reversion_momentum_not_worsening"] = _momentum_not_worsening(
+            ind, enabled=parameters.MERIDIAN_REVERSION_STABILIZATION_ENABLED
+        )
         diag["factors"]["active_leg"] = leg
         return _finish_diag(diag)
 

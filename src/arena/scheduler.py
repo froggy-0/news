@@ -301,6 +301,28 @@ def _short_enabled_for(profile: frequency.FrequencyProfile, algo_id: str) -> boo
     )
 
 
+def _meridian_concurrent_leg_count(track_symbol: str, leg: str) -> int:
+    """`track_symbol`을 제외한 다른 meridian perp 트랙 중, 이미 같은 leg로 열려 있는
+    포지션 수를 센다. 신규진입 직전 MERIDIAN_LEG_CONCURRENCY_CAP과 비교하는 용도
+    (scheduler.py 상관캡, 2026-08-16). leg는 `signal_reason.diagnostics.factors.active_leg`
+    (long: "trend"/"reversion") 또는 "short"에 저장돼 있다(explain_signal 배선)."""
+    tracks = parameters.ALGORITHM_TRACK_SCOPE.get("meridian", frozenset())
+    count = 0
+    for other_symbol in tracks:
+        if other_symbol == track_symbol:
+            continue
+        pos = state.get_position(other_symbol, "meridian")
+        if pos is None:
+            continue
+        diag = (pos.get("signal_reason") or {}).get("diagnostics") or {}
+        other_leg = (diag.get("factors") or {}).get("active_leg")
+        if pos.get("direction") == "short":
+            other_leg = "short"
+        if other_leg == leg:
+            count += 1
+    return count
+
+
 def _risk_policy(profile: frequency.FrequencyProfile) -> risk.PortfolioRiskPolicy:
     # 숏 캡은 승인된 자산×알고 쌍이 있는 perp 트랙에서만 개방한다.
     # 현물 트랙은 다른 트랙에서 동일 algo_id가 승인됐더라도 숏 캡 0을 유지한다.
@@ -1000,6 +1022,24 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
                     if updated:
                         state.set_position(profile.symbol, algo_id, updated)
                 continue
+
+            # meridian 3자산 상관캡 (2026-08-16): 모멘텀 게이트가 자산 간 상관을 못 줄인
+            # 것을 확인한 뒤 도입 — 같은 leg로 이미 열린 "다른" perp 트랙 수가 캡 이상이면
+            # 신규 진입 차단. leg가 MERIDIAN_LEG_CONCURRENCY_CAP_BY_LEG에 없으면 무제한
+            # (trend leg는 백테스트상 효과 없어 기본 미등록, parameters.py 참조).
+            if algo_id == "meridian":
+                leg = meridian_active_leg(macro, ind) if signal == "long" else "short"
+                cap = (
+                    parameters.MERIDIAN_LEG_CONCURRENCY_CAP_BY_LEG.get(leg)
+                    if leg is not None
+                    else None
+                )
+                if cap is not None:
+                    concurrent = _meridian_concurrent_leg_count(profile.symbol, leg)
+                    if concurrent >= cap:
+                        action = "risk_blocked"
+                        skipped_reason = f"meridian_leg_concurrency_cap:{leg}"
+                        continue
 
             risk_decision = risk.evaluate_open(
                 algo_id=algo_id,

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from arena import frequency, parameters, scheduler, spot_policy
+import pytest
+
+from arena import frequency, parameters, scheduler, spot_policy, state
 
 
 def test_v39_out_of_scope_track_blocks_new_entry_but_not_management() -> None:
@@ -60,3 +62,57 @@ def test_short_gate_does_not_leak_to_other_perp_asset(monkeypatch) -> None:
 
     assert scheduler._short_enabled_for(eth_profile, "macd_momentum") is False
     assert scheduler._risk_policy(eth_profile).max_short_positions == 0
+
+
+# ── meridian 3자산 상관캡 (2026-08-16) ──────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _clean_state():
+    """state.open_positions는 모듈 전역이라 테스트 간 오염 방지용으로 정리."""
+    saved = {k: dict(v) for k, v in state.open_positions.items()}
+    state.open_positions.clear()
+    yield
+    state.open_positions.clear()
+    state.open_positions.update(saved)
+
+
+def _seed_meridian_position(symbol: str, *, leg: str | None, direction: str = "long") -> None:
+    signal_reason = {"diagnostics": {"factors": {"active_leg": leg}}}
+    state.set_position(
+        symbol,
+        "meridian",
+        {"id": 1, "direction": direction, "open_time": None, "signal_reason": signal_reason},
+    )
+
+
+def test_meridian_concurrent_leg_count_ignores_own_track() -> None:
+    _seed_meridian_position("BTCUSDT-PERP", leg="reversion")
+    assert scheduler._meridian_concurrent_leg_count("BTCUSDT-PERP", "reversion") == 0
+
+
+def test_meridian_concurrent_leg_count_counts_matching_leg_on_other_tracks() -> None:
+    _seed_meridian_position("BTCUSDT-PERP", leg="reversion")
+    _seed_meridian_position("ETHUSDT-PERP", leg="reversion")
+    assert scheduler._meridian_concurrent_leg_count("SOLUSDT-PERP", "reversion") == 2
+
+
+def test_meridian_concurrent_leg_count_ignores_different_leg() -> None:
+    _seed_meridian_position("BTCUSDT-PERP", leg="trend")
+    assert scheduler._meridian_concurrent_leg_count("SOLUSDT-PERP", "reversion") == 0
+
+
+def test_meridian_concurrent_leg_count_uses_direction_for_short() -> None:
+    # explain_signal은 long leg만 평가하므로 숏 포지션은 direction으로 판별해야 한다.
+    _seed_meridian_position("BTCUSDT-PERP", leg=None, direction="short")
+    assert scheduler._meridian_concurrent_leg_count("ETHUSDT-PERP", "short") == 1
+    assert scheduler._meridian_concurrent_leg_count("ETHUSDT-PERP", "reversion") == 0
+
+
+def test_meridian_leg_concurrency_cap_defaults() -> None:
+    # 20개월 macro 백필 사후 시뮬레이션 근거(scripts/analysis/
+    # meridian_reversion_correlation_check.py) — reversion/short만 cap=1, trend는
+    # 캡을 걸어도 개선이 없어 미등록(무제한).
+    assert parameters.MERIDIAN_LEG_CONCURRENCY_CAP_BY_LEG.get("reversion") == 1
+    assert parameters.MERIDIAN_LEG_CONCURRENCY_CAP_BY_LEG.get("short") == 1
+    assert parameters.MERIDIAN_LEG_CONCURRENCY_CAP_BY_LEG.get("trend") is None

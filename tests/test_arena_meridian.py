@@ -74,6 +74,48 @@ def test_active_leg_none_when_nothing_qualifies() -> None:
     assert algorithms.meridian_active_leg(macro, ind) is None
 
 
+# ── 역발산 leg 모멘텀 안정화 게이트 (2026-08-16, 상관 완화) ────────────────
+
+
+def test_active_leg_reversion_fng_blocked_when_momentum_worsening() -> None:
+    # macd_hist가 직전봉보다 더 나빠지는 중이면(칼받기 구간) FNG<30이어도 보류.
+    macro = {"arena_regime_state": "sideways", "fng": 20.0}
+    ind = {"rsi": 50.0, "macd_hist": -2.0, "macd_hist_prev": -1.0}
+    assert algorithms.meridian_active_leg(macro, ind) is None
+
+
+def test_active_leg_reversion_vix_rsi_blocked_when_momentum_worsening() -> None:
+    macro = {"arena_regime_state": "sideways", "vix_now": 15.0, "vix_q40": 20.0}
+    ind = {"rsi": 40.0, "macd_hist": -2.0, "macd_hist_prev": -1.0}
+    assert algorithms.meridian_active_leg(macro, ind) is None
+
+
+def test_active_leg_reversion_fng_fires_when_momentum_stabilizing() -> None:
+    # macd_hist가 직전봉 대비 개선(하락가속 멈춤)이면 정상 발화.
+    macro = {"arena_regime_state": "sideways", "fng": 20.0}
+    ind = {"rsi": 50.0, "macd_hist": -1.0, "macd_hist_prev": -2.0}
+    assert algorithms.meridian_active_leg(macro, ind) == "reversion"
+
+
+def test_active_leg_trend_leg_ignores_momentum_gate() -> None:
+    # 모멘텀 게이트는 역발산 전용 — 추세 leg는 macd_hist 악화 중이어도 영향 없음.
+    macro = {"arena_regime_state": "bull_trend"}
+    ind = {
+        "tsmom_nl_return_126": 0.1,
+        "tsmom_nl_vol_ewma": 0.01,
+        "macd_hist": -2.0,
+        "macd_hist_prev": -1.0,
+    }
+    assert algorithms.meridian_active_leg(macro, ind) == "trend"
+
+
+def test_active_leg_reversion_momentum_gate_disabled_falls_back_to_legacy(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "MERIDIAN_REVERSION_STABILIZATION_ENABLED", False)
+    macro = {"arena_regime_state": "sideways", "fng": 20.0}
+    ind = {"rsi": 50.0, "macd_hist": -2.0, "macd_hist_prev": -1.0}
+    assert algorithms.meridian_active_leg(macro, ind) == "reversion"
+
+
 # ── meridian_long/meridian_short 신호 함수 ──────────────────────────────
 
 
@@ -120,6 +162,15 @@ def test_explain_signal_meridian_reports_active_leg() -> None:
     assert diag["raw_signal"] == "long"
     assert diag["factors"]["active_leg"] == "trend"
     assert "unknown_algo" not in diag["failed_conditions"]
+
+
+def test_explain_signal_meridian_reports_reversion_momentum_factor() -> None:
+    macro = {"arena_regime_state": "sideways", "fng": 20.0}
+    ind = {"rsi": 50.0, "macd_hist": -2.0, "macd_hist_prev": -1.0}
+    diag = algorithms.explain_signal("meridian", macro, ind)
+    assert diag["raw_signal"] is None
+    assert diag["factors"]["reversion_momentum_not_worsening"] is False
+    assert diag["factors"]["active_leg"] is None
 
 
 # ── 트랙 스코프 ───────────────────────────────────────────────────────────
