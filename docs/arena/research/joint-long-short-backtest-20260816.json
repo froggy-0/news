@@ -1,0 +1,209 @@
+{
+  "as_of": "2026-08-16",
+  "results": [
+    {
+      "algo_id": "macd_momentum",
+      "symbol": "BTCUSDT",
+      "long_only": {
+        "n": 115,
+        "sum_pct": -3.5628842911454828,
+        "sharpe": -0.07260204328855066,
+        "psr": 0.23079221311553572,
+        "dsr": 0.23079221311553566,
+        "min_trl": Infinity,
+        "shortfall_ratio": null,
+        "sufficient": false
+      },
+      "short_only": {
+        "n": 97,
+        "sum_pct": 4.006506463772178,
+        "sharpe": 0.0725025070827895,
+        "psr": 0.7830447458424818,
+        "dsr": 0.7830447458424821,
+        "min_trl": 425.1677403806469,
+        "shortfall_ratio": 4.383172581243782,
+        "sufficient": false
+      },
+      "combined": {
+        "n": 205,
+        "sum_pct": 2.2787726595394457,
+        "sharpe": 0.021291747944940237,
+        "psr": 0.6228243674157344,
+        "dsr": 0.6228243674157344,
+        "min_trl": 5638.0764651999425,
+        "shortfall_ratio": 27.50281202536557,
+        "sufficient": false
+      }
+    },
+    {
+      "algo_id": "macd_momentum",
+      "symbol": "ETHUSDT",
+      "long_only": {
+        "n": 140,
+        "sum_pct": -1.4537574881959578,
+        "sharpe": -0.02697316568392005,
+        "psr": 0.37748499908759314,
+        "dsr": 0.3774849990875931,
+        "min_trl": Infinity,
+        "shortfall_ratio": null,
+        "sufficient": false
+      },
+      "short_only": {
+        "n": 112,
+        "sum_pct": 6.159588550968222,
+        "sharpe": 0.08011675006008366,
+        "psr": 0.8346217104561505,
+        "dsr": 0.8346217104561505,
+        "min_trl": 318.48040858725744,
+        "shortfall_ratio": 2.8435750766719416,
+        "sufficient": false
+      },
+      "combined": {
+        "n": 247,
+        "sum_pct": 4.348986976471099,
+        "sharpe": 0.03227634972371243,
+        "psr": 0.703879636666828,
+        "dsr": 0.703879636666828,
+        "min_trl": 2321.180921426318,
+        "shortfall_ratio": 9.397493609013434,
+        "sufficient": false
+      }
+    },
+    {
+      "algo_id": "macd_momentum",
+      "symbol": "SOLUSDT",
+      "long_only": {
+        "n": 138,
+        "sum_pct": -5.497037106716396,
+        "sharpe": -0.10166134461736126,
+        "psr": 0.13606433729492695,
+        "dsr": 0.136064337294927,
+        "min_trl": Infinity,
+        "shortfall_ratio": null,
+        "sufficient": false
+      },
+      "short_only": {
+        "n": 110,
+        "sum_pct": 3.7709993924357157,
+        "sharpe": 0.06354145505047445,
+        "psr": 0.7618496295739488,
+        "dsr": 0.7618496295739486,
+        "min_trl": 582.2967535773082,
+        "shortfall_ratio": 5.293606850702802,
+        "sufficient": false
+      },
+      "combined": {
+        "n": 242,
+        "sum_pct": -1.0218889162992115,
+        "sharpe": -0.008627683178232592,
+        "psr": 0.4472390395446674,
+        "dsr": 0.4472390395446674,
+        "min_trl": Infinity,
+        "shortfall_ratio": null,
+        "sufficient": false
+      }
+    },
+    {
+      "algo_id": "fng_contrarian",
+      "symbol": "SOLUSDT",
+      "long_only": {
+        "n": 72,
+        "sum_pct": -17.97215461334683,
+        "sharpe": -0.20191178058903475,
+        "psr": 0.05240277145661676,
+        "dsr": 0.05240277145661676,
+        "min_trl": Infinity,
+        "shortfall_ratio": null,
+        "sufficient": false
+      },
+      "short_only": {
+        "n": 22,
+        "sum_pct": 2.2323641217903223,
+        "sharpe": 0.07229511667399324,
+        "psr": 0.6335014179285774,
+        "dsr": 0.6335014179285774,
+        "min_trl": 489.20817706590003,
+        "shortfall_ratio": 22.236735321177274,
+        "sufficient": false
+      },
+      "combined": {
+        "n": 94,
+        "sum_pct": -15.739790491556505,
+        "sharpe": -0.13099413164695234,
+        "psr": 0.11241578432278221,
+        "dsr": 0.11241578432278221,
+        "min_trl": Infinity,
+        "shortfall_ratio": null,
+        "sufficient": false
+      }
+    },
+    {
+      "algo_id": "vix_rsi",
+      "symbol": "SOLUSDT",
+      "long_only": {
+        "n": 63,
+        "sum_pct": -0.03310471816546298,
+        "sharpe": -0.0005366210639379871,
+        "psr": 0.498314470067922,
+        "dsr": 0.498314470067922,
+        "min_trl": Infinity,
+        "shortfall_ratio": null,
+        "sufficient": false
+      },
+      "short_only": {
+        "n": 48,
+        "sum_pct": 5.366450479506268,
+        "sharpe": 0.14618152372143375,
+        "psr": 0.837721851127545,
+        "dsr": 0.837721851127545,
+        "min_trl": 132.0262291166163,
+        "shortfall_ratio": 2.750546439929506,
+        "sufficient": false
+      },
+      "combined": {
+        "n": 111,
+        "sum_pct": 4.511768879449343,
+        "sharpe": 0.046011155808878094,
+        "psr": 0.6857799284445241,
+        "dsr": 0.6857799284445241,
+        "min_trl": 1271.8483408625082,
+        "shortfall_ratio": 11.458093160923497,
+        "sufficient": false
+      }
+    },
+    {
+      "algo_id": "vix_rsi",
+      "symbol": "ETHUSDT",
+      "long_only": {
+        "n": 69,
+        "sum_pct": -10.360409187223398,
+        "sharpe": -0.186685673275842,
+        "psr": 0.06784909505002557,
+        "dsr": 0.0678490950500256,
+        "min_trl": Infinity,
+        "shortfall_ratio": null,
+        "sufficient": false
+      },
+      "short_only": {
+        "n": 48,
+        "sum_pct": 11.08668026917511,
+        "sharpe": 0.2767547450235346,
+        "psr": 0.9698633392228304,
+        "dsr": 0.9698633392228304,
+        "min_trl": 37.024369982528206,
+        "shortfall_ratio": 0.771341041302671,
+        "sufficient": true
+      },
+      "combined": {
+        "n": 118,
+        "sum_pct": -0.4967698147194403,
+        "sharpe": -0.0051886415757337444,
+        "psr": 0.4776261928707683,
+        "dsr": 0.4776261928707683,
+        "min_trl": Infinity,
+        "shortfall_ratio": null,
+        "sufficient": false
+      }
+    }
+  ]
+}

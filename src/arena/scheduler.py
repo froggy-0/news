@@ -934,6 +934,9 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
                 indicators=ind,
                 short_enabled=short_enabled,
                 current_direction=current.get("direction") if current else None,
+                long_enabled=parameters.perp_long_enabled(
+                    track_symbol=profile.symbol, algo_id=algo_id
+                ),
             )
             raw_signal = directional_signal.resolved_signal
             product_decision = (

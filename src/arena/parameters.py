@@ -95,7 +95,14 @@ STRATEGY_VERSION = "arena-spot-v4"
 #   제거, ALGORITHM_TRACK_SCOPE에서 macd_momentum 확장분 제거·fng_contrarian/vix_rsi
 #   확장분 제거(v39/v37 상태로 복귀). direction 게이팅 수정은 되돌리지 않음(숏
 #   미사용 시에도 무해한 방어적 수정).
-PARAMS_VERSION = "arena-params-v41"
+# v42(2026-08-16, 같은 날 후속): 동적 결합 백테스트(joint-long-short-backtest-
+#   20260816.md)로 v41(및 v37 vix_rsi/ETH) 6개 조합 전부가 롱·숏 슬롯 공유로
+#   손실희석·반전되는 것을 확인 — PERP_LONG_BLOCKED_TRACKS 신설, short_signals.
+#   resolve()에 long_enabled 배선해 이 6개 트랙을 숏 전용으로 전환. 신호
+#   함수·PERP_SHORT_ENABLED_TRACKS·ALGORITHM_TRACK_SCOPE는 무변경(진입 스코프
+#   자체는 유지, 방향만 숏으로 제한). 롤백: PERP_LONG_BLOCKED_TRACKS를 빈
+#   frozenset으로.
+PARAMS_VERSION = "arena-params-v42"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v2"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
@@ -287,6 +294,34 @@ def perp_short_enabled_for_track(*, track_symbol: str, product_type: str) -> boo
         for enabled_track, algo_id in PERP_SHORT_ENABLED_TRACKS
         if enabled_track == track_symbol
     )
+
+
+# v42(2026-08-16) — 숏 전용 트랙. [동적 결합 백테스트](docs/arena/research/
+# joint-long-short-backtest-20260816.md)가 v41(및 v37 vix_rsi/ETH)이 승격한
+# 6개 조합 전부에서, 롱·숏이 같은 포지션 슬롯을 공유하면 확실히 나쁜 롱이
+# 자본회전을 잠식해 좋은 숏의 기여를 희석·반전시킨다는 걸 실측(vix_rsi/ETH는
+# DSR 0.970→0.478로 추락, 부호까지 반전). 신호 자체는 문제없고 "같은 슬롯
+# 공유" 구조가 문제라 롱만 차단해 short_only 통계를 보존한다.
+# PERP_SHORT_ENABLED_TRACKS와 동일한 6개 트랙 전부 등록(vix_rsi ETH 포함).
+PERP_LONG_BLOCKED_TRACKS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("BTCUSDT-PERP", "macd_momentum"),
+        ("ETHUSDT-PERP", "macd_momentum"),
+        ("SOLUSDT-PERP", "macd_momentum"),
+        ("SOLUSDT-PERP", "fng_contrarian"),
+        ("ETHUSDT-PERP", "vix_rsi"),
+        ("SOLUSDT-PERP", "vix_rsi"),
+    }
+)
+
+
+def perp_long_enabled(*, track_symbol: str, algo_id: str) -> bool:
+    """해당 트랙에서 롱 신호를 실행할지 — PERP_LONG_BLOCKED_TRACKS에 있으면 차단.
+
+    등록 안 된 (트랙,알고)는 기존 동작 그대로(무제한, True) — meridian처럼
+    설계상 롱/숏 둘 다 필요한 알고에는 영향 없음.
+    """
+    return (track_symbol, algo_id) not in PERP_LONG_BLOCKED_TRACKS
 
 
 HTTP_TIMEOUT_SECONDS = 30

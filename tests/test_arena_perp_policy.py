@@ -165,6 +165,26 @@ def test_perp_short_gate_requires_product_track_and_algo(monkeypatch) -> None:
     )
 
 
+def test_perp_long_blocked_tracks_match_v41_short_promotions() -> None:
+    # v42: 숏 전용 트랙은 v41이 승격한 6개 조합과 정확히 1:1이어야 한다
+    # (동적 결합 백테스트가 실측한 롱-숏 자본잠식이 이 6개 전부에 해당했으므로).
+    for track, algo_id in (
+        ("BTCUSDT-PERP", "macd_momentum"),
+        ("ETHUSDT-PERP", "macd_momentum"),
+        ("SOLUSDT-PERP", "macd_momentum"),
+        ("SOLUSDT-PERP", "fng_contrarian"),
+        ("ETHUSDT-PERP", "vix_rsi"),
+        ("SOLUSDT-PERP", "vix_rsi"),
+    ):
+        assert parameters.perp_long_enabled(track_symbol=track, algo_id=algo_id) is False
+
+
+def test_perp_long_enabled_unaffected_for_meridian_and_unlisted_tracks() -> None:
+    assert parameters.perp_long_enabled(track_symbol="BTCUSDT-PERP", algo_id="meridian") is True
+    assert parameters.perp_long_enabled(track_symbol="BTCUSDT", algo_id="macd_momentum") is True
+    assert parameters.perp_long_enabled(track_symbol="BTCUSDT-PERP", algo_id="vix_rsi") is True
+
+
 def test_open_position_records_explicit_track_product(monkeypatch) -> None:
     monkeypatch.setattr(parameters, "PERP_SHORT_ENABLED_TRACKS", frozenset())
     captured: dict = {}
