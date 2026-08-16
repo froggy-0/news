@@ -28,6 +28,7 @@ agents/
 
 # Local database migrations
 supabase/migrations/
+supabase/schema.sql
 
 # Misc
 log.txt
