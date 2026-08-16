@@ -74,6 +74,14 @@ RUNTIME = "ec2"
 BINANCE_SYMBOL = "BTCUSDT"
 BINANCE_KLINE_INTERVAL = "4h"
 BINANCE_KLINES_LIMIT = 300
+
+# 윈도우 재업서트 시 "무조건 다시 쓰는" 최신 봉 개수 (2026-08-16 Disk I/O 감사).
+# 바이낸스는 매 사이클 같은 300봉 윈도우를 돌려주는데 마감된 과거 봉은 값이 불변이라
+# 재기록이 순수 낭비였다(실측: mark_price_bars 2,866행에 UPDATE 412,334회 = 행당 144회).
+# 마감 전 봉만 갱신하면 되므로 최신 N봉만 다시 쓰고 나머지는 키가 이미 있으면 건너뛴다.
+# 1이면 형성 중인 봉 하나만 커버 — 3은 지연/경계 오차에 대한 안전 여유분.
+# 0으로 두면 "키가 없는 행만 기록", 음수면 필터 비활성(전량 업서트, 이전 동작).
+MARKET_WINDOW_HOT_TAIL_BARS = 3
 # 멀티자산 확장 1차 실험대상(2026-07-31, docs/arena/research/structural-priority-
 # multi-asset-expansion-20260730.md). BINANCE_SYMBOL은 라이브 BTC 경로 전용이라 불변 —
 # 이 상수는 shadow 전용 신규 경로에서만 참조된다.

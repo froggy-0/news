@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from arena import data_lake, parameters
 from arena.execution_gate import ExecutionGateDecision, ExecutionGatePolicy
@@ -418,4 +419,217 @@ def test_record_market_structure_snapshot_tolerates_legacy_premium_constraint(
         result.label == "arena_mark_price_bars.premium_index.upsert.schema_skipped"
         for result in results
     )
-    assert len(fake_db.builders["arena_mark_price_bars"]) == 2
+    # mark_price와 premium_index는 별도 upsert로 나가야 한다(premium이 레거시 제약으로
+    # 실패해도 mark_price는 저장되도록). _rows_needing_write()의 사전 조회 builder는
+    # upsert를 호출하지 않으므로 rows is None으로 구분한다.
+    upserts = [b for b in fake_db.builders["arena_mark_price_bars"] if b.rows is not None]
+    assert len(upserts) == 2
+
+
+# =============================================================================
+# _rows_needing_write — 윈도우 재업서트 중복 제거 (2026-08-16 Disk I/O 감사)
+# =============================================================================
+
+
+class _SelectFakeBuilder:
+    """key 컬럼 조회만 지원하는 PostgREST 빌더 스텁."""
+
+    def __init__(self, table_name: str, existing: list[dict]) -> None:
+        self.table_name = table_name
+        self._existing = existing
+        self.selected: str | None = None
+        self.gte_filter: tuple[str, str] | None = None
+        self.lte_filter: tuple[str, str] | None = None
+        self.eq_filters: list[tuple[str, object]] = []
+        self.limit_value: int | None = None
+
+    def select(self, columns: str):
+        self.selected = columns
+        return self
+
+    def eq(self, column: str, value):
+        self.eq_filters.append((column, value))
+        self._existing = [r for r in self._existing if r.get(column) == value]
+        return self
+
+    def gte(self, column: str, value):
+        self.gte_filter = (column, value)
+        return self
+
+    def lte(self, column: str, value):
+        self.lte_filter = (column, value)
+        return self
+
+    def limit(self, n: int):
+        self.limit_value = n
+        self._existing = self._existing[:n]
+        return self
+
+    async def execute(self):
+        return SimpleNamespace(data=self._existing)
+
+
+def _mark_row(open_time: str, close: float = 100.0) -> dict:
+    return {
+        "exchange": "binance",
+        "symbol": "BTCUSDT",
+        "interval": "4h",
+        "price_type": "mark_price",
+        "open_time": open_time,
+        "close": close,
+        "fetched_at": "2026-08-16T05:00:00Z",
+    }
+
+
+_MARK_KEY = ("exchange", "symbol", "interval", "price_type", "open_time")
+
+
+def _run_filter(monkeypatch, rows, existing, *, hot_tail=3):
+    class FakeDb:
+        def table(self, table_name: str):
+            return _SelectFakeBuilder(table_name, existing)
+
+    monkeypatch.setattr(data_lake.positions, "db", FakeDb)
+    return asyncio.run(
+        data_lake._rows_needing_write(
+            "arena_mark_price_bars",
+            rows,
+            key_columns=_MARK_KEY,
+            time_column="open_time",
+            hot_tail=hot_tail,
+        )
+    )
+
+
+def test_rows_needing_write_skips_stored_closed_bars(monkeypatch) -> None:
+    """이미 저장된 과거 봉은 건너뛰고, 최신 hot_tail개만 다시 쓴다."""
+    rows = [_mark_row(f"2026-08-1{d}T00:00:00Z") for d in range(0, 6)]
+    # DB에 전부 이미 있는 상태(PostgREST는 +00:00 표기로 돌려준다 — 파싱 비교 검증)
+    existing = [{**_mark_row(f"2026-08-1{d}T00:00:00+00:00")} for d in range(0, 6)]
+
+    kept = _run_filter(monkeypatch, rows, existing)
+
+    # 최신 3봉(13,14,15일)만 남는다
+    assert [r["open_time"] for r in kept] == [
+        "2026-08-13T00:00:00Z",
+        "2026-08-14T00:00:00Z",
+        "2026-08-15T00:00:00Z",
+    ]
+
+
+def test_rows_needing_write_keeps_new_and_gap_rows(monkeypatch) -> None:
+    """DB에 키가 없는 행은 과거 봉이라도 반드시 쓴다(구멍 메우기)."""
+    rows = [_mark_row(f"2026-08-1{d}T00:00:00Z") for d in range(0, 6)]
+    # 11일이 DB에 없다(과거 구멍)
+    existing = [_mark_row(f"2026-08-1{d}T00:00:00+00:00") for d in (0, 2, 3, 4, 5)]
+
+    kept = _run_filter(monkeypatch, rows, existing)
+
+    assert "2026-08-11T00:00:00Z" in [r["open_time"] for r in kept]
+    assert "2026-08-10T00:00:00Z" not in [r["open_time"] for r in kept]
+
+
+def test_rows_needing_write_distinguishes_price_type(monkeypatch) -> None:
+    """같은 테이블·같은 시각이라도 price_type이 다르면 별개 키다."""
+    rows = [{**_mark_row("2026-08-10T00:00:00Z"), "price_type": "premium_index"}]
+    existing = [_mark_row("2026-08-10T00:00:00+00:00")]  # mark_price만 저장돼 있음
+
+    kept = _run_filter(monkeypatch, rows, existing, hot_tail=0)
+
+    assert len(kept) == 1  # premium_index는 신규 키라 남아야 한다
+
+
+def test_rows_needing_write_falls_back_to_all_rows_on_query_failure(monkeypatch) -> None:
+    """조회 실패 시 전량 업서트(기존 동작)로 안전하게 되돌아간다."""
+
+    class BrokenDb:
+        def table(self, table_name: str):
+            raise RuntimeError("postgrest down")
+
+    monkeypatch.setattr(data_lake.positions, "db", BrokenDb)
+    rows = [_mark_row(f"2026-08-1{d}T00:00:00Z") for d in range(0, 6)]
+
+    kept = asyncio.run(
+        data_lake._rows_needing_write(
+            "arena_mark_price_bars",
+            rows,
+            key_columns=_MARK_KEY,
+            time_column="open_time",
+        )
+    )
+
+    assert kept == rows
+
+
+def test_rows_needing_write_disabled_by_negative_hot_tail(monkeypatch) -> None:
+    """롤백 스위치: hot_tail이 음수면 필터를 아예 타지 않는다."""
+    rows = [_mark_row("2026-08-10T00:00:00Z")]
+    existing = [_mark_row("2026-08-10T00:00:00+00:00")]
+
+    assert _run_filter(monkeypatch, rows, existing, hot_tail=-1) == rows
+
+
+def test_rows_needing_write_hot_tail_zero_writes_only_missing_keys(monkeypatch) -> None:
+    """hot_tail=0이면 꼬리 재기록 없이 DB에 없는 키만 남긴다."""
+    rows = [_mark_row(f"2026-08-1{d}T00:00:00Z") for d in range(0, 4)]
+    existing = [_mark_row(f"2026-08-1{d}T00:00:00+00:00") for d in (0, 1, 2)]
+
+    kept = _run_filter(monkeypatch, rows, existing, hot_tail=0)
+
+    assert [r["open_time"] for r in kept] == ["2026-08-13T00:00:00Z"]
+
+
+def test_rows_needing_write_scopes_query_to_single_valued_key_columns(monkeypatch) -> None:
+    """한 테이블에 여러 심볼·price_type이 섞여 있어도 배치 대상만 조회해야 한다.
+
+    2026-08-16 배포 직후 실측 회귀: arena_mark_price_bars는 3심볼×2price_type이 한 테이블에
+    살아서 시각 범위만으로 조회하면 배치의 6배가 딸려오고 limit에 잘려 기존 키를 놓쳤다
+    (사이클당 업데이트가 36건이 아니라 1,633건으로 안 줄어듦).
+    """
+    captured: list[_SelectFakeBuilder] = []
+    rows = [_mark_row(f"2026-08-1{d}T00:00:00Z") for d in range(0, 4)]
+    # DB엔 우리 배치(BTCUSDT/mark_price) 외에 다른 심볼·price_type 행도 잔뜩 있다.
+    existing = [_mark_row(f"2026-08-1{d}T00:00:00+00:00") for d in range(0, 4)]
+    for d in range(0, 4):
+        existing.append({**_mark_row(f"2026-08-1{d}T00:00:00+00:00"), "symbol": "ETHUSDT"})
+        existing.append(
+            {**_mark_row(f"2026-08-1{d}T00:00:00+00:00"), "price_type": "premium_index"}
+        )
+
+    class FakeDb:
+        def table(self, table_name: str):
+            builder = _SelectFakeBuilder(table_name, list(existing))
+            captured.append(builder)
+            return builder
+
+    monkeypatch.setattr(data_lake.positions, "db", FakeDb)
+    kept = asyncio.run(
+        data_lake._rows_needing_write(
+            "arena_mark_price_bars",
+            rows,
+            key_columns=_MARK_KEY,
+            time_column="open_time",
+            hot_tail=1,
+        )
+    )
+
+    # 배치에서 값이 하나뿐인 키 컬럼은 전부 eq 필터로 내려가야 한다.
+    assert dict(captured[0].eq_filters) == {
+        "exchange": "binance",
+        "symbol": "BTCUSDT",
+        "interval": "4h",
+        "price_type": "mark_price",
+    }
+    # 조회가 정확히 스코프됐으므로 최신 1봉만 남는다(전량 재기록 아님).
+    assert [r["open_time"] for r in kept] == ["2026-08-13T00:00:00Z"]
+
+
+def test_rows_needing_write_falls_back_when_existing_key_fetch_truncated(monkeypatch) -> None:
+    """조회가 limit에 잘리면 기존 키를 신뢰할 수 없으므로 전량 업서트로 폴백한다."""
+    rows = [_mark_row(f"2026-08-{d:02d}T00:00:00Z") for d in range(1, 6)]
+    # limit(= len(rows)*4+100 = 120)만큼 꽉 채워 돌려준다 → 잘렸다고 판단해야 함
+    existing = [_mark_row("2026-08-01T00:00:00+00:00") for _ in range(200)]
+
+    kept = _run_filter(monkeypatch, rows, existing)
+
+    assert kept == rows

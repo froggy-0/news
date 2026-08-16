@@ -81,6 +81,120 @@ def parse_binance_kline(
     }
 
 
+def _parse_ts_or_none(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        return execution_rules.parse_utc_datetime(value)
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
+def _key_of(row: dict[str, Any], key_columns: tuple[str, ...], time_column: str) -> tuple:
+    """행의 유니크 키를 비교 가능한 튜플로 정규화.
+
+    시각 컬럼은 문자열 표기가 우리 쪽(`_ts` → "...Z")과 PostgREST 응답("...+00:00")에서
+    다르므로 반드시 datetime으로 파싱해 비교한다. 나머지 키 컬럼은 전부 텍스트다.
+    """
+    parts: list[Any] = []
+    for column in key_columns:
+        value = row.get(column)
+        if column == time_column:
+            parts.append(_parse_ts_or_none(value))
+        else:
+            parts.append(str(value))
+    return tuple(parts)
+
+
+async def _rows_needing_write(
+    table: str,
+    rows: list[dict[str, Any]],
+    *,
+    key_columns: tuple[str, ...],
+    time_column: str,
+    hot_tail: int = parameters.MARKET_WINDOW_HOT_TAIL_BARS,
+) -> list[dict[str, Any]]:
+    """윈도우 재업서트에서 실제로 써야 하는 행만 남긴다 (2026-08-16 I/O 감사).
+
+    바이낸스 klines/funding/OI/basis는 매 사이클 같은 300봉 윈도우를 돌려주는데,
+    새로 생기는 건 1~2봉뿐이고 나머지는 값이 동일하다. 그런데 `ON CONFLICT DO UPDATE`는
+    값이 같아도 새 튜플 버전을 만들기 때문에(heap+인덱스+WAL+dead tuple+autovacuum),
+    행당 100회 이상 재기록되고 있었다(실측: mark_price_bars 2,866행에 UPDATE 412,334회).
+
+    남기는 기준은 **값 비교가 아니라 키 존재 + 최신 꼬리**다:
+      1. DB에 키가 없는 행 → 신규이거나 과거 구멍이므로 반드시 쓴다.
+      2. 배치에서 가장 최신인 `hot_tail`개 → 아직 마감 안 된 봉이 여기 들어오므로 계속 갱신한다.
+      3. 나머지(이미 저장됨 + 마감된 과거 봉) → 건너뛴다.
+
+    값을 비교하지 않으므로 float/JSONB 왕복 정밀도 문제가 원천적으로 없다. 대신
+    "마감된 과거 봉은 불변"이라는 전제에 의존하는데, 위 4개 바이낸스 엔드포인트 모두
+    참이다. 조회가 실패하면 전체 행을 그대로 반환해 기존 동작으로 안전하게 되돌아간다.
+
+    부작용: 건너뛴 행의 `fetched_at`은 갱신되지 않는다(값이 안 변한 시점까지만 기록).
+    이 컬럼은 저장소 전체에서 읽는 곳이 없는 메타데이터라 기능 영향 없음(2026-08-16 확인).
+    """
+    if not rows or hot_tail < 0:
+        return rows
+
+    try:
+        timestamps = sorted(
+            {
+                parsed
+                for row in rows
+                if (parsed := _parse_ts_or_none(row.get(time_column))) is not None
+            }
+        )
+        if not timestamps:
+            return rows
+        # hot_tail개의 최신 봉은 무조건 다시 쓴다(마감 전 봉 갱신 보장).
+        # cutoff=None이면 꼬리 재기록 없이 "키가 없는 행"만 남긴다(hot_tail=0).
+        if hot_tail <= 0:
+            cutoff = None
+        elif len(timestamps) >= hot_tail:
+            cutoff = timestamps[-hot_tail]
+        else:
+            cutoff = timestamps[0]
+
+        # 배치 내에서 값이 하나뿐인 키 컬럼은 조회 조건으로 내린다. arena_mark_price_bars처럼
+        # 한 테이블에 여러 심볼·price_type이 섞여 사는 경우, 시각 범위만으로 조회하면
+        # 배치의 몇 배가 딸려와 limit에 잘리고 → 기존 키를 못 찾아 전부 재기록하게 된다
+        # (2026-08-16 배포 직후 실측: mark_price_bars만 1,633건/사이클로 안 줄어들어 발견).
+        query = positions.db().table(table).select(",".join(key_columns))
+        for column in key_columns:
+            if column == time_column:
+                continue
+            values = {row.get(column) for row in rows}
+            if len(values) == 1:
+                query = query.eq(column, values.pop())
+
+        limit = len(rows) * 4 + 100
+        res = (
+            await query.gte(time_column, _ts(timestamps[0]))
+            .lte(time_column, _ts(timestamps[-1]))
+            .limit(limit)
+            .execute()
+        )
+        fetched = res.data or []
+        if len(fetched) >= limit:
+            # 잘렸을 수 있다 → 기존 키를 신뢰할 수 없으므로 전량 업서트로 폴백.
+            logger.info("%s: changed-row filter skipped (existing-key fetch truncated)", table)
+            return rows
+        existing = {_key_of(row, key_columns, time_column) for row in fetched}
+    except Exception as exc:  # 조회 실패 시 기존 동작(전량 업서트)으로 폴백
+        logger.info("%s: changed-row filter skipped (%s)", table, exc)
+        return rows
+
+    kept: list[dict[str, Any]] = []
+    for row in rows:
+        parsed = _parse_ts_or_none(row.get(time_column))
+        if parsed is None or (cutoff is not None and parsed >= cutoff):
+            kept.append(row)
+            continue
+        if _key_of(row, key_columns, time_column) not in existing:
+            kept.append(row)
+    return kept
+
+
 def _capture_health(results: list[CaptureWriteResult]) -> dict[str, Any]:
     warnings = [
         {"label": result.label, "error": result.error} for result in results if not result.ok
@@ -391,11 +505,24 @@ async def record_ohlcv_bars(
     ]
     if not rows:
         return []
-    bar_result = await _safe_execute(
-        "arena_ohlcv_bars.upsert",
-        positions.db()
-        .table("arena_ohlcv_bars")
-        .upsert(rows, on_conflict="exchange,symbol,interval,open_time"),
+    # 값이 안 바뀐 과거 봉 재기록 방지 (2026-08-16 Disk I/O 감사).
+    # arena_runs의 input_* 갱신은 아래에서 반드시 필터 전 `rows` 전체를 써야 한다
+    # (실제 판정에 투입된 윈도우 범위를 기록하는 값이라 저장 여부와 무관).
+    bar_rows = await _rows_needing_write(
+        "arena_ohlcv_bars",
+        rows,
+        key_columns=("exchange", "symbol", "interval", "open_time"),
+        time_column="open_time",
+    )
+    bar_result = (
+        await _safe_execute(
+            "arena_ohlcv_bars.upsert",
+            positions.db()
+            .table("arena_ohlcv_bars")
+            .upsert(bar_rows, on_conflict="exchange,symbol,interval,open_time"),
+        )
+        if bar_rows
+        else CaptureWriteResult(label="arena_ohlcv_bars.upsert", ok=True)
     )
     input_result = await _safe_execute(
         "arena_runs.input_range.update",
@@ -557,63 +684,96 @@ async def record_market_structure_snapshot(
             )
         )
 
-    if snapshot.funding_rates:
+    # 아래 4개 테이블은 매 사이클 같은 윈도우를 통째로 받는다. 값이 안 바뀐 과거 봉을
+    # 다시 쓰지 않도록 _rows_needing_write()로 걸러낸다 (2026-08-16 Disk I/O 감사).
+    funding_rows = await _rows_needing_write(
+        "arena_funding_rates",
+        snapshot.funding_rates,
+        key_columns=("exchange", "symbol", "funding_time"),
+        time_column="funding_time",
+    )
+    if funding_rows:
         results.append(
             await _safe_execute(
                 "arena_funding_rates.upsert",
                 positions.db()
                 .table("arena_funding_rates")
                 .upsert(
-                    snapshot.funding_rates,
+                    funding_rows,
                     on_conflict="exchange,symbol,funding_time",
                 ),
             )
         )
-    if snapshot.open_interest:
+    open_interest_rows = await _rows_needing_write(
+        "arena_open_interest_snapshots",
+        snapshot.open_interest,
+        key_columns=("exchange", "symbol", "period", "timestamp"),
+        time_column="timestamp",
+    )
+    if open_interest_rows:
         results.append(
             await _safe_execute(
                 "arena_open_interest_snapshots.upsert",
                 positions.db()
                 .table("arena_open_interest_snapshots")
                 .upsert(
-                    snapshot.open_interest,
+                    open_interest_rows,
                     on_conflict="exchange,symbol,period,timestamp",
                 ),
             )
         )
-    if snapshot.basis:
+    basis_rows = await _rows_needing_write(
+        "arena_basis_snapshots",
+        snapshot.basis,
+        key_columns=("exchange", "pair", "contract_type", "period", "timestamp"),
+        time_column="timestamp",
+    )
+    if basis_rows:
         results.append(
             await _safe_execute(
                 "arena_basis_snapshots.upsert",
                 positions.db()
                 .table("arena_basis_snapshots")
                 .upsert(
-                    snapshot.basis,
+                    basis_rows,
                     on_conflict="exchange,pair,contract_type,period,timestamp",
                 ),
             )
         )
 
-    if snapshot.mark_price_bars:
+    _mark_price_key = ("exchange", "symbol", "interval", "price_type", "open_time")
+    mark_price_rows = await _rows_needing_write(
+        "arena_mark_price_bars",
+        snapshot.mark_price_bars,
+        key_columns=_mark_price_key,
+        time_column="open_time",
+    )
+    if mark_price_rows:
         results.append(
             await _safe_execute(
                 "arena_mark_price_bars.upsert",
                 positions.db()
                 .table("arena_mark_price_bars")
                 .upsert(
-                    snapshot.mark_price_bars,
+                    mark_price_rows,
                     on_conflict="exchange,symbol,interval,price_type,open_time",
                 ),
             )
         )
-    if snapshot.premium_index_bars:
+    premium_index_rows = await _rows_needing_write(
+        "arena_mark_price_bars",
+        snapshot.premium_index_bars,
+        key_columns=_mark_price_key,
+        time_column="open_time",
+    )
+    if premium_index_rows:
         results.append(
             await _safe_execute_optional_constraint(
                 "arena_mark_price_bars.premium_index.upsert",
                 positions.db()
                 .table("arena_mark_price_bars")
                 .upsert(
-                    snapshot.premium_index_bars,
+                    premium_index_rows,
                     on_conflict="exchange,symbol,interval,price_type,open_time",
                 ),
                 constraint_name="arena_mark_price_bars_price_check",
@@ -792,7 +952,10 @@ async def record_realtime_risk_state(decision: RealtimeRiskDecision) -> CaptureW
         "quality_status": decision.quality_status,
         "feature_snapshot": decision.feature_snapshot,
         "baseline_snapshot": decision.baseline_snapshot,
-        "policy_snapshot": decision.as_dict()["policy"],
+        # policy_snapshot도 저장하지 않는다 (2026-08-16 Disk I/O 감사) — 정적 정책 설정이라
+        # 실측 20,271행 전부 값이 동일했다(distinct=1, 행당 492B). 유일한 소비자인
+        # scheduler._decision_from_snapshot()은 이 값을 읽지 않고 RealtimeRiskPolicy()를
+        # 새로 생성하므로 컬럼 제거로도 안전.
         "evaluated_at": _ts(decision.evaluated_at),
     }
     return await _safe_execute_optional_schema(
@@ -824,7 +987,11 @@ async def record_realtime_risk_event(
         "recommended_action": decision.recommended_action,
         "risk_score": decision.risk_score,
         "trigger_reasons": decision.trigger_reasons,
-        "risk_snapshot": decision.as_dict(),
+        # risk_snapshot(= decision.as_dict() 전체)은 저장하지 않는다 (2026-08-16 Disk I/O 감사).
+        # record_realtime_risk_state()에 2026-07-31 적용했던 것과 동일한 중복 — 이쪽만
+        # 누락돼 있었다. risk_state/risk_score/trigger_reasons/recommended_action 컬럼과
+        # 완전히 겹치는데 행당 2,223B라 TOAST가 테이블의 93%(heap 2.1MB vs TOAST 27MB)를
+        # 차지했다. 이 테이블은 저장소 전체에서 읽는 코드가 없다(2026-08-16 확인).
     }
     return await _safe_execute_optional_schema(
         "arena_realtime_risk_events.insert",
