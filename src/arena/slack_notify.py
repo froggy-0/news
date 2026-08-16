@@ -31,11 +31,20 @@ _SYMBOL_LABEL: dict[str, str] = {
 }
 
 
+def _real_symbol(symbol: str) -> str:
+    return parameters.real_ticker_for_track(symbol)
+
+
+def _is_perp_track(symbol: str) -> bool:
+    """트랙 심볼("BTCUSDT-PERP")이 spot 실제 티커와 다르면 perp 트랙."""
+    return _real_symbol(symbol) != symbol
+
+
 def _symbol_label(symbol: str) -> str:
     # spot→perp Phase A2(2026-08-15): perp 트랙 심볼("BTCUSDT-PERP")은 실제 티커에
     # "-PERP" 접미사가 붙은 형태 — 실제 티커로 역변환해 라벨을 찾고 "-F"(선물) 표시를
     # 덧붙인다. spot 트랙은 real_ticker_for_track()이 그대로 반환해 무변화.
-    real_symbol = parameters.real_ticker_for_track(symbol)
+    real_symbol = _real_symbol(symbol)
     label = _SYMBOL_LABEL.get(real_symbol, real_symbol.removesuffix("USDT") or real_symbol)
     return f"{label}-F" if real_symbol != symbol else label
 
@@ -49,6 +58,7 @@ _ALGO_KO: dict[str, str] = {
     "macd_momentum": "MACD 모멘텀",
     "multi_factor": "멀티팩터",
     "omnibus": "옴니버스",
+    "meridian": "메리디안",
 }
 
 _ALGO_EN: dict[str, str] = {
@@ -58,6 +68,7 @@ _ALGO_EN: dict[str, str] = {
     "macd_momentum": "MACD MOMENTUM",
     "multi_factor": "MULTI FACTOR",
     "omnibus": "OMNIBUS",
+    "meridian": "MERIDIAN",
 }
 
 _MIN_HOLD: dict[str, float] = parameters.MIN_HOLD_HOURS
@@ -148,15 +159,24 @@ def _ret_bar(ret_pct: float) -> str:
 
 
 def _signal_narrative(
-    algo_id: str, direction: str, ind: dict[str, Any], macro: dict[str, Any]
+    algo_id: str,
+    direction: str,
+    ind: dict[str, Any],
+    macro: dict[str, Any],
+    *,
+    is_perp: bool = False,
 ) -> str:
-    """알고리즘별 진입 근거를 한국어로 풀어서 설명."""
+    """알고리즘별 진입 근거를 한국어로 풀어서 설명.
+
+    dir_ko는 "{dir_ko} 진입" 템플릿에 그대로 꽂히므로 "진입" 접미사를 포함하지
+    않는다(과거 short 분기에 "숏 진입"을 넣어 "숏 진입 진입"으로 중복 출력되던 버그 수정).
+    """
     if direction == "long":
-        dir_ko = "현물 매수"
+        dir_ko = "선물 롱" if is_perp else "현물 매수"
     elif direction == "short":
-        dir_ko = "숏 진입"
+        dir_ko = "선물 숏"
     else:
-        dir_ko = "현물 실행 제외 신호"
+        dir_ko = "실행 제외 신호"
     rsi = ind.get("rsi", 50.0)
 
     if algo_id == "regime_trend":
@@ -271,6 +291,30 @@ def _signal_narrative(
             )
         return f"옴니버스 국면 라우팅 — RSI {_rsi_label(rsi)} → {dir_ko} 진입"
 
+    if algo_id == "meridian":
+        if direction == "short":
+            fng = macro.get("fng")
+            return (
+                f"메리디안 *역발산-fade* 숏 — 공포탐욕지수 {_fng_label(fng)} 또는 "
+                f"RSI {_rsi_label(rsi)} 과열 확인(비강세 구간)\n"
+                f"추세미러 숏은 배제(모멘텀크래시 문헌 근거) — 극단적 과열만 페이드, "
+                f"사이징 0.5배 감쇠 → {dir_ko} 진입"
+            )
+        regime_state = macro.get("arena_regime_state") or macro.get("regime_state", "unknown")
+        fng = macro.get("fng")
+        vix_now = macro.get("vix_now")
+        if regime_state == "bull_trend":
+            leg_line = f"*추세(TSMOM_NL)* leg — 로컬 레짐 {_regime_label(regime_state)} 확인"
+        elif fng is not None and fng < parameters.FNG_LONG_BELOW:
+            leg_line = f"*역발산(FNG)* leg — 공포탐욕지수 {_fng_label(fng)} 극도의 공포"
+        else:
+            vix_str = f"{vix_now:.1f}" if vix_now is not None else "—"
+            leg_line = f"*역발산(VIX·RSI)* leg — VIX {vix_str} 안정 + RSI {_rsi_label(rsi)}"
+        return (
+            f"{leg_line}\n"
+            f"리서치 종합 신호(사전 DSR 게이트 없음, 라이브 표본으로 검증 중) → {dir_ko} 진입"
+        )
+
     return f"RSI {_rsi_label(rsi)} → {dir_ko} 진입"
 
 
@@ -281,27 +325,47 @@ def _close_narrative(
     hold_hours: float,
     close_reason: str,
     is_stop_loss: bool,
+    *,
+    is_perp: bool = False,
 ) -> str:
     """청산 결과를 한국어로 풀어서 설명."""
-    dir_ko = "현물 매수" if direction == "long" else "숏"
+    dir_ko = ("선물 롱" if is_perp else "현물 매수") if direction == "long" else "선물 숏"
     algo_ko = _ALGO_KO.get(algo_id, algo_id)
     ret_str = f"{ret_pct * 100:+.2f}%"
     pnl_usd = ret_pct * VIRTUAL_CAPITAL
     pnl_str = f"{pnl_usd:+.2f}"
+    result_word = "수익" if ret_pct >= 0 else "손실"
 
     if is_stop_loss:
+        # stream.py는 stop_loss(초기 ATR 손절, 정의상 항상 손실)와 trailing_stop(래칫
+        # 트레일링 — 이익 방향으로만 이동하지만 아주 조금만 이동했을 수도 있어 결과가
+        # 손실일 수도 이익일 수도 있음)를 close_reason으로 구분해 전달한다. 과거엔
+        # 두 경우 모두 "손실로 강제 청산"을 하드코딩해 트레일링 익절 케이스를 오도했음.
+        if close_reason == "trailing_stop":
+            return (
+                f"*{algo_ko}* 알고리즘의 {dir_ko} 포지션이 *🔒 트레일링 청산* 처리됨\n"
+                f"{hold_hours:.1f}시간 보유 후 *{ret_str}* ({pnl_str}$) *{result_word}*으로 종료\n"
+                f"청산 기준: 래칫 트레일링 스톱(이익 방향으로만 이동) 도달"
+            )
         return (
             f"*{algo_ko}* 알고리즘의 {dir_ko} 포지션이 *🛑 손절* 처리됨\n"
             f"{hold_hours:.1f}시간 보유 후 *{ret_str}* ({pnl_str}$) 손실로 강제 청산\n"
             f"손절 기준: ATR × 2.5 동적 손절선 이탈"
         )
 
+    # 실제 close_reason 값 전수(scheduler.py/stream.py/spot_policy.py/perp_policy.py)를
+    # 전부 매핑 — 과거엔 flat_signal/reverse_signal(오타, 실제 값은 signal_reverse라
+    # 매칭된 적이 없었음) 둘뿐이라 time_stop/target_exit/perp 반전/spot risk-off 청산이
+    # 전부 원문 close_reason 문자열 그대로 노출됐음.
     reason_map = {
         "flat_signal": "신호 소멸 — 알고리즘이 진입 근거 없다고 판단",
-        "reverse_signal": "방향 반전 신호 — 반대 포지션으로 전환",
+        "signal_reverse": "방향 반전 신호 — 반대 포지션으로 즉시 전환",
+        "time_stop": "최대 보유시간 초과 — 시간 손절",
+        "target_exit": "목표가 도달 — 익절",
+        "short_signal_spot_risk_off": "숏 신호 감지 — 현물은 공매도 불가라 리스크오프 청산",
+        "spot_semantics_migration": "정책 변경(숏 시맨틱스 도입)에 따른 레거시 포지션 정리",
     }
     reason_ko = reason_map.get(close_reason, close_reason or "신호 변화")
-    result_word = "수익" if ret_pct >= 0 else "손실"
 
     return (
         f"*{algo_ko}* 알고리즘이 {dir_ko} 포지션을 청산함\n"
@@ -383,11 +447,15 @@ async def notify_open(
         return
 
     sym_label = _symbol_label(symbol)
+    is_perp = _is_perp_track(symbol)
     # spot→perp 전환 Phase B(2026-08-15): direction=="short"는 PERP_SHORT_ENABLED_TRACKS
     # 알고에서만 나온다(positions.open_position()이 그 외엔 거부) — 이전엔 이 함수가
     # non-long을 전부 무음 처리해 숏 진입 알림이 아예 안 갔음.
     dir_emoji = "🟢" if direction == "long" else "🔴"
-    dir_ko = "현물 매수 진입" if direction == "long" else "숏 진입"
+    if direction == "long":
+        dir_ko = "선물 롱 진입" if is_perp else "현물 매수 진입"
+    else:
+        dir_ko = "선물 숏 진입"
     algo_ko = _ALGO_KO.get(algo_id, algo_id)
     algo_en = _ALGO_EN.get(algo_id, algo_id.upper())
 
@@ -421,7 +489,7 @@ async def notify_open(
         # ③ 신호 근거 (알고별 서술형)
         _section_text(
             f"📈 *진입 신호 근거 — {algo_ko}*\n\n"
-            + _signal_narrative(algo_id, direction, ind, macro)
+            + _signal_narrative(algo_id, direction, ind, macro, is_perp=is_perp)
         ),
         _divider(),
         # ④ 시장 환경 (2×2 필드)
@@ -465,10 +533,11 @@ async def notify_close(
         return
 
     sym_label = _symbol_label(symbol)
+    is_perp = _is_perp_track(symbol)
     hit = ret_pct >= 0
     result_emoji = "✅" if hit else "❌"
     result_ko = "수익" if hit else "손실"
-    dir_ko = "현물 매수" if direction == "long" else "숏"
+    dir_ko = ("선물 롱" if is_perp else "현물 매수") if direction == "long" else "선물 숏"
     algo_ko = _ALGO_KO.get(algo_id, algo_id)
     algo_en = _ALGO_EN.get(algo_id, algo_id.upper())
 
@@ -501,7 +570,15 @@ async def notify_close(
         # ④ 청산 서술
         _section_text(
             "💬 *거래 요약*\n\n"
-            + _close_narrative(algo_id, direction, ret_pct, hold_hours, close_reason, is_stop_loss)
+            + _close_narrative(
+                algo_id,
+                direction,
+                ret_pct,
+                hold_hours,
+                close_reason,
+                is_stop_loss,
+                is_perp=is_perp,
+            )
         ),
         _divider(),
         # ⑤ 대시보드 링크 버튼
