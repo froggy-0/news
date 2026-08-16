@@ -478,6 +478,47 @@ def fng_contrarian(macro: dict, ind: dict) -> str | None:
     return None
 
 
+def _fng_contrarian_short_env_ok(macro: dict) -> bool:
+    """fng_contrarian_short 환경필터 — 낙폭 거울 게이트가 없어(아래 함수 docstring
+    참조) 남은 2표(breadth/stablecoin) 둘 다 요구(§3.5 백테스트와 동일 설계)."""
+    return not _breadth_collapsed(macro) and not _stablecoin_contracting(macro)
+
+
+def fng_contrarian_short(macro: dict, ind: dict) -> str | None:
+    """fng_contrarian 숏 — "탐욕 구간에서 판다"(2026-08-16, arena-params-v41).
+
+    Phase B §3.5/§13 설계 그대로: 롱 조건(FNG<30)의 부호 반전이 아니라 별개
+    가설(FNG > FNG_SHORT_ABOVE=70, 30의 50 중심 대칭) — 이 알고는 원래 "공포에서
+    반등을 사는" 역발산 전략이라 대칭 미러가 자연스럽지 않다(§3.5 원문 참조).
+    핵심조건: FNG>70 + `_momentum_not_improving`(상승 가속이 아직 안 멈췄으면
+    보류, 고점 추격매도 회피 — `_momentum_not_worsening`의 거울). risk-off veto는
+    **유지**(§13 veto유지 변형이 veto제거보다 일관되게 우세). 낙폭 거울 게이트는
+    구현하지 않음(대칭 데이터 필드 부재 — §13 docstring 그대로, no-op).
+
+    ⚠️ **v22 물타기·목표가 익절 메커니즘은 이 함수와 무관** — 그 두 메커니즘은
+    `direction=="long"`으로 게이팅돼 있어(2026-08-16 direction-blind 버그 수정,
+    Phase B §13이 실측한 "숏에 적용 시 매 거래 손실 확정" 결함) 숏 포지션은 표준
+    ATR손절+래칫트레일링+시간손절만 받는다(fng_contrarian이 이미
+    `PRICE_STOP_DISABLED_ALGOS`인데, 그 가격손절 제외도 롱 전용으로 좁혀졌다).
+
+    [Phase B 전체 재감사](docs/arena/research/phase-b-full-evidence-reaudit-20260816.md)
+    (2026-08-16): 원 문서 "❌기각"의 실체는 SOL에서 SR 양수(veto유지 PSR=0.878)인데
+    표본(21건)이 MinTRL(41건) 대비 1.9배 부족한 "판정 불가"였다. D019(meridian)와
+    같은 경로로 근접 후보 라이브 관찰 대상 승격(SOL-PERP 트랙 한정,
+    `PERP_SHORT_ENABLED_TRACKS` 참조) — BTC/ETH는 SR 자체가 음수로 확인돼 제외.
+    """
+    fng = macro.get("fng")
+    if fng is None:
+        return None
+    if _is_risk_off(_regime_state(macro)):
+        return None
+    if not _fng_contrarian_short_env_ok(macro):
+        return None
+    if not _momentum_not_improving(ind):
+        return None
+    return "short" if fng > parameters.FNG_SHORT_ABOVE else None
+
+
 def _vix_rsi_secondary_votes(macro: dict) -> dict[str, bool]:
     """vix_rsi 환경필터 2개(품질필터) — VIX_RSI_ENTRY_RELAXED_ENABLED로 N-of-M 투표
     전환 대상(arena-params-v34). momentum_not_worsening(칼받기 방지, v26 정량검증
@@ -655,6 +696,23 @@ def tsmom_nl_position_multiplier(macro: dict, ind: dict) -> float:
     return max(0.0, min(parameters.TSMOM_NL_WEIGHT_CAP, f))
 
 
+def tsmom_nl_position_multiplier_abs(macro: dict, ind: dict) -> float:
+    """`tsmom_nl_position_multiplier`의 숏 대칭판 — 음수 신호를 clip하지 않고
+    |f(s)|를 그대로 쓴다(f는 홀함수라 부호 대칭). `macd_momentum_short`(2026-08-16)
+    전용 — 롱 사이징(위 함수)의 "숏 미실행" 클립을 걷어내는 게 유일한 차이이므로
+    algo_id=="macd_momentum" and direction=="short"일 때만 호출해야 한다
+    (`scripts/analysis/macd_momentum_short_backtest.py`의 프로세스 로컬 몽키패치를
+    영구 함수로 승격, Phase B §2 근거).
+    """
+    if not parameters.TSMOM_NL_ENABLED:
+        return 1.0
+    s = _tsmom_nl_signal(ind)
+    if s is None:
+        return 0.0
+    f = s / (s * s + 1.0)
+    return max(0.0, min(parameters.TSMOM_NL_WEIGHT_CAP, abs(f)))
+
+
 def macd_momentum(macro: dict, ind: dict) -> str | None:
     """MACD 히스토그램 모멘텀 — 신호선 위에서 증가 중인 모멘텀 매수.
 
@@ -721,6 +779,32 @@ def macd_momentum(macro: dict, ind: dict) -> str | None:
     else:
         ok = all(secondary.values())
     return "long" if ok else None
+
+
+def macd_momentum_short(macro: dict, ind: dict) -> str | None:
+    """macd_momentum 숏 — TSMOM_NL 신호의 대칭 반전(2026-08-16, arena-params-v41).
+
+    Phase B §3.1/§8(docs/arena/research/spot-to-perp-phase-b-short-entry-design-20260815.md)
+    설계 그대로: `s < -TSMOM_NL_MIN_SIGNAL`이면 숏. risk-off veto는 **제거**(veto유지
+    변형은 BTC에서 이미 SR 음수로 기각, veto제거가 3자산 전부 방향성 우세했던
+    §8 결과를 따름). 레거시 MACD 히스토그램 폴백(TSMOM_NL_ENABLED=False)은 숏
+    미설계 — 그 경우 항상 None(라이브 기본은 TSMOM_NL_ENABLED=True).
+
+    [Phase B 전체 재감사](docs/arena/research/phase-b-full-evidence-reaudit-20260816.md)
+    (2026-08-16): 원 문서가 "❌기각"으로 표기했던 것은 DSR(그리드탐색 기준)을
+    단일가설에 오적용한 결과였다 — PSR·MinTRL로 재분류하면 3자산 전부 **SR
+    양수(BTC+0.073·ETH+0.080·SOL+0.064)인데 표본(97~112건)이 MinTRL 대비
+    2.8~5.3배 부족해 "판정 불가"**였을 뿐, "엣지 없음"으로 확정된 게 아니었다.
+    사전 DSR≥0.95 게이트를 아직 통과하지 못했으므로 D019(meridian)와 같은
+    "근접 후보 라이브 배선" 경로로 페이퍼캐피털 축적 관찰 대상으로 승격한다 —
+    표본이 쌓이면 이 자체 통계로 재판정(D017 경로로 재분류 또는 철회).
+    """
+    if not parameters.TSMOM_NL_ENABLED:
+        return None
+    s = _tsmom_nl_signal(ind)
+    if s is None:
+        return None
+    return "short" if s < -parameters.TSMOM_NL_MIN_SIGNAL else None
 
 
 def multi_factor(macro: dict, ind: dict) -> str | None:

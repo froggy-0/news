@@ -80,7 +80,11 @@ async def _check_stop_loss(symbol: str, price: float) -> None:
             continue
         # 역발산(평균회귀) 계열: 가격/트레일 손절 제외 — 대신 1m 틱마다 가격 기준 물타기를
         # 실시간 평가(공포 딥에 한계가 체결). 시간 손절은 4h 루프가 담당.
-        if algo_id in parameters.PRICE_STOP_DISABLED_ALGOS:
+        # direction=="long" 게이팅(2026-08-16, v41 fng_contrarian_short 배선 계기): 이
+        # 가격손절 면제는 v22가 롱 전용으로 검증한 설계(평균회귀 손절이 회복을 악화한다는
+        # 근거)라 숏에는 적용된 적이 없다 — 숏은 이 분기를 타지 않고 아래 표준
+        # ATR손절+래칫트레일링 경로로 흘러가야 한다(안 그러면 손절 없이 무방비 노출).
+        if algo_id in parameters.PRICE_STOP_DISABLED_ALGOS and pos["direction"] == "long":
             if parameters.FNG_CONTRARIAN_SCALE_IN_ENABLED and algo_id == "fng_contrarian":
                 updated = await positions.maybe_scale_in_fng_price(pos, price)
                 if updated:

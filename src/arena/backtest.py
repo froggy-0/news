@@ -357,8 +357,16 @@ def _open_position(
     fng_ref_price = 0.0
     fng_filled_count = 0
     fng_duration_scale = 1.0
-    if algo_id == "fng_contrarian" and parameters.FNG_CONTRARIAN_SCALE_IN_ENABLED:
+    if (
+        algo_id == "fng_contrarian"
+        and direction == "long"
+        and parameters.FNG_CONTRARIAN_SCALE_IN_ENABLED
+    ):
         # 역발산: 1차 트랜치만 진입. 추가 트랜치는 가격 하락 시 물타기(_maybe_scale_in_fng_sim).
+        # direction=="long" 게이팅(2026-08-16): 이 물타기·아래 목표가익절은 v22/P-A로
+        # 검증된 롱 전용 메커니즘 — 숏(v41 fng_contrarian_short)에 적용하면 목표가가
+        # 진입가 "위"에 잡혀 거의 즉시 손실 확정된다(Phase B §13 실측 결함). 숏은
+        # 표준 combined_position_weight()+ATR손절+래칫트레일링만 받는다(else 분기).
         # P3(2026-07-21, 미검증): fng_days_below_30 기반 균일 스케일(전 트랜치 비례 축소).
         fng_duration_scale = algorithms.fng_duration_scale(macro)
         position_weight = algorithms.fng_scaled_tranches(fng_duration_scale)[0][1]
@@ -384,8 +392,16 @@ def _open_position(
         if algo_id == "omnibus":
             position_weight *= algorithms.omnibus_position_multiplier(macro, frame.indicators)
         # Nonlinear TSMOM(v35, 2026-08-08 활성화): TSMOM_NL_ENABLED=False면 1.0(무효과).
+        # v41: 숏(macd_momentum_short)은 음수클립 없는 abs 사이징 사용(direction 분기 —
+        # 롱 클립 함수를 그대로 쓰면 숏 신호(s<0)가 전부 비중 0이 돼 포지션이 열려도
+        # 익스포저가 0인 채로 방치된다).
         if algo_id == "macd_momentum":
-            position_weight *= algorithms.tsmom_nl_position_multiplier(macro, frame.indicators)
+            if direction == "long":
+                position_weight *= algorithms.tsmom_nl_position_multiplier(macro, frame.indicators)
+            else:
+                position_weight *= algorithms.tsmom_nl_position_multiplier_abs(
+                    macro, frame.indicators
+                )
         # meridian(v36) — 추세 leg 진입일 때만 TSMOM_NL f(s) 사이징 재적용(역발산 leg는
         # combined_position_weight 기본값 그대로, 설계 §2-2). live scheduler와 동일 배선.
         if algo_id == "meridian" and direction == "long":
@@ -406,8 +422,10 @@ def _open_position(
             macro, frame.indicators, frame.bar.close
         )
     # P-A: fng 이익포착 목표 상승률(비율). 물타기로 평단 하락 시 청산가 자동 하향.
+    # direction=="long" 게이팅(2026-08-16, 위 스케일인 게이팅과 동일 근거) — 숏은
+    # fng_target_pct을 항상 None으로 둬 아래 target_exit 트리거가 무효과가 되게 한다.
     fng_tp = None
-    if algo_id == "fng_contrarian":
+    if algo_id == "fng_contrarian" and direction == "long":
         fng_tp = algorithms.fng_target_pct(frame.indicators, frame.bar.close)
     # Tier2: 범용 목표가 익절(vix_rsi·multi_factor 등). dict에 없는 알고는 None(무효과).
     target_price = None
@@ -709,7 +727,12 @@ def run_replay(
         for algo_id, fn in strategy_fns.items():
             position = positions_by_algo[algo_id]
             # 역발산 계열은 가격 손절 제외 — 시간 손절로 대체(아래 time_stop 블록).
-            price_stop_on = algo_id not in parameters.PRICE_STOP_DISABLED_ALGOS
+            # direction=="long" 게이팅(2026-08-16, stream.py와 동일 근거) — 이 면제는
+            # v22가 롱 전용으로 검증한 설계라 숏(예: fng_contrarian_short)에는 적용된
+            # 적이 없다. 숏은 표준 ATR 가격손절을 그대로 받는다.
+            price_stop_on = algo_id not in parameters.PRICE_STOP_DISABLED_ALGOS or (
+                position is not None and position.direction == "short"
+            )
             omni_leg = (
                 algorithms.omnibus_regime_for(position.macro_snapshot, position.indicator_snapshot)
                 if (position and algo_id == "omnibus")
@@ -918,6 +941,7 @@ def run_replay(
                     position is not None
                     and raw_signal == position.direction
                     and algo_id == "fng_contrarian"
+                    and position.direction == "long"
                     and parameters.FNG_CONTRARIAN_SCALE_IN_ENABLED
                 ):
                     positions_by_algo[algo_id] = _maybe_scale_in_fng_sim(position, frame.bar.low)

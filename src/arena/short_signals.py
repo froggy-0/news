@@ -16,6 +16,15 @@ MinTRL 기준으로는 ETH가 실제 통과였다(사전등록 단일가설에 D
 적용한 게 과보정이었음). 자산 게이팅은 이 딕셔너리가 아니라
 `parameters.PERP_SHORT_ENABLED_TRACKS`가 트랙 단위로 한다 — 이 함수는 자산 무관
 로직이고 ETH-PERP 트랙 하나만 허용목록에 있다.
+
+``macd_momentum``/``fng_contrarian``/``vix_rsi``(SOL 확장) (2026-08-16, arena-params-v41)는
+새 경로 — [Phase B 전체 재감사](
+docs/arena/research/phase-b-full-evidence-reaudit-20260816.md)가 원 문서의
+"❌기각" 다수가 실제로는 DSR(그리드탐색 기준)을 단일가설에 오적용해 "SR 양수인데
+표본부족"을 "엣지없음"으로 잘못 기록한 것이었음을 밝혔다. 사전 DSR≥0.95 게이트는
+아직 통과 못 했으므로(그래서 D017이 아니다) meridian(D019)과 동일하게 페이퍼캐피털
+라이브 관찰로 축적 검증한다 — 자산 게이팅은 이 딕셔너리가 아니라
+`parameters.PERP_SHORT_ENABLED_TRACKS`가 담당(각 함수 docstring 참조).
 """
 
 from __future__ import annotations
@@ -32,6 +41,8 @@ SignalFn = Callable[[dict, dict], str | None]
 PERP_SHORT_ALGORITHMS: dict[str, SignalFn] = {
     "meridian": algorithms.meridian_short,
     "vix_rsi": algorithms.vix_rsi_short,
+    "macd_momentum": algorithms.macd_momentum_short,
+    "fng_contrarian": algorithms.fng_contrarian_short,
 }
 
 

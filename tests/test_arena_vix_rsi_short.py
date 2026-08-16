@@ -15,9 +15,11 @@ def test_vix_rsi_short_registered_in_perp_short_algorithms() -> None:
 
 
 def test_vix_rsi_perp_short_enabled_only_for_eth_track() -> None:
+    # v41(2026-08-16): SOL도 근접 후보로 추가 승격(Phase B 전체 재감사) — BTC만
+    # SR 자체가 음수로 확인돼 계속 제외.
     assert ("ETHUSDT-PERP", "vix_rsi") in parameters.PERP_SHORT_ENABLED_TRACKS
+    assert ("SOLUSDT-PERP", "vix_rsi") in parameters.PERP_SHORT_ENABLED_TRACKS
     assert ("BTCUSDT-PERP", "vix_rsi") not in parameters.PERP_SHORT_ENABLED_TRACKS
-    assert ("SOLUSDT-PERP", "vix_rsi") not in parameters.PERP_SHORT_ENABLED_TRACKS
 
 
 # ── vix_rsi_short 신호 함수 (Phase B §3.5/§12 veto유지 설계 그대로) ────────

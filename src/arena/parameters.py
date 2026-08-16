@@ -74,7 +74,28 @@ STRATEGY_VERSION = "arena-spot-v4"
 #   방지를 위해 scheduler.py가 스코프와 무관하게 계속 관리(시간손절·손절·트레일링·flat청산)
 #   하도록 분리했다(scheduler.py의 스코프 체크 위치 변경 참조). 롤백:
 #   ALGORITHM_TRACK_SCOPE에서 이번에 추가된 5개 항목 제거 + vix_rsi를 ETH-PERP만으로 되돌림.
-PARAMS_VERSION = "arena-params-v40"
+# v41(2026-08-16): Phase B 전체 재감사(evidence-criteria-audit-20260816.md 후속,
+#   phase-b-full-evidence-reaudit-20260816.md) — 원 Phase B 1순환(2026-08-15)이
+#   36셀 전부 "❌기각"으로 표기했던 것 중 12셀(33%)이 DSR(그리드탐색 기준)을
+#   단일가설에 오적용해 "SR양수·표본부족"을 "엣지없음"으로 잘못 기록한 것이었음을
+#   재검증으로 확인(사용자가 "기각 기준이 못미덥다"고 직접 지적한 게 계기).
+#   근접 후보(D017 사전게이트 미통과, D019처럼 라이브 관찰로 축적 검증) 3건을
+#   PERP_SHORT_ENABLED_TRACKS·ALGORITHM_TRACK_SCOPE 양쪽에 추가:
+#   macd_momentum(BTC/ETH/SOL 전부 SR양수 0.064~0.080, 표본 2.8~5.3배 부족),
+#   fng_contrarian(SOL만 SR+0.236, 1.9배 부족 — BTC/ETH는 SR음수라 제외),
+#   vix_rsi(SOL 추가, SR+0.146, 2.8배 부족 — 기존 ETH 확정승격과 별개).
+#   동시에 fng_contrarian의 v22 물타기·목표가익절 메커니즘이 direction을 안 봐
+#   숏에 적용되면 매 거래 손실 확정되던 결함(Phase B §13 실측)을 실제로 고쳤다
+#   (backtest.py/scheduler.py/stream.py, direction=="long" 게이팅 추가) — 이 코드
+#   경로가 이번에 처음으로 도달 가능해지므로 방치할 수 없었다. macd_momentum 숏은
+#   TSMOM_NL 사이징(음수클립)도 direction 인지로 분리(algorithms.tsmom_nl_position_
+#   multiplier_abs 신규). regime_trend/multi_factor/omnibus는 표본 부족이어도 방향
+#   자체가 다수 셀에서 음수라 이번엔 승격하지 않는다(재감사 문서 참조). 롤백:
+#   PERP_SHORT_ENABLED_TRACKS에서 macd_momentum 3개+fng_contrarian SOL+vix_rsi SOL
+#   제거, ALGORITHM_TRACK_SCOPE에서 macd_momentum 확장분 제거·fng_contrarian/vix_rsi
+#   확장분 제거(v39/v37 상태로 복귀). direction 게이팅 수정은 되돌리지 않음(숏
+#   미사용 시에도 무해한 방어적 수정).
+PARAMS_VERSION = "arena-params-v41"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v2"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
@@ -126,6 +147,13 @@ PERP_SHORT_ENABLED_TRACKS: frozenset[tuple[str, str]] = frozenset(
         # v37: D017 경로 첫 승격 — PSR 0.970·MinTRL 37≤48로 검정력까지 충족된
         # 유일한 자산×알고 쌍. BTC/SOL은 각각 기각/판정불가라 추가하지 않는다.
         ("ETHUSDT-PERP", "vix_rsi"),
+        # v41: 근접 후보(D017 미통과, D019처럼 라이브 관찰 축적 검증 — 위 PARAMS_VERSION
+        # 주석 참조). macd_momentum은 3자산 전부 SR양수라 전부 등록.
+        ("BTCUSDT-PERP", "macd_momentum"),
+        ("ETHUSDT-PERP", "macd_momentum"),
+        ("SOLUSDT-PERP", "macd_momentum"),
+        ("SOLUSDT-PERP", "fng_contrarian"),
+        ("SOLUSDT-PERP", "vix_rsi"),
     }
 )
 PERP_TARGET_PRODUCT = "usdm_perp"
@@ -186,11 +214,14 @@ MERIDIAN_LEG_CONCURRENCY_CAP_BY_LEG: dict[str, int] = {"reversion": 1, "short": 
 ALGORITHM_TRACK_SCOPE: dict[str, frozenset[str]] = {
     "meridian": frozenset({"BTCUSDT-PERP", "ETHUSDT-PERP", "SOLUSDT-PERP"}),
     "regime_trend": frozenset(MULTI_ASSET_SYMBOLS),
-    "fng_contrarian": frozenset(MULTI_ASSET_SYMBOLS),
-    "macd_momentum": frozenset(MULTI_ASSET_SYMBOLS),
+    # v41: 근접 후보 숏 승격 트랙만 perp 스코프 추가(PERP_SHORT_ENABLED_TRACKS와 1:1
+    # 대응) — v39가 막았던 "숏 못 쓰는 spot 복제본" 문제가 이 트랙들만 해소됐으므로.
+    "fng_contrarian": frozenset(MULTI_ASSET_SYMBOLS) | {"SOLUSDT-PERP"},
+    "macd_momentum": frozenset(MULTI_ASSET_SYMBOLS)
+    | {"BTCUSDT-PERP", "ETHUSDT-PERP", "SOLUSDT-PERP"},
     "multi_factor": frozenset(MULTI_ASSET_SYMBOLS),
     "omnibus": frozenset(MULTI_ASSET_SYMBOLS),
-    "vix_rsi": frozenset(MULTI_ASSET_SYMBOLS) | {"ETHUSDT-PERP"},
+    "vix_rsi": frozenset(MULTI_ASSET_SYMBOLS) | {"ETHUSDT-PERP", "SOLUSDT-PERP"},
 }
 
 

@@ -48,6 +48,7 @@ from .algorithms import (
     omnibus_target_price,
     primary_flat_skip_reason,
     tsmom_nl_position_multiplier,
+    tsmom_nl_position_multiplier_abs,
 )
 from .algorithms import (
     fng_duration_scale as fng_duration_scale_fn,
@@ -1017,6 +1018,7 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
                     and action == "hold"
                     and parameters.FNG_CONTRARIAN_SCALE_IN_ENABLED
                     and algo_id == "fng_contrarian"
+                    and current.get("direction") == "long"
                 ):
                     updated = await positions.maybe_scale_in_fng_price(current, price)
                     if updated:
@@ -1102,8 +1104,13 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
                 stop_loss_max_pct=config.STOP_LOSS_MAX_PCT,
             )
             # 포지션 사이징 — 변동성타깃 ∧ 거래당 자본위험 중 더 보수적인 비중(현물 0.25~0.7배).
+            # signal=="long" 게이팅(2026-08-16, v41 fng_contrarian_short 배선 계기): 물타기·
+            # 목표가익절은 v22/P-A로 검증된 롱 전용 메커니즘 — 숏에 적용하면 목표가가 진입가
+            # "위"에 잡혀 즉시 손실 확정된다(Phase B §13 실측). 숏은 else 분기의 표준 사이징만.
             is_fng_scale = (
-                algo_id == "fng_contrarian" and parameters.FNG_CONTRARIAN_SCALE_IN_ENABLED
+                algo_id == "fng_contrarian"
+                and signal == "long"
+                and parameters.FNG_CONTRARIAN_SCALE_IN_ENABLED
             )
             fng_duration_scale = 1.0
             if is_fng_scale:
@@ -1125,8 +1132,13 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
                 if algo_id == "omnibus":
                     position_weight *= omnibus_position_multiplier(macro, ind)
                 # Nonlinear TSMOM(v35, 2026-08-08 활성화): TSMOM_NL_ENABLED=False면 1.0(무효과).
+                # v41: 숏(macd_momentum_short)은 abs 사이징(음수클립 없음) — backtest.py와
+                # 동일 근거(롱 클립 함수를 쓰면 숏 신호가 전부 비중 0이 됨).
                 if algo_id == "macd_momentum":
-                    position_weight *= tsmom_nl_position_multiplier(macro, ind)
+                    if signal == "long":
+                        position_weight *= tsmom_nl_position_multiplier(macro, ind)
+                    else:
+                        position_weight *= tsmom_nl_position_multiplier_abs(macro, ind)
                 # meridian(v36) — 추세 leg 진입일 때만 TSMOM_NL f(s) 사이징 재적용
                 # (역발산 leg는 combined_position_weight 기본값 그대로, 설계 §2-2).
                 if algo_id == "meridian" and signal == "long":

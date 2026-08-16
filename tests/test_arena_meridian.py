@@ -185,14 +185,14 @@ def test_meridian_scoped_to_perp_tracks_only() -> None:
 
 
 def test_v39_non_short_algos_scoped_to_spot_only() -> None:
-    """v39: perp에서 숏을 안 쓰는 기존 알고는 spot만 신규진입 허용, perp는 차단."""
-    for algo_id in (
-        "regime_trend",
-        "fng_contrarian",
-        "macd_momentum",
-        "multi_factor",
-        "omnibus",
-    ):
+    """v39: perp에서 숏을 안 쓰는 알고는 spot만 신규진입 허용, perp는 차단.
+
+    v41(2026-08-16)에서 macd_momentum(3자산 전부)·fng_contrarian(SOL만)이
+    Phase B 전체 재감사로 근접 후보 숏 승격돼 이 집합에서 빠졌다 — 아래
+    별도 테스트(test_v41_near_miss_short_candidates_scoped_to_approved_perp_tracks)
+    가 그 트랙들을 검증한다. regime_trend/multi_factor/omnibus는 무변경.
+    """
+    for algo_id in ("regime_trend", "multi_factor", "omnibus"):
         for spot_symbol in ("BTCUSDT", "ETHUSDT", "SOLUSDT"):
             assert parameters.algorithm_in_track_scope(algo_id, spot_symbol) is True
         for perp_symbol in ("BTCUSDT-PERP", "ETHUSDT-PERP", "SOLUSDT-PERP"):
@@ -200,13 +200,30 @@ def test_v39_non_short_algos_scoped_to_spot_only() -> None:
 
 
 def test_v39_vix_rsi_scoped_to_spot_and_eth_perp_only() -> None:
-    """vix_rsi는 ETH-PERP에서만 숏이 승인돼 있어(PERP_SHORT_ENABLED_TRACKS) 그 트랙만
-    perp 신규진입 허용, BTC/SOL-PERP는 차단."""
+    """vix_rsi는 ETH-PERP에서 D017 경로로 확정 승격(PSR·MinTRL 충족)돼 그 트랙은
+    perp 신규진입 허용, BTC-PERP는 여전히 차단.
+
+    SOL-PERP는 v41(2026-08-16)에서 근접 후보로 별도 승격됐다 — 아래
+    test_v41_near_miss_short_candidates_scoped_to_approved_perp_tracks 참조.
+    """
     for spot_symbol in ("BTCUSDT", "ETHUSDT", "SOLUSDT"):
         assert parameters.algorithm_in_track_scope("vix_rsi", spot_symbol) is True
     assert parameters.algorithm_in_track_scope("vix_rsi", "ETHUSDT-PERP") is True
     assert parameters.algorithm_in_track_scope("vix_rsi", "BTCUSDT-PERP") is False
-    assert parameters.algorithm_in_track_scope("vix_rsi", "SOLUSDT-PERP") is False
+
+
+def test_v41_near_miss_short_candidates_scoped_to_approved_perp_tracks() -> None:
+    """v41(2026-08-16, Phase B 전체 재감사 후속) — 근접 후보(D017 미통과, D019처럼
+    라이브 관찰 축적 검증) 승격 트랙만 perp 스코프에 추가됐는지 확인.
+    macd_momentum: 3자산 전부 SR양수라 전부 승격. fng_contrarian: SOL만
+    (BTC/ETH는 SR음수로 제외). vix_rsi: SOL 추가(ETH는 이미 D017로 확정승격).
+    """
+    for perp_symbol in ("BTCUSDT-PERP", "ETHUSDT-PERP", "SOLUSDT-PERP"):
+        assert parameters.algorithm_in_track_scope("macd_momentum", perp_symbol) is True
+    assert parameters.algorithm_in_track_scope("fng_contrarian", "SOLUSDT-PERP") is True
+    assert parameters.algorithm_in_track_scope("fng_contrarian", "BTCUSDT-PERP") is False
+    assert parameters.algorithm_in_track_scope("fng_contrarian", "ETHUSDT-PERP") is False
+    assert parameters.algorithm_in_track_scope("vix_rsi", "SOLUSDT-PERP") is True
 
 
 # ── 사이징 배선(backtest.py 회귀) ─────────────────────────────────────────
