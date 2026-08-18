@@ -562,3 +562,32 @@ def funding_return_pct(
     if total_rate is None:
         return 0.0
     return -execution_rules.direction_sign(direction) * total_rate
+
+
+def trailing_funding_mean(
+    rows: list[dict[str, Any]],
+    *,
+    now: datetime,
+    lookback_hours: float,
+) -> float | None:
+    """`funding_carry` 슬리브(2026-08-18) — 최근 lookback_hours 구간 펀딩비 단순평균.
+
+    항상 롱이 숏에 지불하는 방향(양수)일 때 "현물 매수+선물 매도" 델타중립 포지션이
+    이 프리미엄을 수취한다. 데이터 없음/전부 파싱 실패 시 None(그레이스풀 — 신호
+    함수가 "판단불가=미진입"으로 처리, 게이트 자체를 막지 않는다).
+    """
+    now_dt = execution_rules.parse_utc_datetime(now)
+    start = now_dt - timedelta(hours=lookback_hours)
+    rates: list[float] = []
+    for row in rows:
+        try:
+            funding_time = execution_rules.parse_utc_datetime(row["funding_time"])
+        except (KeyError, TypeError, ValueError, AttributeError):
+            continue
+        if start < funding_time <= now_dt:
+            rate = _safe_float(row.get("funding_rate"))
+            if rate is not None:
+                rates.append(rate)
+    if not rates:
+        return None
+    return sum(rates) / len(rates)

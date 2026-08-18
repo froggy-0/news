@@ -784,6 +784,24 @@ async def _run_cycle(profile_id: str = frequency.LIVE_4H_PROFILE_ID) -> None:
         macro.update(liquidation_features.liquidation_snapshot(_liq_bars, now=now))
     except Exception as exc:
         logger.warning("Liquidation feature snapshot skipped (%s): %s", profile.symbol, exc)
+    # v43: funding_carry 게이트용 트레일링 평균 펀딩비 — BTC/ETH만(FUNDING_CARRY_ASSETS).
+    # profile.binance_symbol(실제 티커)로 조회하므로 spot·perp 두 트랙이 같은 값을 본다
+    # (perp_track_symbol 역함수 real_ticker_for_track과 무관하게 애초에 binance_symbol이
+    # 실제 티커라 자동으로 일치 — 두 트랙이 매 사이클 같은 결론에 도달하는 근거).
+    # get_latest_market_features() 전역 캐시(WI-10, 자산 간 공유되는 알려진 한계)는
+    # 여기 안 씀 — funding_carry는 캐리 손익이 직접 걸린 신호라 직접 조회로 정확성 확보.
+    if profile.binance_symbol in parameters.FUNDING_CARRY_ASSETS:
+        try:
+            _funding_rows = await data_lake.fetch_funding_rates(
+                symbol=profile.binance_symbol,
+                since=now - timedelta(hours=parameters.FUNDING_CARRY_LOOKBACK_HOURS),
+                until=now,
+            )
+            macro["funding_carry_trailing_mean"] = market_structure.trailing_funding_mean(
+                _funding_rows, now=now, lookback_hours=parameters.FUNDING_CARRY_LOOKBACK_HOURS
+            )
+        except Exception as exc:
+            logger.warning("Funding carry trailing mean fetch failed (%s): %s", profile.symbol, exc)
     price = ohlcv.closes[-1]
     capture_results.extend(
         await data_lake.record_ohlcv_bars(

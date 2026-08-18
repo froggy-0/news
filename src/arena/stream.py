@@ -84,6 +84,12 @@ async def _check_stop_loss(symbol: str, price: float) -> None:
         # 가격손절 면제는 v22가 롱 전용으로 검증한 설계(평균회귀 손절이 회복을 악화한다는
         # 근거)라 숏에는 적용된 적이 없다 — 숏은 이 분기를 타지 않고 아래 표준
         # ATR손절+래칫트레일링 경로로 흘러가야 한다(안 그러면 손절 없이 무방비 노출).
+        # v43(funding_carry): 방향 무관 완전 비활성 — 델타중립 캐리는 스팟 롱 다리와
+        # 선물 숏 다리가 별개 트랙의 별개 포지션이라, 가격이 한쪽으로 움직이면 한
+        # 다리만 ATR손절/트레일링에 걸리고 반대쪽은 무방비로 남는다(위 direction=="long"
+        # 게이팅과 다른 메커니즘 — PRICE_STOP_DISABLED_ALGOS_ALL_DIRECTIONS 참조).
+        if algo_id in parameters.PRICE_STOP_DISABLED_ALGOS_ALL_DIRECTIONS:
+            continue
         if algo_id in parameters.PRICE_STOP_DISABLED_ALGOS and pos["direction"] == "long":
             if parameters.FNG_CONTRARIAN_SCALE_IN_ENABLED and algo_id == "fng_contrarian":
                 updated = await positions.maybe_scale_in_fng_price(pos, price)

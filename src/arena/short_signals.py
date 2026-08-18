@@ -53,6 +53,14 @@ PERP_SHORT_ALGORITHMS: dict[str, SignalFn] = {
     "vix_rsi": algorithms.vix_rsi_short,
     "macd_momentum": algorithms.macd_momentum_short,
     "fng_contrarian": algorithms.fng_contrarian_short,
+    # v43(2026-08-18): funding_carry — 세 번째 채택 경로. D017(사전 통계게이트)도
+    # D019(리서치종합, meridian)도 아니다 — 방향 예측이 아예 없는 델타중립 펀딩비
+    # 캐리라 애초에 그리드 통계 게이트의 대상이 아니고(사전 게이트가 검증하려는
+    # 것은 "가격 방향을 맞추는 능력"인데 이 신호는 방향과 무관), 검증 근거는
+    # arena_funding_rates 역사적 일관성(BTC/ETH 90%+ 양전)이다. 롱 다리와 정확히
+    # 같은 게이트(algorithms._funding_carry_active)를 공유한다 — 자산 게이팅은
+    # PERP_SHORT_ENABLED_TRACKS(BTC/ETH만)가 담당.
+    "funding_carry": algorithms.funding_carry_short,
 }
 
 

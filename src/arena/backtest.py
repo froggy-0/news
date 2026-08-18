@@ -733,6 +733,10 @@ def run_replay(
             price_stop_on = algo_id not in parameters.PRICE_STOP_DISABLED_ALGOS or (
                 position is not None and position.direction == "short"
             )
+            # v43(funding_carry): 방향 무관 완전 비활성(stream.py와 동일 근거 —
+            # 델타중립 캐리는 한쪽 다리만 손절되면 반대쪽이 무방비로 남는다).
+            if algo_id in parameters.PRICE_STOP_DISABLED_ALGOS_ALL_DIRECTIONS:
+                price_stop_on = False
             omni_leg = (
                 algorithms.omnibus_regime_for(position.macro_snapshot, position.indicator_snapshot)
                 if (position and algo_id == "omnibus")

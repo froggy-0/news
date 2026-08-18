@@ -607,20 +607,31 @@ const ALGOS = {
   multi_factor:   { color: '#FB923C' },
   omnibus:        { color: '#F472B6' },
   meridian:       { color: '#22D3EE' },
+  funding_carry:  { color: '#84CC16' },
 };
 const ALGO_IDS = Object.keys(ALGOS);
-// src/arena/parameters.py ALGORITHM_TRACK_SCOPE(v36/v39)의 프론트 미러 — 여기 없는 알고는
-// 모든 자산×시장 슬롯에 존재한다고 가정(기존 6알고, spot+perp 둘 다 자본 배정). meridian은
-// perp 전용(spot 자본 슬롯 자체가 없음)이라 그대로 두면 spot 조회 시 거래 0건인 $1,000·0%
-// 유령 슬롯이 총수익률·에쿼티커브에 섞여 희석된다(2026-08-15 Phase A2 세션에서 발견해
-// 미착수로 남겨뒀던 항목, 2026-08-16 처리). ⚠️ 백엔드 스코프가 바뀌면 이 dict도 맞춰야 함
-// (v39는 신규 진입만 막고 spot 자본 슬롯 자체는 그대로라 여기엔 영향 없음 — 5알고 전부
-// 미등록 유지가 맞다).
+// src/arena/parameters.py ALGORITHM_TRACK_SCOPE(v36/v39/v43)의 프론트 미러 — 여기 없는
+// 알고는 모든 자산×시장 슬롯에 존재한다고 가정(기존 6알고, spot+perp 둘 다 자본 배정).
+// meridian은 perp 전용(spot 자본 슬롯 자체가 없음)이라 그대로 두면 spot 조회 시 거래
+// 0건인 $1,000·0% 유령 슬롯이 총수익률·에쿼티커브에 섞여 희석된다(2026-08-15 Phase A2
+// 세션에서 발견해 미착수로 남겨뒀던 항목, 2026-08-16 처리). ⚠️ 백엔드 스코프가 바뀌면
+// 이 dict도 맞춰야 함(v39는 신규 진입만 막고 spot 자본 슬롯 자체는 그대로라 여기엔
+// 영향 없음 — 5알고 전부 미등록 유지가 맞다).
 const ALGO_MARKET_SCOPE = {
   meridian: ['perp'],
 };
-function algoIdsForMarket(marketKey) {
-  return ALGO_IDS.filter(a => !ALGO_MARKET_SCOPE[a] || ALGO_MARKET_SCOPE[a].includes(marketKey));
+// funding_carry(v43, 2026-08-18)는 시장 제약은 없지만(spot 롱 다리 + perp 숏 다리
+// 둘 다 자본 배정) 자산이 BTC/ETH로 한정(src/arena/parameters.py FUNDING_CARRY_ASSETS
+// 미러) — SOL을 그대로 두면 위와 동일한 유령 슬롯 희석이 SOL에서 발생한다. 시장 스코프와
+// 별도 축이라 새 dict로 분리.
+const ALGO_ASSET_SCOPE = {
+  funding_carry: ['BTC', 'ETH'],
+};
+function algoIdsForMarket(marketKey, assetKey) {
+  return ALGO_IDS.filter(a =>
+    (!ALGO_MARKET_SCOPE[a] || ALGO_MARKET_SCOPE[a].includes(marketKey)) &&
+    (!ALGO_ASSET_SCOPE[a] || !assetKey || ALGO_ASSET_SCOPE[a].includes(assetKey))
+  );
 }
 const STARTING_CAPITAL = 1000;
 // 현물 왕복 거래비용 = 2×(fee 10 + slip 1) + spread 1 = 23bps (arena-cost-v3, 2026-08-07).
@@ -641,6 +652,7 @@ const TAB_LABELS = {
   multi_factor: 'MULTI',
   omnibus: 'OMNI',
   meridian: 'MRDN',
+  funding_carry: 'CARRY',
 };
 
 const ALGO_NEEDS = {
@@ -651,6 +663,7 @@ const ALGO_NEEDS = {
   multi_factor:   '레짐·FNG·VIX·RSI·펀딩 5개 중 4개 (기관 유출 veto)',
   omnibus:        '전천후 라우터: UP_TREND·RANGE·DOWN_TREND 레짐별 롱 전략',
   meridian:       '선물 전용 · 추세(롱) + 역발산(롱) + 과열-fade(숏)',
+  funding_carry:  'BTC/ETH 전용 · 방향무관 델타중립 · 현물롱+선물숏 펀딩비 수취',
 };
 
 let positions = [];
@@ -1324,7 +1337,7 @@ function renderFreshness() {
 /* ── Full render pipeline ───────────────────────────────────── */
 function renderAll(ps) {
   positions = ps;
-  const algoIds = algoIdsForMarket(activeMarket);
+  const algoIds = algoIdsForMarket(activeMarket, activeAsset);
   const stats = algoStats(ps, algoIds);
   renderPortfolio(stats);
   renderCards(stats);
@@ -1382,7 +1395,7 @@ function refreshAssetView() {
   // 2026-08-06: ETH/SOL도 실거래 승격 — 자산 구분 없이 동일 라이브 렌더 경로 사용.
   renderPriceChart();
   if (positions.length) {
-    const algoIds = algoIdsForMarket(activeMarket);
+    const algoIds = algoIdsForMarket(activeMarket, activeAsset);
     const stats = algoStats(positions, algoIds);
     renderPortfolio(stats);
     renderCards(stats);
@@ -1603,10 +1616,10 @@ function computeGrandTotal(ps) {
     for (const marketKey of activeMarketKeys) {
       const symbol = trackSymbol(assetKey, marketKey);
       const trackPs = ps.filter(p => p.symbol === symbol);
-      // meridian처럼 특정 시장에만 자본이 배정된 알고는 그 시장에서만 슬롯으로 집계한다
-      // (algoIdsForMarket — 안 그러면 meridian의 spot 유령 슬롯 3개가 $1,000·0%로 섞여
-      // 총수익률이 희석된다).
-      for (const algo of algoIdsForMarket(marketKey)) {
+      // meridian처럼 특정 시장에만, funding_carry처럼 특정 자산에만 자본이 배정된
+      // 알고는 그 슬롯에서만 집계한다(algoIdsForMarket — 안 그러면 meridian의 spot
+      // 유령 슬롯·funding_carry의 SOL 유령 슬롯이 $1,000·0%로 섞여 총수익률이 희석된다).
+      for (const algo of algoIdsForMarket(marketKey, assetKey)) {
         totalSlots++;
         totalStart += STARTING_CAPITAL;
         const algoPs = trackPs.filter(p => p.algo_id === algo);
@@ -1739,7 +1752,7 @@ async function init() {
   setInterval(async () => {
     // 2026-08-06: ETH/SOL도 실거래 승격 — 자산 구분 없이 동일 라이브 갱신 경로.
     latestDecisions = await fetchDecisions(client, trackSymbol(activeAsset, activeMarket));
-    if (positions.length) renderCards(algoStats(positions, algoIdsForMarket(activeMarket)));
+    if (positions.length) renderCards(algoStats(positions, algoIdsForMarket(activeMarket, activeAsset)));
     renderFreshness();
   }, 60_000);
 

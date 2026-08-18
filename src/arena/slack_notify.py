@@ -59,6 +59,7 @@ _ALGO_KO: dict[str, str] = {
     "multi_factor": "멀티팩터",
     "omnibus": "옴니버스",
     "meridian": "메리디안",
+    "funding_carry": "펀딩 캐리",
 }
 
 _ALGO_EN: dict[str, str] = {
@@ -69,6 +70,7 @@ _ALGO_EN: dict[str, str] = {
     "multi_factor": "MULTI FACTOR",
     "omnibus": "OMNIBUS",
     "meridian": "MERIDIAN",
+    "funding_carry": "FUNDING CARRY",
 }
 
 _MIN_HOLD: dict[str, float] = parameters.MIN_HOLD_HOURS
@@ -313,6 +315,21 @@ def _signal_narrative(
         return (
             f"{leg_line}\n"
             f"리서치 종합 신호(사전 DSR 게이트 없음, 라이브 표본으로 검증 중) → {dir_ko} 진입"
+        )
+
+    if algo_id == "funding_carry":
+        mean = macro.get("funding_carry_trailing_mean")
+        mean_str = f"{float(mean) * 100:+.4f}%/8h" if mean is not None else "—"
+        if direction == "short":
+            return (
+                f"펀딩 캐리 *선물 숏 다리* — 방향 베팅 아님(델타중립)\n"
+                f"7일 평균 펀딩비 {mean_str}(양수=롱이 숏에 지불) → 프리미엄 수취 목적 숏 진입\n"
+                f"같은 자산 현물 롱 다리와 짝을 이룸"
+            )
+        return (
+            f"펀딩 캐리 *현물 롱 다리* — 방향 베팅 아님(델타중립)\n"
+            f"7일 평균 펀딩비 {mean_str}(양수=롱이 숏에 지불) → 프리미엄 수취 목적 롱 진입\n"
+            f"같은 자산 선물 숏 다리와 짝을 이룸"
         )
 
     return f"RSI {_rsi_label(rsi)} → {dir_ko} 진입"

@@ -102,7 +102,29 @@ STRATEGY_VERSION = "arena-spot-v4"
 #   함수·PERP_SHORT_ENABLED_TRACKS·ALGORITHM_TRACK_SCOPE는 무변경(진입 스코프
 #   자체는 유지, 방향만 숏으로 제한). 롤백: PERP_LONG_BLOCKED_TRACKS를 빈
 #   frozenset으로.
-PARAMS_VERSION = "arena-params-v42"
+# v43(2026-08-18): 신규 8번째 알고 `funding_carry` — 6알고+meridian과 완전히 다른
+#   축. 방향 예측이 전혀 없는 델타중립 펀딩비 캐리(현물 롱 + 선물 숏 동시 보유,
+#   BTC/ETH만·SOL 제외)라 "라이브 표본이 쌓여야 검증된다"는 제약 자체가 없다 —
+#   이미 수집된 arena_funding_rates 실측(BTC 3개월·ETH 7주)으로 지금 바로 검증:
+#   BTC 펀딩 91.5%가 양수(연환산 +5.1%), ETH 92.4%(+4.2%), SOL은 68.8%(+2.7%,
+#   가끔 큰 음전)라 SOL 제외. 스팟 롱 신호(ALGORITHMS)와 선물 숏 신호
+#   (short_signals.PERP_SHORT_ALGORITHMS)가 같은 게이트(_funding_carry_active,
+#   7일 트레일링 평균 펀딩비 > 임계값)를 공유해 두 트랙이 독립 스케줄되면서도
+#   논리적으로 동기화된다(진짜 원자적 동시체결은 아님 — 두 트랙이 다음 사이클에
+#   각자 같은 데이터를 보고 같은 결론에 도달하는 방식, 소폭 베이시스 오차는
+#   1x·짧은 지연이라 감내 가능하다는 판단). ⚠️ 핵심 리스크: 스팟 롱 다리와 선물
+#   숏 다리가 "같은 알고의 서로 다른 방향 신호"로 별개 트랙에 열리는 구조라, 표준
+#   ATR 가격손절/트레일링을 그대로 두면 가격이 한쪽으로 움직일 때 한 다리만
+#   손절되고 반대쪽은 무방비로 남아 델타중립이 깨질 수 있음 — 신규
+#   PRICE_STOP_DISABLED_ALGOS_ALL_DIRECTIONS로 두 다리 모두 가격손절/트레일링
+#   완전 비활성화(기존 PRICE_STOP_DISABLED_ALGOS는 롱 전용 면제라 이 용도에 못
+#   씀). 최소보유 14일(MIN_HOLD_HOURS, 왕복비용 ~46bps 대비 BTC/ETH 손익분기
+#   ~33~40일 근처까지 조기청산 방지) 후 트레일링평균이 0 이하로 꺾이면 flat
+#   청산. 독립 자본 $1,000×2자산×2다리(spot+perp) 신규 슬롯(사용자 결정,
+#   기존 알고 자본 재활용 아님) — MAX_*_POSITIONS 캡 7→8(알고 수와 동일 유지
+#   관행). 근거: docs/arena/research/funding-carry-sleeve-design-20260818.md.
+#   롤백: FUNDING_CARRY_ENABLED를 False로.
+PARAMS_VERSION = "arena-params-v43"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v2"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
@@ -139,6 +161,24 @@ SHORT_SIGNAL_ACTION = "exit_or_no_trade"
 ALLOW_LIVE_SHORT = False
 RESEARCH_PERP_SHADOW_ENABLED = True
 
+# funding_carry(v43, 2026-08-18) — 델타중립 펀딩비 캐리. 방향 예측 없이 항상
+# 양수인 펀딩 프리미엄(롱→숏 지불)을 "현물 롱 + 선물 숏" 동시 보유로 수취한다.
+# 실측(arena_funding_rates, 2026-08-18 기준): BTC 91.5%가 양수(연환산 +5.1%,
+# n=270/3개월), ETH 92.4%(+4.2%, n=145/7주), SOL은 68.8%뿐(+2.7%, 가끔 큰
+# 음전) — SOL 제외.
+FUNDING_CARRY_ENABLED = True
+FUNDING_CARRY_ASSETS: frozenset[str] = frozenset({"BTCUSDT", "ETHUSDT"})
+# 트레일링 평균 계산 창(7일=펀딩 8h주기 21건) — 짧은 창(예: 2일)은 개별 음수
+# 이벤트(BTC도 8.5%는 음수) 몇 개로 쉽게 뒤집혀 휘소가 잦다. 진입·청산 판정
+# 동일 창 사용(단일 임계값, 엔트리/엑싯 비대칭 없음 — MIN_HOLD가 조기청산 방지를
+# 이미 담당).
+FUNDING_CARRY_LOOKBACK_HOURS = 168.0
+# 8h당 원시 비율(소수) 임계값 — BTC/ETH 실측 평균(0.0038~0.0046%)의 절반 이하로
+# 낮게 잡아 약한/노이즈성 양전 구간은 걸러내되 과도하게 보수적이지 않게 설계값
+# 채택(그리드 튜닝 아님 — 이 슬리브의 검증 근거 자체가 라이브 표본이 아니라
+# 펀딩비 역사적 일관성이라 별도 튜닝 불필요).
+FUNDING_CARRY_ENTRY_MEAN_THRESHOLD = 0.00001  # 0.001%/8h ≈ 연환산 1.1%
+
 # Spot→perp Phase B(2026-08-15): 숏 승격 단위는 알고가 아니라
 # (선물 트랙 심볼, 알고) 쌍이다. 자산별 백테스트 결과가 다른데 algo_id만
 # 허용하면 미통과 자산에도 숏이 열리는 문제가 있었다. 기존 6알고는 기본 빈
@@ -161,6 +201,11 @@ PERP_SHORT_ENABLED_TRACKS: frozenset[tuple[str, str]] = frozenset(
         ("SOLUSDT-PERP", "macd_momentum"),
         ("SOLUSDT-PERP", "fng_contrarian"),
         ("SOLUSDT-PERP", "vix_rsi"),
+        # v43: funding_carry 선물 숏 다리(BTC/ETH만, SOL 제외 — 위 FUNDING_CARRY_ASSETS
+        # 근거 참조). D017/D019와 다른 세 번째 채택 경로 — 방향 예측이 아니라 델타중립
+        # 캐리라 사전 통계게이트 자체가 적용 대상이 아니다.
+        ("BTCUSDT-PERP", "funding_carry"),
+        ("ETHUSDT-PERP", "funding_carry"),
     }
 )
 PERP_TARGET_PRODUCT = "usdm_perp"
@@ -229,6 +274,10 @@ ALGORITHM_TRACK_SCOPE: dict[str, frozenset[str]] = {
     "multi_factor": frozenset(MULTI_ASSET_SYMBOLS),
     "omnibus": frozenset(MULTI_ASSET_SYMBOLS),
     "vix_rsi": frozenset(MULTI_ASSET_SYMBOLS) | {"ETHUSDT-PERP", "SOLUSDT-PERP"},
+    # v43: funding_carry — BTC/ETH spot(롱 다리)+perp(숏 다리)만. SOL 제외(펀딩
+    # 신뢰도 낮음, 위 FUNDING_CARRY_ASSETS 근거), spot 단독도 없음(이 알고는
+    # 스팟 롱을 "캐리의 한쪽 다리"로만 열어야지 방향성 SOL 롱 같은 걸 만들면 안 됨).
+    "funding_carry": frozenset({"BTCUSDT", "ETHUSDT", "BTCUSDT-PERP", "ETHUSDT-PERP"}),
 }
 
 
@@ -311,6 +360,14 @@ PERP_LONG_BLOCKED_TRACKS: frozenset[tuple[str, str]] = frozenset(
         ("SOLUSDT-PERP", "fng_contrarian"),
         ("ETHUSDT-PERP", "vix_rsi"),
         ("SOLUSDT-PERP", "vix_rsi"),
+        # v43: funding_carry — 필수(위 6개는 "손실희석 방지"가 이유였지만 이건 더
+        # 근본적). ALGORITHMS["funding_carry"](롱 함수)와 PERP_SHORT_ALGORITHMS
+        # ["funding_carry"](숏 함수)가 같은 게이트를 공유해 항상 동시에 같은 결론에
+        # 도달한다 — 블록 안 하면 perp 트랙에서 long_signal=="long"과
+        # short_signal=="short"이 매번 동시에 참이 돼 short_signals.resolve()의
+        # 충돌 규칙(신규진입 시 resolved=None)에 걸려 이 트랙이 영원히 진입을 못 한다.
+        ("BTCUSDT-PERP", "funding_carry"),
+        ("ETHUSDT-PERP", "funding_carry"),
     }
 )
 
@@ -367,11 +424,12 @@ POSITION_UNIT = 1.0
 #   count 캡 해제로 인한 개별 계정 리스크 증가는 없음(독립 $1,000 계정 6개).
 #   v36(2026-08-15): 7개 알고(meridian 추가)로 캡도 함께 상향 — "알고 추가 시 캡도
 #   함께 올릴 것"(CLAUDE.md) 원칙 그대로.
-MAX_OPEN_POSITIONS_TOTAL = 7
-MAX_LONG_POSITIONS = 7
-MAX_SHORT_POSITIONS = 7
-MAX_NET_LONG_EXPOSURE = 7.0
-MAX_NET_SHORT_EXPOSURE = 7.0
+#   v43(2026-08-18): 8개 알고(funding_carry 추가)로 재상향.
+MAX_OPEN_POSITIONS_TOTAL = 8
+MAX_LONG_POSITIONS = 8
+MAX_SHORT_POSITIONS = 8
+MAX_NET_LONG_EXPOSURE = 8.0
+MAX_NET_SHORT_EXPOSURE = 8.0
 DAILY_LOSS_LIMIT_PCT = 0.05
 ALGO_MAX_DRAWDOWN_KILL_PCT = 0.10
 COOLDOWN_AFTER_KILL_HOURS = 24.0
@@ -504,7 +562,16 @@ FNG_DURATION_MIN_DAYS = 2
 #   3단 ts60·mh36 종가자산 1.0269 vs 3단 ts72·mh48 1.0214, Δ+0.55%p).
 FNG_CONTRARIAN_TIME_STOP_HOURS = 60.0
 # 가격(ATR·트레일) 손절을 적용하지 않는 알고 — 역발산 계열은 가격 손절이 독.
+# ⚠️ 롱 전용 면제(stream.py/backtest.py가 direction=="long" 게이팅) — 숏은 표준
+#   ATR손절+트레일링을 그대로 받는다(v41, fng_contrarian_short 배선 계기 정정).
 PRICE_STOP_DISABLED_ALGOS: tuple[str, ...] = ("fng_contrarian",)
+# 가격손절을 방향 무관하게(롱·숏 둘 다) 완전 비활성화하는 알고 — 위
+#   PRICE_STOP_DISABLED_ALGOS와 별도 메커니즘(v43, funding_carry). 델타중립
+#   캐리는 스팟 롱 다리·선물 숏 다리가 별개 트랙의 별개 포지션이라, 가격이
+#   한쪽으로 움직이면 한 다리만 ATR손절/트레일링에 걸리고 반대쪽은 그대로
+#   남아 델타중립이 깨질 수 있다 — 두 다리 모두 가격 기반 손절을 아예 안 쓰고
+#   MIN_HOLD_HOURS + 펀딩 추세 반전(flat_signal)만으로 청산한다.
+PRICE_STOP_DISABLED_ALGOS_ALL_DIRECTIONS: tuple[str, ...] = ("funding_carry",)
 # 시간 손절을 적용하는 알고 → 최대 보유시간(h). 위 가격 손절 제거를 보완.
 TIME_STOP_HOURS_BY_ALGO: dict[str, float] = {
     "fng_contrarian": FNG_CONTRARIAN_TIME_STOP_HOURS,
@@ -932,6 +999,11 @@ MIN_HOLD_HOURS: dict[str, float] = {
     "multi_factor": 12.0,
     "omnibus": 8.0,
     "meridian": 12.0,  # 추세/역발산 혼합 — regime_trend·multi_factor와 동일 중간값(v36)
+    # v43: 14일 — 왕복비용(~46bps, spot+perp 양다리 진입+청산) 대비 BTC/ETH 평균
+    # 펀딩 손익분기(~33~40일)에는 못 미치지만, 조기 노이즈성 청산(개별 음수 펀딩
+    # 이벤트 1~2건)만 막는 하한선이지 수익성 보장이 목적이 아니다 — 실제 보유
+    # 기간은 트레일링평균이 유지되는 한 이보다 훨씬 길게 자연 연장된다.
+    "funding_carry": 336.0,
 }
 MIN_HOLD_FALLBACK_HOURS = 4.0
 

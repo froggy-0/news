@@ -1373,6 +1373,36 @@ def meridian_short(macro: dict, ind: dict) -> str | None:
     return None
 
 
+def _funding_carry_active(macro: dict) -> bool:
+    """funding_carry(v43) 공유 게이트 — 스팟 롱 다리·선물 숏 다리가 둘 다 이 판정을
+    쓴다(같은 조건이라야 두 트랙이 별도 스케줄에도 논리적으로 동기화된다).
+
+    방향 예측이 아니라 델타중립 캐리라 레짐/RSI 등 방향성 지표를 전혀 안 본다 —
+    유일한 입력은 트레일링 평균 펀딩비(scheduler.py가 arena_funding_rates에서
+    매 사이클 직접 계산해 주입, macro["funding_carry_trailing_mean"]). None(데이터
+    없음)이면 판단불가로 미진입(그레이스풀).
+    """
+    if not parameters.FUNDING_CARRY_ENABLED:
+        return False
+    mean = macro.get("funding_carry_trailing_mean")
+    if mean is None:
+        return False
+    return mean > parameters.FUNDING_CARRY_ENTRY_MEAN_THRESHOLD
+
+
+def funding_carry_long(macro: dict, ind: dict) -> str | None:
+    """funding_carry — 스팟 롱 다리(캐리의 절반). BTC/ETH만(ALGORITHM_TRACK_SCOPE)."""
+    return "long" if _funding_carry_active(macro) else None
+
+
+def funding_carry_short(macro: dict, ind: dict) -> str | None:
+    """funding_carry — 선물 숏 다리(캐리의 나머지 절반). funding_carry_long과 동일
+    게이트를 공유 — PERP_LONG_BLOCKED_TRACKS가 perp 트랙에서 롱 다리를 무시시켜
+    이 숏만 실행되게 한다(안 그러면 매 사이클 롱·숏이 동시에 참이 돼 충돌 처리로
+    영구 진입 불가)."""
+    return "short" if _funding_carry_active(macro) else None
+
+
 ALGORITHMS: dict[str, Callable[[dict, dict], str | None]] = {
     "regime_trend": regime_trend,
     "fng_contrarian": fng_contrarian,
@@ -1381,6 +1411,7 @@ ALGORITHMS: dict[str, Callable[[dict, dict], str | None]] = {
     "multi_factor": multi_factor,
     "omnibus": omnibus,
     "meridian": meridian_long,
+    "funding_carry": funding_carry_long,
 }
 
 
@@ -1760,6 +1791,24 @@ def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
             ind, enabled=parameters.MERIDIAN_REVERSION_STABILIZATION_ENABLED
         )
         diag["factors"]["active_leg"] = leg
+        return _finish_diag(diag)
+
+    if algo_id == "funding_carry":
+        mean = macro.get("funding_carry_trailing_mean")
+        diag["thresholds"].update(
+            {
+                "entry_mean_threshold": parameters.FUNDING_CARRY_ENTRY_MEAN_THRESHOLD,
+                "lookback_hours": parameters.FUNDING_CARRY_LOOKBACK_HOURS,
+            }
+        )
+        _record_condition(diag, "funding_data_present", mean is not None, veto=True)
+        _record_condition(
+            diag,
+            "funding_carry_positive",
+            mean is not None and mean > parameters.FUNDING_CARRY_ENTRY_MEAN_THRESHOLD,
+            veto=True,
+        )
+        diag["factors"]["funding_carry_trailing_mean"] = mean
         return _finish_diag(diag)
 
     diag["failed_conditions"].append("unknown_algo")
