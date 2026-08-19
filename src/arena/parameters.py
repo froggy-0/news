@@ -124,7 +124,7 @@ STRATEGY_VERSION = "arena-spot-v4"
 #   기존 알고 자본 재활용 아님) — MAX_*_POSITIONS 캡 7→8(알고 수와 동일 유지
 #   관행). 근거: docs/arena/research/funding-carry-sleeve-design-20260818.md.
 #   롤백: FUNDING_CARRY_ENABLED를 False로.
-PARAMS_VERSION = "arena-params-v43"
+PARAMS_VERSION = "arena-params-v44"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v2"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
@@ -742,6 +742,19 @@ TAKER_CONFIRM_RATIO_4H_MIN = 0.95
 #   전면 롤백은 안 함 — "표본 확보" 전략 자체를 부정하는 과잉대응이고, 나머지
 #   3개(macd_momentum/fng_contrarian·vix_rsi 환경필터/multi_factor/omnibus)는
 #   해악 근거가 약하거나(0~+0.5%p) 무효.
+#
+# v44(2026-08-19) 잔여 3알고(fng_contrarian/vix_rsi/omnibus) 개별 재검증 — v38이
+#   "4개 알고만 개별 분해"라 이 3개가 완화 유지 상태로 미검증 방치돼 있었음(신뢰도
+#   제고 점검 중 발견). relaxation_cost_decomposition.py 재실행 결과 3개 전부 전체
+#   구간 완화효과가 음수(fng_contrarian −2.25%p·vix_rsi −2.93%p·omnibus −1.83%p) —
+#   그러나 regime_trend 롤백 때 쓴 기준(귀속 음수 + 전/후반 분할 방향 일관)을 그대로
+#   적용(relaxation_split_period_check.py)하면 갈린다:
+#     omnibus: 전반 −1.22%p·후반 −0.61%p — 둘 다 음수, 방향 일관 → 롤백.
+#     fng_contrarian: 전반 +1.23%p(오히려 개선)·후반 −3.54%p — 불일치, 후반 국면
+#       편향 가능성 배제 못 함 → 롤백 안 함(근거 부족, regime_trend와 동일 기준 적용).
+#     vix_rsi: 전반 +0.99%p·후반 −3.91%p — 마찬가지로 불일치 → 롤백 안 함.
+#   omnibus만 OMNIBUS_REBOUND_MIN_VOTES 2→3(v33 이전 수준)으로 원복, FNG_CONTRARIAN/
+#   VIX_RSI_ENTRY_RELAXED_ENABLED는 True 유지. PARAMS_VERSION v43→v44.
 REGIME_TREND_ENTRY_RELAXED_ENABLED = False
 REGIME_TREND_ENTRY_MIN_SECONDARY_VOTES = 5  # v38: v33 이전(8개 전부 요구)으로 원복 — RELAXED_ENABLED=False라 이 값 자체는 무효과, 문서화용
 MACD_MOMENTUM_ENTRY_RELAXED_ENABLED = True
@@ -767,7 +780,7 @@ MACD_MOMENTUM_ENTRY_MIN_SECONDARY_VOTES = 3  # v33=4 → v34=3 (아래 블록 �
 #   MULTI_FACTOR_MIN_VOTES_EX_REGIME을 3, OMNIBUS_REBOUND_MIN_VOTES를 3으로, 신규
 #   ENABLED 2개(FNG_CONTRARIAN/VIX_RSI)를 False로 되돌리면 v33 상태로 원복.
 MULTI_FACTOR_MIN_VOTES_EX_REGIME = 2  # f1 제외 4개 중 3→2 (f1 필수는 유지)
-OMNIBUS_REBOUND_MIN_VOTES = 2  # 4개 중 3→2
+OMNIBUS_REBOUND_MIN_VOTES = 3  # v44: v33 이전(3)으로 원복 — 전/후반 분할 둘 다 완화효과 음수(일관)
 FNG_CONTRARIAN_ENTRY_RELAXED_ENABLED = True
 FNG_CONTRARIAN_ENTRY_MIN_SECONDARY_VOTES = 2  # 환경필터 3개(낙폭/시장폭/스테이블코인) 중 최소 충족
 VIX_RSI_ENTRY_RELAXED_ENABLED = True
