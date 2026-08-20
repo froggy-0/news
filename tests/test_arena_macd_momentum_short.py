@@ -63,6 +63,32 @@ def test_macd_momentum_short_none_when_tsmom_nl_disabled(monkeypatch) -> None:
     assert algorithms.macd_momentum_short(_base_macro(), _base_ind(ret=-0.5)) is None
 
 
+# ── 2026-08-20 결함수정: 숏 전용 최소신호 하한(TSMOM_NL_SHORT_MIN_SIGNAL) ──────
+#
+# 배경: v41이 롱의 TSMOM_NL_MIN_SIGNAL=0.0("거래량 우선" 선택)을 숏에도 그대로
+# 재사용해, 사이징 f(s)=|s|/(s²+1)가 s→0에서 함께 0에 수렴 — 라이브 10건 중 8건이
+# position_weight<0.10(1건은 0.000)인 "유령 거래"였다. 숏 전용 하한(0.5)을 신설해
+# 롱 임계값(0.0, 그대로 유지)과 분리한다.
+
+
+def test_tsmom_nl_short_min_signal_separate_from_long_min_signal() -> None:
+    assert parameters.TSMOM_NL_SHORT_MIN_SIGNAL != parameters.TSMOM_NL_MIN_SIGNAL
+    assert parameters.TSMOM_NL_SHORT_MIN_SIGNAL == 0.5
+    assert parameters.TSMOM_NL_MIN_SIGNAL == 0.0  # 롱은 v35 그리드 선택 그대로 무변경
+
+
+def test_macd_momentum_short_none_when_signal_below_short_min_signal() -> None:
+    # s = ret/(√126·vol) = -0.06735/(11.2249·0.02) ≈ -0.30 — 하한 0.5 미달, 유령거래 방지.
+    ind = _base_ind(ret=-0.06735, vol=0.02)
+    assert algorithms.macd_momentum_short(_base_macro(), ind) is None
+
+
+def test_macd_momentum_short_fires_when_signal_exceeds_short_min_signal() -> None:
+    # s ≈ -0.60 — 하한 0.5 초과, 정상 발화.
+    ind = _base_ind(ret=-0.1347, vol=0.02)
+    assert algorithms.macd_momentum_short(_base_macro(), ind) == "short"
+
+
 # ── 사이징: 숏은 abs(f(s)) — 롱 전용 클립 함수를 쓰면 비중이 0이 되는 회귀 방지 ──
 
 
@@ -118,3 +144,43 @@ def test_resolve_produces_short_when_long_signal_is_none() -> None:
     )
     assert decision.resolved_signal == "short"
     assert not decision.conflict
+
+
+# ── explain_signal(direction="short") 진단 분기 (2026-08-20 결함수정) ────────
+#
+# 배경: explain_signal(algo_id, macro, ind)는 direction 없이 항상 ALGORITHMS[algo_id]
+# (롱 함수)만 재평가했다 — 숏 거래의 signal_reason.diagnostics도 롱 조건으로
+# 계산돼 tsmom_nl_weight_mult가 항상 0.0으로 기록됐다(라이브 숏 10건 전부 실측
+# 0.0). direction="short"를 받으면 숏 전용 분기(_explain_macd_momentum_short)로
+# 계산해야 한다.
+
+
+def test_explain_signal_short_direction_reports_nonzero_weight_mult() -> None:
+    ind = _base_ind(ret=-0.5)
+    diag = algorithms.explain_signal("macd_momentum", _base_macro(), ind, direction="short")
+    assert diag["raw_signal"] == "short"
+    assert diag["factors"]["tsmom_nl_weight_mult"] > 0.0
+    assert diag["thresholds"]["short_min_signal"] == parameters.TSMOM_NL_SHORT_MIN_SIGNAL
+
+
+def test_explain_signal_default_direction_still_evaluates_long_branch() -> None:
+    # 하위호환: direction 생략 시 기존과 동일하게 롱 조건만 계산(회귀 방지).
+    ind = _base_ind(ret=-0.5)
+    diag = algorithms.explain_signal("macd_momentum", _base_macro(), ind)
+    assert diag["raw_signal"] is None  # 롱 조건(s>0) 불충족
+    assert diag["factors"]["tsmom_nl_weight_mult"] == 0.0
+
+
+def test_explain_signal_short_direction_vetoes_below_short_min_signal() -> None:
+    ind = _base_ind(ret=-0.06735, vol=0.02)  # s≈-0.30 < 하한 0.5
+    diag = algorithms.explain_signal("macd_momentum", _base_macro(), ind, direction="short")
+    assert diag["raw_signal"] is None
+    assert "signal_below_neg_min" in diag["vetoes"]
+
+
+def test_explain_signal_short_direction_only_branches_for_macd_momentum() -> None:
+    # 타 알고는 direction 인자를 무시하고 기존 동작 그대로(부작용 없음 확인).
+    diag = algorithms.explain_signal(
+        "omnibus", {"arena_regime_state": "sideways"}, {}, direction="short"
+    )
+    assert diag["algo_id"] == "omnibus"

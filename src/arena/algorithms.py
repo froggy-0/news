@@ -798,13 +798,18 @@ def macd_momentum_short(macro: dict, ind: dict) -> str | None:
     사전 DSR≥0.95 게이트를 아직 통과하지 못했으므로 D019(meridian)와 같은
     "근접 후보 라이브 배선" 경로로 페이퍼캐피털 축적 관찰 대상으로 승격한다 —
     표본이 쌓이면 이 자체 통계로 재판정(D017 경로로 재분류 또는 철회).
+
+    ⚠️ 2026-08-20 결함수정: 진입 하한을 롱과 공유하던 `TSMOM_NL_MIN_SIGNAL`(=0.0)에서
+    숏 전용 `TSMOM_NL_SHORT_MIN_SIGNAL`(=0.5)로 분리 — 사이징 f(s)=|s|/(s²+1)가 s→0에서
+    함께 0에 수렴해 라이브 10건 중 8건이 position_weight<0.10인 "유령 거래"였음
+    (`parameters.py`의 `TSMOM_NL_SHORT_MIN_SIGNAL` 주석 참조). 롱 임계값은 무변경.
     """
     if not parameters.TSMOM_NL_ENABLED:
         return None
     s = _tsmom_nl_signal(ind)
     if s is None:
         return None
-    return "short" if s < -parameters.TSMOM_NL_MIN_SIGNAL else None
+    return "short" if s < -parameters.TSMOM_NL_SHORT_MIN_SIGNAL else None
 
 
 def multi_factor(macro: dict, ind: dict) -> str | None:
@@ -1450,12 +1455,51 @@ def _finish_diag(diag: dict[str, Any]) -> dict[str, Any]:
     return diag
 
 
-def explain_signal(algo_id: str, macro: dict, ind: dict) -> dict[str, Any]:
+def _explain_macd_momentum_short(macro: dict, ind: dict) -> dict[str, Any]:
+    """macd_momentum 숏(TSMOM_NL 대칭반전)의 진단 — `explain_signal(direction="short")`
+    전용. 롱 브랜치(위 `explain_signal` 본문의 macd_momentum TSMOM_NL 분기)와 대칭:
+    사이징은 `tsmom_nl_position_multiplier_abs`(음수클립 없음), 임계값은
+    `TSMOM_NL_SHORT_MIN_SIGNAL`(2026-08-20 결함수정으로 롱과 분리)."""
+    raw_signal = macd_momentum_short(macro, ind)
+    diag = _diag_base("macd_momentum", raw_signal, macro)
+    s = _tsmom_nl_signal(ind)
+    diag["thresholds"].update(
+        {
+            "lookback_bars": parameters.TSMOM_NL_LOOKBACK_BARS,
+            "vol_mode": parameters.TSMOM_NL_VOL_MODE,
+            "short_min_signal": parameters.TSMOM_NL_SHORT_MIN_SIGNAL,
+            "weight_cap": parameters.TSMOM_NL_WEIGHT_CAP,
+        }
+    )
+    diag["factors"]["tsmom_nl_signal"] = s
+    diag["factors"]["tsmom_nl_weight_mult"] = tsmom_nl_position_multiplier_abs(macro, ind)
+    _record_condition(diag, "signal_available", s is not None, veto=True)
+    _record_condition(
+        diag,
+        "signal_below_neg_min",
+        s is not None and s < -parameters.TSMOM_NL_SHORT_MIN_SIGNAL,
+        veto=True,
+    )
+    return _finish_diag(diag)
+
+
+def explain_signal(
+    algo_id: str, macro: dict, ind: dict, *, direction: str | None = None
+) -> dict[str, Any]:
     """Return deterministic signal diagnostics without changing strategy behavior.
 
     이 함수는 P1 로스터 진단용이다. 전략 함수의 raw signal과 같은 조건식을
     재평가해 `reason.diagnostics.vetoes` 집계를 가능하게 한다.
+
+    `direction`(2026-08-20 결함수정): 기본 None이면 기존과 동일하게 롱 진단만 계산한다
+    (하위호환). 실제로 열린/열리는 포지션의 방향이 "short"로 알려진 호출부(예:
+    `scheduler._signal_reason`)는 이를 넘겨야 한다 — 안 넘기면 macd_momentum 숏 거래의
+    signal_reason.diagnostics가 (숏 조건이 아니라) 항상 롱 조건으로 재계산돼
+    `tsmom_nl_weight_mult`가 항상 0.0으로 기록되는 버그가 있었다(실제 사이징과 무관한
+    진단 전용 결함 — 트레이딩 로직에는 영향 없었음).
     """
+    if algo_id == "macd_momentum" and direction == "short" and parameters.TSMOM_NL_ENABLED:
+        return _explain_macd_momentum_short(macro, ind)
     try:
         raw_signal = ALGORITHMS[algo_id](macro, ind) if algo_id in ALGORITHMS else None
     except (KeyError, TypeError, ValueError) as exc:

@@ -119,6 +119,8 @@ class SimPosition:
     fng_ref_price: float = 0.0
     fng_filled_count: int = 0
     fng_duration_scale: float = 1.0  # P3: 진입 시점 fng_days_below_30 기반 사이징 배수
+    pyramid_ref_price: float = 0.0  # 피라미딩 기준가 = 최초 진입가(물타기·불변, 연구 인프라)
+    pyramid_filled_count: int = 0
     omni_target_price: float | None = None  # WI-7: omnibus 평균회귀 익절 목표가(진입 시 고정)
     fng_target_pct: float | None = None  # P-A: fng 이익포착 목표 상승률(평단×(1+pct) 익절)
     target_price: float | None = (
@@ -462,6 +464,12 @@ def _open_position(
         omni_target_price=omni_target_price,
         fng_target_pct=fng_tp,
         target_price=target_price,
+        # 물타기(fng)와 달리 PYRAMID_UP_LEVELS는 "추가" 트랜치만 나열(초기 진입 자체는
+        # 목록에 없음) — filled_count=0으로 시작해 레벨 0부터 순차 체크한다.
+        pyramid_ref_price=frame.bar.close
+        if algo_id in parameters.PYRAMID_UP_ENABLED_ALGOS
+        else 0.0,
+        pyramid_filled_count=0,
     )
 
 
@@ -499,6 +507,46 @@ def _maybe_scale_in_fng_sim(position: SimPosition, eval_price: float) -> SimPosi
         open_price=new_open,
         position_weight=new_weight,
         fng_filled_count=position.fng_filled_count + applied,
+    )
+
+
+def _maybe_pyramid_up_sim(position: SimPosition, eval_price: float) -> SimPosition:
+    """피라미딩(승자 불타기, 연구 인프라·기본 off) — 물타기(_maybe_scale_in_fng_sim)의
+    방향 일반화판. 봉의 유리한 방향 극값(long=high, short=low)이 진입가 대비
+    `parameters.PYRAMID_UP_LEVELS` 배수(d=|진입가−초기손절가|) 이상 유리하게 움직이면
+    그 한계가에 추가 체결. 트레일링 스톱은 절대 trail_distance만 참조해 평단·비중과
+    무관하므로 이 함수가 청산 메커니즘에 영향을 주지 않는다. 추가분 없으면 원본 그대로.
+    """
+    ref_price = position.pyramid_ref_price or position.open_price
+    d = execution_rules.trail_distance_from_stop(ref_price, position.stop_loss_price, mult=1.0)
+    if d <= 0:
+        return position
+    levels = tuple((mult * d / ref_price, weight) for mult, weight in parameters.PYRAMID_UP_LEVELS)
+    pending = execution_rules.pending_pyramid_tranches(
+        eval_price,
+        ref_price,
+        position.direction,
+        position.pyramid_filled_count,
+        levels,
+    )
+    if not pending:
+        return position
+    new_open, new_weight, applied = execution_rules.fill_pyramid_tranches(
+        position.open_price,
+        position.position_weight,
+        ref_price,
+        position.direction,
+        pending,
+        levels,
+        parameters.VOL_WEIGHT_MAX,
+    )
+    if applied <= 0:
+        return position
+    return replace(
+        position,
+        open_price=new_open,
+        position_weight=new_weight,
+        pyramid_filled_count=position.pyramid_filled_count + applied,
     )
 
 
@@ -931,6 +979,18 @@ def run_replay(
                         positions_by_algo[algo_id] = _maybe_scale_in_fng_sim(
                             position, frame.bar.low
                         )
+                    # 피라미딩(연구 인프라, 기본 off): 보유 중 유리한 방향 극값 도달 시
+                    # 추가 트랜치 체결(long=봉 high, short=봉 low). PYRAMID_UP_ENABLED_ALGOS
+                    # 기본 빈 frozenset이라 무효과 — 라이브 배선 없음(위 모듈 docstring 참조).
+                    if (
+                        position is not None
+                        and product_decision.action == "hold"
+                        and algo_id in parameters.PYRAMID_UP_ENABLED_ALGOS
+                    ):
+                        eval_price = (
+                            frame.bar.high if position.direction == "long" else frame.bar.low
+                        )
+                        positions_by_algo[algo_id] = _maybe_pyramid_up_sim(position, eval_price)
                     continue
                 signal = product_decision.executable_signal
             else:
@@ -949,6 +1009,14 @@ def run_replay(
                     and parameters.FNG_CONTRARIAN_SCALE_IN_ENABLED
                 ):
                     positions_by_algo[algo_id] = _maybe_scale_in_fng_sim(position, frame.bar.low)
+                # 피라미딩 — 위 spot 분기와 동일 패리티(perp 검증 백테스트 경로).
+                if (
+                    position is not None
+                    and raw_signal == position.direction
+                    and algo_id in parameters.PYRAMID_UP_ENABLED_ALGOS
+                ):
+                    eval_price = frame.bar.high if position.direction == "long" else frame.bar.low
+                    positions_by_algo[algo_id] = _maybe_pyramid_up_sim(position, eval_price)
 
             if signal is None:
                 if position and algorithms.exit_hold_override(algo_id, macro, frame.indicators):

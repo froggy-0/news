@@ -252,6 +252,121 @@ def test_fng_contrarian_scale_in_has_parity_under_non_spot_product_type(monkeypa
     assert trade.open_price == pytest.approx(96.3571, abs=1e-3)
 
 
+# ── 피라미딩(승자 불타기) — 연구 인프라, 기본 off (2026-08-20) ────────────────
+#
+# 배경: 이 저장소는 물타기(fng_contrarian)만 구현돼 있고 추세계열에는 사이징을
+# 키우는 메커니즘이 없다(문헌 통설과 반대 배치). 사후 시뮬레이션(pyramiding_
+# feasibility.py)에서 방향은 뚜렷했으나 부트스트랩CI가 0을 포함해 미채택 —
+# `PYRAMID_UP_ENABLED_ALGOS` 기본 빈 frozenset(off), 라이브 미배선. 아래 테스트는
+# (1) 기본값이 진짜 무효과(no-op)인지, (2) 활성화 시 유리한 방향 극값에서 실제로
+# 트랜치가 체결되는지를 검증한다.
+
+
+def test_pyramid_up_disabled_by_default_is_noop() -> None:
+    def always_long(macro, indicators):
+        return "long"
+
+    result = backtest.run_replay(
+        [
+            _frame(0, close=100.0, atr=1.0),
+            _frame(1, high=103.0, low=99.0, close=102.0, atr=1.0),  # 유리한 방향 극값
+        ],
+        strategy_fns={"test_algo": always_long},
+        settings=backtest.BacktestSettings(close_open_at_end=True),
+    )
+
+    assert parameters.PYRAMID_UP_ENABLED_ALGOS == frozenset()  # 기본값 확인
+    assert len(result.trades) == 1
+    trade = result.trades[0]
+    assert trade.open_price == pytest.approx(100.0)  # 트랜치 미체결 → 평단 불변
+    assert trade.position_weight == pytest.approx(0.25)  # combined_position_weight 그대로
+
+
+def test_pyramid_up_enabled_adds_tranches_on_favorable_move(monkeypatch) -> None:
+    monkeypatch.setattr(parameters, "PYRAMID_UP_ENABLED_ALGOS", frozenset({"test_algo"}))
+
+    def always_long(macro, indicators):
+        return "long"
+
+    result = backtest.run_replay(
+        [
+            _frame(0, close=100.0, atr=1.0),  # 진입 @100, stop=97.5(d=2.5), w=0.25
+            # d=2.5 → 레벨 +0.5d=101.25(+1.25%)·+1.0d=102.5(+2.5%). high=103 → 둘 다 체결.
+            _frame(1, high=103.0, low=99.0, close=102.0, atr=1.0),
+        ],
+        strategy_fns={"test_algo": always_long},
+        settings=backtest.BacktestSettings(close_open_at_end=True),
+    )
+
+    assert len(result.trades) == 1
+    trade = result.trades[0]
+    # avg = (100*0.25 + 101.25*0.15 + 102.5*0.15) / 0.55
+    assert trade.open_price == pytest.approx((25 + 15.1875 + 15.375) / 0.55, abs=1e-4)
+    assert trade.position_weight == pytest.approx(0.55)
+
+
+def test_pyramid_up_short_direction_adds_on_downside(monkeypatch) -> None:
+    # 숏(usdm_perp)도 대칭 동작해야 한다 — 유리한 방향은 하락, 봉 저가로 평가.
+    monkeypatch.setattr(parameters, "PYRAMID_UP_ENABLED_ALGOS", frozenset({"test_algo"}))
+
+    def always_short(macro, indicators):
+        return "short"
+
+    result = backtest.run_replay(
+        [
+            _frame(0, close=100.0, atr=1.0),  # 진입 @100, stop=102.5(d=2.5), w=0.25
+            # 레벨 -1.25%=98.75·-2.5%=97.5. low=97 → 둘 다 체결.
+            _frame(1, high=101.0, low=97.0, close=98.0, atr=1.0),
+        ],
+        strategy_fns={"test_algo": always_short},
+        settings=backtest.BacktestSettings(
+            close_open_at_end=True,
+            product_type="usdm_perp",
+            position_semantics="usdm_perp_long_short",
+        ),
+    )
+
+    assert len(result.trades) == 1
+    trade = result.trades[0]
+    assert trade.direction == "short"
+    # avg = (100*0.25 + 98.75*0.15 + 97.5*0.15) / 0.55
+    assert trade.open_price == pytest.approx((25 + 14.8125 + 14.625) / 0.55, abs=1e-4)
+    assert trade.position_weight == pytest.approx(0.55)
+
+
+def test_pyramid_up_does_not_change_trailing_stop_distance(monkeypatch) -> None:
+    # 핵심 설계 전제: ratchet_trailing_stop(bar.close 기준)은 절대 trail_distance만
+    # 참조하고 평단·비중과 무관 — 피라미딩 활성/비활성 여부와 무관하게 동일한 손절가로
+    # 래칫돼야 한다(사후 시뮬 가정 검증). frame1 close=102.0 → 래칫 stop=max(97.5,
+    # 102.0-2.5)=99.5(평단 변화와 무관). frame2가 99.5를 하향 관통해 그 가격에 체결.
+    def always_long(macro, indicators):
+        return "long"
+
+    frames = [
+        _frame(0, close=100.0, atr=1.0),
+        _frame(1, high=103.0, low=99.0, close=102.0, atr=1.0),  # 피라미딩 체결(평단↑) + 래칫
+        _frame(2, open_price=99.6, high=99.8, low=99.0, close=99.2, atr=1.0),
+    ]
+    settings = backtest.BacktestSettings(close_open_at_end=False)
+
+    monkeypatch.setattr(parameters, "PYRAMID_UP_ENABLED_ALGOS", frozenset())
+    disabled = backtest.run_replay(
+        frames, strategy_fns={"test_algo": always_long}, settings=settings
+    )
+    monkeypatch.setattr(parameters, "PYRAMID_UP_ENABLED_ALGOS", frozenset({"test_algo"}))
+    enabled = backtest.run_replay(
+        frames, strategy_fns={"test_algo": always_long}, settings=settings
+    )
+
+    assert len(disabled.trades) == 1 and len(enabled.trades) == 1
+    assert disabled.trades[0].exit_reason == enabled.trades[0].exit_reason == "trailing_stop"
+    assert disabled.trades[0].close_price == pytest.approx(99.5, abs=1e-6)
+    assert enabled.trades[0].close_price == pytest.approx(99.5, abs=1e-6)
+    # 평단·비중은 다르지만(피라미딩 효과) 청산가는 동일해야 한다.
+    assert enabled.trades[0].open_price != pytest.approx(disabled.trades[0].open_price)
+    assert enabled.trades[0].close_price == pytest.approx(disabled.trades[0].close_price)
+
+
 def test_fng_contrarian_unknown_regime_multiplier_scales_first_tranche_only(monkeypatch) -> None:
     # P4(2026-07-21, 신규·미검증): UNKNOWN_REGIME_SIZE_MULT_BY_ALGO가 최초 1차 트랜치에만
     # 적용되고, 이후 가격 기준 물타기(fill_price_tranches)는 정상 절대비중·정상 상한대로

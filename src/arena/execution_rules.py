@@ -336,6 +336,69 @@ def fill_price_tranches(
     return avg, weight, applied
 
 
+def pending_pyramid_tranches(
+    current_price: float,
+    ref_price: float,
+    direction: str,
+    filled_count: int,
+    tranches: tuple[tuple[float, float], ...],
+) -> list[tuple[int, float]]:
+    """현재가가 진입 기준가 대비 **유리한** 방향으로 충분히 움직여 새로 체결 가능한
+    피라미딩(승자 불타기) 트랜치 목록.
+
+    `pending_price_tranches`(물타기 — 롱·불리한 방향 하락 전용)의 방향 일반화판.
+    각 트랜치 (거리비율 level≥0, 추가 비중) — level은 `ref_price` 대비 유리한 방향
+    이동 거리의 비율(롱: 상승, 숏: 하락). 순차 체결(더 깊은 단계는 얕은 단계가
+    먼저 도달해야 유효) — 물타기 쪽과 동일 관례. backtest(봉 high/low)·향후 live(1m
+    틱) 공용 순수함수가 되도록 방향만 받고 그 외 부작용 없음.
+    """
+    if ref_price <= 0:
+        return []
+    sign = -1.0 if direction == "short" else 1.0
+    out: list[tuple[int, float]] = []
+    for i in range(max(filled_count, 0), len(tranches)):
+        level, add_weight = tranches[i]
+        target = ref_price * (1.0 + sign * level)
+        reached = (current_price >= target) if sign > 0 else (current_price <= target)
+        if reached:
+            out.append((i, add_weight))
+        else:
+            break  # 순차적 — 더 깊은 단계는 아직 미도달
+    return out
+
+
+def fill_pyramid_tranches(
+    old_avg: float,
+    old_weight: float,
+    ref_price: float,
+    direction: str,
+    pending: list[tuple[int, float]],
+    tranches: tuple[tuple[float, float], ...],
+    weight_cap: float,
+) -> tuple[float, float, int]:
+    """피라미딩 트랜치들을 각자의 한계가(ref×(1±level))에 체결한 결과 회계.
+
+    `fill_price_tranches`(물타기)의 방향 일반화판 — 페이퍼 한계주문 모델, 누적 비중은
+    weight_cap 상한. 반환 (새 평균진입가, 새 누적비중, 실제 체결 트랜치 수).
+    """
+    sign = -1.0 if direction == "short" else 1.0
+    avg = old_avg
+    weight = old_weight
+    applied = 0
+    for idx, add_weight in pending:
+        room = weight_cap - weight
+        if room <= 1e-9:
+            break
+        aw = min(add_weight, room)
+        if aw <= 0:
+            break
+        fill_price = ref_price * (1.0 + sign * tranches[idx][0])
+        avg = averaged_entry_price(avg, weight, fill_price, aw)
+        weight += aw
+        applied += 1
+    return avg, weight, applied
+
+
 def fee_adjusted_return_pct(
     *,
     direction: str,

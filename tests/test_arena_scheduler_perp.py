@@ -109,6 +109,22 @@ def test_meridian_concurrent_leg_count_uses_direction_for_short() -> None:
     assert scheduler._meridian_concurrent_leg_count("ETHUSDT-PERP", "reversion") == 0
 
 
+def test_signal_reason_threads_direction_into_short_diagnostics() -> None:
+    """2026-08-20 결함수정 회귀방지: scheduler._signal_reason이 signal(direction)을
+    explain_signal에 넘기지 않으면 숏 거래의 signal_reason.diagnostics가 롱 조건으로
+    재계산돼 tsmom_nl_weight_mult가 항상 0.0으로 저장된다(라이브 실측 전례)."""
+    ind = {
+        f"tsmom_nl_return_{parameters.TSMOM_NL_LOOKBACK_BARS}": -0.5,
+        "tsmom_nl_vol_ewma": 0.02,
+        "realized_vol_24h": 0.02,
+    }
+    macro = {"arena_regime_state": "sideways"}
+    reason = scheduler._signal_reason("macd_momentum", "short", ind, macro)
+    diag = reason["diagnostics"]
+    assert diag["raw_signal"] == "short"
+    assert diag["factors"]["tsmom_nl_weight_mult"] > 0.0
+
+
 def test_meridian_leg_concurrency_cap_defaults() -> None:
     # 20개월 macro 백필 사후 시뮬레이션 근거(scripts/analysis/
     # meridian_reversion_correlation_check.py) — reversion/short만 cap=1, trend는

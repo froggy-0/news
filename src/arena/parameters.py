@@ -124,7 +124,25 @@ STRATEGY_VERSION = "arena-spot-v4"
 #   기존 알고 자본 재활용 아님) — MAX_*_POSITIONS 캡 7→8(알고 수와 동일 유지
 #   관행). 근거: docs/arena/research/funding-carry-sleeve-design-20260818.md.
 #   롤백: FUNDING_CARRY_ENABLED를 False로.
-PARAMS_VERSION = "arena-params-v44"
+# v45(2026-08-20): macd_momentum 숏 결함수정 2건, 코드리뷰 세션(레버리지·물타기·숏
+#   판단 문헌조사) 발견분. (1) `TSMOM_NL_SHORT_MIN_SIGNAL` 신설(=0.5) — v41이 숏을
+#   승격하며 롱의 `TSMOM_NL_MIN_SIGNAL=0.0`(v35 "거래량 우선" 선택)을 그대로
+#   재사용해, 사이징 f(s)=|s|/(s²+1)가 s→0에서 함께 0에 수렴 → 라이브 숏 10건 중
+#   8건이 position_weight<0.10(1건 0.000)인 "유령 거래"(슬롯·표본만 소모, 손익
+#   기여 없음)였음. 3자산 macro 백필 실측(short_min_signal_tuning.py)으로 이
+#   값이 최소 position_weight를 구조적으로 ≈0.10 이상 보장하는 첫 지점임을 확인해
+#   채택(sum_w·DSR은 후보 구간 전체에서 노이즈 수준 차이 — 파라미터 fit이 아니라
+#   구조적 결함수정이라 DSR 엄격 기준 미적용, "경제·논리 근거 우선" 원칙). 롱
+#   임계값(0.0)은 무변경. (2) `explain_signal()`에 `direction` 인자 추가 —
+#   기존엔 direction 없이 항상 ALGORITHMS[algo_id](롱 함수)만 재평가해 숏 거래의
+#   signal_reason.diagnostics도 롱 조건으로 계산되고 `tsmom_nl_weight_mult`가
+#   항상 0.0으로 기록됐음(실제 사이징엔 영향 없는 진단 전용 결함). scheduler.
+#   _signal_reason이 signal(direction)을 넘기도록 배선, 기본값 None은 기존 동작과
+#   동일(하위호환). 근거: kelly_leverage_diagnosis.py(레버리지 — CI 전부 0 포함,
+#   1x 유지가 근거 있음을 재확인)·pyramiding_feasibility.py(사후 시뮬 — 추세계열
+#   방향은 유망하나 CI가 0 포함이라 미채택, 정식 A/B는 별도 스레드로 보류).
+#   신규 테스트 8건. 롤백: TSMOM_NL_SHORT_MIN_SIGNAL을 0.0으로(v41 상태 복귀).
+PARAMS_VERSION = "arena-params-v45"
 FEATURE_SET_VERSION = "arena-features-v8"
 RISK_MODEL_VERSION = "portfolio-risk-v2"
 REALTIME_RISK_MODEL_VERSION = "realtime-risk-v1"
@@ -800,6 +818,23 @@ VIX_RSI_ENTRY_MIN_SECONDARY_VOTES = 1  # 환경필터 2개(시장폭/스테이�
 GENERIC_TARGET_EXIT_ENABLED = True  # 스위치 자체는 on, 대상 알고는 아래 dict가 결정(빈 dict=무효과)
 TARGET_EXIT_ATR_MULT_BY_ALGO: dict[str, float] = {}
 
+# ── 피라미딩(승자 불타기) — 백테스트 전용 연구 인프라, 라이브 미배선 (2026-08-20) ──
+# 근거: 이 저장소는 물타기(fng_contrarian 가격 트랜치, v22)만 구현돼 있고 추세계열에는
+#   사이징을 키우는 메커니즘이 없다 — 문헌 통설(피라미딩=추세/돌파 적합, 물타기=평균회귀
+#   적합)과 정반대 배치. 사후 시뮬레이션(pyramiding_feasibility.py, 청산 시점 고정·진입
+#   트랜치만 추가)에서 방향은 뚜렷(추세계열 단조개선, 평균회귀 단조악화)했으나 부트스트랩
+#   95%CI가 전부 0을 포함하고 자산별 불일치(SOL 쏠림)라 미채택 상태.
+# 설계: 트랜치는 `execution_rules.pending_pyramid_tranches`/`fill_pyramid_tranches`(물타기
+#   함수의 방향 일반화판)로 진입가 대비 유리한 방향 d(=|진입가−초기손절가|, ATR 클램핑
+#   거리 재사용) 배수 지점에서 체결. 트레일링 스톱(`ratchet_trailing_stop`)은 절대
+#   trail_distance만 참조하고 평단·비중과 무관하게 동작하므로 피라미딩이 청산 메커니즘에
+#   영향을 주지 않는다(사후 시뮬 가정이 실제로 정확했음을 재확인).
+# ⚠️ 기본 빈 frozenset(off) — DSR/PBO 정식 게이트를 통과하기 전까지 라이브
+#   scheduler.py/positions.py/stream.py에는 배선하지 않는다(백테스트 SimPosition에만
+#   존재). backtest.py의 대상 알고 조건문이 이 집합을 직접 참조한다.
+PYRAMID_UP_ENABLED_ALGOS: frozenset[str] = frozenset()
+PYRAMID_UP_LEVELS: tuple[tuple[float, float], ...] = ((0.5, 0.15), (1.0, 0.15))
+
 # ── 트레일링 거리 분리 (vix_rsi·multi_factor, 2026-08-10) ──────────────────────
 # 근거: /arena-status MFE/MAE 진단 재확인 — vix_rsi 7건 중 5건, multi_factor 11건 중
 #   10건이 MFE(보유중 최대유리이동) < 초기손절거리(=현재 trail_distance). ratchet_trailing
@@ -926,6 +961,17 @@ TSMOM_NL_LOOKBACK_BARS = 126  # walk-forward 6/6 구간 plateau(180/372는 혼�
 TSMOM_NL_VOL_MODE = "ewma"  # "rv6"(6봉 realized_vol_24h) | "ewma"(장기 EWMA, R2와 동일 추정기)
 TSMOM_NL_MIN_SIGNAL = 0.0  # 거래량 우선 채택값(3년 n≈254). 그리드 후보였던 {0.2,0.5}는 수익률 우선.
 TSMOM_NL_WEIGHT_CAP = 0.5  # f(s)=s/(s²+1) 이론적 최댓값(s=1에서 0.5) — 상한 클램프
+# 숏 전용 최소신호 하한 (2026-08-20 결함수정). v41이 macd_momentum 숏을 승격하며 롱의
+# MIN_SIGNAL=0.0(위, "거래량 우선" 선택)을 그대로 재사용 — 사이징 f(s)=|s|/(s²+1)가
+# s→0에서 함께 0에 수렴해, 라이브 숏 10건 중 8건이 position_weight<0.10(1건은 0.000)으로
+# 찍힘: 슬롯·표본만 소모하고 손익 기여가 없는 "유령 거래"(포지션은 열리되 자본 배분이
+# 사실상 0). 롱의 0.0은 그 자체로 검증된 선택이라 되돌리지 않고, 숏에만 별도 하한을 둔다.
+# 0.5 선택 근거: 3자산 macro 백필 실측(short_min_signal_tuning.py)에서 이 값이 최소
+# position_weight를 ≈0.10 이상으로 구조적으로 보장하는 첫 지점(0.4→최소 0.088,
+# 0.5→최소 0.101) — sum_w·DSR은 후보 전 구간(0.0~0.5)에서 유의한 차이 없이 노이즈
+# 수준(전부 부트스트랩CI가 0 포함)이라 "경제적으로 의미있는 최소 배분 보장"이라는
+# 구조적 근거로 채택했지, 백테스트 수익 최적화(파라미터 fit)로 고른 값이 아니다.
+TSMOM_NL_SHORT_MIN_SIGNAL = 0.5
 
 MULTI_FACTOR_LONG_RSI_MAX = 55.0
 MULTI_FACTOR_SHORT_RSI_MIN = 55.0

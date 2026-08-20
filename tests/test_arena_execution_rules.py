@@ -100,6 +100,82 @@ def test_fill_price_tranches_fills_at_limit_prices_and_caps_weight() -> None:
     assert capped_weight == pytest.approx(0.50)
 
 
+# ── 피라미딩(승자 불타기) — pending_price_tranches/fill_price_tranches의 방향
+# 일반화판. 물타기(위)는 롱·불리한 방향(하락) 전용이지만, 피라미딩은 롱=유리한
+# 방향(상승)/숏=유리한 방향(하락) 양쪽을 다뤄야 해 direction 매개변수를 받는다.
+
+
+def test_pending_pyramid_tranches_long_direction_checks_upside() -> None:
+    tranches = ((0.03, 0.15), (0.06, 0.15))
+    ref = 100.0
+    # 102 → +3% 레벨(103) 미달, 아직 없음.
+    assert execution_rules.pending_pyramid_tranches(102.0, ref, "long", 0, tranches) == []
+    # 104 → +3% 레벨만 충족(+6%=106은 미달).
+    assert execution_rules.pending_pyramid_tranches(104.0, ref, "long", 0, tranches) == [(0, 0.15)]
+    # 108 → 두 레벨 모두(갭업).
+    assert execution_rules.pending_pyramid_tranches(108.0, ref, "long", 0, tranches) == [
+        (0, 0.15),
+        (1, 0.15),
+    ]
+    # 이미 0번 체결(filled=1) → 1번만 재평가.
+    assert execution_rules.pending_pyramid_tranches(108.0, ref, "long", 1, tranches) == [(1, 0.15)]
+
+
+def test_pending_pyramid_tranches_short_direction_checks_downside() -> None:
+    tranches = ((0.03, 0.15), (0.06, 0.15))
+    ref = 100.0
+    # 숏은 하락이 유리한 방향 — 97 이하에서 +3% 레벨(=97) 충족.
+    assert execution_rules.pending_pyramid_tranches(97.0, ref, "short", 0, tranches) == [(0, 0.15)]
+    assert execution_rules.pending_pyramid_tranches(99.0, ref, "short", 0, tranches) == []
+
+
+def test_pending_pyramid_tranches_graceful_on_missing_ref() -> None:
+    tranches = ((0.03, 0.15),)
+    assert execution_rules.pending_pyramid_tranches(100.0, 0.0, "long", 0, tranches) == []
+
+
+def test_fill_pyramid_tranches_long_fills_above_ref_and_caps_weight() -> None:
+    tranches = ((0.03, 0.15), (0.06, 0.15))
+    ref = 100.0
+    pending = [(0, 0.15), (1, 0.15)]
+    new_avg, new_weight, applied = execution_rules.fill_pyramid_tranches(
+        100.0, 0.40, ref, "long", pending, tranches, weight_cap=0.70
+    )
+    assert applied == 2
+    assert new_weight == pytest.approx(0.70)
+    # avg = (100*0.40 + 103*0.15 + 106*0.15)/0.70
+    assert new_avg == pytest.approx((40 + 15.45 + 15.9) / 0.70, abs=1e-4)
+
+
+def test_fill_pyramid_tranches_short_fills_below_ref() -> None:
+    tranches = ((0.03, 0.15),)
+    ref = 100.0
+    new_avg, new_weight, applied = execution_rules.fill_pyramid_tranches(
+        100.0, 0.40, ref, "short", [(0, 0.15)], tranches, weight_cap=0.70
+    )
+    assert applied == 1
+    assert new_weight == pytest.approx(0.55)
+    # 숏 체결가 = ref*(1-0.03) = 97
+    assert new_avg == pytest.approx((100 * 0.40 + 97 * 0.15) / 0.55, abs=1e-4)
+
+
+def test_fill_pyramid_tranches_partial_fill_at_weight_cap() -> None:
+    tranches = ((0.03, 0.15), (0.06, 0.30))
+    ref = 100.0
+    # 0.40+0.15(0번 전량)=0.55로 정확히 상한 도달 — 1번은 잔여 0이라 미체결(applied=1).
+    _, capped_weight, capped_applied = execution_rules.fill_pyramid_tranches(
+        100.0, 0.40, ref, "long", [(0, 0.15), (1, 0.30)], tranches, weight_cap=0.55
+    )
+    assert capped_applied == 1
+    assert capped_weight == pytest.approx(0.55)
+    # 상한 0.70이면 0번 전량 + 1번 중 잔여 0.15만 부분 체결.
+    _, capped_weight2, capped_applied2 = execution_rules.fill_pyramid_tranches(
+        100.0, 0.40, ref, "long", [(0, 0.15), (1, 0.30)], tranches, weight_cap=0.70
+    )
+    assert capped_applied2 == 2
+    assert capped_weight2 == pytest.approx(0.70)
+
+
 def test_averaged_entry_price_is_weight_weighted() -> None:
     # 0.15@100 + 0.25@90 → (15+22.5)/0.4 = 93.75
     assert execution_rules.averaged_entry_price(100.0, 0.15, 90.0, 0.25) == pytest.approx(93.75)

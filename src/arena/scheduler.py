@@ -538,7 +538,10 @@ def _signal_reason(algo_id: str, signal: str | None, ind: dict, macro: dict) -> 
         indicators=ind,
         macro=macro,
     )
-    reason["diagnostics"] = explain_signal(algo_id, macro, ind)
+    # direction=signal(2026-08-20 결함수정): 숏 거래의 진단이 롱 조건으로 재계산되던 버그.
+    # explain_signal이 direction="short"를 받으면 macd_momentum에 한해 숏 전용 분기로
+    # 계산한다(다른 알고는 기존과 동일, 하위호환).
+    reason["diagnostics"] = explain_signal(algo_id, macro, ind, direction=signal)
     return reason
 
 
