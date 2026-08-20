@@ -77,3 +77,9 @@ Binance USDM 선물의 펀딩비는 롱이 숏에게 지불하는 구조(양수�
 
 - 대시보드(`arena/index.html`) 표시 — meridian 선례처럼 백엔드 배선 후 별도 세션.
 - 실제 배포 후 라이브 관찰(펀딩 부호가 실측대로 지속되는지, 베이시스 오차 크기).
+
+## 후속 (2026-08-20)
+
+라이브 관찰 중 `ret_pct`가 가격손익+펀딩비를 합산해버려 이 슬리브의 존재 이유(펀딩비 수취)를
+사후 검증할 수 없던 감사가능성 결함을 발견·수정. 상세:
+[funding-carry-pnl-decomposition-20260820.md](funding-carry-pnl-decomposition-20260820.md).

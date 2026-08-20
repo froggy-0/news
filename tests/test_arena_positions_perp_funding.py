@@ -145,6 +145,43 @@ def test_close_position_perp_track_resolves_real_ticker_for_funding(monkeypatch)
     assert ret_pct == pytest.approx(0.01 - 0.0023 - 0.0004, abs=1e-9)
 
 
+def test_close_position_records_price_and_funding_pnl_breakdown(monkeypatch) -> None:
+    # 2026-08-20: funding_carry처럼 가격손익+펀딩비가 ret_pct 하나에 섞이면 사후에
+    # "펀딩비만 얼마나 벌었나"를 검증할 수 없었던 문제 — 전용 컬럼(price_pnl_pct/
+    # funding_pnl_pct)에 분리 기록하는지 확인. _FakeQuery는 호출마다 row 사본을 새로
+    # 만들어(공유 상태 없음) 최종 상태를 못 엿보므로, update payload 자체를 가로채는
+    # 로컬 스텁을 씀.
+    row = _base_row(product_type="usdm_perp", direction="short", open_price=100.0)
+    captured_payloads: list[dict] = []
+
+    class _RecordingQuery(_FakeQuery):
+        def update(self, payload: dict) -> "_RecordingQuery":
+            captured_payloads.append(payload)
+            return super().update(payload)
+
+    class _RecordingDb(_FakeDb):
+        def table(self, name: str) -> _RecordingQuery:
+            assert name == "paper_positions"
+            return _RecordingQuery(self._row)
+
+    monkeypatch.setattr(positions, "_client", _RecordingDb(row))
+
+    async def fake_fetch(*, symbol, since, until):
+        return [{"funding_time": "2026-08-15T08:00:00Z", "funding_rate": 0.0004}]
+
+    monkeypatch.setattr(data_lake, "fetch_funding_rates", fake_fetch)
+
+    ret_pct = asyncio.run(
+        positions.close_position(1, datetime(2026, 8, 15, 12, tzinfo=timezone.utc), 99.0)
+    )
+
+    assert len(captured_payloads) == 1
+    payload = captured_payloads[0]
+    assert payload["price_pnl_pct"] == pytest.approx(0.01 - 0.0023, abs=1e-9)
+    assert payload["funding_pnl_pct"] == pytest.approx(0.0004, abs=1e-9)
+    assert ret_pct == pytest.approx(payload["price_pnl_pct"] + payload["funding_pnl_pct"], abs=1e-9)
+
+
 def test_close_position_perp_funding_fetch_failure_is_graceful(monkeypatch, caplog) -> None:
     row = _base_row(product_type="usdm_perp", direction="long")
     monkeypatch.setattr(positions, "_client", _FakeDb(row))

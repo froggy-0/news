@@ -342,7 +342,7 @@ async def close_position(
         logger.info("close_position skip(이미 closed): id=%s", position_id)
         return float(row.get("ret_pct") or 0.0)
     # 풀 비용 적용: fee + slippage + spread(왕복). 레거시 행은 컬럼 부재 → 0.0 fallback.
-    ret_pct = execution_rules.fee_adjusted_return_pct(
+    price_pnl_pct = execution_rules.fee_adjusted_return_pct(
         direction=row["direction"],
         open_price=row["open_price"],
         close_price=close_price,
@@ -350,6 +350,11 @@ async def close_position(
         slippage_bps=float(row.get("slippage_bps") or 0.0),
         spread_bps_round_trip=float(row.get("spread_bps_round_trip") or 0.0),
     )
+    ret_pct = price_pnl_pct
+    # 2026-08-20: funding_carry처럼 가격손익과 펀딩비가 섞이면 안 되는 알고를 위해 둘을
+    # 분리 보존 — ret_pct(DB 컬럼, 기존 집계·대시보드 전부 이 값 사용)는 계속 합산값을
+    # 쓰되, price_pnl_pct/funding_pnl_pct 전용 컬럼에 따로 기록해 사후분해 가능하게 한다.
+    funding_pnl_pct = 0.0
     # perp 전환 Phase A(2026-08-15): spot은 펀딩 없음(product_type='spot'/None). perp
     # 포지션은 보유기간 동안의 실제 arena_funding_rates(4h마다 수집)를 합산해 정산 —
     # backtest.py._close_position이 이미 하는 것과 동일 방식(부호: 롱은 양의 펀딩비
@@ -369,13 +374,13 @@ async def close_position(
                 since=execution_rules.parse_utc_datetime(row["open_time"]),
                 until=execution_rules.parse_utc_datetime(close_time),
             )
-            funding_pct = market_structure.funding_return_pct(
+            funding_pnl_pct = market_structure.funding_return_pct(
                 direction=row["direction"],
                 funding_rates=funding_rows,
                 open_time=row["open_time"],
                 close_time=close_time,
             )
-            ret_pct += funding_pct
+            ret_pct += funding_pnl_pct
         except Exception as exc:
             logger.warning("Funding accrual skipped (id=%s): %s", position_id, exc)
     hold_hours = execution_rules.hold_hours(row["open_time"], close_time)
@@ -385,6 +390,11 @@ async def close_position(
         "close_time": close_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "close_price": close_price,
         "ret_pct": ret_pct,
+        # 2026-08-20: 가격손익/펀딩비 분리 컬럼 — funding_carry처럼 ret_pct 하나로는
+        # "펀딩비로 실제 얼마 벌었나"를 검증할 수 없던 문제 해결(전용 컬럼, ret_pct =
+        # price_pnl_pct + funding_pnl_pct 항상 성립).
+        "price_pnl_pct": price_pnl_pct,
+        "funding_pnl_pct": funding_pnl_pct,
         "hit": ret_pct > 0,
         "is_stop_loss": is_stop_loss,
         "hold_hours": round(hold_hours, 2),

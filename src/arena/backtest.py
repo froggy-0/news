@@ -1224,6 +1224,10 @@ def _macro_signal_from_snapshot(row: dict[str, Any], decision_time: datetime) ->
         "stablecoin_supply_zscore": raw.get("stablecoin_supply_zscore"),
         # P3(2026-07-21): fng<30 연속일수 — fng_contrarian 진입 품질 피처
         "fng_days_below_30": raw.get("fng_days_below_30"),
+        # 2026-08-20: 선물 프리미엄 지수(premium index) z-score — riptide 후보 알고 탐색용,
+        # regimeRaw에 없으면 None(그레이스풀), 라이브 배선 전이라 scheduler._fetch_macro엔 없음
+        "premium_index_zscore": raw.get("premium_index_zscore"),
+        "premium_index_zscore_max_7d": raw.get("premium_index_zscore_max_7d"),
         # 변동성 환경 라벨 (사이징/신뢰도 컨텍스트)
         "vol_level": risk_overlay.get("volLevel"),
         "vol_trend": risk_overlay.get("volTrend"),
